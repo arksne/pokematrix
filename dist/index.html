@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>League-17 TMA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/assets/index-BCYlQKpE.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CchYdZwm.css">
+  </head>
+  <body>
+    <div class="tma-container">
+      
+      <header class="tma-header">
+        <h1 id="header-title">Мир (Канто)</h1>
+      </header>
+
+      <main class="tma-main-area">
+        
+        <!-- ======================= -->
+        <!-- VIEW 1: WORLD MAP -->
+        <!-- ======================= -->
+        <div id="view-world" class="app-view active-view">
+          
+          <div class="location-card">
+            <div class="location-image" id="loc-image"></div>
+            <h2 class="location-name" id="loc-name">Вермилион</h2>
+            <p class="location-desc" id="loc-desc">Портовый город, в который мы попадаем после путешествия из Джото.</p>
+            
+            <div class="location-actions" id="loc-actions">
+              <!-- Dynamically injected (Heal, Hunt, Shop) -->
+            </div>
+          </div>
+
+          <div class="navigation-panel">
+            <h3>Переходы:</h3>
+            <div class="nav-buttons" id="nav-buttons">
+              <!-- Dynamically injected navigation links -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ======================= -->
+        <!-- VIEW 2: BACKPACK -->
+        <!-- ======================= -->
+        <div id="view-backpack" class="app-view">
+          <div class="tma-inventory">
+            <h3>🎒 Рюкзак (Инвентарь)</h3>
+            <div class="inventory-items">
+              <div class="inv-item">
+                <div class="inv-icon">🔴</div>
+                <div class="inv-details">
+                  <span class="inv-name">Монстробол</span>
+                  <span class="inv-desc">Для поимки диких покемонов.</span>
+                </div>
+                <div class="inv-actions">
+                  <span class="inv-qty">x<span id="qty-pokeball">10</span></span>
+                </div>
+              </div>
+              
+              <div class="inv-item">
+                <div class="inv-icon">🧪</div>
+                <div class="inv-details">
+                  <span class="inv-name">Аптечка</span>
+                  <span class="inv-desc">Восстанавливает 20 HP.</span>
+                </div>
+                <div class="inv-actions">
+                  <span class="inv-qty">x<span id="qty-potion">5</span></span>
+                  <button class="btn-use" id="btn-use-potion-out">Юз</button>
+                </div>
+              </div>
+              
+              <div class="inv-item">
+                <div class="inv-icon">🍬</div>
+                <div class="inv-details">
+                  <span class="inv-name">Сладкая Конфета</span>
+                  <span class="inv-desc">+1 Уровень, +4 макс. EV.</span>
+                </div>
+                <div class="inv-actions">
+                  <span class="inv-qty">x<span id="qty-candy">20</span></span>
+                  <button class="btn-use" id="btn-use-candy">Юз</button>
+                </div>
+              </div>
+
+              <div class="inv-item">
+                <div class="inv-icon">💊</div>
+                <div class="inv-details">
+                  <span class="inv-name">Витамин</span>
+                  <span class="inv-desc">+10 макс. EV, повышает Счастье.</span>
+                </div>
+                <div class="inv-actions">
+                  <span class="inv-qty">x<span id="qty-vitamin">20</span></span>
+                  <button class="btn-use" id="btn-use-vitamin">Юз</button>
+                </div>
+              </div>
+
+              <div class="inv-item">
+                <div class="inv-icon">💪</div>
+                <div class="inv-details">
+                  <span class="inv-name">Набор Тренировки</span>
+                  <span class="inv-desc">Улучшает случайный стат</span>
+                </div>
+                <div class="inv-actions">
+                  <span class="inv-qty">x<span id="qty-train">50</span></span>
+                  <button class="btn-use" id="btn-use-train">Юз</button>
+                </div>
+              </div>
+
+              <div class="inv-item">
+                <div class="inv-icon">🧪</div>
+                <div class="inv-details">
+                  <span class="inv-name">Набор Ослабления</span>
+                  <span class="inv-desc">Снижает тренировку на 1</span>
+                </div>
+                <div class="inv-actions">
+                  <span class="inv-qty">x<span id="qty-weaken">20</span></span>
+                  <button class="btn-use btn-danger" id="btn-use-weaken">Юз</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================= -->
+        <!-- VIEW 3: TEAM / POKEMON -->
+        <!-- ======================= -->
+        <div id="view-team" class="app-view">
+          
+          <!-- TEAM GRID -->
+          <div id="team-roster">
+            <h3 style="margin-bottom: 10px;">Моя Команда <span id="team-count">(0/6)</span></h3>
+            <div class="team-grid" id="team-grid">
+              <!-- Dynamically injected team members -->
+            </div>
+          </div>
+
+          <!-- POKEMON PROFILE -->
+          <div class="reborn-profile-container" id="pokedex-display" style="display: none;">
+            
+            <div style="margin-bottom: 10px; display: flex; justify-content: space-between;">
+              <span id="btn-back-team" class="reborn-back-btn">&laquo; Назад к Команде</span>
+              <div style="display: flex; gap: 5px;">
+                <span id="btn-prev-mon" class="reborn-back-btn" style="padding: 6px 10px; margin: 0;">&lt; Пред.</span>
+                <span id="btn-next-mon" class="reborn-back-btn" style="padding: 6px 10px; margin: 0;">След. &gt;</span>
+              </div>
+            </div>
+
+            <div class="reborn-profile-header">
+              <div class="reborn-sprite-box">
+                <img id="poke-sprite" class="reborn-sprite" src="" alt="Pokemon" />
+              </div>
+              <div class="reborn-profile-title">
+                <h2 id="poke-name">Pikachu #25</h2>
+                <div id="poke-types" class="poke-types"></div>
+                <div style="font-weight:bold; margin-top:5px;">
+                  HP: <span id="info-cur-hp">0</span> / <span id="info-max-hp">0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Actions Panel -->
+            <div class="reborn-quick-actions">
+              <button id="qa-potion" class="reborn-qa-btn">Аптечка (<span id="qa-qty-potion">0</span>)</button>
+              <button id="qa-candy" class="reborn-qa-btn">Конфета (<span id="qa-qty-candy">0</span>)</button>
+              <button id="qa-vitamin" class="reborn-qa-btn">Витамин (<span id="qa-qty-vitamin">0</span>)</button>
+              <button id="qa-train" class="reborn-qa-btn">Тренировка (<span id="qa-qty-train">0</span>)</button>
+              <button id="qa-weaken" class="reborn-qa-btn">Ослабление (<span id="qa-qty-weaken">0</span>)</button>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <div class="reborn-tabs">
+              <input type="radio" name="poke-tabs" id="tab-info" checked>
+              <label for="tab-info">Инфо</label>
+
+              <input type="radio" name="poke-tabs" id="tab-stats">
+              <label for="tab-stats">Статы</label>
+
+              <input type="radio" name="poke-tabs" id="tab-moves">
+              <label for="tab-moves">Атаки</label>
+
+              <input type="radio" name="poke-tabs" id="tab-status">
+              <label for="tab-status">Сост.</label>
+
+              <!-- TAB CONTENT: INFO -->
+              <div id="content-info" class="tab-content">
+                <div class="info-row"><b>Уровень:</b> <span id="info-lvl" style="font-weight:bold; color:var(--tma-primary)">5</span></div>
+                <div class="info-row"><b>Характер:</b> <span id="info-nature">-</span></div>
+                <div class="info-row"><b>Способность:</b> <span id="info-ability">-</span></div>
+                <div class="info-row"><b>Тера-тип:</b> <span id="info-tera">-</span></div>
+                <div class="info-row"><b>Шанс крита:</b> <span id="info-crit">0%</span></div>
+                <div class="info-row genecode-row">
+                  <b>Генокод:</b> <span id="info-genecode" style="color: #4682B4; font-family: monospace; letter-spacing: 1px;">-</span>
+                </div>
+              </div>
+
+              <!-- TAB CONTENT: STATS -->
+              <div id="content-stats" class="tab-content">
+                
+                <div class="reborn-stats-summary">
+                  <span>Уровень: <strong id="stat-lvl-display">5</strong></span>
+                  <span>Витаминов: <strong id="stat-vit-display">0/10</strong></span>
+                  <span>EV: <strong id="ev-remaining">0</strong> / <strong id="ev-total">0</strong></span>
+                </div>
+
+                <table class="reborn-stats-table">
+                  <thead>
+                    <tr>
+                      <th>Стат</th>
+                      <th>IV</th>
+                      <th>EV</th>
+                      <th>Итог</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="stat-name">HP</td>
+                      <td><input type="number" class="reborn-input-iv" id="iv-hp" readonly></td>
+                      <td>
+                        <div class="ev-input-group">
+                          <input type="number" class="reborn-input-ev" id="ev-hp" min="0" max="126" value="0">
+                          <button class="reborn-ev-btn" data-stat="hp" data-val="10">+10</button>
+                          <button class="reborn-ev-btn" data-stat="hp" data-val="max">MAX</button>
+                        </div>
+                      </td>
+                      <td class="stat-result" id="val-hp">0</td>
+                    </tr>
+                    <tr>
+                      <td class="stat-name" id="label-atk">Атака</td>
+                      <td><input type="number" class="reborn-input-iv" id="iv-atk" readonly></td>
+                      <td>
+                        <div class="ev-input-group">
+                          <input type="number" class="reborn-input-ev" id="ev-atk" min="0" max="126" value="0">
+                          <button class="reborn-ev-btn" data-stat="atk" data-val="10">+10</button>
+                          <button class="reborn-ev-btn" data-stat="atk" data-val="max">MAX</button>
+                        </div>
+                      </td>
+                      <td class="stat-result" id="val-atk">0</td>
+                    </tr>
+                    <tr>
+                      <td class="stat-name" id="label-def">Защита</td>
+                      <td><input type="number" class="reborn-input-iv" id="iv-def" readonly></td>
+                      <td>
+                        <div class="ev-input-group">
+                          <input type="number" class="reborn-input-ev" id="ev-def" min="0" max="126" value="0">
+                          <button class="reborn-ev-btn" data-stat="def" data-val="10">+10</button>
+                          <button class="reborn-ev-btn" data-stat="def" data-val="max">MAX</button>
+                        </div>
+                      </td>
+                      <td class="stat-result" id="val-def">0</td>
+                    </tr>
+                    <tr>
+                      <td class="stat-name" id="label-spa">Сп. Атака</td>
+                      <td><input type="number" class="reborn-input-iv" id="iv-spa" readonly></td>
+                      <td>
+                        <div class="ev-input-group">
+                          <input type="number" class="reborn-input-ev" id="ev-spa" min="0" max="126" value="0">
+                          <button class="reborn-ev-btn" data-stat="spa" data-val="10">+10</button>
+                          <button class="reborn-ev-btn" data-stat="spa" data-val="max">MAX</button>
+                        </div>
+                      </td>
+                      <td class="stat-result" id="val-spa">0</td>
+                    </tr>
+                    <tr>
+                      <td class="stat-name" id="label-spd">Сп. Защ</td>
+                      <td><input type="number" class="reborn-input-iv" id="iv-spd" readonly></td>
+                      <td>
+                        <div class="ev-input-group">
+                          <input type="number" class="reborn-input-ev" id="ev-spd" min="0" max="126" value="0">
+                          <button class="reborn-ev-btn" data-stat="spd" data-val="10">+10</button>
+                          <button class="reborn-ev-btn" data-stat="spd" data-val="max">MAX</button>
+                        </div>
+                      </td>
+                      <td class="stat-result" id="val-spd">0</td>
+                    </tr>
+                    <tr>
+                      <td class="stat-name" id="label-spe">Скорость</td>
+                      <td><input type="number" class="reborn-input-iv" id="iv-spe" readonly></td>
+                      <td>
+                        <div class="ev-input-group">
+                          <input type="number" class="reborn-input-ev" id="ev-spe" min="0" max="126" value="0">
+                          <button class="reborn-ev-btn" data-stat="spe" data-val="10">+10</button>
+                          <button class="reborn-ev-btn" data-stat="spe" data-val="max">MAX</button>
+                        </div>
+                      </td>
+                      <td class="stat-result" id="val-spe">0</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- TAB CONTENT: MOVES -->
+              <div id="content-moves" class="tab-content">
+                <div class="moves-grid">
+                  <div class="move-slot">
+                    <div class="move-name" id="move-0-name">-</div>
+                    <div class="move-pp" id="move-0-pp">PP 0/0</div>
+                  </div>
+                  <div class="move-slot">
+                    <div class="move-name" id="move-1-name">-</div>
+                    <div class="move-pp" id="move-1-pp">PP 0/0</div>
+                  </div>
+                  <div class="move-slot">
+                    <div class="move-name" id="move-2-name">-</div>
+                    <div class="move-pp" id="move-2-pp">PP 0/0</div>
+                  </div>
+                  <div class="move-slot">
+                    <div class="move-name" id="move-3-name">-</div>
+                    <div class="move-pp" id="move-3-pp">PP 0/0</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB CONTENT: STATUS -->
+              <div id="content-status" class="tab-content">
+                
+                <div class="status-row">
+                  <b>Счастье:</b> <span id="status-happiness">0</span> / 255
+                </div>
+
+                <div class="training-status-box" style="margin-top: 15px;">
+                  <div class="training-info">
+                    <strong>Тренировка:</strong> <span id="train-stage">Отсутствует</span> <span id="train-stat"></span> <span id="train-pct"></span>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </main>
+
+      <!-- BOTTOM NAVIGATION BAR -->
+      <nav class="tma-bottom-nav">
+        <div class="nav-item active" data-target="view-world">
+          <div class="nav-icon">🗺️</div>
+          <span>Мир</span>
+        </div>
+        <div class="nav-item" data-target="view-backpack">
+          <div class="nav-icon">🎒</div>
+          <span>Рюкзак</span>
+        </div>
+        <div class="nav-item" data-target="view-team">
+          <div class="nav-icon">🐾</div>
+          <span>Команда</span>
+        </div>
+      </nav>
+
+    </div>
+
+    <!-- ROSTER MODAL -->
+    <div id="roster-modal" class="modal-overlay" style="display:none;">
+      <div class="roster-container">
+        <h2>Моя Команда</h2>
+        <div id="roster-list" class="roster-list"></div>
+        <button class="tma-btn" id="close-roster" style="margin-top:15px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+
+
+    <!-- BATTLE ARENA (Modal) -->
+    <div id="encounter-modal" class="modal-overlay">
+      <div class="reborn-battle-arena">
+        
+        <!-- PLAYER POKEMON (Left) -->
+        <div class="reborn-side-panel">
+          <div class="reborn-poke-header">
+            <span id="player-name" class="reborn-poke-name">Groudon</span>
+            <span id="player-lvl" class="reborn-poke-lvl">[50-lvl]</span>
+          </div>
+          <div class="reborn-hp-wrap">
+            <div class="reborn-hp-bar">
+              <div class="reborn-hp-fill" id="player-hp-fill"></div>
+            </div>
+            <div class="reborn-exp-bar">
+              <div class="reborn-exp-fill" id="player-exp-fill"></div>
+            </div>
+          </div>
+          <div class="reborn-hp-text" id="player-hp-text">100/100</div>
+          <div class="reborn-sprite-box">
+            <img class="reborn-sprite" id="player-sprite" src="" alt="player">
+          </div>
+        </div>
+
+        <!-- CENTER PANEL (Log & Controls) -->
+        <div class="reborn-center-panel">
+          
+          <div class="reborn-controls" id="battle-main-menu">
+            <div class="reborn-moves" id="battle-moves-menu">
+              <span class="reborn-move-link" id="move-btn-0">-</span> |
+              <span class="reborn-move-link" id="move-btn-1">-</span> |
+              <span class="reborn-move-link" id="move-btn-2">-</span> |
+              <span class="reborn-move-link" id="move-btn-3">-</span>
+            </div>
+            
+            <div class="reborn-actions">
+              <select id="battle-item-select" class="reborn-select">
+                <option value="pokeball">Монстробол (<span id="battle-qty-pokeballs">0</span>)</option>
+                <option value="potion">Аптечка (<span id="battle-qty-potions">0</span>)</option>
+              </select>
+              <button class="reborn-btn-use" id="btn-use-item">Use</button>
+              <span class="reborn-escape-link" id="btn-run"> | сбежать</span>
+            </div>
+          </div>
+
+          <div class="reborn-controls" id="battle-end-menu" style="display:none; justify-content:center;">
+            <span class="reborn-escape-link" id="btn-leave-battle">Уйти с поля боя</span>
+          </div>
+
+          <div class="reborn-log-container">
+            <div class="reborn-battle-log" id="battle-log">На вас напал дикий покемон!</div>
+          </div>
+          
+        </div>
+
+        <!-- WILD POKEMON (Right) -->
+        <div class="reborn-side-panel">
+          <div class="reborn-poke-header">
+            <span id="wild-name" class="reborn-poke-name">Pidgey</span>
+            <span id="wild-lvl" class="reborn-poke-lvl">[5-lvl]</span>
+          </div>
+          <div class="reborn-hp-wrap">
+            <div class="reborn-hp-bar">
+              <div class="reborn-hp-fill" id="wild-hp-fill"></div>
+            </div>
+          </div>
+          <div class="reborn-hp-text" id="wild-hp-text">10/10</div>
+          <div class="reborn-sprite-box">
+            <img class="reborn-sprite" id="wild-sprite" src="" alt="wild">
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </body>
+</html>
