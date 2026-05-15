@@ -2250,6 +2250,7 @@ function getWeatherMultiplier(moveType, weather) {
 // --- QUESTS (Feature 5) ---
 const QUEST_TYPES = ['catch_x', 'defeat_x', 'earn_money', 'explore', 'use_item', 'collect_items'];
 const QUEST_CONFIGS = [
+  // Original 8
   { id: 'catch_5', type: 'catch_x', target: 5, desc: 'Поймайте 5 покемонов', rewardMoney: 500, rewardItem: 'pokeball', rewardQty: 3 },
   { id: 'defeat_10', type: 'defeat_x', target: 10, desc: 'Победите 10 диких покемонов', rewardMoney: 800, rewardItem: 'potion', rewardQty: 2 },
   { id: 'earn_1000', type: 'earn_money', target: 1000, desc: 'Заработайте $1000', rewardMoney: 300, rewardItem: 'candy', rewardQty: 2 },
@@ -2258,6 +2259,19 @@ const QUEST_CONFIGS = [
   { id: 'collect_hair', type: 'collect_items', targetItem: 'venonatHair', target: 3, desc: 'Соберите 3 Волоска Веноната', rewardMoney: 300, rewardItem: 'candy', rewardQty: 1 },
   { id: 'collect_bone', type: 'collect_items', targetItem: 'cuboneBone', target: 2, desc: 'Соберите 2 Кости Кьюбона', rewardMoney: 400, rewardItem: 'greatBall', rewardQty: 2 },
   { id: 'collect_coals', type: 'collect_items', targetItem: 'coals', target: 4, desc: 'Соберите 4 Уголька', rewardMoney: 350, rewardItem: 'potion', rewardQty: 3 },
+  // New quests based on wiki references
+  { id: 'catch_10', type: 'catch_x', target: 10, desc: 'Поймайте 10 покемонов', rewardMoney: 1200, rewardItem: 'greatBall', rewardQty: 5 },
+  { id: 'catch_15', type: 'catch_x', target: 15, desc: 'Поймайте 15 покемонов', rewardMoney: 2000, rewardItem: 'ultraBall', rewardQty: 3 },
+  { id: 'defeat_20', type: 'defeat_x', target: 20, desc: 'Победите 20 диких покемонов', rewardMoney: 1500, rewardItem: 'superPotion', rewardQty: 3 },
+  { id: 'defeat_5', type: 'defeat_x', target: 5, desc: 'Победите 5 диких покемонов', rewardMoney: 400, rewardItem: 'pokeball', rewardQty: 3 },
+  { id: 'earn_5000', type: 'earn_money', target: 5000, desc: 'Заработайте $5000', rewardMoney: 1000, rewardItem: 'vitamin', rewardQty: 2 },
+  { id: 'earn_10000', type: 'earn_money', target: 10000, desc: 'Заработайте $10000', rewardMoney: 2000, rewardItem: 'evolutionStone', rewardQty: 1 },
+  { id: 'explore_10', type: 'explore', target: 10, desc: 'Посетите 10 разных локаций', rewardMoney: 800, rewardItem: 'fullRestore', rewardQty: 1 },
+  { id: 'use_8', type: 'use_item', target: 8, desc: 'Используйте 8 предметов в бою', rewardMoney: 500, rewardItem: 'superPotion', rewardQty: 3 },
+  { id: 'collect_fire', type: 'collect_items', targetItem: 'lavaCore', target: 3, desc: 'Соберите 3 Лавовых Ядра', rewardMoney: 900, rewardItem: 'fireStone', rewardQty: 1 },
+  { id: 'collect_water', type: 'collect_items', targetItem: 'crystalShard', target: 3, desc: 'Соберите 3 Кристалла', rewardMoney: 600, rewardItem: 'waterStone', rewardQty: 1 },
+  { id: 'collect_plant', type: 'collect_items', targetItem: 'plantSample', target: 4, desc: 'Соберите 4 Образца Растений', rewardMoney: 700, rewardItem: 'leafStone', rewardQty: 1 },
+  { id: 'collect_venom', type: 'collect_items', targetItem: 'seviperVenom', target: 2, desc: 'Соберите 2 Яда Севайпера', rewardMoney: 800, rewardItem: 'fullRestore', rewardQty: 2 },
 ];
 
 let quests = [];
@@ -8311,9 +8325,9 @@ function openPokedex() {
     }
 
     cell.classList.add(statusClass);
-    const imgSrc = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexId}.png`;
+    const imgSrc = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${name}.png`;
     cell.innerHTML = `
-      <img src="${imgSrc}" alt="${name}" loading="lazy" onerror="this.style.display='none'">
+      <img src="${imgSrc}" alt="${name}" loading="lazy" onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${name}.png'">
       <span class="poke-name">${name}</span>
     `;
     grid.appendChild(cell);
@@ -8366,31 +8380,63 @@ async function showPokedexInfo(speciesName) {
     }).join('');
 
     const spriteUrl = data.sprites?.other?.['official-artwork']?.front_default || data.sprites.front_default;
+    const shinyUrl = data.sprites?.other?.['official-artwork']?.front_shiny || data.sprites.front_shiny;
     const detailTypeBg = getTypeGradient(data.types);
+
+    // Find gym leaders using this Pokemon
+    const gymUsers = [];
+    for (const [key, leader] of Object.entries(gymLeaders)) {
+      if (leader.team) {
+        const names = leader.team.flatMap(m => m.pokemon || []);
+        if (names.some(n => n.replace('_2','') === speciesName)) gymUsers.push(leader.name);
+      }
+    }
 
     detailEl.innerHTML = `
       <button class="pokedex-detail-back" id="pokedex-detail-back">← Назад</button>
       <div class="pokedex-detail-header">
-        <div class="pokedex-detail-sprite-box" style="background:${detailTypeBg};">
-          <img class="pokedex-detail-sprite" src="${spriteUrl}" alt="${data.name}">
+        <div class="pokedex-detail-sprite-box" style="background:${detailTypeBg};" id="dex-sprite-box">
+          <img class="pokedex-detail-sprite" id="dex-sprite" src="${spriteUrl}" alt="${data.name}">
         </div>
         <div class="pokedex-detail-title">
           <h2>${data.name}</h2>
           <span class="dex-number">#${String(data.id).padStart(3, '0')}</span>
           <div class="pokedex-detail-types">${types}</div>
+          <button id="btn-shiny-toggle" style="margin-top:4px;padding:2px 8px;font-size:0.7rem;background:var(--tma-bg);border:1px solid var(--tma-border);color:var(--tma-text);border-radius:4px;cursor:pointer;">✨ Шайни</button>
         </div>
       </div>
       <div class="pokedex-detail-status ${statusClass}">${statusText}</div>
+      <div style="display:flex;justify-content:space-around;font-size:0.7rem;margin:4px 0;">
+        <span>${getPowerStars({apiData:data})}★ мощи</span>
+        <span>${getRarityStars({apiData:data})}✦ редкость</span>
+      </div>
       ${pokedexData[speciesName] ? `
       <div class="pokedex-detail-method">
         <div class="method-row"><b>Способ:</b> ${pokedexData[speciesName].method}</div>
         <div class="method-row"><b>Где:</b> ${pokedexData[speciesName].location}</div>
+      </div>` : ''}
+      ${gymUsers.length > 0 ? `
+      <div class="pokedex-detail-method" style="background:rgba(175,82,222,0.15);border-color:#af52de;">
+        <div class="method-row"><b>⚔ Используется лидерами:</b> ${gymUsers.join(', ')}</div>
       </div>` : ''}
       <div class="pokedex-detail-stats">
         <h4>Базовые статы</h4>
         ${statsHtml}
       </div>
     `;
+
+    // Shiny toggle
+    let showingShiny = false;
+    document.getElementById('btn-shiny-toggle').addEventListener('click', () => {
+      showingShiny = !showingShiny;
+      document.getElementById('dex-sprite').src = showingShiny ? (shinyUrl || spriteUrl) : spriteUrl;
+      document.getElementById('btn-shiny-toggle').textContent = showingShiny ? '✨ Обычный' : '✨ Шайни';
+      if (showingShiny && shinyUrl) {
+        document.getElementById('dex-sprite-box').style.background = 'radial-gradient(circle, #3a2a5a 0%, #1a1a3a 100%)';
+      } else {
+        document.getElementById('dex-sprite-box').style.background = detailTypeBg;
+      }
+    });
 
     document.getElementById('pokedex-detail-back').addEventListener('click', () => {
       detailEl.style.display = 'none';
