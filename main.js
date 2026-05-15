@@ -8162,17 +8162,17 @@ function showItemInfoModal(item, qty) {
 // --- PvP Battle ---
 let pvpBattleId = null;
 let pvpOpponentName = '';
-let pvpActiveMon = null;
-let pvpOpponentMon = null;
+let pvpMyMon = null;
+let pvpOppMon = null;
 let pvpMyTurn = false;
 
-function openPvPArena(battleId, opponent, isFirst) {
+function openPvPArena(battleId, opponent, myFirst) {
   pvpBattleId = battleId;
   pvpOpponentName = opponent;
-  pvpMyTurn = isFirst;
+  pvpMyTurn = myFirst;
   const alive = myTeam.find(m => m.currentHp > 0);
   if (!alive) { showToast('Нет живых покемонов!', true); return; }
-  pvpActiveMon = alive;
+  pvpMyMon = alive;
 
   let modal = document.getElementById('pvp-modal');
   if (!modal) {
@@ -8181,11 +8181,9 @@ function openPvPArena(battleId, opponent, isFirst) {
     modal.className = 'modal-overlay';
     modal.style.display = 'none';
     modal.innerHTML = `
-      <div class="reborn-battle-arena" style="max-width:420px;width:95%;">
-        <div style="text-align:center;padding:8px;">
-          <span id="pvp-opponent-name" style="font-weight:bold;"></span>
-          <span id="pvp-turn-indicator" style="color:var(--tma-text-muted);margin-left:8px;"></span>
-        </div>
+      <div class="reborn-battle-arena" style="max-width:440px;width:95%;">
+        <div style="text-align:center;padding:8px;"><span id="pvp-opponent-name" style="font-weight:bold;"></span></div>
+        <div style="text-align:center;font-size:0.9rem;" id="pvp-turn-indicator"></div>
         <div class="reborn-pokemon-row">
           <div class="reborn-side-panel">
             <div class="reborn-poke-header"><span id="pvp-my-name"></span> <span id="pvp-my-lvl"></span></div>
@@ -8204,7 +8202,7 @@ function openPvPArena(battleId, opponent, isFirst) {
           <div class="reborn-moves" id="pvp-moves"></div>
           <div class="reborn-log-container"><div class="reborn-battle-log" id="pvp-log"></div></div>
         </div>
-        <button class="tma-btn" id="btn-pvp-leave" style="width:100%;margin-top:8px;">Покинуть бой</button>
+        <button class="tma-btn" id="btn-pvp-leave" style="width:100%;margin-top:8px;">Сдаться</button>
       </div>
     `;
     document.body.appendChild(modal);
@@ -8213,30 +8211,46 @@ function openPvPArena(battleId, opponent, isFirst) {
       socket.emit('pvp_end', { battleId: pvpBattleId, action: { type: 'surrender' } });
       pvpBattleId = null;
       autoSave();
+      updateMoneyDisplay();
     });
   }
 
-  document.getElementById('pvp-opponent-name').textContent = `⚔ ${opponent}`;
+  document.getElementById('pvp-opponent-name').textContent = `⚔ Бой с ${opponent}`;
+  document.getElementById('pvp-opp-name').textContent = opponent;
+  document.getElementById('pvp-opp-lvl').textContent = '';
+  document.getElementById('pvp-opp-hp').textContent = '?/?';
+  document.getElementById('pvp-opp-hp-fill').style.width = '100%';
+  document.getElementById('pvp-opp-sprite').src = '';
+  document.getElementById('pvp-log').innerHTML = '';
   updatePvPUI();
   modal.style.display = 'flex';
+
+  // Send my pokemon data to opponent
+  const mon = pvpMyMon;
+  socket.emit('pvp_action', { battleId, action: {
+    type: 'mon_data',
+    name: mon.nickname || mon.apiData?.name,
+    lvl: mon.baseLevel + (mon.candiesEaten || 0),
+    hp: mon.currentHp,
+    maxHp: mon.maxHp,
+    sprite: mon.apiData?.sprites?.other?.['official-artwork']?.front_default || mon.apiData?.sprites?.front_default || ''
+  }});
 }
 
 function updatePvPUI() {
-  if (!pvpActiveMon) return;
-  const mon = pvpActiveMon;
+  if (!pvpMyMon) return;
+  const mon = pvpMyMon;
   const curLvl = mon.baseLevel + (mon.candiesEaten || 0);
   document.getElementById('pvp-my-name').textContent = mon.nickname || mon.apiData?.name;
   document.getElementById('pvp-my-lvl').textContent = `Lv${curLvl}`;
   document.getElementById('pvp-my-hp').textContent = `${mon.currentHp}/${mon.maxHp}`;
-  document.getElementById('pvp-my-hp-fill').style.width = `${(mon.currentHp / mon.maxHp) * 100}%`;
+  document.getElementById('pvp-my-hp-fill').style.width = `${Math.max(0, (mon.currentHp / mon.maxHp) * 100)}%`;
   const sprite = mon.apiData?.sprites?.other?.['official-artwork']?.front_default || mon.apiData?.sprites?.front_default || '';
   document.getElementById('pvp-my-sprite').src = sprite;
 
-  const turnEl = document.getElementById('pvp-turn-indicator');
-  turnEl.textContent = pvpMyTurn ? '🎯 Ваш ход!' : '⏳ Ход соперника...';
-  turnEl.style.color = pvpMyTurn ? '#34c759' : 'var(--tma-text-muted)';
+  document.getElementById('pvp-turn-indicator').textContent = pvpMyTurn ? '🎯 Ваш ход!' : '⏳ Ожидание хода соперника...';
+  document.getElementById('pvp-turn-indicator').style.color = pvpMyTurn ? '#34c759' : '#ff9500';
 
-  // Render move buttons
   const movesDiv = document.getElementById('pvp-moves');
   movesDiv.innerHTML = '';
   const moves = mon.apiData?.moves?.filter(m => m) || [];
@@ -8244,45 +8258,41 @@ function updatePvPUI() {
     const btn = document.createElement('span');
     btn.className = 'reborn-move-link';
     btn.textContent = m.move.name;
+    btn.style.opacity = pvpMyTurn ? '1' : '0.5';
     btn.onclick = () => {
       if (!pvpMyTurn) { showToast('Сейчас ход соперника!', true); return; }
       doPvPAttack(i);
     };
     movesDiv.appendChild(btn);
   });
-  if (moves.length === 0) movesDiv.innerHTML = '<span style="color:var(--tma-text-muted)">Нет атак</span>';
 }
 
 function doPvPAttack(moveIdx) {
-  if (!pvpActiveMon || !pvpOpponentMon || !pvpBattleId) return;
-  const move = pvpActiveMon.apiData.moves?.[moveIdx]?.move;
+  if (!pvpMyMon || !pvpBattleId) return;
+  const move = pvpMyMon.apiData?.moves?.[moveIdx]?.move;
   const moveName = move?.name || 'Атака';
-  const power = 60;
-  const dmg = Math.floor(((pvpActiveMon.baseLevel + (pvpActiveMon.candiesEaten || 0)) * power / 20) * (0.8 + Math.random() * 0.4));
-  const crit = Math.random() < 0.1;
+  const lvl = pvpMyMon.baseLevel + (pvpMyMon.candiesEaten || 0);
+  const atk = (pvpMyMon.apiData?.stats?.[1]?.base_stat || 60);
+  const power = move ? (move.power || 60) : 60;
+  const rawDmg = Math.floor(((lvl * power * (atk / 100)) / 15) * (0.85 + Math.random() * 0.3));
+  const crit = Math.random() < 0.0625;
+  const dmg = crit ? Math.floor(rawDmg * 1.5) : rawDmg;
 
-  pvpOpponentMon.currentHp -= crit ? dmg * 2 : dmg;
-  if (pvpOpponentMon.currentHp < 0) pvpOpponentMon.currentHp = 0;
+  const logEl = document.getElementById('pvp-log');
+  logEl.innerHTML = `Вы: ${moveName}! ${crit ? '💥Крит! ' : ''}(-${dmg})\n${logEl.innerHTML}`;
 
   pvpMyTurn = false;
-  const logEl = document.getElementById('pvp-log');
-  logEl.innerHTML = `${monName()} использует ${moveName}! ${crit ? '💥Крит! ' : ''}(-${crit ? dmg * 2 : dmg} HP)\n${logEl.innerHTML}`;
-
-  socket.emit('pvp_action', { battleId: pvpBattleId, action: { type: 'attack', moveIdx, dmg: crit ? dmg * 2 : dmg, crit } });
+  socket.emit('pvp_action', { battleId: pvpBattleId, action: { type: 'attack', moveName, dmg, crit } });
   updatePvPUI();
-  if (pvpOpponentMon.currentHp <= 0) endPvP(true);
 }
 
-function monName() { return pvpActiveMon?.nickname || pvpActiveMon?.apiData?.name || '???'; }
-
 function endPvP(won) {
-  showToast(won ? 'Победа в PvP!' : 'Поражение в PvP...', !won);
-  if (won) money += 500;
+  showToast(won ? '🏆 Победа в PvP! +500¥' : '💀 Поражение в PvP...', !won);
+  if (won) { money += 500; updateMoneyDisplay(); }
   document.getElementById('pvp-modal').style.display = 'none';
   socket.emit('pvp_end', { battleId: pvpBattleId, action: { type: won ? 'win' : 'lose' } });
   pvpBattleId = null;
   autoSave();
-  renderTrainerCard();
 }
 
 function initTradeSocket() {
@@ -8371,7 +8381,7 @@ function initTradeSocket() {
   // PvP handlers
   socket.on('pvp_challenge_received', (data) => {
     showConfirmModal('⚔ Вызов на бой!', `Тренер ${data.fromName} вызывает вас на битву!`, () => {
-      if (myTeam.length === 0 || !myTeam.some(m => m.currentHp > 0)) {
+      if (!myTeam.some(m => m.currentHp > 0)) {
         showToast('Нужен хотя бы один живой покемон!', true);
         socket.emit('pvp_decline', data.fromId);
         return;
@@ -8385,36 +8395,46 @@ function initTradeSocket() {
   });
 
   socket.on('pvp_start', (data) => {
-    openPvPArena(data.battleId, data.opponent, false);
-    showToast(`Бой с ${data.opponent}! Выберите покемона и нажмите Готов`, false);
-  });
-
-  socket.on('pvp_begin', (data) => {
-    pvpMyTurn = data.first;
-    // Setup opponent mon (dummy based on first alive)
-    if (!pvpOpponentMon) pvpOpponentMon = { name: pvpOpponentName, currentHp: 200, maxHp: 200, baseLevel: myTeam[0]?.baseLevel || 50 };
-    socket.emit('pvp_ready', { battleId: pvpBattleId });
-    updatePvPUI();
-    document.getElementById('pvp-log').innerHTML = 'Бой начался!\n';
+    openPvPArena(data.battleId, data.opponent, data.first || false);
   });
 
   socket.on('pvp_opponent_action', (action) => {
+    if (!pvpBattleId) return;
+    if (action.type === 'mon_data') {
+      // Opponent sent their pokemon data
+      document.getElementById('pvp-opp-name').textContent = action.name;
+      document.getElementById('pvp-opp-lvl').textContent = `Lv${action.lvl}`;
+      document.getElementById('pvp-opp-hp').textContent = `${action.hp}/${action.maxHp}`;
+      document.getElementById('pvp-opp-hp-fill').style.width = `${(action.hp / action.maxHp) * 100}%`;
+      if (action.sprite) document.getElementById('pvp-opp-sprite').src = action.sprite;
+      // Store opponent HP for tracking
+      if (!pvpOppMon) pvpOppMon = {};
+      pvpOppMon.currentHp = action.hp;
+      pvpOppMon.maxHp = action.maxHp;
+    }
     if (action.type === 'attack') {
-      pvpActiveMon.currentHp -= action.dmg || 0;
-      if (pvpActiveMon.currentHp < 0) pvpActiveMon.currentHp = 0;
+      if (pvpMyMon) {
+        pvpMyMon.currentHp -= action.dmg;
+        if (pvpMyMon.currentHp < 0) pvpMyMon.currentHp = 0;
+        updatePvPUI();
+      }
       const logEl = document.getElementById('pvp-log');
-      logEl.innerHTML = `${pvpOpponentName} атакует! ${action.crit ? '💥Крит! ' : ''}(-${action.dmg} HP)\n${logEl.innerHTML}`;
+      logEl.innerHTML = `${pvpOpponentName}: ${action.moveName}! ${action.crit ? '💥Крит! ' : ''}(-${action.dmg})\n${logEl.innerHTML}`;
       pvpMyTurn = true;
       updatePvPUI();
-      if (pvpActiveMon.currentHp <= 0) endPvP(false);
+      if (pvpMyMon && pvpMyMon.currentHp <= 0) endPvP(false);
     }
     if (action.type === 'surrender') {
-      showToast('Соперник сдался! Победа!', false);
+      showToast('🏆 Соперник сдался! Победа!', false);
+      money += 500; updateMoneyDisplay();
       document.getElementById('pvp-modal').style.display = 'none';
       pvpBattleId = null;
+      autoSave();
     }
-    if (action.type === 'win') {
-      showToast('Соперник победил!', true);
+    if (action.type === 'win' || action.type === 'lose') {
+      document.getElementById('pvp-modal').style.display = 'none';
+      pvpBattleId = null;
+      autoSave();
     }
   });
 }
@@ -8613,14 +8633,18 @@ function openTradeWindow(partnerName) {
       socket.emit('trade_offer', { tradeId: activeTradeId, offer: null });
       renderTradeOffers();
       renderTradePickGrid();
-      document.getElementById('btn-trade-confirm').textContent = '✅ Подтвердить обмен';
-      document.getElementById('btn-trade-confirm').disabled = false;
-      document.getElementById('btn-trade-confirm').style.opacity = '1';
+      renderTradeItemGrid();
+      const conf = document.getElementById('btn-trade-confirm');
+      conf.textContent = '✅ Подтвердить обмен';
+      conf.disabled = false;
+      conf.style.opacity = '1';
     });
 
     tw.addEventListener('click', (e) => { if (e.target === tw) { if (activeTradeId) socket.emit('trade_cancel', activeTradeId); closeTradeWindow(); } });
   }
 
+  myTradeOffer = null;
+  partnerTradeOffer = null;
   document.getElementById('trade-partner-name').textContent = partnerName;
   document.getElementById('trade-my-status').textContent = '⏳ Ожидание';
   document.getElementById('trade-my-status').className = 'trade-status waiting';

@@ -109,9 +109,9 @@ export function initSocket(server, allowedOrigin) {
 
     socket.on('pvp_accept', (fromId) => {
       const battleId = `${fromId}-${socket.id}-${Date.now()}`;
-      pvpBattles.set(battleId, { p1: fromId, p2: socket.id, p1Ready: false, p2Ready: false, turn: 0, log: [] });
-      io.to(fromId).emit('pvp_start', { battleId, opponent: onlinePlayers.get(socket.id)?.username });
-      io.to(socket.id).emit('pvp_start', { battleId, opponent: onlinePlayers.get(fromId)?.username });
+      pvpBattles.set(battleId, { p1: fromId, p2: socket.id });
+      io.to(fromId).emit('pvp_start', { battleId, opponent: onlinePlayers.get(socket.id)?.username, first: true });
+      io.to(socket.id).emit('pvp_start', { battleId, opponent: onlinePlayers.get(fromId)?.username, first: false });
     });
 
     socket.on('pvp_ready', (data) => {
