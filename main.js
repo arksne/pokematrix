@@ -1473,11 +1473,23 @@ function initAdminPanel() {
   modal.className = 'modal-overlay';
   modal.style.display = 'none';
   modal.innerHTML = `
-    <div class="selection-modal-card" style="max-width:360px;width:95%;max-height:85vh;overflow-y:auto;">
+    <div class="selection-modal-card" style="max-width:380px;width:95%;max-height:85vh;overflow-y:auto;">
       <h3>🛠 Админ-панель</h3>
-      <p style="font-size:0.8rem;color:var(--tma-text-muted);margin:0 0 10px;">ID: ${tgUser?.id || '?'}</p>
-      <div id="admin-buttons" style="display:flex;flex-direction:column;gap:6px;"></div>
-      <button class="tma-btn" id="btn-admin-close" style="width:100%;margin-top:10px;">Закрыть</button>
+      <p style="font-size:0.75rem;color:var(--tma-text-muted);margin:0 0 8px;">Мой ID: ${tgUser?.id || '?'} | ${tgUser?.username || ''}</p>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <input id="admin-target-id" type="text" placeholder="ID тренера" style="flex:1;padding:6px 8px;font-size:0.8rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
+        <button class="tma-btn" id="admin-lookup" style="padding:6px 12px;font-size:0.8rem;background:#007aff;">🔍</button>
+      </div>
+      <div id="admin-target-info" style="font-size:0.72rem;color:var(--tma-text-muted);margin-bottom:8px;"></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+        <button class="tma-btn admin-id-act" data-act="items" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#34c759;">🎒</button>
+        <button class="tma-btn admin-id-act" data-act="money" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#ff9500;">💰</button>
+        <button class="tma-btn admin-id-act" data-act="badges" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#ff3b30;">🏅</button>
+        <button class="tma-btn admin-id-act" data-act="heal" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#007aff;">🏥</button>
+        <button class="tma-btn admin-id-act" data-act="iv" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#af52de;">⭐</button>
+      </div>
+      <div id="admin-buttons" style="display:flex;flex-direction:column;gap:4px;"></div>
+      <button class="tma-btn" id="btn-admin-close" style="width:100%;margin-top:8px;">Закрыть</button>
     </div>
   `;
   document.body.appendChild(modal);
@@ -1505,6 +1517,36 @@ function initAdminPanel() {
     b.style.cssText = 'width:100%;padding:10px;font-size:0.9rem;background:var(--tma-card-bg);color:var(--tma-text);border:1px solid var(--tma-border);';
     b.addEventListener('click', () => { fn(); });
     container.appendChild(b);
+  });
+
+  // ID-based admin actions
+  const targetInfo = document.getElementById('admin-target-info');
+  document.getElementById('admin-lookup').addEventListener('click', async () => {
+    const tid = document.getElementById('admin-target-id').value.trim();
+    if (!tid) { targetInfo.textContent = 'Введите ID'; return; }
+    targetInfo.textContent = 'Поиск...';
+    try {
+      const res = await fetch(`/api/profile/${tid}`);
+      const d = await res.json();
+      if (d.profile) {
+        const p = d.profile;
+        targetInfo.innerHTML = `👤 ${p.first_name||p.username} | 🏅${p.badges} | 💰${p.money} | 🐾${p.team?.length||0}`;
+        targetInfo.setAttribute('data-found', tid);
+      } else { targetInfo.textContent = 'Не найден'; targetInfo.removeAttribute('data-found'); }
+    } catch(e) { targetInfo.textContent = 'Ошибка'; }
+  });
+
+  document.querySelectorAll('.admin-id-act').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tid = targetInfo.getAttribute('data-found');
+      if (!tid) { showToast('Сначала 🔍 найди тренера по ID', true); return; }
+      const act = btn.getAttribute('data-act');
+      try {
+        const res = await fetch(`/admin/api?token=league17admin2026&cmd=give_${act}&user=${tid}`);
+        const d = await res.json();
+        showToast(d.status === 'ok' ? '✅ Готово' : '❌ ' + (d.error || 'ошибка'), d.status !== 'ok');
+      } catch(e) { showToast('Ошибка API', true); }
+    });
   });
 
   fab.addEventListener('click', () => { modal.style.display = 'flex'; });
@@ -8112,9 +8154,10 @@ async function loadLocationTrainers() {
     const data = await res.json();
     listEl.innerHTML = '';
     if (!data.trainers || data.trainers.length === 0) {
-      listEl.textContent = 'никого';
+      listEl.textContent = '0';
       return;
     }
+    listEl.textContent = data.trainers.length + ' ';
     data.trainers.forEach((t, i) => {
       const span = document.createElement('span');
       span.className = 'chat-trainer-chip';
@@ -8130,9 +8173,10 @@ function renderOnlinePlayers() {
   if (!listEl) return;
   listEl.innerHTML = '';
   if (onlinePlayersList.length === 0) {
-    listEl.textContent = 'никого';
+    listEl.textContent = '0';
     return;
   }
+  listEl.textContent = onlinePlayersList.length + ' ';
   onlinePlayersList.forEach((p, i) => {
     const span = document.createElement('span');
     span.className = 'chat-trainer-chip';

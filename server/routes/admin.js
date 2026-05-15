@@ -129,9 +129,19 @@ router.get('/api', adminAuth, async (req, res) => {
   const db = getDB();
   let result = { cmd, user };
 
+  // Helper: resolve user by numeric ID or username
+  async function resolveUser(idOrName) {
+    const byId = await db.get('SELECT id FROM users WHERE id = ?', parseInt(idOrName));
+    if (byId) return byId;
+    return await db.get('SELECT id FROM users WHERE username = ?', idOrName);
+  }
+
   try {
+    const u = await resolveUser(user);
+    if (!u && cmd !== 'give_items') {} // handled per-command
+
     if (cmd === 'give_items') {
-      const u = await db.get('SELECT id FROM users WHERE username = ?', user);
+      if (!u) { result.error = 'User not found'; return res.json(result); }
       if (!u) { result.error = 'User not found'; return res.json(result); }
       const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
       if (!save) { result.error = 'No save data'; return res.json(result); }
@@ -143,7 +153,7 @@ router.get('/api', adminAuth, async (req, res) => {
       await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
       result = { status: 'ok', items: ALL_ITEMS.length, money: data.money };
     } else if (cmd === 'give_money') {
-      const u = await db.get('SELECT id FROM users WHERE username = ?', user);
+      const u = await resolveUser(user);
       if (!u) { result.error = 'User not found'; return res.json(result); }
       const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
       if (!save) { result.error = 'No save'; return res.json(result); }
@@ -152,7 +162,7 @@ router.get('/api', adminAuth, async (req, res) => {
       await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
       result = { status: 'ok', money: data.money };
     } else if (cmd === 'give_badges') {
-      const u = await db.get('SELECT id FROM users WHERE username = ?', user);
+      const u = await resolveUser(user);
       if (!u) { result.error = 'User not found'; return res.json(result); }
       const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
       if (!save) { result.error = 'No save'; return res.json(result); }
@@ -162,7 +172,7 @@ router.get('/api', adminAuth, async (req, res) => {
       await db.run(`INSERT INTO leaderboard (user_id, badges_count, team_level_sum, money, updated_at) VALUES (?,8,50,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET badges_count=8,updated_at=datetime('now')`, u.id, data.money||0);
       result = { status: 'ok', badges: 8 };
     } else if (cmd === 'give_legendary') {
-      const u = await db.get('SELECT id FROM users WHERE username = ?', user);
+      const u = await resolveUser(user);
       if (!u) { result.error = 'User not found'; return res.json(result); }
       const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
       if (!save) { result.error = 'No save'; return res.json(result); }
@@ -193,7 +203,7 @@ router.get('/api', adminAuth, async (req, res) => {
         result = { status: 'ok', pokemon: pick, teamSize: data.myTeam.length };
       } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
     } else if (cmd === 'heal_team') {
-      const u = await db.get('SELECT id FROM users WHERE username = ?', user);
+      const u = await resolveUser(user);
       if (!u) { result.error = 'User not found'; return res.json(result); }
       const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
       if (!save) { result.error = 'No save'; return res.json(result); }
@@ -202,7 +212,7 @@ router.get('/api', adminAuth, async (req, res) => {
       await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
       result = { status: 'ok', healed: data.myTeam.length };
     } else if (cmd === 'max_iv') {
-      const u = await db.get('SELECT id FROM users WHERE username = ?', user);
+      const u = await resolveUser(user);
       if (!u) { result.error = 'User not found'; return res.json(result); }
       const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
       if (!save) { result.error = 'No save'; return res.json(result); }
@@ -211,7 +221,7 @@ router.get('/api', adminAuth, async (req, res) => {
       await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
       result = { status: 'ok', mons: data.myTeam.length };
     } else if (cmd === 'fix_levels') {
-      const u = await db.get('SELECT id FROM users WHERE username = ?', user);
+      const u = await resolveUser(user);
       if (!u) { result.error = 'User not found'; return res.json(result); }
       const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
       if (!save) { result.error = 'No save'; return res.json(result); }
