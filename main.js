@@ -1962,6 +1962,165 @@ let gymLeaderKey = null;
 let gymTeamIndex = 0;
 let gymTeamData = null;
 
+// --- BATTLE STATE PERSISTENCE (survives page refresh) ---
+function saveBattleState() {
+  if (!battleType || battleType === 'none') return;
+  const state = {
+    battleType,
+    locationId: currentLocationId,
+    activeMonIndex: myTeam.indexOf(activePlayerMon),
+    activeMonCurHP: activePlayerMon?.currentHp,
+    activeMonMovesPP: activePlayerMon?.movesPP,
+    activeMonStatStages: activePlayerMon?.statStages,
+    activeMonChoiceLocked: activePlayerMon?.choiceLockedMove,
+    currentWeather,
+    escapeAttempts,
+    battleRound,
+    itemsUsedInBattle
+  };
+  if (battleType === 'wild' && activeWild) {
+    state.wildPkmName = activeWild.name;
+    state.wildCurHP = wildCurHP;
+    state.wildMaxHP = wildMaxHP;
+    state.wildLvl = wildLvl;
+    state.wildStatus = wildStatus;
+    state.wildSleepTurns = wildSleepTurns;
+    state.wildMovesPP = wildMovesPP;
+    state.wildIsShiny = activeWild.isShiny;
+  }
+  if ((battleType === 'gym' || battleType === 'elite' || battleType === 'champion') && gymTeamData) {
+    state.gymLeaderKey = gymLeaderKey;
+    state.gymTeamIndex = gymTeamIndex;
+    state.gymTeamIndexInMember = gymTeamIndexInMember;
+    state.gymTeamData = gymTeamData;
+    if (activeWild) {
+      state.wildCurHP = wildCurHP;
+      state.wildMaxHP = wildMaxHP;
+      state.wildStatus = wildStatus;
+      state.wildSleepTurns = wildSleepTurns;
+      state.wildMovesPP = wildMovesPP;
+    }
+  }
+  try { localStorage.setItem(lsKey('battle_state'), JSON.stringify(state)); } catch(e) {}
+}
+
+function clearBattleState() {
+  try { localStorage.removeItem(lsKey('battle_state')); } catch(e) {}
+}
+
+async function restoreBattleState() {
+  let state;
+  try {
+    const raw = localStorage.getItem(lsKey('battle_state'));
+    if (!raw) return false;
+    state = JSON.parse(raw);
+  } catch(e) { return false; }
+
+  if (!state.battleType || !state.locationId || state.locationId !== currentLocationId) {
+    clearBattleState();
+    return false;
+  }
+
+  const activeIdx = state.activeMonIndex;
+  if (activeIdx === undefined || activeIdx < 0 || activeIdx >= myTeam.length) return false;
+  const mon = myTeam[activeIdx];
+  if (!mon || mon.currentHp <= 0) return false;
+
+  // Restore player mon state
+  activePlayerMon = mon;
+  mon.currentHp = state.activeMonCurHP;
+  if (state.activeMonMovesPP) mon.movesPP = state.activeMonMovesPP;
+  if (state.activeMonStatStages) mon.statStages = state.activeMonStatStages;
+  if (state.activeMonChoiceLocked !== undefined) mon.choiceLockedMove = state.activeMonChoiceLocked;
+
+  battleType = state.battleType;
+  currentWeather = state.currentWeather || getDailyWeather(currentLocationId);
+  escapeAttempts = state.escapeAttempts || 0;
+  battleRound = state.battleRound || 0;
+  itemsUsedInBattle = state.itemsUsedInBattle || 0;
+
+  if (battleType === 'wild' && state.wildPkmName) {
+    try {
+      const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${state.wildPkmName.toLowerCase()}`);
+      activeWild = await res.json();
+      pokedexSeen.add(activeWild.name);
+      activeWild.isShiny = state.wildIsShiny || false;
+
+      // Fetch species for catch rate
+      try {
+        const speciesRes = await fetch(activeWild.species.url);
+        const speciesData = await speciesRes.json();
+        activeWild.captureRate = speciesData.capture_rate;
+        activeWild.speciesData = speciesData;
+      } catch(e) {}
+
+      wildLvl = state.wildLvl;
+      wildMaxHP = state.wildMaxHP;
+      wildCurHP = state.wildCurHP;
+      wildStatus = state.wildStatus;
+      wildSleepTurns = state.wildSleepTurns || 0;
+      wildMovesPP = state.wildMovesPP || [];
+      activeWild.status = wildStatus;
+      activeWild.heldItem = null; // Can't restore held item reliably
+      activeWild.berries = { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 };
+
+      // Fetch wild moves
+      wildMovesDetailed = [];
+      const movePromises = [];
+      for (let i = 0; i < activeWild.moves.length && i < 20; i++) {
+        movePromises.push(
+          fetch(activeWild.moves[i].move.url).then(r => r.json()).catch(() => null)
+        );
+      }
+      const moveResults = await Promise.all(movePromises);
+      wildMovesDetailed = moveResults.filter(m => m && m.power);
+
+      if (!activeWild.wildIVs) {
+        activeWild.wildIVs = {
+          hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
+          def: Math.floor(Math.random() * 32), spa: Math.floor(Math.random() * 32),
+          spd: Math.floor(Math.random() * 32), spe: Math.floor(Math.random() * 32)
+        };
+      }
+
+      renderBattleUI();
+      loadMoveButtons(activePlayerMon, battleType === 'wild' ? useMove : useMoveGym);
+
+      document.getElementById('encounter-modal').style.display = 'flex';
+      document.getElementById('battle-main-menu').style.display = 'flex';
+      document.getElementById('battle-end-menu').style.display = 'none';
+      document.getElementById('battle-gym-info').style.display = 'none';
+
+      appendToLog('⚡ Битва восстановлена!', true);
+      appendToLog(`Дикий ${activeWild.name.toUpperCase()} всё ещё здесь!`, false, 'battle');
+
+      return true;
+    } catch(e) {
+      console.error('Failed to restore wild battle:', e);
+      clearBattleState();
+      return false;
+    }
+  }
+
+  return false;
+}
+
+function renderBattleUI() {
+  document.getElementById('wild-name').innerText = activeWild.name;
+  document.getElementById('wild-lvl').innerText = `Lv${wildLvl}`;
+  const wildSpriteUrl = activeWild.sprites?.other?.['official-artwork']?.front_default || activeWild.sprites.front_default;
+  document.getElementById('wild-sprite').src = wildSpriteUrl;
+  document.getElementById('wild-status-icon').innerText = getStatusIcon(wildStatus);
+  updateWildHpUI();
+
+  document.getElementById('player-name').innerText = activePlayerMon.nickname || activePlayerMon.apiData.name;
+  document.getElementById('player-lvl').innerText = `Lv${activePlayerMon.baseLevel + activePlayerMon.candiesEaten}`;
+  const playerSpriteUrl = activePlayerMon.apiData.sprites?.other?.['official-artwork']?.front_default || activePlayerMon.apiData.sprites.front_default;
+  document.getElementById('player-sprite').src = playerSpriteUrl;
+  document.getElementById('player-status-icon').innerText = getStatusIcon(activePlayerMon.status);
+  updateBattleSpriteBgs();
+  updatePlayerHpUI();
+}
 const MAX_IV = 70;
 
 // --- WEATHER ---
@@ -2070,6 +2229,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   initProfileEvents();
   initEncounterEvents();
+
+  // Restore battle if one was in progress before page refresh
+  restoreBattleState();
   initInventoryEvents();
   initProfileUXEvents();
   initCloudEvents();
@@ -4306,6 +4468,7 @@ async function useMove(moveIndex) {
       return;
     }
     if (wildCurHP <= 0) return;
+    saveBattleState();
     setTimeout(() => { enemyTurn(); }, 1000);
     return;
   }
@@ -4592,6 +4755,7 @@ async function useMove(moveIndex) {
 
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
+    clearBattleState();
     updateInventoryDisplay();
     updateMoneyDisplay();
     autoSave();
@@ -4650,6 +4814,7 @@ function enemyTurn() {
     money += wildLvl * 15;
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
+    clearBattleState();
     updateInventoryDisplay();
     updateMoneyDisplay();
     autoSave();
@@ -4782,6 +4947,7 @@ function enemyTurn() {
       updatePlayerHpUI();
       appendToLog(`${activePlayerMon.apiData.name} восстанавливает HP от Объедков! (+${heal})`);
     }
+    saveBattleState();
     setTimeout(() => {
       document.getElementById('battle-main-menu').style.display = 'flex';
     }, 1000);
@@ -5117,6 +5283,7 @@ function initEncounterEvents() {
 
   document.getElementById('btn-leave-battle').addEventListener('click', () => {
     document.getElementById('encounter-modal').style.display = 'none';
+    clearBattleState();
     gymTeamIndex = 0;
     gymTeamIndexInMember = 0;
     gymTeamData = null;
