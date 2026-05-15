@@ -3675,11 +3675,8 @@ function renderLocation(locId) {
   }
 
   updateTimeOfDay();
-  const timeBadge = isDaytime ? '☀️ День' : '🌙 Ночь';
   const locNameEl = document.getElementById('loc-name');
-  if (!locNameEl.innerText.includes('☀️') && !locNameEl.innerText.includes('🌙')) {
-    locNameEl.innerText = `${timeBadge} ${loc.name}`;
-  }
+  locNameEl.innerText = `${isDaytime ? '☀️' : '🌙'} ${loc.name}`;
 
   const actionsContainer = document.getElementById('loc-actions');
   actionsContainer.innerHTML = '';
