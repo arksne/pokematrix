@@ -2213,7 +2213,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const loaded = loadGame();
   if (!loaded) {
-    await giveStarter();
+    // Try cloud save before starting fresh
+    const cloudData = await cloudLoad();
+    if (cloudData && cloudData.myTeam && cloudData.myTeam.length > 0) {
+      applyCloudSave(cloudData);
+      saveGame();
+      showToast('Прогресс восстановлен из облака!', false);
+    } else {
+      await giveStarter();
+    }
   } else {
     const cloudData = await cloudLoad();
     if (cloudData) {
@@ -4614,6 +4622,8 @@ async function useMove(moveIndex) {
 
     updateWildHpUI();
 
+    appendToLog(`Нанесено ${dmg} урона!`, false, 'dmg');
+
     if (typeMult > 1) {
       appendToLog('Это суперэффективно!', false, 'eff');
     } else if (typeMult < 1 && typeMult > 0) {
@@ -5521,6 +5531,8 @@ async function useMoveGym(moveIndex) {
     }
 
     updateWildHpUI();
+
+    appendToLog(`Нанесено ${dmg} урона!`, false, 'dmg');
 
     if (typeMult > 1) appendToLog('Это суперэффективно!', false, 'eff');
     else if (typeMult < 1 && typeMult > 0) appendToLog('Это малоэффективно...');
