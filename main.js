@@ -1373,13 +1373,87 @@ function initInventory() {
   });
 }
 
-// Дебаг: заполнить рюкзак всеми предметами x10 (вызови в консоли)
-window.fillAllItems = function() {
-  ITEMS.forEach(item => { inventory[item.id] = 10; });
-  updateInventoryDisplay();
-  autoSave();
-  console.log('Рюкзак заполнен всеми предметами x10');
+// ═══════════════════════════════════════════
+// 🛠 АДМИН-КОНСОЛЬ (вызывай в F12 → Console)
+// ═══════════════════════════════════════════
+window.help = function() {
+  console.log(`
+🛠 Админ-команды (вводи в консоли):
+──────────────────────────────────────────
+💰 money(N)         — Добавить N кредитов
+🎒 items()          — Все предметы x999
+🎒 items10()        — Все предметы x10
+🏅 allBadges()      — Все 8 значков Канто
+🏥 heal()           — Вылечить всю команду
+⭐ maxIV()          — Макс IV (31) всей команде
+📈 lvlup(N)         — +N уровней команде
+🦄 legendary()      — Добавить легендарного покемона
+🦄 mew()            — Добавить Мью
+🗺️  goto(locId)      — Телепорт в локацию
+📋 cmds()           — Показать это меню
+──────────────────────────────────────────
+  `);
 };
+window.cmds = window.help;
+
+window.money = function(n = 100000) { money += n; updateMoneyDisplay(); autoSave(); console.log('+¥' + n); };
+window.items = function() { ITEMS.forEach(i => { inventory[i.id] = 999; }); updateInventoryDisplay(); autoSave(); console.log('Все предметы x999'); };
+window.items10 = function() { ITEMS.forEach(i => { inventory[i.id] = 10; }); updateInventoryDisplay(); autoSave(); console.log('Все предметы x10'); };
+window.allBadges = function() {
+  badges = ['Boulder Badge','Cascade Badge','Thunder Badge','Rainbow Badge','Marsh Badge','Soul Badge','Volcano Badge','Earth Badge'];
+  updateBadgeDisplay(); autoSave(); console.log('8 значков получено!');
+};
+window.heal = function() {
+  myTeam.forEach(m => { m.currentHp = m.maxHp; m.status = null; m.sleepTurns = 0;
+    if (m.movesPP) m.movesPP.forEach(pp => { if (pp) pp.current = pp.max; });
+  });
+  updatePlayerHpUI(); autoSave(); console.log('Команда вылечена');
+};
+window.maxIV = function() {
+  myTeam.forEach(m => { m.ivs = { hp:31, atk:31, def:31, spa:31, spd:31, spe:31 }; });
+  autoSave(); console.log('IV 31 всей команде');
+};
+window.lvlup = function(n = 10) {
+  myTeam.forEach(m => { for(let i=0;i<n;i++) { m.baseLevel++; m.maxHp = calculateStat(m,'hp',false); m.currentHp = m.maxHp; } });
+  refreshProfileUI(); renderTeamGrid(); autoSave(); console.log('+' + n + ' уровней команде');
+};
+window.legendary = async function() {
+  const leg = ['mewtwo','mew','lugia','ho-oh','celebi','rayquaza','groudon','kyogre','dialga','palkia','giratina','arceus','zekrom','reshiram','xerneas','yveltal','solgaleo','lunala','marshadow','zeraora'];
+  const pick = leg[Math.floor(Math.random()*leg.length)];
+  await giveStarterMon(pick);
+  renderTeamGrid(); autoSave(); console.log('Легендарный ' + pick + ' добавлен!');
+};
+window.mew = async function() { await giveStarterMon('mew'); renderTeamGrid(); autoSave(); console.log('Мью добавлен!'); };
+window.goto = function(locId) {
+  if (!REGIONS[currentRegion]?.locations[locId] && !Object.values(REGIONS).some(r => r.locations[locId])) {
+    console.log('Локация не найдена. Примеры: pallet_town, viridian_city, goldenrod, indigo_plateau');
+    return;
+  }
+  currentLocationId = locId;
+  for (const [reg, data] of Object.entries(REGIONS)) {
+    if (data.locations[locId]) { currentRegion = reg; break; }
+  }
+  renderLocation(locId); autoSave(); console.log('Телепорт: ' + locId);
+};
+
+// Авто-список ID локаций
+window.locations = function() {
+  const all = [];
+  for (const [reg, data] of Object.entries(REGIONS)) {
+    for (const [id, loc] of Object.entries(data.locations)) {
+      all.push({ id, name: loc.name, region: reg, hasHeal: loc.hasHeal, hasWater: loc.hasWater });
+    }
+  }
+  console.table(all);
+  return all;
+};
+
+window.myId = function() { console.log('Твой Telegram ID:', tgUser?.id || 'не авторизован'); console.log('Твой username:', tgUser?.username || 'нет'); return tgUser?.id; };
+window.adminAdd = function(id) { if(!id) { console.log('Используй: adminAdd(ТВОЙ_ID_ИЗ_myId())'); return; } ADMIN_IDS.add(id); console.log('Админ добавлен:', id); };
+window.adminList = function() { console.log('Админы:', Array.from(ADMIN_IDS)); return Array.from(ADMIN_IDS); };
+
+console.log('🛠 League-17 Admin готов. Введи help() для списка команд.');
+console.log('📱 Твой Telegram ID: введи myId()');
 
 function getItemQty(itemId) {
   return inventory[itemId] ?? 0;
@@ -1824,7 +1898,8 @@ let tgUser = null;
 let tgToken = null;
 let cloudSaveTimer = null;
 const API_BASE = '/api';
-const ADMIN_IDS = new Set([1394113078]); // Admin Telegram IDs
+// Admin Telegram IDs — пополняется через консоль: adminAdd()
+const ADMIN_IDS = new Set([1394113078]);
 
 document.addEventListener('DOMContentLoaded', async () => {
   initAppNav();
