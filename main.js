@@ -843,7 +843,7 @@ const ITEMS = [
   { id: 'coals', nameRu: 'Угольки', category: 'quest', desc: 'Горячие угольки', sprite: '276.png', spriteType: 'local', price: 0, sellPrice: 200, isUsable: false, isBall: false, implemented: true },
 
   // ── Покеболы (доп) ──
-  { id: 'superDarkBall', nameRu: 'Супердаркбол', category: 'balls', desc: '+6 ген (шайни +7)', sprite: 'P79.png', spriteType: 'local', price: 0, sellPrice: 5000, isUsable: false, isBall: true, ballMult: 1, implemented: false },
+  { id: 'superDarkBall', nameRu: 'Супердаркбол', category: 'balls', desc: '+6 ген (шайни +7)', sprite: 'P79.png', spriteType: 'local', price: 0, sellPrice: 5000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
 
   // ── Эвольверы (доп) ──
   { id: 'happinessEvolver', nameRu: 'Эволвер Счастья', category: 'evolutionStones', desc: 'Эволюция по счастью', sprite: '143.gif', spriteType: 'local', price: 0, sellPrice: 3000, isUsable: false, isBall: false, implemented: false },
@@ -7034,7 +7034,7 @@ function openHeldItemPicker(monIndex) {
   if (!mon) return;
 
   const choices = ITEMS.filter(item => {
-    return (item.category === 'battle' || item.category === 'berries') && getItemQty(item.id) > 0;
+    return (item.category === 'battle' || item.category === 'berries' || item.category === 'other') && getItemQty(item.id) > 0 && item.isUsable !== false;
   });
 
   const selectionItems = choices.map((item) => ({
