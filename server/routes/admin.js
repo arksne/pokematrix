@@ -226,6 +226,10 @@ router.get('/api', adminAuth, async (req, res) => {
       (data.myTeam||[]).forEach(m => { m.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31}; });
       await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
       result = { status: 'ok', mons: data.myTeam.length };
+    } else if (cmd === 'force_register') {
+      if (!u) { result.error = 'User not found'; return res.json(result); }
+      await db.run('UPDATE users SET registered = 1, registered_at = COALESCE(registered_at, datetime(\'now\')) WHERE id = ?', u.id);
+      result = { status: 'ok', registered: 1 };
     } else if (cmd === 'fix_levels') {
       const u = await resolveUser(user);
       if (!u) { result.error = 'User not found'; return res.json(result); }
