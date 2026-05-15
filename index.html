@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>League-17 TMA</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css" />
   </head>
@@ -12,6 +13,17 @@
       
       <header class="tma-header">
         <h1 id="header-title">Мир (Канто)</h1>
+        <div class="header-info">
+          <span id="money-display" class="header-money">¥500</span>
+          <span id="badge-display" class="header-badges">Значки: 0/8</span>
+          <button id="btn-cloud-sync" class="header-sync" title="Синхронизировать">☁️ Синхр.</button>
+          <button id="btn-leaderboard" class="header-lb" title="Таблица лидеров">🏆</button>
+          <button id="btn-open-pokedex" class="header-lb" title="Покедекс">📖</button>
+          <button id="btn-quests" class="header-lb" title="Задания">📋</button>
+          <button id="btn-theme-toggle" class="header-lb" title="Темная тема">🌙</button>
+          <button id="btn-hunt-toggle" class="header-hunt" title="Искать покемонов">⚪</button>
+          <button id="btn-reset-game" class="header-reset" title="Сбросить игру">⟳</button>
+        </div>
       </header>
 
       <main class="tma-main-area">
@@ -24,11 +36,18 @@
           <div class="location-card">
             <div class="location-image" id="loc-image"></div>
             <h2 class="location-name" id="loc-name">Вермилион</h2>
+            <p class="location-region" id="loc-region">Канто</p>
             <p class="location-desc" id="loc-desc">Портовый город, в который мы попадаем после путешествия из Джото.</p>
+            <p class="location-weather" id="loc-weather">☀️ Ясно</p>
             
             <div class="location-actions" id="loc-actions">
               <!-- Dynamically injected (Heal, Hunt, Shop) -->
             </div>
+          </div>
+
+          <div class="npc-panel" id="npc-panel" style="display:none;">
+            <h3>👤 Персонажи</h3>
+            <div class="npc-buttons" id="npc-buttons"></div>
           </div>
 
           <div class="navigation-panel">
@@ -46,77 +65,8 @@
         <div id="view-backpack" class="app-view">
           <div class="tma-inventory">
             <h3>🎒 Рюкзак (Инвентарь)</h3>
-            <div class="inventory-items">
-              <div class="inv-item">
-                <div class="inv-icon">🔴</div>
-                <div class="inv-details">
-                  <span class="inv-name">Монстробол</span>
-                  <span class="inv-desc">Для поимки диких покемонов.</span>
-                </div>
-                <div class="inv-actions">
-                  <span class="inv-qty">x<span id="qty-pokeball">10</span></span>
-                </div>
-              </div>
-              
-              <div class="inv-item">
-                <div class="inv-icon">🧪</div>
-                <div class="inv-details">
-                  <span class="inv-name">Аптечка</span>
-                  <span class="inv-desc">Восстанавливает 20 HP.</span>
-                </div>
-                <div class="inv-actions">
-                  <span class="inv-qty">x<span id="qty-potion">5</span></span>
-                  <button class="btn-use" id="btn-use-potion-out">Юз</button>
-                </div>
-              </div>
-              
-              <div class="inv-item">
-                <div class="inv-icon">🍬</div>
-                <div class="inv-details">
-                  <span class="inv-name">Сладкая Конфета</span>
-                  <span class="inv-desc">+1 Уровень, +4 макс. EV.</span>
-                </div>
-                <div class="inv-actions">
-                  <span class="inv-qty">x<span id="qty-candy">20</span></span>
-                  <button class="btn-use" id="btn-use-candy">Юз</button>
-                </div>
-              </div>
-
-              <div class="inv-item">
-                <div class="inv-icon">💊</div>
-                <div class="inv-details">
-                  <span class="inv-name">Витамин</span>
-                  <span class="inv-desc">+10 макс. EV, повышает Счастье.</span>
-                </div>
-                <div class="inv-actions">
-                  <span class="inv-qty">x<span id="qty-vitamin">20</span></span>
-                  <button class="btn-use" id="btn-use-vitamin">Юз</button>
-                </div>
-              </div>
-
-              <div class="inv-item">
-                <div class="inv-icon">💪</div>
-                <div class="inv-details">
-                  <span class="inv-name">Набор Тренировки</span>
-                  <span class="inv-desc">Улучшает случайный стат</span>
-                </div>
-                <div class="inv-actions">
-                  <span class="inv-qty">x<span id="qty-train">50</span></span>
-                  <button class="btn-use" id="btn-use-train">Юз</button>
-                </div>
-              </div>
-
-              <div class="inv-item">
-                <div class="inv-icon">🧪</div>
-                <div class="inv-details">
-                  <span class="inv-name">Набор Ослабления</span>
-                  <span class="inv-desc">Снижает тренировку на 1</span>
-                </div>
-                <div class="inv-actions">
-                  <span class="inv-qty">x<span id="qty-weaken">20</span></span>
-                  <button class="btn-use btn-danger" id="btn-use-weaken">Юз</button>
-                </div>
-              </div>
+            <div class="inventory-items" id="inventory-items">
+              <!-- Динамически рендерится из JS -->
             </div>
           </div>
         </div>
@@ -150,7 +100,7 @@
                 <img id="poke-sprite" class="reborn-sprite" src="" alt="Pokemon" />
               </div>
               <div class="reborn-profile-title">
-                <h2 id="poke-name">Pikachu #25</h2>
+                <h2 id="poke-name" style="cursor:pointer;" title="Нажмите чтобы дать прозвище">Pikachu #25</h2>
                 <div id="poke-types" class="poke-types"></div>
                 <div style="font-weight:bold; margin-top:5px;">
                   HP: <span id="info-cur-hp">0</span> / <span id="info-max-hp">0</span>
@@ -165,6 +115,10 @@
               <button id="qa-vitamin" class="reborn-qa-btn">Витамин (<span id="qa-qty-vitamin">0</span>)</button>
               <button id="qa-train" class="reborn-qa-btn">Тренировка (<span id="qa-qty-train">0</span>)</button>
               <button id="qa-weaken" class="reborn-qa-btn">Ослабление (<span id="qa-qty-weaken">0</span>)</button>
+              <button id="qa-super-potion" class="reborn-qa-btn">Супер Аптечка (<span id="qa-qty-super-potion">0</span>)</button>
+              <button id="qa-full-restore" class="reborn-qa-btn">Восстановление (<span id="qa-qty-full-restore">0</span>)</button>
+              <button id="qa-evolution-stone" class="reborn-qa-btn">Камень Эволюции (<span id="qa-qty-evolution-stone">0</span>)</button>
+              <button id="qa-tm" class="reborn-qa-btn">Переучить (<span id="qa-qty-tm">0</span>)</button>
             </div>
 
             <!-- Tabs Navigation -->
@@ -187,6 +141,7 @@
                 <div class="info-row"><b>Характер:</b> <span id="info-nature">-</span></div>
                 <div class="info-row"><b>Способность:</b> <span id="info-ability">-</span></div>
                 <div class="info-row"><b>Тера-тип:</b> <span id="info-tera">-</span></div>
+                <div class="info-row"><b>Держит:</b> <span id="info-held-item" style="cursor:pointer;color:var(--tma-primary)">-</span></div>
                 <div class="info-row"><b>Шанс крита:</b> <span id="info-crit">0%</span></div>
                 <div class="info-row genecode-row">
                   <b>Генокод:</b> <span id="info-genecode" style="color: #4682B4; font-family: monospace; letter-spacing: 1px;">-</span>
@@ -312,7 +267,11 @@
 
               <!-- TAB CONTENT: STATUS -->
               <div id="content-status" class="tab-content">
-                
+
+                <div id="profile-status-display" class="status-row" style="display:none;">
+                  <b>Статус:</b> <span id="profile-status-text"></span>
+                </div>
+
                 <div class="status-row">
                   <b>Счастье:</b> <span id="status-happiness">0</span> / 255
                 </div>
@@ -331,6 +290,59 @@
 
         </div>
 
+        <!-- ======================= -->
+        <!-- VIEW 5: CHAT + TRAINER CARD -->
+        <!-- ======================= -->
+        <div id="view-chat" class="app-view">
+          <div class="chat-layout">
+
+            <!-- LEFT: CHAT -->
+            <div class="chat-panel">
+              <div class="chat-header">Общий чат</div>
+              <div class="chat-messages" id="chat-messages">
+                <div class="chat-loading">Загрузка сообщений...</div>
+              </div>
+              <div class="chat-input-area">
+                <input class="chat-input" id="chat-input" type="text" placeholder="Введите сообщение..." maxlength="500">
+                <button class="chat-send-btn" id="chat-send-btn">Отпр.</button>
+              </div>
+            </div>
+
+            <!-- RIGHT: TRAINER CARD -->
+            <div class="trainer-card">
+              <div class="trainer-card-header">
+                <div class="trainer-avatar" id="trainer-avatar">👤</div>
+                <div class="trainer-name" id="trainer-name">Загрузка...</div>
+              </div>
+              <div class="trainer-stats">
+                <div class="trainer-stat">
+                  <span class="trainer-stat-label">Кредиты</span>
+                  <span class="trainer-stat-value" id="trainer-money">¥500</span>
+                </div>
+                <div class="trainer-stat">
+                  <span class="trainer-stat-label">Значки</span>
+                  <span class="trainer-stat-value" id="trainer-badges">0</span>
+                </div>
+                <div class="trainer-stat">
+                  <span class="trainer-stat-label">Поймано</span>
+                  <span class="trainer-stat-value" id="trainer-caught">0/151</span>
+                </div>
+              </div>
+
+              <div class="trainer-location-trainers" id="trainer-location-trainers">
+                <div class="trainer-location-label">Тренеры на локации:</div>
+                <div class="trainer-location-list" id="trainer-location-list">Загрузка...</div>
+              </div>
+
+              <div class="trainer-team-label">Команда</div>
+              <div class="trainer-team" id="trainer-team">
+                <div class="trainer-team-empty">Нет покемонов</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
       </main>
 
       <!-- BOTTOM NAVIGATION BAR -->
@@ -346,6 +358,10 @@
         <div class="nav-item" data-target="view-team">
           <div class="nav-icon">🐾</div>
           <span>Команда</span>
+        </div>
+        <div class="nav-item" data-target="view-chat">
+          <div class="nav-icon">💬</div>
+          <span>Чат</span>
         </div>
       </nav>
 
@@ -365,75 +381,273 @@
     <!-- BATTLE ARENA (Modal) -->
     <div id="encounter-modal" class="modal-overlay">
       <div class="reborn-battle-arena">
-        
-        <!-- PLAYER POKEMON (Left) -->
-        <div class="reborn-side-panel">
-          <div class="reborn-poke-header">
-            <span id="player-name" class="reborn-poke-name">Groudon</span>
-            <span id="player-lvl" class="reborn-poke-lvl">[50-lvl]</span>
-          </div>
-          <div class="reborn-hp-wrap">
-            <div class="reborn-hp-bar">
-              <div class="reborn-hp-fill" id="player-hp-fill"></div>
-            </div>
-            <div class="reborn-exp-bar">
-              <div class="reborn-exp-fill" id="player-exp-fill"></div>
-            </div>
-          </div>
-          <div class="reborn-hp-text" id="player-hp-text">100/100</div>
-          <div class="reborn-sprite-box">
-            <img class="reborn-sprite" id="player-sprite" src="" alt="player">
-          </div>
-        </div>
 
-        <!-- CENTER PANEL (Log & Controls) -->
+        <!-- РЯД ПОКЕМОНОВ (Игрок слева, Дикий справа) -->
+        <div class="reborn-pokemon-row">
+
+          <!-- PLAYER POKEMON -->
+          <div class="reborn-side-panel">
+            <div class="reborn-poke-header">
+              <span id="player-name" class="reborn-poke-name">Groudon</span>
+              <span id="player-status-icon" class="reborn-status-icon"></span>
+              <span id="player-held-icon" class="reborn-held-icon" style="display:none;" title="Удерживаемый предмет"></span>
+              <span id="player-lvl" class="reborn-poke-lvl">Lv50</span>
+            </div>
+            <div class="reborn-hp-wrap">
+              <div class="reborn-hp-bar">
+                <div class="reborn-hp-fill" id="player-hp-fill"></div>
+              </div>
+              <div class="reborn-exp-bar">
+                <div class="reborn-exp-fill" id="player-exp-fill"></div>
+              </div>
+            </div>
+            <div class="reborn-hp-text" id="player-hp-text">100/100</div>
+            <div class="reborn-sprite-box">
+              <img class="reborn-sprite" id="player-sprite" src="" alt="player">
+            </div>
+          </div>
+
+          <!-- WILD POKEMON -->
+          <div class="reborn-side-panel">
+            <div class="reborn-poke-header">
+              <span id="wild-name" class="reborn-poke-name">Pidgey</span>
+              <span id="wild-status-icon" class="reborn-status-icon"></span>
+              <span id="wild-held-icon" class="reborn-held-icon" style="display:none;" title="Удерживаемый предмет"></span>
+              <span id="wild-lvl" class="reborn-poke-lvl">Lv5</span>
+            </div>
+            <div class="reborn-hp-wrap">
+              <div class="reborn-hp-bar">
+                <div class="reborn-hp-fill" id="wild-hp-fill"></div>
+              </div>
+            </div>
+            <div class="reborn-hp-text" id="wild-hp-text">10/10</div>
+            <div class="reborn-sprite-box">
+              <img class="reborn-sprite" id="wild-sprite" src="" alt="wild">
+            </div>
+          </div>
+
+        </div><!-- /reborn-pokemon-row -->
+
+        <!-- CENTER PANEL (Controls + Log) -->
         <div class="reborn-center-panel">
           
+          <div class="reborn-gym-info" id="battle-gym-info" style="display:none;">
+            <span id="gym-leader-battle-name" class="reborn-gym-badge">Лидер: Брок</span>
+          </div>
+
           <div class="reborn-controls" id="battle-main-menu">
             <div class="reborn-moves" id="battle-moves-menu">
-              <span class="reborn-move-link" id="move-btn-0">-</span> |
-              <span class="reborn-move-link" id="move-btn-1">-</span> |
-              <span class="reborn-move-link" id="move-btn-2">-</span> |
+              <span class="reborn-move-link" id="move-btn-0">-</span>
+              <span class="reborn-move-link" id="move-btn-1">-</span>
+              <span class="reborn-move-link" id="move-btn-2">-</span>
               <span class="reborn-move-link" id="move-btn-3">-</span>
             </div>
             
             <div class="reborn-actions">
               <select id="battle-item-select" class="reborn-select">
-                <option value="pokeball">Монстробол (<span id="battle-qty-pokeballs">0</span>)</option>
-                <option value="potion">Аптечка (<span id="battle-qty-potions">0</span>)</option>
+                <!-- Динамически рендерится из JS -->
               </select>
-              <button class="reborn-btn-use" id="btn-use-item">Use</button>
-              <span class="reborn-escape-link" id="btn-run"> | сбежать</span>
+              <button class="reborn-btn-use" id="btn-use-item">Исп.</button>
+              <button class="reborn-btn-use" id="btn-switch" style="background:#5856d6;">↔</button>
+              <span class="reborn-escape-link" id="btn-run">Сбежать</span>
             </div>
           </div>
 
-          <div class="reborn-controls" id="battle-end-menu" style="display:none; justify-content:center;">
-            <span class="reborn-escape-link" id="btn-leave-battle">Уйти с поля боя</span>
+          <div class="reborn-controls" id="battle-end-menu" style="display:none; justify-content:center; align-items:center;">
+            <span class="reborn-escape-link" id="btn-leave-battle">✓ Уйти с поля боя</span>
           </div>
 
           <div class="reborn-log-container">
             <div class="reborn-battle-log" id="battle-log">На вас напал дикий покемон!</div>
           </div>
           
-        </div>
+        </div><!-- /reborn-center-panel -->
 
-        <!-- WILD POKEMON (Right) -->
-        <div class="reborn-side-panel">
-          <div class="reborn-poke-header">
-            <span id="wild-name" class="reborn-poke-name">Pidgey</span>
-            <span id="wild-lvl" class="reborn-poke-lvl">[5-lvl]</span>
-          </div>
-          <div class="reborn-hp-wrap">
-            <div class="reborn-hp-bar">
-              <div class="reborn-hp-fill" id="wild-hp-fill"></div>
-            </div>
-          </div>
-          <div class="reborn-hp-text" id="wild-hp-text">10/10</div>
-          <div class="reborn-sprite-box">
-            <img class="reborn-sprite" id="wild-sprite" src="" alt="wild">
+      </div>
+    </div>
+
+    <!-- SHOP MODAL -->
+    <div id="shop-modal" class="modal-overlay" style="display:none;">
+      <div class="shop-container">
+        <div class="shop-header">
+          <h2>🛒 Магазин</h2>
+          <div class="shop-tabs">
+            <span class="shop-tab active" id="shop-buy-tab">Купить</span>
+            <span class="shop-tab" id="shop-sell-tab">Продать</span>
           </div>
         </div>
+        <div class="shop-money">Кредитов: <span id="shop-money-display">¥500</span></div>
+        <div class="shop-items" id="shop-items"></div>
+        <button class="tma-btn" id="btn-close-shop" style="margin-top:15px; width:100%;">Закрыть</button>
+      </div>
+    </div>
 
+    <!-- GYM MODAL -->
+    <div id="gym-modal" class="modal-overlay" style="display:none;">
+      <div class="gym-container">
+        <h2>⚔ Зал Лидера</h2>
+        <div class="gym-leader-info">
+          <h3 id="gym-leader-name">Брок</h3>
+          <p id="gym-leader-title">Лидер Зала Пьютера</p>
+          <p id="gym-leader-type">Тип: Камень</p>
+          <p id="gym-reward">Награда: Badge + ¥1500</p>
+        </div>
+        <div class="gym-team-section">
+          <h4>Команда лидера:</h4>
+          <ul id="gym-team-list"></ul>
+        </div>
+        <div class="gym-actions">
+          <button class="btn-use" id="btn-start-gym-battle" style="background:#af52de;">Сразиться!</button>
+          <button class="tma-btn" id="btn-close-gym-modal" style="margin-top:10px; width:100%;">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ELITE MODAL -->
+    <div id="elite-modal" class="modal-overlay" style="display:none;">
+      <div class="elite-container">
+        <h2>🏆 Элитная Четверка</h2>
+        <div class="elite-info">
+          <p>Докажите, что вы достойны звания Чемпиона!</p>
+        </div>
+        <div id="elite-member-list" class="elite-member-list"></div>
+        <div class="elite-actions">
+          <button class="btn-use" id="btn-start-elite-battle" style="background:#ff3b30;">Начать Испытание!</button>
+          <button class="tma-btn" id="btn-close-elite-modal" style="margin-top:10px; width:100%;">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD MODAL -->
+    <div id="leaderboard-modal" class="modal-overlay" style="display:none;">
+      <div class="leaderboard-container">
+        <h2>🏆 Таблица Лидеров</h2>
+        <div id="leaderboard-list" class="leaderboard-list">
+          <div class="leaderboard-loading">Загрузка...</div>
+        </div>
+        <button class="tma-btn" id="btn-close-leaderboard" style="margin-top:15px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- POKEDEX MODAL -->
+    <div id="pokedex-modal" class="modal-overlay" style="display:none;">
+      <div class="pokedex-container">
+        <div class="pokedex-header">
+          <h2>📖 Покедекс</h2>
+          <span class="pokedex-count" id="pokedex-count">0/151</span>
+        </div>
+        <input id="pokedex-search" class="pokedex-search" type="text" placeholder="Поиск по имени или #...">
+        <div class="pokedex-grid" id="pokedex-grid"></div>
+        <div id="pokedex-detail" class="pokedex-detail" style="display:none;"></div>
+        <button class="tma-btn" id="btn-close-pokedex" style="margin-top:12px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- TM MODAL -->
+    <div id="tm-modal" class="modal-overlay" style="display:none;">
+      <div class="tm-container">
+        <h2>📼 Переучивание атак</h2>
+        <div class="tm-pokemon-name" id="tm-pokemon-name"></div>
+        <div class="tm-section">
+          <h3>Текущие атаки:</h3>
+          <div class="tm-current-list" id="tm-current-list"></div>
+        </div>
+        <div class="tm-section">
+          <h3>Доступные атаки (выберите для замены):</h3>
+          <div class="tm-move-grid" id="tm-available-list"></div>
+        </div>
+        <div id="tm-slot-picker" class="tm-slot-picker" style="display:none;"></div>
+        <button class="tma-btn" id="btn-close-tm" style="margin-top:12px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- EVOLUTION OVERLAY -->
+    <div id="evolution-overlay" class="modal-overlay" style="display:none;">
+      <div class="evolution-container">
+        <div class="evo-sprite-box">
+          <img id="evo-sprite" class="evo-sprite" src="" alt="evolving">
+        </div>
+        <div id="evo-text" class="evo-text">Что? Покемон эволюционирует!</div>
+      </div>
+    </div>
+
+    <!-- NPC MODAL -->
+    <div id="npc-modal" class="modal-overlay" style="display:none;">
+      <div class="npc-container">
+        <div class="npc-header">
+          <span class="npc-sprite" id="npc-sprite">👤</span>
+          <h2 id="npc-name">NPC</h2>
+        </div>
+        <div class="npc-dialog" id="npc-dialog"></div>
+        <div class="npc-quests" id="npc-quests"></div>
+        <div class="npc-actions">
+          <button class="tma-btn" id="btn-close-npc">Уйти</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PC MODAL -->
+    <div id="pc-modal" class="modal-overlay" style="display:none;">
+      <div class="pc-container">
+        <h2>💻 PC — Хранилище покемонов <span id="pc-team-count"></span></h2>
+        <div class="pc-tabs" id="pc-tabs"></div>
+        <div class="pc-slots" id="pc-slots"></div>
+        <div class="pc-actions">
+          <button class="tma-btn" id="btn-pc-close">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CRAFTING MODAL -->
+    <div id="crafting-modal" class="modal-overlay" style="display:none;">
+      <div class="crafting-container">
+        <h2>🔧 Крафтинг</h2>
+        <div class="crafting-tabs" id="crafting-tabs"></div>
+        <div class="crafting-recipes" id="crafting-recipes"></div>
+        <button class="tma-btn" id="btn-crafting-close" style="margin-top:12px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- QUESTS MODAL -->
+    <div id="quest-modal" class="modal-overlay" style="display:none;">
+      <div class="quest-container">
+        <h2>📋 Задания</h2>
+        <div id="quest-list" class="quest-list"></div>
+        <button class="tma-btn" id="btn-close-quests" style="margin-top:12px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- TRAINER PROFILE MODAL -->
+    <div id="trainer-profile-modal" class="modal-overlay" style="display:none;">
+      <div class="trainer-profile-modal-content">
+        <div class="trainer-profile-header">
+          <div class="trainer-avatar" id="modal-trainer-avatar">👤</div>
+          <div class="trainer-profile-name" id="modal-trainer-name">Загрузка...</div>
+        </div>
+        <div class="trainer-profile-stats">
+          <div class="trainer-stat">
+            <span class="trainer-stat-label">Кредиты</span>
+            <span class="trainer-stat-value" id="modal-trainer-money">¥0</span>
+          </div>
+          <div class="trainer-stat">
+            <span class="trainer-stat-label">Значки</span>
+            <span class="trainer-stat-value" id="modal-trainer-badges">0</span>
+          </div>
+        </div>
+        <div class="trainer-team-label">Команда</div>
+        <div class="trainer-team" id="modal-trainer-team">
+          <div class="trainer-team-empty">Нет данных</div>
+        </div>
+        <button class="tma-btn" id="btn-close-trainer-profile" style="margin-top:12px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- STARTER MODAL -->
+    <div id="starter-modal" class="modal-overlay" style="display:none;">
+      <div class="starter-container">
+        <h2>Выберите стартового покемона</h2>
+        <p style="color:var(--tma-text-muted); margin:8px 0 16px;">Профессор Оук предлагает вам выбрать одного из трёх покемонов</p>
+        <div class="starter-grid" id="starter-grid"></div>
       </div>
     </div>
 
