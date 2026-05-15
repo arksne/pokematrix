@@ -2352,11 +2352,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (huntActive) {
         stopAutoHunt();
       } else {
-        const enc = getLocationEncounters();
-        if (enc.length === 0) {
-          showToast('На этой локации не водятся дикие покемоны.', true);
-          return;
-        }
         if (!myTeam.some(m => m.currentHp > 0)) {
           showToast('Вам нужен хотя бы один живой покемон!', true);
           return;
@@ -4147,10 +4142,24 @@ function startAutoHunt() {
   try { localStorage.setItem(lsKey('hunt_active'), '1'); } catch(_) {}
   const btn = document.getElementById('btn-hunt-toggle');
   if (btn) {
-    btn.innerHTML = '🔴';
     btn.classList.add('active');
     btn.title = 'Прекратить поиск';
   }
+
+  const updateHuntBtn = () => {
+    if (!btn || !huntActive) return;
+    const enc = getLocationEncounters();
+    if (enc.length > 0) {
+      btn.innerHTML = '🔴';
+      btn.style.background = '#ff3b30';
+      btn.title = 'Прекратить поиск';
+    } else {
+      btn.innerHTML = '🟢';
+      btn.style.background = '#34c759';
+      btn.title = 'Поиск... (нет диких покемонов на этой локации)';
+    }
+  };
+  updateHuntBtn();
 
   const doTick = () => {
     if (!huntActive) return;
@@ -4163,7 +4172,8 @@ function startAutoHunt() {
       return;
     }
     const enc = getLocationEncounters();
-    if (enc.length === 0) { huntTimer = setTimeout(doTick, 5000); return; }
+    if (enc.length === 0) { updateHuntBtn(); huntTimer = setTimeout(doTick, 5000); return; }
+    updateHuntBtn();
     // 20% base chance every tick
     if (Math.random() < 0.20) {
       const pkmName = pickWeightedEncounter(enc);
@@ -4186,6 +4196,7 @@ function stopAutoHunt() {
   if (btn) {
     btn.innerHTML = '⚪';
     btn.classList.remove('active');
+    btn.style.background = '';
     btn.title = 'Искать покемонов';
   }
 }
