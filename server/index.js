@@ -4,6 +4,7 @@ import saveRoutes from './routes/save.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import chatRoutes from './routes/chat.js';
 import profileRoutes from './routes/profile.js';
+import adminRoutes from './routes/admin.js';
 
 const express = (await import('express')).default;
 const cors = (await import('cors')).default;
@@ -35,6 +36,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+app.use('/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/save', saveRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
