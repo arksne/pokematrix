@@ -106,18 +106,4 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Reset all data for current user
-router.post('/reset', async (req, res) => {
-  try {
-    const db = getDB();
-    await db.run('DELETE FROM game_saves WHERE user_id = ?', req.userId);
-    await db.run('DELETE FROM leaderboard WHERE user_id = ?', req.userId);
-    await db.run('DELETE FROM user_locations WHERE user_id = ?', req.userId);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Reset error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 export default router;

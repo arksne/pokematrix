@@ -2782,22 +2782,9 @@ function autoSave() {
   cloudSave();
 }
 
-async function resetGame() {
-  showConfirmModal('Сброс прогресса', 'Это удалит ВСЕ данные безвозвратно. Продолжить?', async () => {
-    // Clear all localStorage for this account
-    const keys = ['save','save_ts','save_v','save_sync','save_corrupted','save_backup','theme','quest_date','avatar','nickname_'];
-    keys.forEach(k => { try { localStorage.removeItem(lsKey(k)); } catch(e) {} });
-
-    // Wipe server data
-    if (tgToken) {
-      try {
-        await fetch('/api/save/reset', {
-          method: 'POST',
-          headers: getCloudAuthHeaders()
-        });
-      } catch(e) { /* server might be offline */ }
-    }
-
+function resetGame() {
+  showConfirmModal('Сброс прогресса', 'Это действие необратимо! Вы уверены?', () => {
+    localStorage.removeItem(lsKey('save'));
     location.reload();
   });
 }
