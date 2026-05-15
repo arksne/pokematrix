@@ -1503,7 +1503,7 @@ input[type="number"] {
 .pokedex-header h2 { margin: 0; color: var(--tma-primary); }
 .pokedex-count {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--tma-text-muted);
   font-weight: 600;
 }
 .pokedex-search {
@@ -1512,6 +1512,7 @@ input[type="number"] {
   border: 1px solid var(--tma-border);
   border-radius: 10px;
   background: var(--tma-bg);
+  color: var(--tma-text);
   font-size: 0.9rem;
   outline: none;
   margin-bottom: 10px;
@@ -1527,7 +1528,9 @@ input[type="number"] {
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   overflow-y: auto;
-  min-height: 0;
+  min-height: 300px;
+  max-height: 55vh;
+  padding: 2px;
 }
 .pokedex-cell {
   text-align: center;
@@ -1537,35 +1540,29 @@ input[type="number"] {
   border: 1px solid var(--tma-border);
   cursor: pointer;
   transition: transform 0.1s, box-shadow 0.15s;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 .pokedex-cell:active {
   transform: scale(0.95);
-}
-.pokedex-cell.unknown {
-  background: var(--tma-bg);
-  border-color: var(--tma-border);
 }
 .pokedex-cell.unknown img {
   filter: brightness(0) saturate(0);
   opacity: 0.15;
 }
-.pokedex-cell.unknown .poke-name {
-  color: var(--tma-text-muted);
-}
-.pokedex-cell.seen img {
-  filter: grayscale(1) brightness(0.7);
-}
-.pokedex-cell.seen .poke-name {
-  color: var(--tma-text-muted);
-}
-.pokedex-cell.caught img {
-  filter: none;
-}
+.pokedex-cell.unknown .poke-name { color: var(--tma-text-muted); }
+.pokedex-cell.seen img { filter: grayscale(1) brightness(0.7); }
+.pokedex-cell.seen .poke-name { color: var(--tma-text-muted); }
+.pokedex-cell.caught img { filter: none; }
 .pokedex-cell img {
-  width: 60px;
-  height: 60px;
+  width: 56px;
+  height: 56px;
   object-fit: contain;
   transition: filter 0.3s;
+  image-rendering: auto;
 }
 .poke-name {
   font-size: 0.6rem;
@@ -1585,6 +1582,7 @@ input[type="number"] {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  animation: fadeIn 0.2s ease;
 }
 .pokedex-detail-loading {
   text-align: center;
