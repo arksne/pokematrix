@@ -7238,6 +7238,79 @@ function hideLoginScreen() {
   }
 }
 
+async function showRegistrationScreen(tgData) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.id = 'register-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:var(--tma-bg);z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;overflow-y:auto;padding:20px;';
+    overlay.innerHTML = `
+      <div style="text-align:center;max-width:360px;width:100%;">
+        <div style="font-size:4rem;margin-bottom:8px;">👋</div>
+        <h2 style="margin:0 0 4px;">Добро пожаловать!</h2>
+        <p style="color:var(--tma-text-muted);margin:0 0 20px;font-size:0.85rem;">Давай создадим твой профиль тренера</p>
+
+        <div style="text-align:left;margin-bottom:16px;">
+          <label style="font-size:0.8rem;color:var(--tma-text-muted);">Прозвище тренера</label>
+          <input id="reg-nickname" type="text" value="${tgData.first_name || tgData.username || ''}" maxlength="20" style="width:100%;padding:10px;margin:4px 0 12px;border:1px solid var(--tma-border);border-radius:8px;background:var(--tma-card-bg);color:var(--tma-text);font-size:1rem;">
+
+          <label style="font-size:0.8rem;color:var(--tma-text-muted);">Аватар</label>
+          <div id="reg-avatars" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px;">
+            ${['👤','🧑','👨‍🔬','🎩','🧢','🎓','👑','🤠','🦸','🧙','😎','🤖','👻','🐱','🐶'].map(a => `<span class="reg-avatar-opt" data-av="${a}" style="font-size:1.8rem;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent;">${a}</span>`).join('')}
+          </div>
+
+          <label style="font-size:0.8rem;color:var(--tma-text-muted);">Стартовый покемон</label>
+          <div id="reg-starters" style="display:flex;gap:8px;margin:4px 0 12px;">
+            ${['bulbasaur','charmander','squirtle','pikachu'].map(s => `<div class="reg-starter-opt" data-starter="${s}" style="flex:1;text-align:center;cursor:pointer;padding:8px;border-radius:8px;border:2px solid var(--tma-border);text-transform:capitalize;font-size:0.75rem;">${s}</div>`).join('')}
+          </div>
+        </div>
+
+        <button class="tma-btn" id="btn-register" style="width:100%;padding:12px;background:#34c759;font-size:1rem;">🎮 Начать приключение!</button>
+        <p id="reg-error" style="color:#ff3b30;font-size:0.8rem;margin-top:8px;display:none;"></p>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    let selectedAvatar = '👤';
+    let selectedStarter = 'bulbasaur';
+
+    overlay.querySelectorAll('.reg-avatar-opt').forEach(el => {
+      el.addEventListener('click', () => {
+        overlay.querySelectorAll('.reg-avatar-opt').forEach(e => e.style.borderColor = 'transparent');
+        el.style.borderColor = 'var(--tma-primary)';
+        selectedAvatar = el.getAttribute('data-av');
+      });
+    });
+
+    overlay.querySelectorAll('.reg-starter-opt').forEach(el => {
+      el.addEventListener('click', () => {
+        overlay.querySelectorAll('.reg-starter-opt').forEach(e => e.style.borderColor = 'var(--tma-border)');
+        el.style.borderColor = 'var(--tma-primary)';
+        selectedStarter = el.getAttribute('data-starter');
+      });
+    });
+
+    document.getElementById('btn-register').addEventListener('click', async () => {
+      const nickname = document.getElementById('reg-nickname').value.trim();
+      if (!nickname) { document.getElementById('reg-error').style.display = 'block'; document.getElementById('reg-error').textContent = 'Введи прозвище!'; return; }
+
+      try {
+        await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nickname, avatar: selectedAvatar, starterPokemon: selectedStarter })
+        });
+        trainerNickname = nickname;
+        localStorage.setItem(lsKey('avatar'), selectedAvatar);
+        localStorage.setItem(lsKey('nickname_'), nickname);
+        tgUser.registered = 1;
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.5s';
+        setTimeout(() => { overlay.remove(); resolve(true); }, 500);
+      } catch(e) { document.getElementById('reg-error').style.display = 'block'; document.getElementById('reg-error').textContent = 'Ошибка сервера'; }
+    });
+  });
+}
+
 async function authTelegram() {
   initTelegram();
   showLoginScreen('Авторизация через Telegram...', false);
@@ -7261,7 +7334,15 @@ async function authTelegram() {
     tgToken = data.token;
     tgUser = data.user;
     localStorage.setItem('league17_trainer_id', String(tgUser.id));
+
     hideLoginScreen();
+
+    // Check if registration needed — wait for it
+    if (!data.user.registered) {
+      await showRegistrationScreen(data.user);
+      // Reload user data after registration
+      tgUser.registered = 1;
+    }
   } catch (e) {
     console.warn('Auth failed (offline?)', e);
     showLoginScreen('Нет соединения с сервером. Проверьте интернет.', true);

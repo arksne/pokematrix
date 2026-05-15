@@ -25,7 +25,12 @@ export async function initDB() {
       telegram_id TEXT UNIQUE NOT NULL,
       username TEXT DEFAULT '',
       first_name TEXT DEFAULT '',
-      created_at TEXT DEFAULT (datetime('now'))
+      nickname TEXT DEFAULT '',
+      avatar TEXT DEFAULT '👤',
+      starter_pokemon TEXT DEFAULT '',
+      registered INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      registered_at TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS game_saves (

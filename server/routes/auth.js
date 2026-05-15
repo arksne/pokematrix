@@ -38,7 +38,7 @@ router.post('/tg', async (req, res) => {
         tgUser.username || '',
         tgUser.first_name || ''
       );
-      user = { id: result.lastID, telegram_id: telegramId, username: tgUser.username || '' };
+      user = { id: result.lastID, telegram_id: telegramId, username: tgUser.username || '', registered: 0 };
     } else {
       await db.run(
         'UPDATE users SET username = ?, first_name = ? WHERE id = ?',
@@ -55,11 +55,40 @@ router.post('/tg', async (req, res) => {
       user: {
         id: user.id,
         telegram_id: user.telegram_id,
-        username: user.username
+        username: user.username,
+        registered: user.registered || 0,
+        nickname: user.nickname || '',
+        avatar: user.avatar || '👤',
+        starter_pokemon: user.starter_pokemon || ''
       }
     });
   } catch (err) {
     console.error('Auth error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Register / complete profile
+import { authMiddleware } from '../middleware/auth.js';
+router.post('/register', authMiddleware, async (req, res) => {
+  try {
+    const { nickname, avatar, starterPokemon } = req.body;
+    const db = getDB();
+    const user = await db.get('SELECT * FROM users WHERE id = ?', req.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    await db.run(
+      `UPDATE users SET nickname = ?, avatar = ?, starter_pokemon = ?, registered = 1, registered_at = datetime('now')
+       WHERE id = ?`,
+      nickname || user.first_name || '',
+      avatar || '👤',
+      starterPokemon || '',
+      req.userId
+    );
+
+    res.json({ success: true, user: { ...user, nickname: nickname || user.first_name, avatar: avatar || '👤', registered: 1 } });
+  } catch (err) {
+    console.error('Register error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
