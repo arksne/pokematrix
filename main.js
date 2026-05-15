@@ -2211,21 +2211,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Admin panel button (phone-friendly)
   if (isAdmin) initAdminPanel();
 
-  const loaded = loadGame();
-  if (!loaded) {
-    // Try cloud save before starting fresh
+  // Load game: cloud (server) is primary source, localStorage is cache
+  let gameLoaded = false;
+  if (tgToken) {
+    // Always check cloud first — it's the source of truth
     const cloudData = await cloudLoad();
     if (cloudData && cloudData.myTeam && cloudData.myTeam.length > 0) {
       applyCloudSave(cloudData);
-      saveGame();
-      showToast('Прогресс восстановлен из облака!', false);
-    } else {
-      await giveStarter();
+      saveGame(); // sync to localStorage
+      gameLoaded = true;
     }
-  } else {
-    const cloudData = await cloudLoad();
-    if (cloudData) {
-      applyCloudSave(cloudData);
+  }
+  if (!gameLoaded) {
+    // Fall back to localStorage
+    const localLoaded = loadGame();
+    if (localLoaded) {
+      gameLoaded = true;
+      // Sync local to cloud
+      if (tgToken) cloudSave();
+    }
+  }
+  if (!gameLoaded) {
+    await giveStarter();
+    showToast('Добро пожаловать в Лигу Покемонов!', false);
+  } else if (tgToken) {
+    // Background sync: push local to cloud if local is newer
+    const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+    const cloudTs = lastCloudSync || 0;
+    if (localTs > cloudTs + 5000) {
+      cloudSave();
     }
   }
 
@@ -2240,6 +2254,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Restore battle if one was in progress before page refresh
   restoreBattleState();
+
+  // Restore hunt toggle state
+  if (localStorage.getItem(lsKey('hunt_active')) === '1') {
+    const enc = getLocationEncounters();
+    if (enc.length > 0 && myTeam.some(m => m.currentHp > 0)) {
+      startAutoHunt();
+    } else {
+      try { localStorage.removeItem(lsKey('hunt_active')); } catch(_) {}
+    }
+  }
+
   initInventoryEvents();
   initProfileUXEvents();
   initCloudEvents();
@@ -2856,19 +2881,19 @@ function saveGame() {
     inventory['credit'] = money;
   }
 
+  const saveJson = JSON.stringify(saveData);
   try {
-    localStorage.setItem(lsKey('save'), JSON.stringify(saveData));
+    localStorage.setItem(lsKey('save'), saveJson);
     localStorage.setItem(lsKey('save_ts'), String(Date.now()));
     localStorage.setItem(lsKey('save_v'), String(saveVersion));
   } catch (e) {
-    console.warn('localStorage save failed — clearing old data', e);
+    console.warn('localStorage save failed — freeing space', e);
     try {
-      // Try to free space and retry: remove all known large keys
-      const keysToRemove = ['save_backup', 'save', 'save_ts', 'save_v', 'quest_date', 'pokedex_seen', 'pokedex_caught'];
-      for (const k of keysToRemove) localStorage.removeItem(lsKey(k));
-      localStorage.setItem(lsKey('save'), JSON.stringify(saveData));
-      localStorage.setItem(lsKey('save_ts'), String(Date.now()));
-      localStorage.setItem(lsKey('save_v'), String(saveVersion));
+      // Remove auxiliary keys to free space, keep 'save' intact
+      ['save_backup', 'save_ts', 'save_v', 'quest_date', 'pokedex_seen', 'pokedex_caught', 'battle_state'].forEach(k => {
+        try { localStorage.removeItem(lsKey(k)); } catch(_) {}
+      });
+      localStorage.setItem(lsKey('save'), saveJson);
     } catch (e2) {
       console.error('CRITICAL: Cannot save to localStorage', e2);
     }
@@ -4127,6 +4152,7 @@ function startAutoHunt() {
   if (encounters.length === 0) return;
 
   huntActive = true;
+  try { localStorage.setItem(lsKey('hunt_active'), '1'); } catch(_) {}
   const btn = document.getElementById('btn-hunt-toggle');
   if (btn) {
     btn.innerHTML = '🔴';
@@ -4162,6 +4188,7 @@ function startAutoHunt() {
 
 function stopAutoHunt() {
   huntActive = false;
+  try { localStorage.removeItem(lsKey('hunt_active')); } catch(_) {}
   if (huntTimer) { clearTimeout(huntTimer); huntTimer = null; }
   const btn = document.getElementById('btn-hunt-toggle');
   if (btn) {
@@ -7605,7 +7632,6 @@ function applyCloudSave(data) {
   badges = data.badges || badges;
   trainerNickname = data.trainerNickname || trainerNickname;
   myTeam = data.myTeam || myTeam;
-  // Rehydrate team
   myTeam.forEach(m => {
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     if (!m.learnableMoves) m.learnableMoves = [];
@@ -7622,6 +7648,14 @@ function applyCloudSave(data) {
   daycareEgg = data.daycareEgg || daycareEgg;
   lastLocation = data.lastLocation || lastLocation;
   expShareActive = data.expShareActive || expShareActive;
+  quests = data.quests || quests;
+  questProgress = data.questProgress || questProgress;
+  completedQuests = data.completedQuests || completedQuests;
+  npcQuestProgress = data.npcQuestProgress || npcQuestProgress;
+  completedNPCQuests = data.completedNPCQuests || completedNPCQuests;
+  visitedLocations = new Set(data.visitedLocations || []);
+  itemsUsedInBattle = data.itemsUsedInBattle || itemsUsedInBattle;
+  itemHistory = data.itemHistory || itemHistory;
   saveVersion = cloudV;
   validateGameState();
 
