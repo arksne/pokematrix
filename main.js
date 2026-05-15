@@ -1966,6 +1966,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await authTelegram();
 
+  // Load Pokedex data (wiki-based encounter info)
+  loadPokedexData();
+
   // Update trainer card after auth
   renderTrainerCard();
 
@@ -3591,24 +3594,24 @@ const STATUS_NAMES = {
 
 const evolutionCache = {};
 
-const POKEDEX_KANTO = [
-  'bulbasaur','ivysaur','venusaur','charmander','charmeleon','charizard','squirtle','wartortle','blastoise',
-  'caterpie','metapod','butterfree','weedle','kakuna','beedrill','pidgey','pidgeotto','pidgeot',
-  'rattata','raticate','spearow','fearow','ekans','arbok','pikachu','raichu','sandshrew','sandslash',
-  'nidoran-f','nidorina','nidoqueen','nidoran-m','nidorino','nidoking','clefairy','clefable','vulpix',
-  'ninetales','jigglypuff','wigglytuff','zubat','golbat','oddish','gloom','vileplume','paras','parasect',
-  'venonat','venomoth','diglett','dugtrio','meowth','persian','psyduck','golduck','mankey','primeape',
-  'growlithe','arcanine','poliwag','poliwhirl','poliwrath','abra','kadabra','alakazam','machop','machoke',
-  'machamp','bellsprout','weepinbell','victreebel','tentacool','tentacruel','geodude','graveler','golem',
-  'ponyta','rapidash','slowpoke','slowbro','magnemite','magneton','farfetchd','doduo','dodrio','seel',
-  'dewgong','grimer','muk','shellder','cloyster','gastly','haunter','gengar','onix','drowzee','hypno',
-  'krabby','kingler','voltorb','electrode','exeggcute','exeggutor','cubone','marowak','hitmonlee',
-  'hitmonchan','lickitung','koffing','weezing','rhyhorn','rhydon','chansey','tangela','kangaskhan',
-  'horsea','seadra','goldeen','seaking','staryu','starmie','mr-mime','scyther','jynx','electabuzz',
-  'magmar','pinsir','tauros','magikarp','gyarados','lapras','ditto','eevee','vaporeon','jolteon',
-  'flareon','porygon','omanyte','omastar','kabuto','kabutops','aerodactyl','snorlax','articuno','zapdos',
-  'moltres','dratini','dragonair','dragonite','mewtwo','mew'
-];
+let POKEDEX_ALL = [];
+let pokedexData = {};
+let pokedexTotal = 0;
+
+async function loadPokedexData() {
+  try {
+    const res = await fetch('/pokedex_data.json');
+    pokedexData = await res.json();
+    POKEDEX_ALL = Object.keys(pokedexData);
+    pokedexTotal = POKEDEX_ALL.length;
+  } catch (e) {
+    console.warn('Pokedex data load failed, using Kanto only', e);
+    POKEDEX_ALL = ['bulbasaur','ivysaur','venusaur','charmander','charmeleon','charizard','squirtle','wartortle','blastoise','caterpie','metapod','butterfree','weedle','kakuna','beedrill','pidgey','pidgeotto','pidgeot','rattata','raticate','spearow','fearow','ekans','arbok','pikachu','raichu','sandshrew','sandslash','nidoran-f','nidorina','nidoqueen','nidoran-m','nidorino','nidoking','clefairy','clefable','vulpix','ninetales','jigglypuff','wigglytuff','zubat','golbat','oddish','gloom','vileplume','paras','parasect','venonat','venomoth','diglett','dugtrio','meowth','persian','psyduck','golduck','mankey','primeape','growlithe','arcanine','poliwag','poliwhirl','poliwrath','abra','kadabra','alakazam','machop','machoke','machamp','bellsprout','weepinbell','victreebel','tentacool','tentacruel','geodude','graveler','golem','ponyta','rapidash','slowpoke','slowbro','magnemite','magneton','farfetchd','doduo','dodrio','seel','dewgong','grimer','muk','shellder','cloyster','gastly','haunter','gengar','onix','drowzee','hypno','krabby','kingler','voltorb','electrode','exeggcute','exeggutor','cubone','marowak','hitmonlee','hitmonchan','lickitung','koffing','weezing','rhyhorn','rhydon','chansey','tangela','kangaskhan','horsea','seadra','goldeen','seaking','staryu','starmie','mr-mime','scyther','jynx','electabuzz','magmar','pinsir','tauros','magikarp','gyarados','lapras','ditto','eevee','vaporeon','jolteon','flareon','porygon','omanyte','omastar','kabuto','kabutops','aerodactyl','snorlax','articuno','zapdos','moltres','dratini','dragonair','dragonite','mewtwo','mew'];
+    pokedexData = {};
+    pokedexTotal = POKEDEX_ALL.length;
+  }
+}
+
 let pokedexSeen = new Set();
 let pokedexCaught = new Set();
 let isDaytime = true;
@@ -7469,7 +7472,7 @@ async function triggerEvolution(pokemon, targetName) {
 // FEATURE: POKEDEX
 // ================================================================
 function getPokedexId(speciesName) {
-  const idx = POKEDEX_KANTO.indexOf(speciesName);
+  const idx = POKEDEX_ALL.indexOf(speciesName);
   return idx >= 0 ? idx + 1 : -1;
 }
 
@@ -7487,7 +7490,7 @@ function openPokedex() {
   if (searchEl) { searchEl.value = ''; searchEl.style.display = 'block'; }
   if (grid) grid.style.display = 'grid';
 
-  POKEDEX_KANTO.forEach((name, idx) => {
+  POKEDEX_ALL.forEach((name, idx) => {
     const dexId = idx + 1;
     const cell = document.createElement('div');
     cell.className = 'pokedex-cell';
@@ -7504,7 +7507,7 @@ function openPokedex() {
     cell.classList.add(statusClass);
     const imgSrc = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${dexId}.png`;
     cell.innerHTML = `
-      <img src="${imgSrc}" alt="${name}" loading="lazy">
+      <img src="${imgSrc}" alt="${name}" loading="lazy" onerror="this.style.display='none'">
       <span class="poke-name">${name}</span>
     `;
     grid.appendChild(cell);
@@ -7512,7 +7515,7 @@ function openPokedex() {
   });
 
   const caughtQty = pokedexCaught.size;
-  countEl.innerText = `${caughtQty}/151`;
+  countEl.innerText = `${caughtQty}/${pokedexTotal}`;
 }
 
 async function showPokedexInfo(speciesName) {
@@ -7572,6 +7575,11 @@ async function showPokedexInfo(speciesName) {
         </div>
       </div>
       <div class="pokedex-detail-status ${statusClass}">${statusText}</div>
+      ${pokedexData[speciesName] ? `
+      <div class="pokedex-detail-method">
+        <div class="method-row"><b>Способ:</b> ${pokedexData[speciesName].method}</div>
+        <div class="method-row"><b>Где:</b> ${pokedexData[speciesName].location}</div>
+      </div>` : ''}
       <div class="pokedex-detail-stats">
         <h4>Базовые статы</h4>
         ${statsHtml}
@@ -8073,7 +8081,7 @@ function renderTrainerCard() {
 
   moneyEl.textContent = `¥${money}`;
   badgesEl.textContent = badges.length;
-  caughtEl.textContent = `${pokedexCaught.size}/151`;
+  caughtEl.textContent = `${pokedexCaught.size}/${pokedexTotal || 151}`;
 
   loadLocationTrainers();
   renderOnlinePlayers();

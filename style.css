@@ -1583,6 +1583,22 @@ input[type="number"] {
   background: #e2e3e5;
   color: #383d41;
 }
+.pokedex-detail-method {
+  background: var(--tma-card-bg);
+  border: 1px solid var(--tma-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+}
+.method-row {
+  padding: 2px 0;
+  color: var(--tma-text-muted);
+}
+.method-row b {
+  color: var(--tma-text);
+}
+
 .pokedex-detail-stats {
   background: var(--tma-bg);
   border-radius: 12px;
