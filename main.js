@@ -6554,13 +6554,26 @@ function initTelegram() {
 
 async function authTelegram() {
   initTelegram();
-  if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
-    tgUser = window.Telegram.WebApp.initDataUnsafe.user;
-    tgToken = "dummy_token";
+  let initData = '';
+
+  if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+    initData = window.Telegram.WebApp.initData;
   } else {
-    // Fallback for browser testing
-    tgUser = { id: 1, first_name: "Trainer", username: "trainer123" };
-    tgToken = "test_token";
+    initData = 'test';
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/tg`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    tgToken = data.token;
+    tgUser = data.user;
+  } catch (e) {
+    console.warn('Auth failed (offline?)', e);
   }
 }
 

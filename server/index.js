@@ -42,6 +42,22 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files from the Vite build output directory
+app.use(express.static(path.join(__dirname, '../dist')));
+
+// SPA fallback for all other non-API routes
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 try {
