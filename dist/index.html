@@ -6,7 +6,7 @@
     <title>League-17 TMA</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/League17-tma/assets/index-BNTzY0hU.js"></script>
+    <script type="module" crossorigin src="/League17-tma/assets/index-e1bO3PGy.js"></script>
     <link rel="stylesheet" crossorigin href="/League17-tma/assets/index-D33r7Fp3.css">
   </head>
   <body>
@@ -15,7 +15,6 @@
       <header class="tma-header">
         <h1 id="header-title">Мир (Канто)</h1>
         <div class="header-info">
-          <span id="money-display" class="header-money">¥500</span>
           <span id="badge-display" class="header-badges">Значки: 0/8</span>
           <button id="btn-cloud-sync" class="header-sync" title="Синхронизировать">☁️ Синхр.</button>
           <button id="btn-leaderboard" class="header-lb" title="Таблица лидеров">🏆</button>
@@ -599,6 +598,10 @@
             <span class="trainer-stat-label">Значки</span>
             <span class="trainer-stat-value" id="modal-trainer-badges">0</span>
           </div>
+        </div>
+        <div class="trainer-actions" id="modal-trainer-actions" style="display:none;gap:8px;margin-bottom:12px;">
+          <button class="tma-btn" id="btn-trainer-trade" style="flex:1;background:#007aff;">🤝 Обмен</button>
+          <button class="tma-btn" id="btn-trainer-battle" style="flex:1;background:#ff3b30;">⚔ Бой</button>
         </div>
         <div class="trainer-team-label">Команда</div>
         <div class="trainer-team" id="modal-trainer-team">

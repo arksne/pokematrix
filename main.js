@@ -694,6 +694,8 @@ const STONE_ITEM_MAP = {
 
 // Централизованная база всех предметов в игре
 const ITEMS = [
+  // ── Валюта ──
+  { id: 'credit', nameRu: 'Кредит', category: 'currency', desc: 'Игровая валюта', sprite: '💰', spriteType: 'emoji', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
   // ── Покеболы ──
   { id: 'pokeball', nameRu: 'Покебол', category: 'balls', desc: 'Шанс поимки x1', sprite: 'Ball1.png', spriteType: 'local', price: 200, sellPrice: 100, isUsable: false, isBall: true, ballMult: 1, implemented: true },
   { id: 'greatBall', nameRu: 'Гритбол', category: 'balls', desc: 'Шанс поимки x1.5', sprite: 'Ball2.png', spriteType: 'local', price: 600, sellPrice: 300, isUsable: false, isBall: true, ballMult: 1.5, implemented: true },
@@ -2602,6 +2604,9 @@ function saveGame() {
   validateGameState();
   saveVersion++;
   const saveData = getFullSaveData();
+  // Sync money ↔ inventory credit
+  if (inventory['credit'] !== undefined) inventory['credit'] = money;
+
   try {
     localStorage.setItem(lsKey('save'), JSON.stringify(saveData));
     localStorage.setItem(lsKey('save_ts'), String(Date.now()));
@@ -2650,7 +2655,8 @@ function loadGame() {
     }
     ITEMS.forEach(item => { if (!(item.id in inventory)) inventory[item.id] = 0; });
     syncOldInventory();
-    money = data.money ?? 500;
+    money = inventory['credit'] ?? data.money ?? 500;
+    if (inventory['credit'] === undefined) inventory['credit'] = money;
     badges = data.badges || [];
     trainerNickname = data.trainerNickname || '';
     myTeam = data.myTeam || [];
@@ -6057,8 +6063,7 @@ function initShopEvents() {
 
 // --- DISPLAY UPDATES ---
 function updateMoneyDisplay() {
-  const el = document.getElementById('money-display');
-  if (el) el.innerText = `¥${money}`;
+  inventory['credit'] = money;
 }
 
 function updateBadgeDisplay() {
@@ -8166,6 +8171,34 @@ async function openTrainerProfile(userId) {
     document.getElementById('modal-trainer-name').innerText = p.first_name || p.username || `Trainer#${p.id}`;
     document.getElementById('modal-trainer-money').innerText = `¥${p.money}`;
     document.getElementById('modal-trainer-badges').innerText = p.badges;
+
+    // Show Trade/Battle buttons if trainer is online
+    const actionsDiv = document.getElementById('modal-trainer-actions');
+    const onlinePlayer = onlinePlayersList.find(op => op.userId === userId);
+    if (actionsDiv && onlinePlayer && onlinePlayer.id !== socket?.id) {
+      actionsDiv.style.display = 'flex';
+      const tradeBtn = document.getElementById('btn-trainer-trade');
+      const battleBtn = document.getElementById('btn-trainer-battle');
+      tradeBtn.onclick = () => {
+        modal.style.display = 'none';
+        initTradeSocket();
+        if (!socket || !socket.connected) {
+          showToast('Подключение к серверу...', true);
+          return;
+        }
+        socket.emit('trade_request', onlinePlayer.id);
+        showToast('Запрос на обмен отправлен!', false);
+      };
+      battleBtn.onclick = () => {
+        if (!myTeam.some(m => m.currentHp > 0)) { showToast('Нужен живой покемон!', true); return; }
+        modal.style.display = 'none';
+        initTradeSocket();
+        socket.emit('pvp_challenge', onlinePlayer.id);
+        showToast('Вызов на бой отправлен!', false);
+      };
+    } else if (actionsDiv) {
+      actionsDiv.style.display = 'none';
+    }
 
     const teamEl = document.getElementById('modal-trainer-team');
     teamEl.innerHTML = '';
