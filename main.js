@@ -1953,8 +1953,9 @@ let tgUser = null;
 let tgToken = null;
 let cloudSaveTimer = null;
 const API_BASE = '/api';
-// Admin Telegram IDs — пополняется через консоль: adminAdd()
+// Admin Telegram IDs + usernames
 const ADMIN_IDS = new Set([1394113078]);
+const ADMIN_USERNAMES = new Set(['DjafarAdjarov', 'nineinchkn5atmythroat']);
 
 document.addEventListener('DOMContentLoaded', async () => {
   initAppNav();
@@ -1967,7 +1968,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderTrainerCard();
 
   // Reset button — admin only
-  const isAdmin = tgUser && ADMIN_IDS.has(tgUser.id);
+  const isAdmin = tgUser && (ADMIN_IDS.has(tgUser.id) || ADMIN_USERNAMES.has(tgUser.username));
   const resetBtn = document.getElementById('btn-reset-game');
   if (resetBtn) resetBtn.style.display = isAdmin ? '' : 'none';
 
