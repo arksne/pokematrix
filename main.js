@@ -1455,6 +1455,61 @@ window.adminList = function() { console.log('Админы:', Array.from(ADMIN_ID
 console.log('🛠 League-17 Admin готов. Введи help() для списка команд.');
 console.log('📱 Твой Telegram ID: введи myId()');
 
+// 📱 Админ-панель для телефона (кнопка в интерфейсе)
+function initAdminPanel() {
+  // Floating admin button
+  const fab = document.createElement('button');
+  fab.id = 'admin-fab';
+  fab.innerHTML = '🛠';
+  fab.title = 'Админ-панель';
+  fab.style.cssText = 'position:fixed;bottom:120px;right:16px;width:48px;height:48px;border-radius:50%;background:#af52de;color:#fff;border:none;font-size:1.4rem;z-index:250;box-shadow:0 4px 12px rgba(0,0,0,0.4);cursor:pointer;display:flex;align-items:center;justify-content:center;';
+  document.body.appendChild(fab);
+
+  // Admin modal
+  const modal = document.createElement('div');
+  modal.id = 'admin-modal';
+  modal.className = 'modal-overlay';
+  modal.style.display = 'none';
+  modal.innerHTML = `
+    <div class="selection-modal-card" style="max-width:360px;width:95%;max-height:85vh;overflow-y:auto;">
+      <h3>🛠 Админ-панель</h3>
+      <p style="font-size:0.8rem;color:var(--tma-text-muted);margin:0 0 10px;">ID: ${tgUser?.id || '?'}</p>
+      <div id="admin-buttons" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <button class="tma-btn" id="btn-admin-close" style="width:100%;margin-top:10px;">Закрыть</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const btns = [
+    ['💰 +100 000 кредитов', () => { money += 100000; updateMoneyDisplay(); autoSave(); showToast('+100 000¥', false); }],
+    ['🎒 Предметы x999', () => { ITEMS.forEach(i => { inventory[i.id] = 999; }); updateInventoryDisplay(); autoSave(); showToast('Предметы x999', false); }],
+    ['🏅 Все 8 значков', () => { badges = ['Boulder Badge','Cascade Badge','Thunder Badge','Rainbow Badge','Marsh Badge','Soul Badge','Volcano Badge','Earth Badge']; updateBadgeDisplay(); autoSave(); showToast('8 значков!', false); }],
+    ['🏥 Лечить команду', () => { myTeam.forEach(m => { m.currentHp = m.maxHp; m.status = null; m.sleepTurns = 0; if (m.movesPP) m.movesPP.forEach(pp => { if (pp) pp.current = pp.max; }); }); refreshProfileUI(); autoSave(); showToast('Вылечено!', false); }],
+    ['⭐ Макс IV (31)', () => { myTeam.forEach(m => { m.ivs = { hp:31,atk:31,def:31,spa:31,spd:31,spe:31 }; }); refreshProfileUI(); autoSave(); showToast('IV 31!', false); }],
+    ['📈 +10 уровней', () => { myTeam.forEach(m => { for(let i=0;i<10;i++) { m.baseLevel++; m.maxHp = calculateStat(m,'hp',false); m.currentHp = m.maxHp; } }); refreshProfileUI(); renderTeamGrid(); autoSave(); showToast('+10 lvl!', false); }],
+    ['🦄 Случайный легендарный', async () => { const leg = ['mewtwo','mew','lugia','ho-oh','rayquaza','groudon','kyogre','dialga','palkia','giratina','zekrom','reshiram','xerneas','yveltal','solgaleo','lunala','zeraora']; const pick = leg[Math.floor(Math.random()*leg.length)]; await giveStarterMon(pick); renderTeamGrid(); autoSave(); showToast(pick + '!', false); }],
+    ['🦄 Мью', async () => { await giveStarterMon('mew'); renderTeamGrid(); autoSave(); showToast('Мью!', false); }],
+    ['🗺️ Алабастия', () => { currentLocationId = 'pallet_town'; currentRegion = 'kanto'; renderLocation('pallet_town'); autoSave(); showToast('Pallet Town', false); }],
+    ['🗺️ Плато Индиго', () => { currentLocationId = 'indigo_plateau'; currentRegion = 'kanto'; renderLocation('indigo_plateau'); autoSave(); showToast('Indigo Plateau', false); }],
+    ['🗺️ Голденрод', () => { currentLocationId = 'goldenrod'; currentRegion = 'east_johto'; renderLocation('goldenrod'); autoSave(); showToast('Goldenrod', false); }],
+    ['💾 Форс-сейв', () => { saveGame(); cloudSave(); showToast('Сохранено!', false); }],
+  ];
+
+  const container = document.getElementById('admin-buttons');
+  btns.forEach(([label, fn]) => {
+    const b = document.createElement('button');
+    b.className = 'tma-btn';
+    b.textContent = label;
+    b.style.cssText = 'width:100%;padding:10px;font-size:0.9rem;background:var(--tma-card-bg);color:var(--tma-text);border:1px solid var(--tma-border);';
+    b.addEventListener('click', () => { fn(); });
+    container.appendChild(b);
+  });
+
+  fab.addEventListener('click', () => { modal.style.display = 'flex'; });
+  document.getElementById('btn-admin-close').addEventListener('click', () => { modal.style.display = 'none'; });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+}
+
 function getItemQty(itemId) {
   return inventory[itemId] ?? 0;
 }
@@ -1912,11 +1967,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderTrainerCard();
 
   // Reset button — admin only
+  const isAdmin = tgUser && ADMIN_IDS.has(tgUser.id);
   const resetBtn = document.getElementById('btn-reset-game');
-  if (resetBtn) {
-    const isAdmin = tgUser && ADMIN_IDS.has(tgUser.id);
-    resetBtn.style.display = isAdmin ? '' : 'none';
-  }
+  if (resetBtn) resetBtn.style.display = isAdmin ? '' : 'none';
+
+  // Admin panel button (phone-friendly)
+  if (isAdmin) initAdminPanel();
 
   const loaded = loadGame();
   if (!loaded) {
