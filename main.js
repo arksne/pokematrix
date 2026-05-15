@@ -604,6 +604,25 @@ function travelToRegion(targetRegion, targetLoc, ticketItemId) {
     alert(`Нужен билет: ${itemDef(ticketItemId).nameRu}!`);
     return;
   }
+  
+  const currentHour = new Date().getHours();
+  let schedule = [];
+  
+  if (ticketItemId === 'ticketBoatJK' || ticketItemId === 'ticketBoatJS') {
+    schedule = [10, 14, 18, 22];
+  } else if (ticketItemId === 'ticketTrainJK') {
+    schedule = [8, 12, 16, 20];
+  } else if (ticketItemId === 'ticketBusJ') {
+    schedule = [9, 13, 17, 21];
+  } else {
+    schedule = [0, 4, 8, 12, 16, 20];
+  }
+
+  if (!schedule.includes(currentHour)) {
+    alert(`Транспорт сейчас недоступен! Расписание отправлений: ${schedule.map(h => h + ':00').join(', ')}. Текущее время сервера: ${currentHour}:00`);
+    return;
+  }
+
   removeItem(ticketItemId, 1);
   currentRegion = targetRegion;
   appendToLog(`Вы отправились в регион ${REGIONS[targetRegion].name}!`, false, 'quest');
@@ -1336,14 +1355,8 @@ const NPC_DATA = {
 let inventory = {};
 
 function initInventory() {
-  ITEMS.forEach(item => { inventory[item.id] = 0; });
-  // Starting items
-  inventory.pokeball = 10;
-  inventory.potion = 5;
-  inventory.candy = 20;
-  inventory.vitamin = 20;
-  inventory.train = 50;
-  inventory.weaken = 20;
+  // Give infinite (9999) of every item for beta testing
+  ITEMS.forEach(item => { inventory[item.id] = 9999; });
 }
 
 // Дебаг: заполнить рюкзак всеми предметами x10 (вызови в консоли)
@@ -2258,42 +2271,58 @@ function resetGame() {
 }
 
 // --- STARTER ---
-const STARTERS = [
-  { name: 'bulbasaur', label: 'Бульбазавр', type1: 'trava', type2: 'yad' },
-  { name: 'charmander', label: 'Чармандер', type1: 'ogon' },
-  { name: 'squirtle', label: 'Сквиртл', type1: 'voda' }
+const GEN_STARTERS = [
+  ['bulbasaur', 'charmander', 'squirtle'],
+  ['chikorita', 'cyndaquil', 'totodile'],
+  ['treecko', 'torchic', 'mudkip'],
+  ['turtwig', 'chimchar', 'piplup'],
+  ['snivy', 'tepig', 'oshawott'],
+  ['chespin', 'fennekin', 'froakie'],
+  ['rowlet', 'litten', 'popplio'],
+  ['grookey', 'scorbunny', 'sobble'],
+  ['sprigatito', 'fuecoco', 'quaxly']
 ];
 
 async function giveStarter() {
   const modal = document.getElementById('starter-modal');
   const grid = document.getElementById('starter-grid');
   if (!modal || !grid) {
-    // fallback if modal not found
     await giveStarterMon('bulbasaur');
     return;
   }
 
   grid.innerHTML = '';
+  const title = document.querySelector('#starter-modal h2');
+  if (title) title.innerText = 'Выберите карту (Поколения 1-9)';
 
-  for (const s of STARTERS) {
-    const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${s.name}`);
-    const data = await res.json();
-    const sprite = data.sprites?.other?.['official-artwork']?.front_default || data.sprites.front_default;
-    const types = data.types.map(t => t.type.name).join(', ');
-
+  GEN_STARTERS.forEach((gen, idx) => {
     const div = document.createElement('div');
     div.className = 'starter-option';
-    div.innerHTML = `
-      <img src="${sprite}" alt="${s.label}" loading="lazy">
-      <div class="starter-option-name">${s.label}</div>
-      <div class="starter-option-type">${types}</div>
-    `;
+    div.style.background = 'linear-gradient(135deg, #2a5298, #1e3c72)';
+    div.style.color = '#fff';
+    div.style.display = 'flex';
+    div.style.alignItems = 'center';
+    div.style.justifyContent = 'center';
+    div.style.fontSize = '3rem';
+    div.style.fontWeight = 'bold';
+    div.style.cursor = 'pointer';
+    div.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+    div.style.borderRadius = '10px';
+    div.style.height = '150px';
+    div.style.transition = 'transform 0.2s';
+    div.innerText = '?';
+
+    div.addEventListener('mouseenter', () => div.style.transform = 'scale(1.05)');
+    div.addEventListener('mouseleave', () => div.style.transform = 'scale(1)');
+
     div.addEventListener('click', () => {
+      const chosenStarter = gen[Math.floor(Math.random() * gen.length)];
       modal.style.display = 'none';
-      giveStarterMon(s.name);
+      giveStarterMon(chosenStarter);
+      alert(`Вам выпал покемон: ${chosenStarter.toUpperCase()}! (Gen ${idx + 1})`);
     });
     grid.appendChild(div);
-  }
+  });
 
   modal.style.display = 'flex';
 }
