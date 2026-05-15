@@ -1,11 +1,21 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import { mkdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let db;
 
 export async function initDB() {
+  // Ensure the data directory exists (Railway doesn't auto-create it)
+  const dataDir = path.join(__dirname, '../data');
+  mkdirSync(dataDir, { recursive: true });
+
   db = await open({
-    filename: './data/game.db',
+    filename: path.join(dataDir, 'game.db'),
     driver: sqlite3.Database
   });
 
