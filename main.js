@@ -3447,7 +3447,7 @@ function calculateStat(pokemon, statName, isWild) {
   // Nature modifier (non-HP stats only, player mons only)
   let natureMod = 1.0;
   if (statName !== 'hp' && !isWild && pokemon.natureIdx !== undefined) {
-    const nature = NATURES[pokemon.natureIdx];
+    const nature = natures[pokemon.natureIdx];
     if (nature) {
       if (nature.buff === mapName) natureMod = 1.1;
       else if (nature.nerf === mapName) natureMod = 0.9;

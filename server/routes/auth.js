@@ -20,14 +20,19 @@ router.post('/tg', async (req, res) => {
     let tgUser;
 
     if (!isRealInitData) {
-      return res.status(403).json({ error: 'Telegram authentication required' });
-    }
-    if (!botToken) {
+      // Browser/dev access — use test user, no BOT_TOKEN needed
+      if (initData === 'test') {
+        tgUser = parseTestUser();
+      } else {
+        return res.status(403).json({ error: 'Telegram authentication required' });
+      }
+    } else if (!botToken) {
       console.warn('BOT_TOKEN is not set — Telegram init data verification is SKIPPED. Set BOT_TOKEN in production!');
       tgUser = parseTestUser(initData);
     } else {
       tgUser = verifyTelegramInitData(initData, botToken);
     }
+
     if (!tgUser) {
       return res.status(403).json({ error: 'Invalid Telegram init data' });
     }
