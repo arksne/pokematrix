@@ -3,6 +3,7 @@ import { Server } from 'socket.io';
 let io;
 const onlinePlayers = new Map(); // socket.id -> { username, userId }
 const activeTrades = new Map();  // tradeId -> { p1: socketId, p2: socketId, p1Offer: null, p2Offer: null, p1Confirm: false, p2Confirm: false }
+const pvpBattles = new Map();   // battleId -> { p1, p2 }
 
 export function getIO() { return io; }
 
@@ -98,7 +99,6 @@ export function initSocket(server, allowedOrigin) {
     });
 
     // --- PvP Battle System ---
-    const pvpBattles = new Map(); // battleId -> { p1, p2, p1Mon, p2Mon, turn, log }
 
     socket.on('pvp_challenge', (targetId) => {
       const challenger = onlinePlayers.get(socket.id);

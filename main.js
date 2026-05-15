@@ -5953,12 +5953,6 @@ function refreshProfileUI() {
     }
   }
 
-  // Auto-fetch learnable moves from PokeAPI (once per pokemon)
-  if (!mon._learnableFetched && mon.apiData?.id) {
-    mon._learnableFetched = true;
-    fetchLearnableMoves(mon);
-  }
-
   // Learnable moves
   const learnableDiv = document.getElementById('content-moves');
   let learnableHTML = '';
@@ -6462,11 +6456,26 @@ function useItem(itemId) {
                     showToast(`${mon.nickname || mon.apiData.name} выучил ${entry.move.name}!`, false);
                     knownNames.add(entry.move.name);
                   } else {
-                    showConfirmModal('Новая атака!', `${mon.nickname || mon.apiData.name} хочет выучить ${entry.move.name}, но у него уже 4 атаки. Заменить первую?`, () => {
-                      mon.apiData.moves[0].move = { name: entry.move.name, url: entry.move.url };
-                      knownNames.add(entry.move.name);
-                      showToast(`${entry.move.name} выучено!`, false);
-                    });
+                    // Show slot picker to choose which move to replace
+                    const slotItems = (mon.apiData.moves || []).filter(m => m).map((m, i) => ({
+                      label: m.move.name,
+                      subtitle: `Слот ${i + 1}`
+                    }));
+                    slotItems.push({ label: 'Отказаться', subtitle: 'Сохранить в резерв' });
+                    showSelectionModal(`Заменить атаку на ${entry.move.name}?`, slotItems, (pick) => {
+                      if (pick < 4) {
+                        mon.apiData.moves[pick].move = { name: entry.move.name, url: entry.move.url };
+                        knownNames.add(entry.move.name);
+                        showToast(`${entry.move.name} выучено!`, false);
+                      } else {
+                        // Save to reserve
+                        if (!mon.learnableMoves) mon.learnableMoves = [];
+                        if (!mon.learnableMoves.some(m => m.name === entry.move.name)) {
+                          mon.learnableMoves.push({ name: entry.move.name, url: entry.move.url, power: 0, type: 'normal' });
+                        }
+                        showToast(`${entry.move.name} сохранено в резерв!`, false);
+                      }
+                    }, true);
                   }
                 }
                 break;
@@ -7451,20 +7460,28 @@ function offerLearnMove(pokemon, move) {
     }
 
     // All slots full — ask which to replace
-    showConfirmModal('Новая атака!', `${monName} хочет выучить ${moveName}, но знает уже 4 атаки. Заменить первую?`, () => {
+    const slotItems = (pokemon.apiData.moves || []).filter(m => m).map((m, i) => ({
+      label: m.move.name,
+      subtitle: `Слот ${i + 1}`
+    }));
+    slotItems.push({ label: 'Отказаться', subtitle: 'Сохранить в резерв' });
+    showSelectionModal(`Заменить атаку на ${moveName}?`, slotItems, (pick) => {
       const url = move.url || `https://pokeapi.co/api/v2/move/${moveName}/`;
-      const oldMove = pokemon.apiData.moves[0]?.move?.name || 'неизвестную атаку';
-      pokemon.apiData.moves[0].move = { name: moveName, url };
-      appendToLog(`${monName} забыл ${oldMove} и выучил ${moveName}!`, false, 'system');
-      resolve(true);
-    }, () => {
-      appendToLog(`${monName} не стал учить ${moveName}. Атака сохранена в резерв.`, false, 'system');
-      if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
-      if (!pokemon.learnableMoves.some(m => m.name === moveName)) {
-        pokemon.learnableMoves.push({ name: moveName, url: move.url || '', power: move.power || 0, type: move.type?.name || 'normal' });
+      if (pick < 4) {
+        const oldMove = pokemon.apiData.moves[pick]?.move?.name || 'неизвестную атаку';
+        pokemon.apiData.moves[pick].move = { name: moveName, url };
+        appendToLog(`${monName} забыл ${oldMove} и выучил ${moveName}!`, false, 'system');
+        resolve(true);
+      } else {
+        // Save to reserve
+        if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
+        if (!pokemon.learnableMoves.some(m => m.name === moveName)) {
+          pokemon.learnableMoves.push({ name: moveName, url, power: move.power || 0, type: move.type?.name || 'normal' });
+        }
+        appendToLog(`${monName} не стал учить ${moveName}. Атака сохранена в резерв.`, false, 'system');
+        resolve(false);
       }
-      resolve(false);
-    });
+    }, true);
   });
 }
 
@@ -8706,7 +8723,7 @@ function renderTradeItemGrid() {
   if (!grid) return;
   grid.innerHTML = '';
 
-  const tradeItems = ITEMS.filter(item => (inventory[item.id] || 0) > 0 && item.isUsable && item.implemented !== false);
+  const tradeItems = ITEMS.filter(item => (inventory[item.id] || 0) > 0 && item.implemented !== false && item.category !== 'awards');
   if (tradeItems.length === 0) {
     grid.innerHTML = '<div style="text-align:center;color:var(--tma-text-muted);padding:10px;grid-column:1/-1;font-size:0.8rem;">Нет предметов</div>';
     return;
