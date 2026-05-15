@@ -11,6 +11,9 @@ const rateLimit = (await import('express-rate-limit')).default;
 
 const app = express();
 
+// Trust proxy for Railway/Heroku/etc. (fixes rate-limit warnings)
+app.set('trust proxy', 1);
+
 const allowedOrigin = process.env.ALLOWED_ORIGIN;
 app.use(cors(allowedOrigin ? { origin: allowedOrigin } : {}));
 app.use(express.json({ limit: '10mb' }));
