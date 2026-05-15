@@ -18,15 +18,10 @@ export function initSocket(server, allowedOrigin) {
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    // Claude AI bot — always online
-    const claudeBot = { id: 'claude-bot-001', username: 'Claude_AI', userId: 0 };
-
     // Player joins the global lobby
     socket.on('join_lobby', (data) => {
       onlinePlayers.set(socket.id, { username: data.username, userId: data.userId });
-      const players = Array.from(onlinePlayers.entries()).map(([id, info]) => ({ id, ...info }));
-      players.unshift(claudeBot);
-      io.emit('online_players', players);
+      io.emit('online_players', Array.from(onlinePlayers.entries()).map(([id, info]) => ({ id, ...info })));
     });
 
     // Request to trade
@@ -152,9 +147,7 @@ export function initSocket(server, allowedOrigin) {
 
     socket.on('disconnect', () => {
       onlinePlayers.delete(socket.id);
-      const players = Array.from(onlinePlayers.entries()).map(([id, info]) => ({ id, ...info }));
-      players.unshift(claudeBot);
-      io.emit('online_players', players);
+      io.emit('online_players', Array.from(onlinePlayers.entries()).map(([id, info]) => ({ id, ...info })));
       
       // Cleanup trades
       for (const [tradeId, trade] of activeTrades.entries()) {

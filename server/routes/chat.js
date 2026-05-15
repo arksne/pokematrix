@@ -9,6 +9,7 @@ const router = Router();
 const CLAUDE_ID = 0;
 const CLAUDE_USERNAME = 'Claude_AI';
 const CLAUDE_NAME = 'Claude AI';
+const ADMIN_USERNAMES = new Set(['DjafarAdjarov', 'nineinchkn5atmythroat']);
 
 async function sendClaudeMessage(text, io, db) {
   const msg = {
@@ -19,53 +20,164 @@ async function sendClaudeMessage(text, io, db) {
     text,
     created_at: new Date().toISOString()
   };
-  // Store in DB
   try {
     await db.run('INSERT INTO chat_messages (user_id, username, first_name, text) VALUES (?, ?, ?, ?)',
       CLAUDE_ID, CLAUDE_USERNAME, CLAUDE_NAME, text);
   } catch(e) { /* ignore */ }
-  // Broadcast
   if (io) io.emit('chat_message', msg);
   return msg;
 }
 
-async function claudeAutoReply(userText, io, db) {
-  const t = userText.toLowerCase();
+async function claudeAutoReply(userText, io, db, username) {
+  // Only respond to admin usernames
+  if (!ADMIN_USERNAMES.has(username)) return;
+
+  const t = userText.trim();
+  if (!t.startsWith('!')) return; // Only commands
+
+  const parts = t.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
   let reply = null;
 
-  if (t.includes('привет') || t.includes('здаров') || t.includes('ку') || t.includes('hello') || t.includes('hi')) {
-    reply = 'Привет, тренер! 🤖 Я Claude — ИИ-помощник. Спроси меня о покемонах, битвах или игре!';
-  } else if (t.includes('как дела') || t.includes('как ты')) {
-    reply = 'Я в порядке! Мониторю сервер, смотрю за игроками. Всё работает стабильно!';
-  } else if (t.includes('спасибо') || t.includes('спс') || t.includes('thx')) {
-    reply = 'Всегда пожалуйста! Обращайся в любое время 🫡';
-  } else if (t.includes('claude') || t.includes('клод') || t.includes('помощь') || t.includes('хелп') || t.includes('help')) {
-    reply = 'Я здесь! Чем могу помочь? Могу рассказать о: локациях, гим-лидерах, покемонах, эволюциях, тренировках, PvP, обменах.';
-  } else if (t.includes('где') && (t.includes('найти') || t.includes('покемон') || t.includes('легендар'))) {
-    reply = 'Легендарные покемоны водятся в особых местах: Острова Морской Пены (Артикуно), Сафари Зона (редкие), Плато Индиго (после 8 значков).';
-  } else if (t.includes('эволюц') || t.includes('эволюция')) {
-    reply = 'Эволюция происходит через: уровень (конфеты), камни эволюции (в магазине), тренировку. Камни: Огненный, Водный, Лиственный, Громовой, Лунный, Солнечный.';
-  } else if (t.includes('гим') || t.includes('лидер') || t.includes('значок')) {
-    reply = '8 гим-лидеров Канто: Брок (Пьютер), Мисти (Церулин), Сёрдж (Вермилион), Эрика (Селадон), Сабрина (Шаффран), Кога (Фуксия), Блейн (Синнабар), Джованни (Виридиан). И 8 в Джото!';
-  } else if (t.includes('pvp') || t.includes('битва') || t.includes('бой')) {
-    reply = 'PvP бои доступны в Обменнике (Покецентр). Нажми ⚔ рядом с именем тренера чтобы вызвать на бой!';
-  } else if (t.includes('обмен') || t.includes('трейд') || t.includes('trade')) {
-    reply = 'Обмен доступен в Покецентре → Обменник. Можно обменивать покемонов и предметы. Односторонний обмен тоже работает!';
-
-  // Admin commands
-  } else if (t.startsWith('!items') || t.startsWith('!предметы')) {
-    const targetUser = await db.get('SELECT id FROM users WHERE username = ?', t.split(' ')[1] || '');
-    reply = 'Укажи username: !items DjafarAdjarov';
-  } else if (t.startsWith('!status') || t.startsWith('!статус')) {
+  if (cmd === '!help' || cmd === '!помощь' || cmd === '!хелп' || cmd === '!команды') {
+    reply = `🤖 Команды Claude:
+!статус — статистика сервера
+!игроки — список игроков
+!лог — последние сообщения чата
+!дай предметы USERNAME — дать предметы x99
+!дай деньги USERNAME N — дать N кредитов
+!дай значки USERNAME — все 8 значков
+!хил USERNAME — лечить команду
+!ив USERNAME — макс IV
+!лега USERNAME — легендарный покемон
+!фикс USERNAME — уровни до 50`;
+  } else if (cmd === '!status' || cmd === '!статус' || cmd === '!server' || cmd === '!сервер') {
     const users = await db.all('SELECT COUNT(*) as c FROM users');
     const saves = await db.all('SELECT COUNT(*) as c FROM game_saves');
     const msgs = await db.all('SELECT COUNT(*) as c FROM chat_messages');
-    reply = `📊 Сервер: ${users[0].c} игроков, ${saves[0].c} сохранений, ${msgs[0].c} сообщений. Онлайн: работает!`;
+    const lb = await db.all('SELECT u.username, u.first_name, l.badges_count, l.money FROM leaderboard l JOIN users u ON u.id=l.user_id ORDER BY l.badges_count DESC LIMIT 5');
+    const top = lb.map((e,i) => `${i+1}. ${e.first_name||e.username}: 🏅${e.badges_count} ¥${e.money}`).join(', ');
+    reply = `📊 Сервер: ${users[0].c} игроков, ${saves[0].c} сохранений, ${msgs[0].c} сообщений. Топ: ${top}`;
+  } else if (cmd === '!игроки' || cmd === '!players' || cmd === '!users') {
+    const users = await db.all('SELECT username, first_name, created_at FROM users ORDER BY id DESC LIMIT 10');
+    reply = '👤 Игроки: ' + users.map(u => u.first_name||u.username).join(', ');
+  } else if (cmd === '!лог' || cmd === '!log' || cmd === '!chat') {
+    const msgs = await db.all('SELECT username, first_name, text, created_at FROM chat_messages ORDER BY id DESC LIMIT 5');
+    reply = '💬 Чат: ' + msgs.map(m => `[${m.first_name||m.username}]: ${m.text.slice(0,40)}`).join(' | ');
+  } else if (cmd === '!дай' && parts[1] === 'предметы' && parts[2]) {
+    const target = parts[2];
+    const u = await db.get('SELECT id FROM users WHERE username = ?', target);
+    if (!u) { reply = 'Игрок не найден: ' + target; }
+    else {
+      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+      if (!save) { reply = 'Нет сохранения у ' + target; }
+      else {
+        let data = JSON.parse(save.save_data);
+        if (!data.inventory) data.inventory = {};
+        ['pokeball','greatBall','ultraBall','masterBall','potion','superPotion','fullRestore','candy','vitamin','train','weaken','evolutionStone','fireStone','waterStone','leafStone','thunderStone','moonStone','tm','ppUp','antidote','antiparalyze','energyDrink','fireExtinguisher','elixir','strongElixir','luckyEgg','expShare','oldRod','goodRod','superRod','darkBall'].forEach(id => { data.inventory[id] = 99; });
+        data.money = (data.money||0) + 100000;
+        await db.run('UPDATE game_saves SET save_data=?, updated_at=datetime(\'now\') WHERE user_id=?', JSON.stringify(data), u.id);
+        reply = `✅ ${target}: предметы x99 + 100к¥`;
+      }
+    }
+  } else if (cmd === '!дай' && parts[1] === 'деньги' && parts[2]) {
+    const target = parts[2]; const amount = parseInt(parts[3]) || 100000;
+    const u = await db.get('SELECT id FROM users WHERE username = ?', target);
+    if (!u) { reply = 'Игрок не найден: ' + target; }
+    else {
+      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+      if (!save) { reply = 'Нет сохранения'; }
+      else {
+        let data = JSON.parse(save.save_data); data.money = (data.money||0) + amount;
+        await db.run('UPDATE game_saves SET save_data=?, updated_at=datetime(\'now\') WHERE user_id=?', JSON.stringify(data), u.id);
+        reply = `💰 ${target}: +${amount}¥ (теперь ${data.money}¥)`;
+      }
+    }
+  } else if (cmd === '!дай' && parts[1] === 'значки' && parts[2]) {
+    const target = parts[2];
+    const u = await db.get('SELECT id FROM users WHERE username = ?', target);
+    if (!u) { reply = 'Игрок не найден'; }
+    else {
+      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+      if (!save) { reply = 'Нет сохранения'; }
+      else {
+        let data = JSON.parse(save.save_data);
+        data.badges = ['Boulder Badge','Cascade Badge','Thunder Badge','Rainbow Badge','Marsh Badge','Soul Badge','Volcano Badge','Earth Badge'];
+        await db.run('UPDATE game_saves SET save_data=?, updated_at=datetime(\'now\') WHERE user_id=?', JSON.stringify(data), u.id);
+        reply = `🏅 ${target}: 8 значков!`;
+      }
+    }
+  } else if (cmd === '!хил' && parts[1]) {
+    const target = parts[1];
+    const u = await db.get('SELECT id FROM users WHERE username = ?', target);
+    if (!u) { reply = 'Игрок не найден'; }
+    else {
+      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+      if (!save) { reply = 'Нет сохранения'; }
+      else {
+        let data = JSON.parse(save.save_data); (data.myTeam||[]).forEach(m => { m.currentHp=m.maxHp; m.status=null; m.sleepTurns=0; });
+        await db.run('UPDATE game_saves SET save_data=?, updated_at=datetime(\'now\') WHERE user_id=?', JSON.stringify(data), u.id);
+        reply = `🏥 ${target}: команда вылечена`;
+      }
+    }
+  } else if (cmd === '!ив' && parts[1]) {
+    reply = await fixPlayer(parts[1], db, (m) => { m.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31}; }, '⭐ макс IV');
+  } else if (cmd === '!лега' && parts[1]) {
+    const target = parts[1];
+    const u = await db.get('SELECT id FROM users WHERE username = ?', target);
+    if (!u) { reply = 'Игрок не найден'; }
+    else {
+      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+      if (!save) { reply = 'Нет сохранения'; }
+      else {
+        const legends = ['mewtwo','mew','lugia','ho-oh','rayquaza','groudon','kyogre','dialga','palkia','zekrom','reshiram'];
+        const pick = legends[Math.floor(Math.random()*legends.length)];
+        let data = JSON.parse(save.save_data);
+        try {
+          const pokeRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${pick}`);
+          const pokeData = await pokeRes.json();
+          const newMon = {
+            uid: Date.now().toString(36)+Math.random().toString(36).substr(2,6),
+            originalTrainer: String(u.id), createdAt: Date.now(), caughtLocation: 'claude_bot',
+            apiData: pokeData, maxHp: 200, currentHp: 200,
+            ivs: {hp:31,atk:31,def:31,spa:31,spd:31,spe:31},
+            evs: {hp:0,atk:0,def:0,spa:0,spd:0,spe:0},
+            baseLevel: 70, exp: 343000, expToNext: 357911,
+            candiesEaten:0, vitaminsEaten:0, training:null, trainingStage:0, trainingStat:null,
+            happiness:70, natureIdx:0, breedLetter:'S', status:null, sleepTurns:0,
+            movesPP:[], statStages:{atk:0,def:0,spa:0,spd:0,spe:0},
+            abilityName: pokeData.abilities[0]?.ability?.name||null,
+            heldItem:null, berries:{sitrusBerry:0,oranBerry:0,lumBerry:0,chestoBerry:0,rawstBerry:0},
+            learnableMoves:[]
+          };
+          data.myTeam = data.myTeam || [];
+          if (data.myTeam.length >= 6) data.myTeam[0] = newMon;
+          else data.myTeam.push(newMon);
+          await db.run('UPDATE game_saves SET save_data=?, updated_at=datetime(\'now\') WHERE user_id=?', JSON.stringify(data), u.id);
+          reply = `🦄 ${target}: ${pick} добавлен!`;
+        } catch(e) { reply = 'Ошибка PokeAPI'; }
+      }
+    }
+  } else if (cmd === '!фикс' && parts[1]) {
+    reply = await fixPlayer(parts[1], db, (m) => { if(m.baseLevel<50) m.baseLevel=50; m.maxHp=Math.floor(m.maxHp*1.5); m.currentHp=m.maxHp; }, '📈 уровни до 50');
+  } else if (cmd === '!test' || cmd === '!тест') {
+    reply = '✅ Claude online. Жду команд.';
   }
 
   if (reply) {
-    setTimeout(() => sendClaudeMessage(reply, io, db), 500 + Math.random() * 1000);
+    setTimeout(() => sendClaudeMessage(reply, io, db), 300 + Math.random() * 500);
   }
+}
+
+async function fixPlayer(username, db, fn, label) {
+  const u = await db.get('SELECT id FROM users WHERE username = ?', username);
+  if (!u) return 'Игрок не найден: ' + username;
+  const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+  if (!save) return 'Нет сохранения у ' + username;
+  let data = JSON.parse(save.save_data);
+  (data.myTeam||[]).forEach(fn);
+  await db.run('UPDATE game_saves SET save_data=?, updated_at=datetime(\'now\') WHERE user_id=?', JSON.stringify(data), u.id);
+  return `${label}: ${username} (${data.myTeam.length} покемонов)`;
 }
 
 // Send a chat message (auth required)
@@ -107,8 +219,8 @@ router.post('/send', authMiddleware, async (req, res) => {
     const io = getIO();
     if (io) io.emit('chat_message', msg);
 
-    // Claude AI auto-reply
-    claudeAutoReply(text.trim(), io, db);
+    // Claude AI auto-reply (admin commands only)
+    claudeAutoReply(text.trim(), io, db, user.username);
 
     res.json({ success: true });
   } catch (err) {
