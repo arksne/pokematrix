@@ -8157,12 +8157,28 @@ async function triggerEvolution(pokemon, targetName) {
   const evoText = document.getElementById('evo-text');
   if (!overlay) return;
 
-  evoText.innerText = `Что? ${pokemon.apiData.name} эволюционирует!`;
-  evoSprite.src = pokemon.apiData.sprites?.other?.['official-artwork']?.front_default || pokemon.apiData.sprites?.front_default || '';
+  const oldName = pokemon.apiData.name;
+  const oldSprite = pokemon.apiData.sprites?.other?.['official-artwork']?.front_default || pokemon.apiData.sprites?.front_default || '';
   const evoBox = evoSprite.closest('.evo-sprite-box');
-  if (evoBox) evoBox.style.background = getTypeGradient(pokemon.apiData.types);
   overlay.style.display = 'flex';
 
+  // Stage 1: "What?!" — old sprite shakes
+  evoText.innerHTML = `<span class="evo-shake">Что?!</span><br><small>${oldName} эволюционирует!</small>`;
+  evoSprite.src = oldSprite;
+  if (evoBox) { evoBox.style.background = getTypeGradient(pokemon.apiData.types); evoBox.classList.add('evo-flash'); }
+  await sleep(2000);
+
+  // Stage 2: White flash — Pokemon is transforming
+  evoText.innerHTML = '✨ <span class="evo-glowing">Эволюция!</span> ✨';
+  evoSprite.style.filter = 'brightness(3)';
+  await sleep(800);
+  evoSprite.style.filter = 'brightness(0.5)';
+  await sleep(400);
+  evoSprite.style.filter = 'brightness(3)';
+  await sleep(600);
+  evoSprite.style.filter = 'brightness(1)';
+
+  // Stage 3: Fetch new form
   try {
     const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${targetName}`);
     const newData = await res.json();
@@ -8171,18 +8187,40 @@ async function triggerEvolution(pokemon, targetName) {
     const baseHp = newData.stats[0].base_stat;
     const curLvl = pokemon.baseLevel + (pokemon.candiesEaten || 0);
     const newMaxHp = Math.floor(0.01 * (2 * baseHp + pokemon.ivs.hp + Math.floor(0.25 * pokemon.evs.hp)) * curLvl) + curLvl + 10;
+    const oldMaxHp = pokemon.maxHp;
     pokemon.maxHp = newMaxHp;
-    pokemon.currentHp = Math.min(pokemon.currentHp, newMaxHp);
+    pokemon.currentHp = Math.min(pokemon.currentHp + (newMaxHp - oldMaxHp), newMaxHp);
 
-    evoText.innerText = `Поздравляем! ${targetName.toUpperCase()}!`;
     evoSprite.src = newData.sprites?.other?.['official-artwork']?.front_default || newData.sprites?.front_default || '';
     if (evoBox) evoBox.style.background = getTypeGradient(newData.types);
+
+    // Stage 4: Reveal!
+    evoText.innerHTML = `<b>${targetName.toUpperCase()}!</b>`;
+    evoSprite.style.filter = 'brightness(2) drop-shadow(0 0 20px gold)';
+    evoBox?.classList.remove('evo-flash');
+    evoBox?.classList.add('evo-reveal');
+    await sleep(1500);
+
+    // Stage 5: Show new stats
+    const newStars = getPowerStars(pokemon);
+    const bst = newData.stats.reduce((s, st) => s + st.base_stat, 0);
+    const types = newData.types.map(t => t.type.name).join(', ');
+    evoText.innerHTML = `
+      <b>${targetName.toUpperCase()}</b><br>
+      <small style="color:#ccc">${types} | BST: ${bst}</small><br>
+      <span style="color:#ff9500">${'★'.repeat(newStars)}${'☆'.repeat(10-newStars)}</span><br>
+      <small style="color:#5af">HP: ${oldMaxHp} → ${newMaxHp}</small>
+    `;
+    evoBox?.classList.remove('evo-reveal');
+    await sleep(2500);
   } catch (e) {
     console.warn('Evolution fetch failed for', targetName, e);
-    evoText.innerText = 'Ошибка эволюции...';
+    evoText.innerHTML = 'Ошибка эволюции...';
+    await sleep(2000);
   }
 
-  await new Promise(resolve => setTimeout(resolve, 2500));
+  evoSprite.style.filter = '';
+  evoBox?.classList.remove('evo-flash', 'evo-reveal');
   overlay.style.display = 'none';
 }
 
