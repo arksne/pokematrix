@@ -21,6 +21,7 @@
           <button id="btn-quests" class="header-lb" title="Задания">📋</button>
           <button id="btn-theme-toggle" class="header-lb" title="Темная тема">🌙</button>
           <button id="btn-hunt-toggle" class="header-hunt" title="Искать покемонов">⚪</button>
+          <button id="btn-notifications" class="header-lb" title="Уведомления" style="position:relative;">🔔<span id="notif-badge" style="position:absolute;top:-4px;right:-6px;background:#ff3b30;color:#fff;border-radius:50%;min-width:16px;height:16px;font-size:0.6rem;display:none;align-items:center;justify-content:center;"></span></button>
           <button id="btn-reset-game" class="header-reset" title="Сбросить игру">⟳</button>
         </div>
       </header>
@@ -642,6 +643,15 @@
           <div class="trainer-team-empty">Нет данных</div>
         </div>
         <button class="tma-btn" id="btn-close-trainer-profile" style="margin-top:12px; width:100%;">Закрыть</button>
+      </div>
+    </div>
+
+    <!-- NOTIFICATIONS MODAL -->
+    <div id="notif-modal" class="modal-overlay" style="display:none;">
+      <div class="leaderboard-container" style="max-width:420px;">
+        <h2>🔔 Уведомления</h2>
+        <div id="notif-list" style="display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto;"></div>
+        <button class="tma-btn" id="btn-close-notif" style="margin-top:12px;width:100%;">Закрыть</button>
       </div>
     </div>
 

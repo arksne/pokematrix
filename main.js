@@ -1939,13 +1939,93 @@ let myTeam = [];
 // PC STORAGE (boxes of 30)
 let pcBoxes = [[]];
 
+// NOTIFICATION SYSTEM
+let notifications = []; // [{ id, title, text, time, read }]
+
+function addNotification(title, text) {
+  notifications.unshift({ id: Date.now(), title, text, time: new Date().toISOString(), read: false });
+  if (notifications.length > 50) notifications.length = 50;
+  updateNotifBadge();
+  saveGame();
+}
+
+function updateNotifBadge() {
+  const unread = notifications.filter(n => !n.read).length;
+  const badge = document.getElementById('notif-badge');
+  if (badge) {
+    badge.textContent = unread || '';
+    badge.style.display = unread > 0 ? '' : 'none';
+  }
+}
+
+function openNotifications() {
+  const modal = document.getElementById('notif-modal');
+  if (!modal) return;
+  const list = document.getElementById('notif-list');
+  list.innerHTML = notifications.length === 0
+    ? '<div style="text-align:center;padding:20px;color:var(--tma-text-muted);">Нет уведомлений</div>'
+    : notifications.map(n => `
+      <div class="notif-item ${n.read ? '' : 'unread'}" data-id="${n.id}">
+        <b>${n.title}</b>
+        <p>${n.text}</p>
+        <small>${new Date(n.time).toLocaleString('ru')}</small>
+      </div>
+    `).join('');
+  notifications.forEach(n => n.read = true);
+  updateNotifBadge();
+  modal.style.display = 'flex';
+}
+
 // BREEDING SYSTEM
 let breedingPairs = []; // [{ boxIdx, mon1Uid, mon2Uid, startTime, readyTime }]
 let eggs = [];          // [{ uid, species, apiData, readyTime, boxIdx, parent1Uid, parent2Uid }]
 const EGG_TIME = 10 * 60 * 1000;      // 10 min to produce egg
 const EGG_BONUS_TIME = 5 * 60 * 1000;  // 5 min with matching nature
-const EGG_HATCH_TIME = 15 * 60 * 1000; // 15 min to hatch
+const EGG_HATCH_TIME = 7 * 24 * 60 * 60 * 1000; // 7 days to hatch
 const BREEDING_CHECK_INTERVAL = 60 * 1000; // check every minute
+
+// --- STAR RATINGS ---
+const LEGENDARY_NAMES = new Set([
+  'articuno','zapdos','moltres','mewtwo','mew','raikou','entei','suicune','lugia','ho-oh','celebi',
+  'regirock','regice','registeel','latias','latios','kyogre','groudon','rayquaza','jirachi','deoxys',
+  'uxie','mesprit','azelf','dialga','palkia','heatran','regigigas','giratina','cresselia','phione','manaphy','darkrai','shaymin','arceus',
+  'victini','reshiram','zekrom','kyurem','keldeo','meloetta','genesect',
+  'xerneas','yveltal','zygarde','diancie','hoopa','volcanion',
+  'tapu-koko','tapu-lele','tapu-bulu','tapu-fini','cosmog','cosmoem','solgaleo','lunala','necrozma','magearna','marshadow','zeraora',
+  'zacian','zamazenta','eternatus','kubfu','urshifu','regieleki','regidrago','glastrier','spectrier','calyrex',
+  'koraidon','miraidon'
+]);
+
+function getPowerStars(mon) {
+  if (!mon.apiData?.stats) return 1;
+  const bst = mon.apiData.stats.reduce((sum, s) => sum + s.base_stat, 0);
+  if (bst >= 650) return 10;
+  if (bst >= 600) return 9;
+  if (bst >= 550) return 8;
+  if (bst >= 500) return 7;
+  if (bst >= 450) return 6;
+  if (bst >= 400) return 5;
+  if (bst >= 350) return 4;
+  if (bst >= 300) return 3;
+  if (bst >= 250) return 2;
+  return 1;
+}
+
+function getRarityStars(mon) {
+  const name = mon.apiData?.species?.name || mon.apiData?.name;
+  if (name && LEGENDARY_NAMES.has(name)) return 5;
+  const cr = mon.apiData?.captureRate || mon.apiData?.speciesData?.capture_rate || 255;
+  if (cr < 30) return 4;
+  if (cr < 80) return 3;
+  if (cr < 150) return 2;
+  return 1;
+}
+
+function renderStars(powerStars, rarityStars) {
+  const gold = '★'.repeat(powerStars) + '☆'.repeat(10 - powerStars);
+  const black = '✦'.repeat(rarityStars) + '✧'.repeat(5 - rarityStars);
+  return `<span style="color:#ff9500;font-size:0.55rem;" title="Мощь: ${powerStars}/10">${gold}</span> <span style="color:#333;font-size:0.55rem;" title="Редкость: ${rarityStars}/5">${black}</span>`;
+}
 
 // ACTIVE POKEMON STATE
 let currentPokemonIndex = null;
@@ -2279,6 +2359,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Periodic breeding & egg hatch check
   setInterval(() => { if (eggs.length > 0 || breedingPairs.length > 0) checkBreeding(); }, BREEDING_CHECK_INTERVAL);
 
+  // Notification bell
+  document.getElementById('btn-notifications').addEventListener('click', openNotifications);
+  document.getElementById('btn-close-notif').addEventListener('click', () => { document.getElementById('notif-modal').style.display = 'none'; });
+  document.getElementById('notif-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
+  updateNotifBadge();
+
   // Pokedex events
   const btnOpenPokedex = document.getElementById('btn-open-pokedex');
   if (btnOpenPokedex) btnOpenPokedex.addEventListener('click', openPokedex);
@@ -2602,6 +2688,7 @@ async function checkBreeding() {
           parent2Uid: existingPair.mon2Uid
         };
         eggs.push(egg);
+        addNotification('🥚 Новое яйцо!', `В Боксе ${boxIdx + 1} появилось яйцо ${species}!`);
         appendToLog(`🥚 В Боксе ${boxIdx + 1} появилось яйцо! (${species})`, false, 'quest');
       }
       // Remove pair — they produce one egg, need to be re-paired
@@ -2694,10 +2781,12 @@ async function hatchEgg(egg) {
 
     if (myTeam.length < 6) {
       myTeam.push(newMon);
+      addNotification('🎉 Яйцо вылупилось!', `${pokeData.name} появился на свет!`);
       appendToLog(`🎉 Из яйца вылупился ${pokeData.name}!`, false, 'quest');
     } else {
       if (pcBoxes.length === 0) pcBoxes.push([]);
       pcBoxes[0].push(newMon);
+      addNotification('🎉 Яйцо вылупилось!', `${pokeData.name} вылупился и отправлен в PC (команда полна).`);
       appendToLog(`🎉 Из яйца вылупился ${pokeData.name}! (отправлен в PC)`, false, 'quest');
     }
     eggs = eggs.filter(e => e !== egg);
@@ -3042,6 +3131,7 @@ function getFullSaveData() {
     daycareMons, daycareEgg, lastLocation, expShareActive,
     breedingPairs: breedingPairs.map(p => ({ boxIdx: p.boxIdx, mon1Uid: p.mon1Uid, mon2Uid: p.mon2Uid, startTime: p.startTime, readyTime: p.readyTime })),
     eggs: eggs.map(e => ({ uid: e.uid, species: e.species, readyTime: e.readyTime, boxIdx: e.boxIdx, parent1Uid: e.parent1Uid, parent2Uid: e.parent2Uid, inTeam: e.inTeam })),
+    notifications: notifications.slice(0, 30),
   };
 }
 
@@ -3169,6 +3259,7 @@ function loadGame() {
     expShareActive = data.expShareActive || false;
     breedingPairs = data.breedingPairs || [];
     eggs = data.eggs || [];
+    notifications = data.notifications || [];
 
     validateGameState();
     return true;
@@ -3610,6 +3701,16 @@ function renderLocation(locId) {
       renderLocation('pokecenter');
     };
     actionsContainer.appendChild(btnPokecenter);
+  }
+
+  // Fishing button on water locations
+  if (loc.hasWater && getBestRod()) {
+    const btnFish = document.createElement('button');
+    btnFish.className = 'btn-use';
+    btnFish.style.backgroundColor = '#5ac8fa';
+    btnFish.innerText = '🎣 Рыбачить';
+    btnFish.onclick = () => showFishMenu();
+    actionsContainer.appendChild(btnFish);
   }
 
   // Pokemon Center location
@@ -4448,6 +4549,24 @@ const FISHING_TABLES = {
     { name: 'dratini', minLvl: 15, maxLvl: 30, weight: 2 },
   ]
 };
+
+function getBestRod() {
+  if (getItemQty('superRod') > 0) return 'superRod';
+  if (getItemQty('goodRod') > 0) return 'goodRod';
+  if (getItemQty('oldRod') > 0) return 'oldRod';
+  return null;
+}
+
+function showFishMenu() {
+  const rods = [];
+  if (getItemQty('oldRod') > 0) rods.push('oldRod');
+  if (getItemQty('goodRod') > 0) rods.push('goodRod');
+  if (getItemQty('superRod') > 0) rods.push('superRod');
+  if (rods.length === 0) return showToast('Нет удочек!', true);
+  if (rods.length === 1) { startFishing(rods[0]); return; }
+  const items = rods.map(r => ({ text: itemDef(r).nameRu, action: () => startFishing(r) }));
+  showSelectionModal('🎣 Выберите удочку', items);
+}
 
 function getLocationHasWater() {
   const loc = getLocation(currentLocationId);
@@ -5350,6 +5469,7 @@ function initEncounterEvents() {
           } else {
             if (pcBoxes.length === 0) pcBoxes.push([]);
             pcBoxes[0].push(newMon);
+            addNotification('📦 Покемон в PC', `${newMon.name || activeWild.name} отправлен в Бокс 1 (команда полна).`);
             appendToLog(`${newMon.name || activeWild.name} отправлен в PC (команда полна).`, false, 'catch');
           }
           pokedexCaught.add(activeWild.name);
@@ -6544,6 +6664,8 @@ function renderTeamGrid() {
           <div class="slot-lvl">Вылупится через ~${remaining} мин</div>
         `;
       } else {
+        const pwStars2 = getPowerStars(mon);
+        const rStars2 = getRarityStars(mon);
         slot.innerHTML = `
           ${reorderHtml}
           <div class="team-sprite-wrap">
@@ -6551,7 +6673,7 @@ function renderTeamGrid() {
             ${trainLabel}
           </div>
           <div class="slot-name">${mon.nickname || mon.apiData.name} ${statusIcon}</div>
-          <div class="slot-lvl">Lvl ${curLvl} | ${mon.currentHp}/${mon.maxHp} HP</div>
+          <div class="slot-lvl">${renderStars(pwStars2, rStars2)} Lvl ${curLvl} | ${mon.currentHp}/${mon.maxHp} HP</div>
         `;
       }
       slot.setAttribute('data-poke-index', i);
