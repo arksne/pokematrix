@@ -1,6 +1,12 @@
 import crypto from 'crypto';
 
-function hmacSha256(key, data) {
+// Returns raw Buffer (needed for chained HMAC per Telegram spec)
+function hmacSha256Buffer(key, data) {
+  return crypto.createHmac('sha256', key).update(data).digest();
+}
+
+// Returns hex string for final comparison
+function hmacSha256Hex(key, data) {
   return crypto.createHmac('sha256', key).update(data).digest('hex');
 }
 
@@ -19,8 +25,11 @@ export function verifyTelegramInitData(initData, botToken) {
 
   const dataCheckString = sorted.join('\n');
 
-  const secretKey = hmacSha256('WebAppData', botToken);
-  const computedHash = hmacSha256(secretKey, dataCheckString);
+  // Per Telegram docs:
+  // secret_key = HMAC_SHA256(key="WebAppData", data=bot_token)  → raw bytes
+  // hash       = HMAC_SHA256(key=secret_key,   data=check_string) → hex
+  const secretKey = hmacSha256Buffer('WebAppData', botToken);
+  const computedHash = hmacSha256Hex(secretKey, dataCheckString);
 
   if (computedHash !== hash) return null;
 
