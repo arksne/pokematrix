@@ -73,6 +73,11 @@ pre{background:#111;padding:8px;border-radius:4px;font-size:0.7rem;max-height:30
 <button class="btn btn-purp" onclick="action('max_iv','nineinchkn5atmythroat')">⭐ Макс IV nineinch</button>
 <button class="btn btn-purp" onclick="action('fix_levels','DjafarAdjarov')">📈 Fix уровни DjafarAdjarov</button>
 <button class="btn btn-purp" onclick="action('fix_levels','nineinchkn5atmythroat')">📈 Fix уровни nineinch</button>
+<h2>💬 Chat as Claude</h2>
+<input id="claude-msg" placeholder="Сообщение в чат..." style="width:100%;margin:4px 0;" onkeydown="if(event.key==='Enter')claudeChat()">
+<button class="btn btn-purp" onclick="claudeChat()">Отправить как Claude AI</button>
+<div class="result" id="chat-result"></div>
+<br>
 <div class="result" id="result"></div>
 </div>
 
@@ -99,6 +104,19 @@ async function action(cmd, user, val) {
   const res = await fetch('/admin/api?token='+TOKEN+'&cmd='+cmd+'&user='+user+(val?'&val='+val:''));
   const json = await res.json();
   document.getElementById('result').innerText = JSON.stringify(json, null, 2);
+}
+async function claudeChat() {
+  const inp = document.getElementById('claude-msg');
+  const text = inp.value.trim();
+  if(!text) return;
+  const res = await fetch('/api/chat/bot', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text, token:'claude-admin-2026'})
+  });
+  const json = await res.json();
+  document.getElementById('chat-result').innerText = json.success ? '✅ Отправлено: '+text : '❌ Ошибка';
+  inp.value = '';
 }
 </script>
 </body></html>`;
