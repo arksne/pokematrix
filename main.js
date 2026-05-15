@@ -1458,6 +1458,7 @@ const LEGENDARY_SET = new Set([
 let uidCounter = Date.now();
 function generateUID() { return (++uidCounter).toString(36) + Math.random().toString(36).substr(2, 6); }
 function getTrainerId() { return tgUser?.id || localStorage.getItem('league17_trainer_id') || '0'; }
+function lsKey(name) { return `league17_${name}_${getTrainerId()}`; }
 
 // BADGES (NEW)
 let badges = [];
@@ -1926,7 +1927,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Dark theme toggle
   const themeToggle = document.getElementById('btn-theme-toggle');
   if (themeToggle) {
-    const savedTheme = localStorage.getItem('league17_theme');
+    const savedTheme = localStorage.getItem(lsKey('theme'));
     if (savedTheme === 'dark') {
       document.documentElement.setAttribute('data-theme', 'dark');
       themeToggle.innerText = '☀️';
@@ -1935,11 +1936,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       if (isDark) {
         document.documentElement.removeAttribute('data-theme');
-        localStorage.setItem('league17_theme', 'light');
+        localStorage.setItem(lsKey('theme'), 'light');
         themeToggle.innerText = '🌙';
       } else {
         document.documentElement.setAttribute('data-theme', 'dark');
-        localStorage.setItem('league17_theme', 'dark');
+        localStorage.setItem(lsKey('theme'), 'dark');
         themeToggle.innerText = '☀️';
       }
     });
@@ -2406,7 +2407,7 @@ function saveGame() {
     pcBoxes, daycareMons, daycareEgg, lastLocation, expShareActive,
   };
   try {
-    localStorage.setItem('league17_save', JSON.stringify(saveData));
+    localStorage.setItem(lsKey('save'), JSON.stringify(saveData));
   } catch (e) {
     console.warn('Save failed (storage full?)', e);
   }
@@ -2414,7 +2415,7 @@ function saveGame() {
 
 function loadGame() {
   try {
-    const raw = localStorage.getItem('league17_save');
+    const raw = localStorage.getItem(lsKey('save'));
     if (!raw) return false;
     const data = JSON.parse(raw);
 
@@ -2480,7 +2481,7 @@ function autoSave() {
 
 function resetGame() {
   showConfirmModal('Сброс прогресса', 'Это действие необратимо! Вы уверены?', () => {
-    localStorage.removeItem('league17_save');
+    localStorage.removeItem(lsKey('save'));
     location.reload();
   });
 }
@@ -3267,7 +3268,7 @@ function giveBerryToMon(berryType) {
 // --- QUESTS (Feature 5) ---
 function generateDailyQuests() {
   const today = new Date().toISOString().slice(0, 10);
-  const lastGen = localStorage.getItem('league17_quest_date');
+  const lastGen = localStorage.getItem(lsKey('quest_date'));
   if (lastGen === today && quests.length > 0) return;
 
   const shuffled = [...QUEST_CONFIGS].sort(() => Math.random() - 0.5);
@@ -3279,7 +3280,7 @@ function generateDailyQuests() {
   }));
   questProgress = {};
   quests.forEach(q => { questProgress[q.id] = 0; });
-  localStorage.setItem('league17_quest_date', today);
+  localStorage.setItem(lsKey('quest_date'), today);
   autoSave();
 }
 
