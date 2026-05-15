@@ -33,20 +33,25 @@ async function claudeAutoReply(userText, io, db, username) {
   if (!ADMIN_USERNAMES.has(username)) return;
 
   const t = userText.trim();
+
+  // /claude — прямой канал в Claude Code (до проверки !)
+  if (t.startsWith('/claude') || t.startsWith('/клод')) {
+    const msg = t.replace(/^\/claude\s*|^\/клод\s*/i, '');
+    const text = msg
+      ? `🤖 Принято! Claude обрабатывает: "${msg.slice(0,60)}${msg.length>60?'...':''}"`
+      : 'ℹ️ Формат: /claude <сообщение>. Claude Code увидит и ответит.';
+    if (msg) console.log('[CLAUDE_CMD] from', username, ':', msg);
+    setTimeout(() => sendClaudeMessage(text, io, db), 300);
+    return;
+  }
+
   if (!t.startsWith('!')) return; // Only commands
 
   const parts = t.split(/\s+/);
   const cmd = parts[0].toLowerCase();
   let reply = null;
 
-  if (t.startsWith('/claude') || t.startsWith('/клод')) {
-    const msg = t.replace(/^\/claude\s*|^\/клод\s*/i, '');
-    if (!msg) { reply = 'ℹ️ Формат: /claude <сообщение>. Claude Code увидит и ответит.'; }
-    else {
-      console.log('[CLAUDE_CMD] from', username, ':', msg);
-      reply = `🤖 Принято! Claude обрабатывает: "${msg.slice(0,60)}${msg.length>60?'...':''}"`;
-    }
-  } else if (cmd === '!help' || cmd === '!помощь' || cmd === '!хелп' || cmd === '!команды') {
+  if (cmd === '!help' || cmd === '!помощь' || cmd === '!хелп' || cmd === '!команды') {
     reply = `🤖 Команды Claude:
 /claude ТЕКСТ — передать сообщение Claude Code (отвечу позже)
 !статус — статистика сервера
