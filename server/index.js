@@ -69,6 +69,26 @@ import { initSocket } from './socket.js';
 
 try {
   await initDB();
+
+  // Backup key trainers' progress on startup
+  const db = getDB();
+  const trainers = ['kisunplay', 'DjafarAdjarov'];
+  for (const username of trainers) {
+    const user = await db.get('SELECT id, username, first_name FROM users WHERE username = ?', username);
+    if (user) {
+      const save = await db.get('SELECT save_data, updated_at FROM game_saves WHERE user_id = ?', user.id);
+      const lb = await db.get('SELECT badges_count, team_level_sum, money FROM leaderboard WHERE user_id = ?', user.id);
+      console.log(`[backup] ${user.username} (ID:${user.id}): badges=${lb?.badges_count || 0} lvl_sum=${lb?.team_level_sum || 0} money=${lb?.money || 0} saved=${save?.updated_at || 'never'}`);
+      if (save) {
+        import('fs').then(fs => {
+          const dir = path.join(__dirname, '../data/backups');
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, `${username}_${Date.now()}.json`), save.save_data);
+        }).catch(() => {});
+      }
+    }
+  }
+
   const server = app.listen(PORT, () => {
     console.log(`League-17 TMA server running on port ${PORT}`);
   });
