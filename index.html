@@ -13,15 +13,18 @@
       
       <header class="tma-header">
         <h1 id="header-title">Мир (Канто)</h1>
-        <div class="header-info">
+        <div id="badge-row" style="text-align:center;margin-bottom:4px;">
           <span id="badge-display" class="header-badges">Значки: 0/8</span>
-          <button id="btn-cloud-sync" class="header-sync" title="Синхронизировать">☁️ Синхр.</button>
-          <button id="btn-leaderboard" class="header-lb" title="Таблица лидеров">🏆</button>
+          <span id="money-display" class="header-money">¥0</span>
+        </div>
+        <div class="header-info">
+          <button id="btn-hunt-toggle" class="header-hunt" title="Искать покемонов">⚪</button>
           <button id="btn-open-pokedex" class="header-lb" title="Покедекс">📖</button>
           <button id="btn-quests" class="header-lb" title="Задания">📋</button>
-          <button id="btn-theme-toggle" class="header-lb" title="Темная тема">🌙</button>
-          <button id="btn-hunt-toggle" class="header-hunt" title="Искать покемонов">⚪</button>
+          <button id="btn-leaderboard" class="header-lb" title="Таблица лидеров">🏆</button>
           <button id="btn-notifications" class="header-lb" title="Уведомления" style="position:relative;">🔔<span id="notif-badge" style="position:absolute;top:-4px;right:-6px;background:#ff3b30;color:#fff;border-radius:50%;min-width:16px;height:16px;font-size:0.6rem;display:none;align-items:center;justify-content:center;"></span></button>
+          <button id="btn-theme-toggle" class="header-lb" title="Темная тема">🌙</button>
+          <button id="btn-cloud-sync" class="header-sync" title="Синхронизировать">☁️</button>
           <button id="btn-reset-game" class="header-reset" title="Сбросить игру">⟳</button>
         </div>
       </header>

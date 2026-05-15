@@ -5428,15 +5428,6 @@ function enemyTurn() {
   // Berry auto-use for player
   if (activePlayerMon.currentHp > 0) checkBerryAutoUse(activePlayerMon, true);
 
-  // Random status from wild (10% chance)
-  if (!activePlayerMon.status && Math.random() < 0.1) {
-    const statuses = ['psn', 'brn', 'par'];
-    const st = statuses[Math.floor(Math.random() * statuses.length)];
-    if (applyStatusEffect(activePlayerMon, st)) {
-      document.getElementById('player-status-icon').innerText = getStatusIcon(st);
-      appendToLog(`${activePlayerMon.apiData.name} получил ${STATUS_NAMES[st]}!`);
-    }
-  }
 
   if (activePlayerMon.currentHp === 0) {
     appendToLog(`${activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
@@ -6765,6 +6756,8 @@ function initShopEvents() {
 // --- DISPLAY UPDATES ---
 function updateMoneyDisplay() {
   inventory['credit'] = money;
+  const el = document.getElementById('money-display');
+  if (el) el.innerText = `¥${money}`;
 }
 
 function updateBadgeDisplay() {
