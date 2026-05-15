@@ -1476,9 +1476,12 @@ function initAdminPanel() {
     <div class="selection-modal-card" style="max-width:380px;width:95%;max-height:85vh;overflow-y:auto;">
       <h3>🛠 Админ-панель</h3>
       <p style="font-size:0.75rem;color:var(--tma-text-muted);margin:0 0 8px;">Мой ID: ${tgUser?.id || '?'} | ${tgUser?.username || ''}</p>
-      <div style="display:flex;gap:6px;margin-bottom:8px;">
-        <input id="admin-target-id" type="text" placeholder="ID тренера" style="flex:1;padding:6px 8px;font-size:0.8rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
-        <button class="tma-btn" id="admin-lookup" style="padding:6px 12px;font-size:0.8rem;background:#007aff;">🔍</button>
+      <div style="display:flex;gap:4px;margin-bottom:6px;">
+        <select id="admin-user-select" style="flex:1;padding:6px;font-size:0.78rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);max-width:60%;">
+          <option value="">— Выбрать —</option>
+        </select>
+        <input id="admin-target-id" type="text" placeholder="или ID" style="flex:1;padding:6px 8px;font-size:0.78rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
+        <button class="tma-btn" id="admin-lookup" style="padding:6px 10px;font-size:0.8rem;background:#007aff;">🔍</button>
       </div>
       <div id="admin-target-info" style="font-size:0.72rem;color:var(--tma-text-muted);margin-bottom:8px;"></div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
@@ -1519,6 +1522,32 @@ function initAdminPanel() {
     container.appendChild(b);
   });
 
+  // Populate user dropdown when opening admin panel
+  fab.addEventListener('click', async () => {
+    modal.style.display = 'flex';
+    const select = document.getElementById('admin-user-select');
+    if (select.options.length <= 1) {
+      try {
+        const res = await fetch('/admin/users?token=league17admin2026');
+        const data = await res.json();
+        if (data.users) {
+          data.users.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = `${u.first_name||u.username||'?'} (ID:${u.id})`;
+            select.appendChild(opt);
+          });
+        }
+      } catch(e) {}
+    }
+    select.addEventListener('change', () => {
+      if (select.value) {
+        document.getElementById('admin-target-id').value = select.value;
+        document.getElementById('admin-lookup').click();
+      }
+    });
+  });
+
   // ID-based admin actions
   const targetInfo = document.getElementById('admin-target-info');
   document.getElementById('admin-lookup').addEventListener('click', async () => {
@@ -1549,7 +1578,6 @@ function initAdminPanel() {
     });
   });
 
-  fab.addEventListener('click', () => { modal.style.display = 'flex'; });
   document.getElementById('btn-admin-close').addEventListener('click', () => { modal.style.display = 'none'; });
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
 }
@@ -2005,6 +2033,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initAppNav();
   initShopEvents();
   initGymEvents();
+  initTrainersTab();
 
   await authTelegram();
 
@@ -8093,6 +8122,77 @@ async function sendChatMessage() {
   } catch (e) {
     console.warn('Chat send failed', e);
   }
+}
+
+// ================================================================
+// TRAINERS TAB — all visitors + account
+// ================================================================
+let trainersAllData = [];
+
+async function loadAllTrainers() {
+  const listEl = document.getElementById('trainers-all-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="text-align:center;color:var(--tma-text-muted);padding:20px;">Загрузка...</div>';
+  try {
+    const res = await fetch('/admin/users?token=league17admin2026');
+    const data = await res.json();
+    trainersAllData = data.users || [];
+    if (trainersAllData.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center;color:var(--tma-text-muted);padding:30px;">Нет тренеров</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    trainersAllData.forEach(u => {
+      const card = document.createElement('div');
+      card.className = 'trainer-list-card';
+      card.innerHTML = `
+        <div class="trainer-list-avatar">${u.avatar || '👤'}</div>
+        <div class="trainer-list-info">
+          <div class="trainer-list-name">${u.first_name || u.username || 'Тренер'}</div>
+          <div class="trainer-list-id">ID: ${u.id} | ${u.created_at?.slice(0,10) || ''}</div>
+        </div>`;
+      card.addEventListener('click', () => openTrainerProfile(u.id));
+      listEl.appendChild(card);
+    });
+  } catch(e) { listEl.innerHTML = '<div style="text-align:center;color:var(--tma-text-muted);padding:20px;">Ошибка загрузки</div>'; }
+}
+
+function initTrainersTab() {
+  // Tab switching
+  document.querySelectorAll('.trainers-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.trainers-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const panel = tab.getAttribute('data-tab');
+      document.getElementById('trainers-all-panel').style.display = panel === 'all' ? 'block' : 'none';
+      document.getElementById('trainers-account-panel').style.display = panel === 'account' ? 'block' : 'none';
+      if (panel === 'all') loadAllTrainers();
+      if (panel === 'account') showAccountPanel();
+    });
+  });
+
+  // Account save
+  const saveBtn = document.getElementById('btn-account-save');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      trainerNickname = document.getElementById('account-nickname').value.trim();
+      const avatar = document.getElementById('account-avatar-select').value;
+      localStorage.setItem(lsKey('avatar'), avatar);
+      localStorage.setItem(lsKey('nickname_'), trainerNickname);
+      showAccountPanel();
+      renderTrainerCard();
+      autoSave();
+      showToast('Сохранено!', false);
+    });
+  }
+}
+
+function showAccountPanel() {
+  document.getElementById('account-avatar').textContent = localStorage.getItem(lsKey('avatar')) || '👤';
+  document.getElementById('account-name').textContent = trainerNickname || tgUser?.first_name || 'Тренер';
+  document.getElementById('account-id').textContent = `Telegram ID: ${tgUser?.id || '?'}`;
+  document.getElementById('account-nickname').value = trainerNickname || '';
+  document.getElementById('account-avatar-select').value = localStorage.getItem(lsKey('avatar')) || '👤';
 }
 
 // ================================================================

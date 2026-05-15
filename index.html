@@ -318,6 +318,37 @@
           </div>
         </div>
 
+        <!-- ======================= -->
+        <!-- VIEW 6: TRAINERS + ACCOUNT -->
+        <!-- ======================= -->
+        <div id="view-trainers" class="app-view">
+          <div class="trainers-tabs-bar">
+            <button class="trainers-tab active" data-tab="all">👥 Все</button>
+            <button class="trainers-tab" data-tab="account">👤 Аккаунт</button>
+          </div>
+          <div id="trainers-all-panel" class="trainers-panel">
+            <div id="trainers-all-list" class="trainers-all-list">Загрузка...</div>
+          </div>
+          <div id="trainers-account-panel" class="trainers-panel" style="display:none;">
+            <div class="account-card">
+              <div class="account-avatar" id="account-avatar">👤</div>
+              <h3 id="account-name">---</h3>
+              <p id="account-id" style="color:var(--tma-text-muted);font-size:0.8rem;"></p>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+                <input id="account-nickname" type="text" placeholder="Прозвище" maxlength="20" style="padding:8px;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
+                <select id="account-avatar-select" style="padding:8px;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
+                  <option value="👤">👤 Обычный</option><option value="🧑">🧑 Тренер</option><option value="👨‍🔬">👨‍🔬 Профессор</option>
+                  <option value="🎩">🎩 Джентльмен</option><option value="🧢">🧢 Кепка</option><option value="👒">👒 Шляпа</option>
+                  <option value="⛑">⛑ Шлем</option><option value="🎓">🎓 Выпускник</option><option value="👑">👑 Корона</option>
+                  <option value="🤠">🤠 Ковбой</option><option value="🦸">🦸 Герой</option><option value="🧙">🧙 Маг</option><option value="🦹">🦹 Злодей</option>
+                  <option value="😎">😎 Крутой</option><option value="🤖">🤖 Робот</option><option value="👻">👻 Призрак</option>
+                </select>
+                <button class="tma-btn" id="btn-account-save" style="background:#34c759;">💾 Сохранить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </main>
 
       <!-- BOTTOM NAVIGATION BAR -->
@@ -337,6 +368,10 @@
         <div class="nav-item" data-target="view-chat">
           <div class="nav-icon">💬</div>
           <span>Чат</span>
+        </div>
+        <div class="nav-item" data-target="view-trainers">
+          <div class="nav-icon">👥</div>
+          <span>Тренеры</span>
         </div>
       </nav>
 

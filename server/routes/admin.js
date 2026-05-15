@@ -236,6 +236,25 @@ router.get('/api', adminAuth, async (req, res) => {
   res.json(result);
 });
 
+// List all users for admin dropdown + trainers tab
+router.get('/users', adminAuth, async (req, res) => {
+  const db = getDB();
+  const users = await db.all('SELECT id, telegram_id, username, first_name, created_at FROM users ORDER BY id DESC');
+  // Also fetch save data for team info
+  for (const u of users) {
+    const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+    if (save) {
+      try {
+        const data = JSON.parse(save.save_data);
+        u.badges = data.badges?.length || 0;
+        u.money = data.money || 0;
+        u.teamSize = (data.myTeam || []).length;
+      } catch(e) { u.badges = 0; u.money = 0; u.teamSize = 0; }
+    }
+  }
+  res.json({ users });
+});
+
 // Health
 router.get('/health', (req, res) => res.json({ ok: true }));
 
