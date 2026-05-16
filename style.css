@@ -1531,6 +1531,7 @@ input[type="number"] {
   min-height: 300px;
   max-height: 55vh;
   padding: 2px;
+  position: relative;
 }
 .pokedex-cell {
   text-align: center;

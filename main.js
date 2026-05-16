@@ -8384,7 +8384,7 @@ function openPokedex() {
   grid.innerHTML = '';
   if (detailEl) detailEl.style.display = 'none';
   if (searchEl) { searchEl.value = ''; searchEl.style.display = 'block'; }
-  if (grid) grid.style.display = 'grid';
+  if (grid) { grid.style.display = 'grid'; grid.style.visibility = 'visible'; grid.style.position = 'relative'; }
 
   POKEDEX_ALL.forEach((name, idx) => {
     const dexId = idx + 1;
@@ -8420,7 +8420,8 @@ async function showPokedexInfo(speciesName) {
   const searchEl = document.getElementById('pokedex-search');
   if (!detailEl || !gridEl) return;
 
-  gridEl.style.display = 'none';
+  gridEl.style.visibility = 'hidden';
+  gridEl.style.position = 'absolute';
   if (searchEl) searchEl.style.display = 'none';
   detailEl.style.display = 'flex';
   detailEl.innerHTML = '<div class="pokedex-detail-loading">Загрузка...</div>';
@@ -8516,7 +8517,8 @@ async function showPokedexInfo(speciesName) {
 
     document.getElementById('pokedex-detail-back').addEventListener('click', () => {
       detailEl.style.display = 'none';
-      gridEl.style.display = 'grid';
+      gridEl.style.visibility = 'visible';
+      gridEl.style.position = 'relative';
       if (searchEl) searchEl.style.display = 'block';
     });
 
