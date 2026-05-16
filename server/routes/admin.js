@@ -1,54 +1,33 @@
 import { Router } from 'express';
 import { getDB } from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const router = Router();
 
-// Admin usernames — these users can use admin API via JWT
 const ADMIN_USERNAMES = new Set(['DjafarAdjarov', 'nineinchkn5atmythroat']);
-
-// Admin password — fallback for dashboard and non-JWT access
 const ADMIN_PASS = 'league17admin2026';
 
-// Middleware: check admin password OR JWT from admin-list user
+// Load admin HTML template once
+let ADMIN_HTML = '';
+try { ADMIN_HTML = readFileSync(join(__dirname, 'admin.html'), 'utf8'); } catch(e) { ADMIN_HTML = '<h1>admin.html not found</h1>'; }
+
 function adminAuth(req, res, next) {
   const token = req.query.token || req.headers['x-admin-token'];
   if (token === ADMIN_PASS) return next();
+  if (req.path === '/' && !token) return res.send(loginPage());
   if (!token) {
-    // Try JWT auth — only allow users in ADMIN_USERNAMES
-    return authMiddleware(req, res, () => {
-      if (req.adminUsername && ADMIN_USERNAMES.has(req.adminUsername)) return next();
-      // We need the username — let's check after authMiddleware
-      return dbLookupAuth(req, res, next);
+    return authMiddleware(req, res, async () => {
+      const db = getDB();
+      const user = await db.get('SELECT username FROM users WHERE id = ?', req.userId);
+      if (user && ADMIN_USERNAMES.has(user.username)) { req.adminUsername = user.username; return next(); }
+      return res.status(403).json({ error: 'Admin access required' });
     });
   }
-  if (req.path === '/' && !token) {
-    return res.send(loginPage());
-  }
-  return res.status(401).json({ error: 'Unauthorized. Use ?token=PASSWORD or JWT' });
-}
-
-async function dbLookupAuth(req, res, next) {
-  const db = getDB();
-  const user = await db.get('SELECT username FROM users WHERE id = ?', req.userId);
-  if (user && ADMIN_USERNAMES.has(user.username)) {
-    req.adminUsername = user.username;
-    return next();
-  }
-  return res.status(403).json({ error: 'Admin access required' });
-}
-
-// JWT-based admin access check (for client-side admin panel)
-async function jwtAdminAuth(req, res, next) {
-  return authMiddleware(req, res, async () => {
-    const db = getDB();
-    const user = await db.get('SELECT username FROM users WHERE id = ?', req.userId);
-    if (user && ADMIN_USERNAMES.has(user.username)) {
-      req.adminUsername = user.username;
-      return next();
-    }
-    return res.status(403).json({ error: 'Admin access required' });
-  });
+  return res.status(401).json({ error: 'Unauthorized' });
 }
 
 function loginPage() {
@@ -59,102 +38,27 @@ button{padding:10px 20px;font-size:1.2rem;border:none;border-radius:6px;backgrou
 </style></head><body><form onsubmit="location.href='?token='+encodeURIComponent(document.getElementById('p').value)"><input id="p" type="password" placeholder="Password" autofocus><button>Login</button></form></body></html>`;
 }
 
-// --- Admin Dashboard ---
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// --- Dashboard ---
 router.get('/', adminAuth, async (req, res) => {
   const db = getDB();
-  const users = await db.all('SELECT id, telegram_id, username, first_name, created_at FROM users ORDER BY id DESC LIMIT 20');
-  const saves = await db.all('SELECT user_id, save_data, updated_at FROM game_saves ORDER BY updated_at DESC LIMIT 20');
-  const lb = await db.all(`SELECT u.username, u.first_name, l.* FROM leaderboard l JOIN users u ON u.id=l.user_id ORDER BY l.badges_count DESC LIMIT 20`);
-  const chat = await db.all('SELECT * FROM chat_messages ORDER BY id DESC LIMIT 20');
+  const users = await db.all('SELECT id, telegram_id, username, first_name FROM users ORDER BY id');
+  const lb = await db.all('SELECT u.username, u.first_name, l.* FROM leaderboard l JOIN users u ON u.id=l.user_id ORDER BY l.badges_count DESC LIMIT 30');
+  const token = req.query.token || '';
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PokeMatrix Admin</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:monospace;background:#0a0a0a;color:#e0e0e0;padding:12px}
-h1{color:#af52de;margin-bottom:12px}
-h2{color:#5af;margin:16px 0 8px;font-size:1rem}
-table{width:100%;border-collapse:collapse;font-size:0.75rem;margin-bottom:12px}
-th,td{border:1px solid #222;padding:4px 6px;text-align:left;max-width:200px;overflow:hidden;white-space:nowrap}
-th{background:#111;color:#af52de}
-tr:hover{background:#111}
-.section{display:flex;gap:12px;flex-wrap:wrap}
-.col{flex:1;min-width:300px}
-.btn{padding:6px 14px;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;margin:2px}
-.btn-on{background:#34c759;color:#fff}
-.btn-off{background:#ff3b30;color:#fff}
-.btn-act{background:#007aff;color:#fff}
-.btn-purp{background:#af52de;color:#fff}
-input,select{padding:6px;border:1px solid #333;border-radius:4px;background:#111;color:#fff;font-size:0.8rem;margin:2px}
-pre{background:#111;padding:8px;border-radius:4px;font-size:0.7rem;max-height:300px;overflow:auto}
-.result{color:#5af;margin-top:4px;font-size:0.8rem}
-</style></head><body>
-<h1>🛠 PokeMatrix Admin</h1>
+  const userOptions = users.map(u =>
+    `<option value="${u.id}">#${u.id} ${esc(u.username||'?')} (${esc(u.first_name||'')})</option>`
+  ).join('');
 
-<div class="section">
-<div class="col">
-<h2>🔧 Actions</h2>
-<button class="btn btn-act" onclick="action('give_items','DjafarAdjarov')">🎒 Дать предметы DjafarAdjarov</button>
-<button class="btn btn-act" onclick="action('give_items','nineinchkn5atmythroat')">🎒 Дать предметы nineinch</button>
-<button class="btn btn-act" onclick="action('give_money','DjafarAdjarov','1000000')">💰 Дать 1M DjafarAdjarov</button>
-<button class="btn btn-act" onclick="action('give_money','nineinchkn5atmythroat','1000000')">💰 Дать 1M nineinch</button>
-<button class="btn btn-act" onclick="action('give_badges','DjafarAdjarov')">🏅 Дать значки DjafarAdjarov</button>
-<button class="btn btn-act" onclick="action('give_badges','nineinchkn5atmythroat')">🏅 Дать значки nineinch</button>
-<button class="btn btn-purp" onclick="action('give_legendary','DjafarAdjarov')">🦄 Легендарный DjafarAdjarov</button>
-<button class="btn btn-purp" onclick="action('give_legendary','nineinchkn5atmythroat')">🦄 Легендарный nineinch</button>
-<button class="btn btn-purp" onclick="action('heal_team','DjafarAdjarov')">🏥 Лечить DjafarAdjarov</button>
-<button class="btn btn-purp" onclick="action('heal_team','nineinchkn5atmythroat')">🏥 Лечить nineinch</button>
-<button class="btn btn-purp" onclick="action('max_iv','DjafarAdjarov')">⭐ Макс IV DjafarAdjarov</button>
-<button class="btn btn-purp" onclick="action('max_iv','nineinchkn5atmythroat')">⭐ Макс IV nineinch</button>
-<button class="btn btn-purp" onclick="action('fix_levels','DjafarAdjarov')">📈 Fix уровни DjafarAdjarov</button>
-<button class="btn btn-purp" onclick="action('fix_levels','nineinchkn5atmythroat')">📈 Fix уровни nineinch</button>
-<h2>💬 Chat as Claude</h2>
-<input id="claude-msg" placeholder="Сообщение в чат..." style="width:100%;margin:4px 0;" onkeydown="if(event.key==='Enter')claudeChat()">
-<button class="btn btn-purp" onclick="claudeChat()">Отправить как Claude AI</button>
-<div class="result" id="chat-result"></div>
-<br>
-<div class="result" id="result"></div>
-</div>
+  const lbTable = `<table><tr><th>Игрок</th><th>Значки</th><th>Покемонов</th><th>¥</th></tr>
+    ${lb.map(e => `<tr><td>${esc(e.first_name||e.username||'?')}</td><td>${e.badges_count}</td><td>${e.pokemon_count||0}</td><td>${e.money||0}</td></tr>`).join('')}</table>`;
 
-<div class="col">
-<h2>📋 Leaderboard (${lb.length})</h2>
-<table>${lb.map(e => `<tr><td>${e.first_name||e.username||'?'}</td><td>🏅${e.badges_count}</td><td>🐾${e.pokemon_count||0}</td><td>✨${e.legendary_count||0}</td><td>¥${e.money||0}</td></tr>`).join('')}</table>
-</div></div>
+  let html = ADMIN_HTML
+    .replace('__USER_OPTIONS__', userOptions)
+    .replace('__LEADERBOARD_TABLE__', lbTable)
+    .replace('__TOKEN__', token);
 
-<div class="section">
-<div class="col">
-<h2>👤 Users (${users.length})</h2>
-<table><tr><th>ID</th><th>Telegram</th><th>Username</th><th>Name</th><th>Created</th></tr>
-${users.map(u => `<tr><td>${u.id}</td><td>${u.telegram_id}</td><td>${u.username}</td><td>${u.first_name}</td><td>${u.created_at}</td></tr>`).join('')}</table>
-</div>
-<div class="col">
-<h2>💾 Recent Saves</h2>
-<table><tr><th>User</th><th>Updated</th><th>Size</th></tr>
-${saves.map(s => `<tr><td>${s.user_id}</td><td>${s.updated_at}</td><td>${(s.save_data?.length||0)}b</td></tr>`).join('')}</table>
-</div></div>
-
-<script>
-const TOKEN = '${req.query.token || ''}';
-async function action(cmd, user, val) {
-  const res = await fetch('/admin/api?token='+TOKEN+'&cmd='+cmd+'&user='+user+(val?'&val='+val:''));
-  const json = await res.json();
-  document.getElementById('result').innerText = JSON.stringify(json, null, 2);
-}
-async function claudeChat() {
-  const inp = document.getElementById('claude-msg');
-  const text = inp.value.trim();
-  if(!text) return;
-  const res = await fetch('/api/chat/bot', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({text, token:'claude-admin-2026'})
-  });
-  const json = await res.json();
-  document.getElementById('chat-result').innerText = json.success ? '✅ Отправлено: '+text : '❌ Ошибка';
-  inp.value = '';
-}
-</script>
-</body></html>`;
   res.send(html);
 });
 
@@ -164,106 +68,207 @@ router.get('/api', adminAuth, async (req, res) => {
   const db = getDB();
   let result = { cmd, user };
 
-  // Helper: resolve user by numeric ID or username
   async function resolveUser(idOrName) {
     const byId = await db.get('SELECT id FROM users WHERE id = ?', parseInt(idOrName));
     if (byId) return byId;
     return await db.get('SELECT id FROM users WHERE username = ?', idOrName);
   }
 
+  async function getSave(u) {
+    const row = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
+    if (!row) return null;
+    return JSON.parse(row.save_data);
+  }
+
+  async function putSave(u, data) {
+    await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
+  }
+
   try {
     const u = await resolveUser(user);
-    if (!u && cmd !== 'give_items') {} // handled per-command
+
+    if (cmd === 'get_save') {
+      if (!u) { result.error = 'User not found'; return res.json(result); }
+      const save = await getSave(u);
+      let POKEDEX_ALL = [];
+      try {
+        const fs = await import('fs'); const path = await import('path');
+        const pdata = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public/pokedex_data.json'), 'utf8'));
+        POKEDEX_ALL = Object.keys(pdata);
+      } catch(e) {}
+      result = { status: 'ok', userId: u.id, username: user, save, pokedexAll: POKEDEX_ALL };
+      return res.json(result);
+    }
+
+    if (cmd === 'set_save') {
+      return res.status(400).json({ error: 'Use POST for set_save' });
+    }
+
+    if (!u) { result.error = 'User not found'; return res.json(result); }
+
+    let save = await getSave(u);
+    if (!save) { result.error = 'No save data'; return res.json(result); }
 
     if (cmd === 'give_items') {
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save data'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      if (!data.inventory) data.inventory = {};
+      if (!save.inventory) save.inventory = {};
       const ALL_ITEMS = ['pokeball','greatBall','ultraBall','masterBall','quickBall','friendBall','loveBall','duskBall','timerBall','darkBall','potion','superPotion','fullRestore','candy','vitamin','train','weaken','evolutionStone','fireStone','waterStone','leafStone','thunderStone','moonStone','sunStone','shinyStone','duskStone','iceStone','dawnStone','tm','ppUp','sitrusBerry','oranBerry','lumBerry','chestoBerry','rawstBerry','antidote','antiparalyze','energyDrink','fireExtinguisher','healingHerb','weakElixir','elixir','strongElixir','xAttack','xDefense','xSpDefense','xSpAttack','xSpeed','protein','iron','calcium','zinc','carbos','luckyEgg','expShare','oldRod','goodRod','superRod','darkBall'];
-      ALL_ITEMS.forEach(id => { data.inventory[id] = 999; });
-      data.money = (data.money || 0) + 500000;
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', items: ALL_ITEMS.length, money: data.money };
+      ALL_ITEMS.forEach(id => { save.inventory[id] = 999; });
+      save.money = (save.money || 0) + 500000;
+      await putSave(u, save);
+      result = { status: 'ok', items: ALL_ITEMS.length, money: save.money };
+
     } else if (cmd === 'give_money') {
-      const u = await resolveUser(user);
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      data.money = (data.money || 0) + parseInt(val || 100000);
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', money: data.money };
+      save.money = (save.money || 0) + parseInt(val || 100000);
+      await putSave(u, save);
+      result = { status: 'ok', money: save.money };
+
     } else if (cmd === 'give_badges') {
-      const u = await resolveUser(user);
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      data.badges = ['Boulder Badge','Cascade Badge','Thunder Badge','Rainbow Badge','Marsh Badge','Soul Badge','Volcano Badge','Earth Badge'];
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      await db.run(`INSERT INTO leaderboard (user_id, badges_count, team_level_sum, money, updated_at) VALUES (?,8,50,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET badges_count=8,updated_at=datetime('now')`, u.id, data.money||0);
+      save.badges = ['Boulder Badge','Cascade Badge','Thunder Badge','Rainbow Badge','Marsh Badge','Soul Badge','Volcano Badge','Earth Badge'];
+      await putSave(u, save);
       result = { status: 'ok', badges: 8 };
+
     } else if (cmd === 'give_legendary') {
-      const u = await resolveUser(user);
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
       const legends = ['mewtwo','mew','lugia','ho-oh','rayquaza','groudon','kyogre','dialga','palkia','giratina','zekrom','reshiram'];
       const pick = legends[Math.floor(Math.random()*legends.length)];
       try {
-        const pokeRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${pick}`);
+        const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+pick);
         const pokeData = await pokeRes.json();
-        const newMon = {
-          uid: Date.now().toString(36)+Math.random().toString(36).substr(2,6),
-          originalTrainer: String(u.id), createdAt: Date.now(), caughtLocation: 'admin',
-          apiData: pokeData, maxHp: 200, currentHp: 200,
-          ivs: {hp:31,atk:31,def:31,spa:31,spd:31,spe:31},
-          evs: {hp:0,atk:0,def:0,spa:0,spd:0,spe:0},
-          baseLevel: 70, exp: 343000, expToNext: 357911,
-          candiesEaten:0, vitaminsEaten:0, training:null, trainingStage:0, trainingStat:null,
-          happiness:70, natureIdx:0, breedLetter:'S', status:null, sleepTurns:0,
-          movesPP:[], statStages:{atk:0,def:0,spa:0,spd:0,spe:0},
-          abilityName: pokeData.abilities[0]?.ability?.name||null,
-          heldItem:null, berries:{sitrusBerry:0,oranBerry:0,lumBerry:0,chestoBerry:0,rawstBerry:0},
-          learnableMoves:[]
-        };
-        data.myTeam = data.myTeam || [];
-        if (data.myTeam.length >= 6) data.myTeam[0] = newMon;
-        else data.myTeam.push(newMon);
-        await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-        result = { status: 'ok', pokemon: pick, teamSize: data.myTeam.length };
+        const newMon = makeMon(pokeData, u.id, 70);
+        save.myTeam = save.myTeam || [];
+        if (save.myTeam.length >= 6) save.myTeam[0] = newMon;
+        else save.myTeam.push(newMon);
+        await putSave(u, save);
+        result = { status: 'ok', pokemon: pick };
       } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
+
     } else if (cmd === 'heal_team') {
-      const u = await resolveUser(user);
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      (data.myTeam||[]).forEach(m => { m.currentHp = m.maxHp; m.status = null; m.sleepTurns = 0; });
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', healed: data.myTeam.length };
+      (save.myTeam||[]).forEach(m => { m.currentHp = m.maxHp; m.status = null; m.sleepTurns = 0; });
+      await putSave(u, save);
+      result = { status: 'ok', healed: (save.myTeam||[]).length };
+
     } else if (cmd === 'max_iv') {
-      const u = await resolveUser(user);
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      (data.myTeam||[]).forEach(m => { m.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31}; });
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', mons: data.myTeam.length };
+      (save.myTeam||[]).forEach(m => { m.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31}; });
+      await putSave(u, save);
+      result = { status: 'ok', mons: (save.myTeam||[]).length };
+
     } else if (cmd === 'fix_levels') {
-      const u = await resolveUser(user);
-      if (!u) { result.error = 'User not found'; return res.json(result); }
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      (data.myTeam||[]).forEach(m => { if(m.baseLevel < 50) m.baseLevel = 50; m.maxHp = Math.floor(m.maxHp*1.5); m.currentHp = m.maxHp; });
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', mons: data.myTeam.length };
+      (save.myTeam||[]).forEach(m => { if(m.baseLevel < 50) m.baseLevel = 50; m.maxHp = Math.floor(m.maxHp*1.5); m.currentHp = m.maxHp; });
+      await putSave(u, save);
+      result = { status: 'ok', mons: (save.myTeam||[]).length };
+
+    } else if (cmd === 'teleport') {
+      save.currentLocationId = val;
+      await putSave(u, save);
+      result = { status: 'ok', location: val };
+
+    } else if (cmd === 'reset_save') {
+      save = { myTeam:[], pcBoxes:[[]], inventory:{}, money:500, badges:[], pokedexSeen:[], pokedexCaught:[], quests:[], questProgress:{}, completedQuests:[], npcQuestProgress:{}, completedNPCQuests:[], tutorialStep:0, currentLocationId:'pallet_town', currentRegion:'kanto' };
+      await putSave(u, save);
+      result = { status: 'ok', reset: true };
+
+    } else if (cmd === 'edit_mon') {
+      const params = JSON.parse(val || '{}');
+      const { pos, baseLevel, species, shiny, heal, maxIV } = params;
+      const parts = (pos||'').split(':');
+      let mon;
+      if (parts[0] === 'team') mon = (save.myTeam||[])[parseInt(parts[1])];
+      else if (parts[0] === 'pc') mon = (save.pcBoxes||[])[parseInt(parts[1])]?.[parseInt(parts[2])];
+
+      if (!mon) { result.error = 'Mon not found at '+pos; return res.json(result); }
+      if (heal) { mon.currentHp = mon.maxHp; mon.status = null; mon.sleepTurns = 0; }
+      if (maxIV) { mon.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31}; }
+      if (baseLevel !== undefined) {
+        mon.baseLevel = baseLevel;
+        const baseHp = mon.apiData?.stats?.[0]?.base_stat || 50;
+        mon.maxHp = Math.floor(0.01 * (2 * baseHp + (mon.ivs?.hp||0) + Math.floor(0.25 * (mon.evs?.hp||0))) * baseLevel) + baseLevel + 10;
+        mon.currentHp = Math.min(mon.currentHp, mon.maxHp);
+      }
+      if (species && species !== mon.apiData?.name) {
+        try {
+          const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+species);
+          mon.apiData = await pokeRes.json();
+          mon.abilityName = mon.apiData.abilities[0]?.ability?.name || null;
+        } catch(e) { result.warn = 'Species fetch failed'; }
+      }
+      if (shiny !== undefined) mon.shiny = shiny;
+      await putSave(u, save);
+      result = { status: 'ok', mon: mon.apiData?.name };
+
+    } else if (cmd === 'delete_mon') {
+      const parts = (val||'').split(':');
+      if (parts[0] === 'team') save.myTeam.splice(parseInt(parts[1]), 1);
+      else if (parts[0] === 'pc') { const box = save.pcBoxes[parseInt(parts[1])]; if (box) box.splice(parseInt(parts[2]), 1); }
+      await putSave(u, save);
+      result = { status: 'ok', deleted: true };
+
+    } else if (cmd === 'add_mon') {
+      const params = JSON.parse(val || '{}');
+      const { species, level, shiny, maxIV, target } = params;
+      try {
+        const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+(species||'bulbasaur'));
+        const mon = makeMon(await pokeRes.json(), u.id, level||50);
+        if (maxIV) mon.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31};
+        if (shiny) mon.shiny = true;
+        mon.hasBred = false;
+        if (target === 'pc') {
+          if (!save.pcBoxes || save.pcBoxes.length === 0) save.pcBoxes = [[]];
+          save.pcBoxes[0].push(mon);
+        } else {
+          save.myTeam = save.myTeam || [];
+          if (save.myTeam.length >= 6) save.myTeam[0] = mon;
+          else save.myTeam.push(mon);
+        }
+        await putSave(u, save);
+        result = { status: 'ok', pokemon: species, target };
+      } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
+
+    } else if (cmd === 'toggle_pokedex') {
+      save.pokedexSeen = save.pokedexSeen || [];
+      save.pokedexCaught = save.pokedexCaught || [];
+      const seenIdx = save.pokedexSeen.indexOf(val);
+      const caughtIdx = save.pokedexCaught.indexOf(val);
+      if (caughtIdx >= 0) { save.pokedexCaught.splice(caughtIdx, 1); }
+      else if (seenIdx >= 0) { save.pokedexSeen.splice(seenIdx, 1); save.pokedexCaught.push(val); }
+      else { save.pokedexSeen.push(val); }
+      await putSave(u, save);
+      result = { status: 'ok', seen: save.pokedexSeen.length, caught: save.pokedexCaught.length };
+
+    } else if (cmd === 'pokedex_all') {
+      save.pokedexSeen = []; save.pokedexCaught = [];
+      if (val === 'caught') {
+        try {
+          const fs = await import('fs'); const path = await import('path');
+          save.pokedexCaught = Object.keys(JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public/pokedex_data.json'), 'utf8')));
+        } catch(e) {}
+      }
+      await putSave(u, save);
+      result = { status: 'ok', caught: save.pokedexCaught.length };
+
+    } else if (cmd === 'set_inventory') {
+      if (!save.inventory) save.inventory = {};
+      Object.assign(save.inventory, JSON.parse(val || '{}'));
+      await putSave(u, save);
+      result = { status: 'ok' };
+
+    } else if (cmd === 'set_money') {
+      save.money = parseInt(val) || 0;
+      await putSave(u, save);
+      result = { status: 'ok', money: save.money };
+
+    } else if (cmd === 'reset_quests') {
+      if (val === 'daily') { save.quests = []; save.questProgress = {}; save.completedQuests = []; }
+      else if (val === 'npc') { save.npcQuestProgress = {}; save.completedNPCQuests = []; }
+      await putSave(u, save);
+      result = { status: 'ok' };
+
+    } else if (cmd === 'complete_all_quests') {
+      if (val === 'npc') {
+        save.npcQuestProgress = {};
+        save.completedNPCQuests = ['professor_elm_quest','mr_pokemon_quest','kurt_quest','radio_tower_quest','lake_of_rage_quest','dragon_den_quest'];
+      }
+      await putSave(u, save);
+      result = { status: 'ok' };
+
     } else {
       result.error = 'Unknown command: '+cmd;
     }
@@ -271,11 +276,11 @@ router.get('/api', adminAuth, async (req, res) => {
   res.json(result);
 });
 
-// JWT-authorized admin API (for client-side admin panel, no password needed)
-router.get('/jwt-api', jwtAdminAuth, async (req, res) => {
-  const { cmd, user, val } = req.query;
+// POST for raw JSON save
+router.post('/api', adminAuth, async (req, res) => {
+  const { cmd, user } = req.query;
   const db = getDB();
-  let result = { cmd, user };
+  if (cmd !== 'set_save') return res.status(400).json({ error: 'POST only for set_save' });
 
   async function resolveUser(idOrName) {
     const byId = await db.get('SELECT id FROM users WHERE id = ?', parseInt(idOrName));
@@ -285,113 +290,32 @@ router.get('/jwt-api', jwtAdminAuth, async (req, res) => {
 
   try {
     const u = await resolveUser(user);
-    if (!u) { result.error = 'User not found'; return res.json(result); }
-
-    if (cmd === 'give_items') {
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save data'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      if (!data.inventory) data.inventory = {};
-      const ALL_ITEMS = ['pokeball','greatBall','ultraBall','masterBall','quickBall','friendBall','loveBall','duskBall','timerBall','darkBall','potion','superPotion','fullRestore','candy','vitamin','train','weaken','evolutionStone','fireStone','waterStone','leafStone','thunderStone','moonStone','sunStone','shinyStone','duskStone','iceStone','dawnStone','tm','ppUp','sitrusBerry','oranBerry','lumBerry','chestoBerry','rawstBerry','antidote','antiparalyze','energyDrink','fireExtinguisher','healingHerb','weakElixir','elixir','strongElixir','xAttack','xDefense','xSpDefense','xSpAttack','xSpeed','protein','iron','calcium','zinc','carbos','luckyEgg','expShare','oldRod','goodRod','superRod','darkBall'];
-      ALL_ITEMS.forEach(id => { data.inventory[id] = 999; });
-      data.money = (data.money || 0) + 500000;
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', items: ALL_ITEMS.length, money: data.money };
-    } else if (cmd === 'give_money') {
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      data.money = (data.money || 0) + parseInt(val || 100000);
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', money: data.money };
-    } else if (cmd === 'give_badges') {
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      data.badges = ['Boulder Badge','Cascade Badge','Thunder Badge','Rainbow Badge','Marsh Badge','Soul Badge','Volcano Badge','Earth Badge'];
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', badges: 8 };
-    } else if (cmd === 'give_legendary') {
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      const legends = ['mewtwo','mew','lugia','ho-oh','rayquaza','groudon','kyogre','dialga','palkia','giratina','zekrom','reshiram'];
-      const pick = legends[Math.floor(Math.random()*legends.length)];
-      try {
-        const pokeRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${pick}`);
-        const pokeData = await pokeRes.json();
-        const newMon = {
-          uid: Date.now().toString(36)+Math.random().toString(36).substr(2,6),
-          originalTrainer: String(u.id), createdAt: Date.now(), caughtLocation: 'admin',
-          apiData: pokeData, maxHp: 200, currentHp: 200,
-          ivs: {hp:31,atk:31,def:31,spa:31,spd:31,spe:31},
-          evs: {hp:0,atk:0,def:0,spa:0,spd:0,spe:0},
-          baseLevel: 70, exp: 343000, expToNext: 357911,
-          candiesEaten:0, vitaminsEaten:0, training:null, trainingStage:0, trainingStat:null,
-          happiness:70, natureIdx:0, breedLetter:'S', status:null, sleepTurns:0,
-          movesPP:[], statStages:{atk:0,def:0,spa:0,spd:0,spe:0},
-          abilityName: pokeData.abilities[0]?.ability?.name||null,
-          heldItem:null, berries:{sitrusBerry:0,oranBerry:0,lumBerry:0,chestoBerry:0,rawstBerry:0},
-          learnableMoves:[]
-        };
-        data.myTeam = data.myTeam || [];
-        if (data.myTeam.length >= 6) data.myTeam[0] = newMon;
-        else data.myTeam.push(newMon);
-        await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-        result = { status: 'ok', pokemon: pick, teamSize: data.myTeam.length };
-      } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
-    } else if (cmd === 'heal_team') {
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      (data.myTeam||[]).forEach(m => { m.currentHp = m.maxHp; m.status = null; m.sleepTurns = 0; });
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', healed: (data.myTeam||[]).length };
-    } else if (cmd === 'max_iv') {
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      (data.myTeam||[]).forEach(m => { m.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31}; });
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', maxed: (data.myTeam||[]).length };
-    } else if (cmd === 'fix_levels') {
-      const save = await db.get('SELECT save_data FROM game_saves WHERE user_id = ?', u.id);
-      if (!save) { result.error = 'No save'; return res.json(result); }
-      let data = JSON.parse(save.save_data);
-      (data.myTeam||[]).forEach(m => { if(m.baseLevel < 50) m.baseLevel = 50; m.maxHp = Math.floor(m.maxHp * 1.5); m.currentHp = m.maxHp; });
-      await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
-      result = { status: 'ok', fixed: (data.myTeam||[]).length };
-    } else {
-      result.error = 'Unknown command: ' + cmd;
-    }
-  } catch(e) { result.error = e.message; }
-  res.json(result);
+    if (!u) return res.json({ error: 'User not found' });
+    await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(req.body), u.id);
+    res.json({ status: 'ok', saved: true });
+  } catch(e) { res.json({ error: e.message }); }
 });
 
-// List all users for admin dropdown + trainers tab
-router.get('/users', adminAuth, async (req, res) => {
-  const db = getDB();
-  const users = await db.all('SELECT id, telegram_id, username, first_name, nickname, avatar, registered, created_at, registered_at FROM users ORDER BY id DESC');
-  for (const u of users) {
-    const save = await db.get('SELECT save_data, updated_at FROM game_saves WHERE user_id = ?', u.id);
-    const loc = await db.get('SELECT location_id, updated_at FROM user_locations WHERE user_id = ?', u.id);
-    if (save) {
-      try {
-        const data = JSON.parse(save.save_data);
-        u.badges = data.badges?.length || 0;
-        u.money = data.money || 0;
-        u.teamSize = (data.myTeam || []).length;
-        u.lastSave = save.updated_at;
-      } catch(e) { u.badges = 0; u.money = 0; u.teamSize = 0; }
-    }
-    u.lastLocation = loc?.location_id || null;
-    u.lastSeen = loc?.updated_at || u.lastSave || u.created_at;
-    u.region = u.lastLocation ? (u.lastLocation.includes('johto') ? 'Джото' : u.lastLocation.includes('selen') ? 'Селен' : 'Канто') : null;
-  }
-  res.json({ users });
-});
-
-// Health
 router.get('/health', (req, res) => res.json({ ok: true }));
+
+function makeMon(pokeData, trainerId, level) {
+  const baseHp = pokeData.stats[0].base_stat;
+  const ivs = {hp:Math.floor(Math.random()*32),atk:Math.floor(Math.random()*32),def:Math.floor(Math.random()*32),spa:Math.floor(Math.random()*32),spd:Math.floor(Math.random()*32),spe:Math.floor(Math.random()*32)};
+  const maxHp = Math.floor(0.01 * (2 * baseHp + ivs.hp) * level) + level + 10;
+  return {
+    uid: Date.now().toString(36)+Math.random().toString(36).substr(2,6),
+    originalTrainer: String(trainerId), createdAt: Date.now(), caughtLocation: 'admin',
+    apiData: pokeData, maxHp, currentHp: maxHp, ivs,
+    evs: {hp:0,atk:0,def:0,spa:0,spd:0,spe:0},
+    baseLevel: level, exp: 0, expToNext: 8,
+    candiesEaten:0, vitaminsEaten:0, training:null, trainingStage:0, trainingStat:null,
+    happiness:120, natureIdx: Math.floor(Math.random()*25), breedLetter: 'S',
+    gender: Math.random() < 0.5 ? 'male' : 'female',
+    status: null, sleepTurns: 0, movesPP:[], statStages:{atk:0,def:0,spa:0,spd:0,spe:0},
+    abilityName: pokeData.abilities[0]?.ability?.name||null,
+    heldItem:null, berries:{sitrusBerry:0,oranBerry:0,lumBerry:0,chestoBerry:0,rawstBerry:0},
+    learnableMoves:[], isEgg:false, hasBred: false
+  };
+}
 
 export default router;

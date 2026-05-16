@@ -6,8 +6,8 @@
     <title>PokeMatrix</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/League17-tma/assets/index-Bujw6_29.js"></script>
-    <link rel="stylesheet" crossorigin href="/League17-tma/assets/index-B2G53ydT.css">
+    <script type="module" crossorigin src="/assets/index-Lbgsuvzy.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-kStlDR0r.css">
   </head>
   <body>
     <div class="tma-container">
@@ -543,8 +543,23 @@
     <div id="pokedex-modal" class="modal-overlay" style="display:none;">
       <div class="pokedex-container">
         <div class="pokedex-header">
-          <h2>📖 Покедекс</h2>
+          <h2>Покедекс</h2>
           <span class="pokedex-count" id="pokedex-count">0/151</span>
+        </div>
+        <div class="pokedex-filters" id="pokedex-filters">
+          <select id="pokedex-gen-filter" class="pokedex-filter-select">
+            <option value="all">Все поколения</option>
+            <option value="1">Kanto #1-151</option>
+            <option value="2">Johto #152-251</option>
+            <option value="3">Hoenn #252-386</option>
+            <option value="4">Sinnoh #387+</option>
+          </select>
+          <select id="pokedex-status-filter" class="pokedex-filter-select">
+            <option value="all">Все</option>
+            <option value="caught">Пойманные</option>
+            <option value="seen">Замеченные</option>
+            <option value="unknown">Неизвестные</option>
+          </select>
         </div>
         <input id="pokedex-search" class="pokedex-search" type="text" placeholder="Поиск по имени или #...">
         <div class="pokedex-grid" id="pokedex-grid"></div>

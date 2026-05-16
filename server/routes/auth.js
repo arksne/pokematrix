@@ -43,12 +43,19 @@ router.post('/tg', async (req, res) => {
     let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', telegramId);
 
     if (!user) {
+      // Use INSERT OR IGNORE to prevent race condition on concurrent registration
       const result = await db.run(
-        'INSERT INTO users (telegram_id, username, first_name) VALUES (?, ?, ?)',
+        'INSERT OR IGNORE INTO users (telegram_id, username, first_name) VALUES (?, ?, ?)',
         telegramId, tgUser.username || '', tgUser.first_name || ''
       );
-      user = { id: result.lastID, telegram_id: telegramId, username: tgUser.username || '', registered: 0 };
-    } else {
+      if (result.lastID) {
+        user = { id: result.lastID, telegram_id: telegramId, username: tgUser.username || '', registered: 0 };
+      } else {
+        // Another concurrent request already inserted — re-fetch
+        user = await db.get('SELECT * FROM users WHERE telegram_id = ?', telegramId);
+      }
+    }
+    if (user) {
       await db.run(
         'UPDATE users SET username = ?, first_name = ? WHERE id = ?',
         tgUser.username || '', tgUser.first_name || '', user.id

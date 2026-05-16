@@ -148,13 +148,22 @@ export function initSocket(server, allowedOrigin) {
     socket.on('disconnect', () => {
       onlinePlayers.delete(socket.id);
       io.emit('online_players', Array.from(onlinePlayers.entries()).map(([id, info]) => ({ id, ...info })));
-      
+
       // Cleanup trades
       for (const [tradeId, trade] of activeTrades.entries()) {
         if (trade.p1 === socket.id || trade.p2 === socket.id) {
           const partner = trade.p1 === socket.id ? trade.p2 : trade.p1;
           io.to(partner).emit('trade_cancelled', 'Партнёр отключился');
           activeTrades.delete(tradeId);
+        }
+      }
+
+      // Cleanup PvP battles (was missing)
+      for (const [battleId, battle] of pvpBattles.entries()) {
+        if (battle.p1 === socket.id || battle.p2 === socket.id) {
+          const opponent = battle.p1 === socket.id ? battle.p2 : battle.p1;
+          io.to(opponent).emit('pvp_opponent_action', { type: 'forfeit', reason: 'Противник отключился' });
+          pvpBattles.delete(battleId);
         }
       }
     });

@@ -19,6 +19,11 @@ export async function initDB() {
     driver: sqlite3.Database
   });
 
+  // Enable WAL mode for concurrent reads/writes
+  await db.exec('PRAGMA journal_mode=WAL;');
+  // Enable foreign key enforcement
+  await db.exec('PRAGMA foreign_keys=ON;');
+
   await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

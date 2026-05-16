@@ -1523,10 +1523,30 @@ input[type="number"] {
   border-color: var(--tma-primary);
   box-shadow: 0 0 0 2px rgba(0,122,255,0.15);
 }
+.pokedex-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.pokedex-filter-select {
+  flex: 1;
+  padding: 7px 8px;
+  border: 1px solid var(--tma-border);
+  border-radius: 8px;
+  background: var(--tma-bg);
+  color: var(--tma-text);
+  font-size: 0.75rem;
+  outline: none;
+  cursor: pointer;
+}
+.pokedex-filter-select:focus {
+  border-color: var(--tma-primary);
+}
 .pokedex-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
   overflow-y: auto;
   min-height: 300px;
   max-height: 55vh;
@@ -1535,13 +1555,12 @@ input[type="number"] {
 }
 .pokedex-cell {
   text-align: center;
-  padding: 6px;
-  border-radius: 8px;
+  padding: 4px 2px;
+  border-radius: 6px;
   background: var(--tma-bg);
   border: 1px solid var(--tma-border);
   cursor: pointer;
   transition: transform 0.1s, box-shadow 0.15s;
-  min-height: 90px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1552,28 +1571,35 @@ input[type="number"] {
 }
 .pokedex-cell.unknown img {
   filter: brightness(0) saturate(0);
-  opacity: 0.15;
+  opacity: 0.12;
 }
 .pokedex-cell.unknown .poke-name { color: var(--tma-text-muted); }
-.pokedex-cell.seen img { filter: grayscale(1) brightness(0.7); }
+.pokedex-cell.seen img { filter: grayscale(1) brightness(0.65); }
 .pokedex-cell.seen .poke-name { color: var(--tma-text-muted); }
 .pokedex-cell.caught img { filter: none; }
+.pokedex-cell.caught { border-color: var(--tma-primary); background: rgba(0,122,255,0.05); }
 .pokedex-cell img {
-  width: 56px;
-  height: 56px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
   transition: filter 0.3s;
   image-rendering: auto;
 }
+.pokedex-cell .dex-num {
+  font-size: 0.55rem;
+  color: var(--tma-text-muted);
+  line-height: 1;
+}
 .poke-name {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   text-transform: capitalize;
   color: var(--tma-text);
   display: block;
-  margin-top: 2px;
+  margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* --- POKEDEX DETAIL PANEL --- */

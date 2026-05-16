@@ -38,10 +38,12 @@ app.use(limiter);
 
 app.use('/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/save', saveRoutes);
+// Stricter rate limit for save endpoint
+const saveLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false });
+app.use('/api/save', saveLimiter, saveRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/chat', chatRoutes);
-app.use('/api', profileRoutes);
+app.use('/api/profile', profileRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });

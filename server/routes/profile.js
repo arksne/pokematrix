@@ -115,7 +115,7 @@ router.get('/profile/:userId', async (req, res) => {
 router.get('/trainers/all', async (req, res) => {
   try {
     const db = getDB();
-    const users = await db.all('SELECT id, telegram_id, username, first_name, nickname, avatar, registered, created_at, registered_at FROM users ORDER BY id DESC');
+    const users = await db.all('SELECT id, username, first_name, nickname, avatar, registered, created_at, registered_at FROM users ORDER BY id DESC');
     for (const u of users) {
       const save = await db.get('SELECT save_data, updated_at FROM game_saves WHERE user_id = ?', u.id);
       const loc = await db.get('SELECT location_id, updated_at FROM user_locations WHERE user_id = ?', u.id);

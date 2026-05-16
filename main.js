@@ -1,210 +1,383 @@
 import { io } from 'socket.io-client';
+
+window.onerror = function(msg, src, line, col, err) {
+  document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:#ff3b30;color:#fff;padding:10px;z-index:99999;font-size:12px;white-space:pre-wrap"><b>JS ERROR:</b> ' + msg + '<br>at ' + src + ':' + line + ':' + col + '</div>';
+  console.error(msg, err);
+};
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
 // --- GAME DATA (REGIONS & LOCATIONS) ---
+// --- GAME DATA (REGIONS & LOCATIONS) ---
+// Based on wiki.league17.ru structure
 const REGIONS = {
   kanto: {
     name: 'Канто',
     locations: {
       'pallet_town': {
-        name: 'Алабастия (Pallet Town)', desc: 'Ваш родной город. Здесь находится лаборатория профессора Оука.',
-        image: 'wiki_images/Vermilion.jpg', links: ['route_1', 'route_21'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+        name: 'Алабастия (Pallet Town)', desc: 'Тихий городок на юге Канто. Здесь живёт профессор Оук — ведущий специалист по покемонам.',
+        image: 'wiki_images/Vermilion.jpg', links: ['route_1', 'route_21'], encounters: [{ id: 'mel_albert_0', type: 'collect_items', targetItem: 'magnemiteNut', targetQty: 2, desc: 'Принесите 2 магнитные гайки для Альберта', rewardMoney: 500, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: null }], hasHeal: true, hasWater: true, region: 'kanto'
       },
       'route_1': {
-        name: 'Маршрут 1', desc: 'Короткая тропа между Алабастией и Виридианом.',
-        image: 'wiki_images/generic_route.png',
-        links: ['pallet_town', 'viridian_city'], encounters: ['pidgey', 'rattata'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 1', desc: 'Первый маршрут тренера — дорога между Алабастией и Виридианом.',
+        image: 'wiki_images/generic_route.png', links: ['pallet_town', 'viridian_city'], encounters: ['pidgey', 'rattata'], hasHeal: false, region: 'kanto'
       },
       'viridian_city': {
-        name: 'Виридиан', desc: 'Зеленый город, где находится гим земли.',
-        image: 'wiki_images/Vermilion.jpg', links: ['route_1', 'route_2', 'route_22'], encounters: [], hasHeal: true, region: 'kanto'
+        name: 'Виридиан', desc: 'Город вечной зелени. Знаменит статуей Виридианского покемона.',
+        image: '', links: ['route_1', 'route_2', 'route_22', 'viridian_stadium'], encounters: [], hasHeal: true, region: 'kanto'
+      },
+      'viridian_stadium': {
+        name: 'Земляной Стадион', desc: 'Арена земляных покемонов Джованни.',
+        image: '', links: ['viridian_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_22': {
-        name: 'Маршрут 22', desc: 'Дорога к Лиге Покемонов.',
-        image: 'wiki_images/generic_route.png',
-        links: ['viridian_city', 'victory_road'], encounters: ['mankey', 'spearow'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 22', desc: 'Обходная дорога к Плато Индиго через Дорогу Победы.',
+        image: 'wiki_images/generic_route.png', links: ['viridian_city', 'victory_road'], encounters: ['mankey', 'spearow', 'rattata'], hasHeal: false, region: 'kanto'
       },
       'route_2': {
-        name: 'Маршрут 2', desc: 'Дорога к Виридианскому лесу.',
+        name: 'Маршрут 2', desc: 'Дорога через лес, ведущая в Виридианский Лес и Пещеру Диглеттов.',
         image: 'wiki_images/Doroga_2.jpg', links: ['viridian_city', 'viridian_forest', 'diglett_cave'], encounters: ['caterpie', 'weedle', 'pidgey'], hasHeal: false, region: 'kanto'
       },
       'viridian_forest': {
-        name: 'Виридианский Лес', desc: 'Темный лес, полный жуков.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['route_2', 'pewter_city'], encounters: ['caterpie', 'metapod', 'weedle', 'kakuna', 'pikachu'], hasHeal: false, region: 'kanto'
+        name: 'Виридианский Лес', desc: 'Густой лес полный насекомых-покемонов. Естественный лабиринт для новичков.',
+        image: 'wiki_images/generic_route.png', links: ['route_2', 'pewter_city'], encounters: ['caterpie', 'metapod', 'weedle', 'kakuna', 'pikachu'], hasHeal: false, region: 'kanto'
       },
       'pewter_city': {
-        name: 'Пьютер', desc: 'Каменный город, гим Брока.',
-        image: 'wiki_images/Vermilion.jpg', links: ['viridian_forest', 'route_3'], encounters: [], hasHeal: true, region: 'kanto'
+        name: 'Пьютер', desc: 'Каменный город у подножия гор. Здесь находится музей ископаемых.',
+        image: '', links: ['viridian_forest', 'route_3', 'pewter_stadium'], encounters: [], hasHeal: true, region: 'kanto'
+      },
+      'pewter_stadium': {
+        name: 'Каменный Стадион', desc: 'Арена каменных покемонов Брока.',
+        image: '', links: ['pewter_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_3': {
-        name: 'Маршрут 3', desc: 'Холмистая дорога к Лунной Горе.',
-        image: 'wiki_images/generic_route.png',
-        links: ['pewter_city', 'mt_moon'], encounters: ['spearow', 'jigglypuff', 'nidoran-f', 'nidoran-m'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 3', desc: 'Горная тропа ведущая к Лунной Горе. Популярна у тренеров-альпинистов.',
+        image: 'wiki_images/generic_route.png', links: ['pewter_city', 'mt_moon'], encounters: ['spearow', 'jigglypuff', 'nidoran-f', 'nidoran-m'], hasHeal: false, region: 'kanto'
       },
       'mt_moon': {
-        name: 'Лунная Гора (Mt. Moon)', desc: 'Огромная пещера, где падают метеориты.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_3', 'route_4'], encounters: ['zubat', 'geodude', 'paras', 'clefairy'], hasHeal: false, region: 'kanto'
+        name: 'Лунная Гора (Mt. Moon)', desc: 'Огромная пещера известная метеоритными дождями. Здесь обитают редкие Клефейри.',
+        image: 'wiki_images/generic_route.png', links: ['route_3', 'route_4'], encounters: ['zubat', 'geodude', 'clefairy', 'paras'], hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_4': {
-        name: 'Маршрут 4', desc: 'Короткий спуск к Церулину.',
-        image: 'wiki_images/generic_route.png',
-        links: ['mt_moon', 'cerulean_city'], encounters: ['rattata', 'spearow', 'ekans', 'sandshrew'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 4', desc: 'Крутой спуск с Лунной Горы к Церулину. Живописный вид на залив.',
+        image: 'wiki_images/generic_route.png', links: ['mt_moon', 'cerulean_city'], encounters: ['rattata', 'spearow', 'ekans', 'sandshrew'], hasHeal: false, region: 'kanto'
       },
       'cerulean_city': {
-        name: 'Церулин', desc: 'Водный город Мисти.',
-        image: 'wiki_images/Serulin.jpeg', links: ['route_4', 'route_24', 'route_5', 'route_9'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+        name: 'Церулин', desc: 'Водный город с знаменитым фонтаном. Здесь тренирует Мисти — мастер водных покемонов.',
+        image: 'wiki_images/Serulin.jpeg', links: ['route_4', 'route_24', 'route_5', 'route_9', 'cerulean_pokecenter', 'cerulean_pokemarket', 'cerulean_bike_shop', 'cerulean_cafe_rain', 'cerulean_tavern', 'cerulean_stadium'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+      },
+      'cerulean_stadium': {
+        name: 'Водный Стадион', desc: 'Арена водных покемонов Мисти.',
+        image: '', links: ['cerulean_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'cerulean_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Церулине.',
+        image: '', links: ['cerulean_city'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'kanto'
+      },
+      'cerulean_pokemarket': {
+        name: 'Покемаркет', desc: 'Магазин товаров для тренеров.',
+        image: '', links: ['cerulean_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'cerulean_bike_shop': {
+        name: 'Веломагазин', desc: 'Магазин велосипедов.',
+        image: '', links: ['cerulean_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'cerulean_cafe_rain': {
+        name: 'Кафе «Rain»', desc: 'Уютное кафе в центре Церулина.',
+        image: '', links: ['cerulean_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'cerulean_tavern': {
+        name: 'Таверна', desc: 'Старая таверна Церулина.',
+        image: '', links: ['cerulean_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_24': {
-        name: 'Маршрут 24 (Мост)', desc: 'Мост самородков.',
-        image: 'wiki_images/generic_route.png',
-        links: ['cerulean_city', 'route_25'], encounters: ['weedle', 'caterpie', 'abra', 'bellsprout'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 24', desc: 'Живописный мост через реку. Знаменит тренерами-самородками.',
+        image: 'wiki_images/generic_route.png', links: ['cerulean_city', 'route_25'], encounters: ['weedle', 'caterpie', 'abra', 'bellsprout'], hasHeal: false, region: 'kanto'
       },
       'route_25': {
-        name: 'Маршрут 25', desc: 'Дом Билла.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_24'], encounters: ['pidgey', 'oddish', 'venonat'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 25', desc: 'Тупиковая дорога к мысу, где живёт исследователь Билл.',
+        image: 'wiki_images/generic_route.png', links: ['route_24'], encounters: ['pidgey', 'oddish', 'venonat'], hasHeal: false, region: 'kanto'
       },
       'route_5': {
-        name: 'Маршрут 5', desc: 'Спуск к Шаффрану.',
-        image: 'wiki_images/generic_route.png',
-        links: ['cerulean_city', 'saffron'], encounters: ['meowth', 'mankey', 'pidgey'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 5', desc: 'Короткая дорога от Церулина до мегаполиса Шаффран.',
+        image: 'wiki_images/generic_route.png', links: ['cerulean_city', 'saffron'], encounters: ['meowth', 'mankey', 'pidgey'], hasHeal: false, region: 'kanto'
       },
       'saffron': {
-        name: 'Шаффран', desc: 'Крупный мегаполис в центре Канто.',
-        image: 'wiki_images/Vostochnyj_Shaffran.jpg', links: ['route_5', 'route_6', 'route_7', 'route_8'], encounters: [], hasHeal: true, region: 'kanto'
+        name: 'Шаффран', desc: 'Крупнейший мегаполис Канто. Здесь базируется штаб-квартира Лиги 17 и Академия Голденрода.',
+        image: 'wiki_images/Vostochnyj_Shaffran.jpg', links: ['route_5', 'route_6', 'route_7', 'route_8', 'saffron_west_pokemarket', 'saffron_psychic_stadium', 'saffron_needle_house', 'saffron_swot_lab', 'saffron_east_station', 'saffron_east_pokecenter', 'saffron_silph_co'], encounters: [], hasHeal: true, region: 'kanto'
+      },
+      'saffron_west_pokemarket': {
+        name: 'Покемаркет (Западный)', desc: 'Магазин в западной части Шаффрана.',
+        image: '', links: ['saffron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'saffron_psychic_stadium': {
+        name: 'Психический Стадион', desc: 'Арена психических покемонов Сабрины.',
+        image: '', links: ['saffron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'saffron_needle_house': {
+        name: 'Дом с иглой', desc: 'Загадочный дом в Западном Шаффране.',
+        image: '', links: ['saffron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'saffron_swot_lab': {
+        name: 'Лаборатория Свота', desc: 'Исследовательская лаборатория.',
+        image: '', links: ['saffron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'saffron_east_station': {
+        name: 'Вокзал (Восточный)', desc: 'Железнодорожный вокзал.',
+        image: '', links: ['saffron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'saffron_east_pokecenter': {
+        name: 'Покецентр (Восточный)', desc: 'Центр лечения в восточном Шаффране.',
+        image: '', links: ['saffron'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'kanto'
+      },
+      'saffron_silph_co': {
+        name: 'Силф Ко', desc: 'Штаб-квартира корпорации Силф.',
+        image: '', links: ['saffron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_6': {
-        name: 'Маршрут 6', desc: 'Короткий маршрут, соединяющий Вермилион и Шаффран.',
-        image: 'wiki_images/generic_route.png',
-        links: ['saffron', 'vermilion'], encounters: ['pidgey', 'rattata', 'meowth', 'psyduck', 'oddish'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 6', desc: 'Южная дорога от Шаффрана к портовому Вермилиону.',
+        image: 'wiki_images/generic_route.png', links: ['saffron', 'vermilion'], encounters: ['pidgey', 'rattata', 'meowth', 'psyduck', 'oddish'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'vermilion': {
-        name: 'Вермилион', desc: 'Портовый город Канто.',
-        image: 'wiki_images/Vermilion.jpg', links: ['route_6', 'route_11'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+        name: 'Вермилион', desc: 'Крупнейший порт Канто. Отсюда ходят паромы в другие регионы.',
+        image: '', links: ['route_6', 'route_11', 'vermilion_pokecenter', 'vermilion_pokemarket', 'vermilion_stadium', 'vermilion_port', 'vermilion_fanclub', 'vermilion_library', 'vermilion_circus'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+      },
+      'vermilion_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Вермилионе.',
+        image: '', links: ['vermilion'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'kanto'
+      },
+      'vermilion_pokemarket': {
+        name: 'Покемаркет', desc: 'Магазин товаров для тренеров.',
+        image: '', links: ['vermilion'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'vermilion_stadium': {
+        name: 'Электрический Стадион', desc: 'Арена электрических покемонов Сёрджа.',
+        image: '', links: ['vermilion'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'vermilion_port': {
+        name: 'Порт', desc: 'Крупный порт Канто.',
+        image: '', links: ['vermilion'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'kanto'
+      },
+      'vermilion_fanclub': {
+        name: 'Фан-клуб покемонов', desc: 'Клуб фанатов покемонов.',
+        image: '', links: ['vermilion'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'vermilion_library': {
+        name: 'Библиотека', desc: 'Городская библиотека Вермилиона.',
+        image: '', links: ['vermilion'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'vermilion_circus': {
+        name: 'Цирковой шатёр', desc: 'Передвижной цирк с покемонами.',
+        image: '', links: ['vermilion'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_11': {
-        name: 'Маршрут 11', desc: 'Дорога на восток от Вермилиона.',
-        image: 'wiki_images/generic_route.png',
-        links: ['vermilion', 'diglett_cave', 'route_12'], encounters: ['spearow', 'ekans', 'sandshrew', 'drowzee'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 11', desc: 'Восточная дорога вдоль побережья, ведущая к Пещере Диглеттов.',
+        image: 'wiki_images/generic_route.png', links: ['vermilion', 'diglett_cave', 'route_12'], encounters: ['spearow', 'ekans', 'sandshrew', 'drowzee'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'diglett_cave': {
-        name: 'Пещера Диглеттов', desc: 'Тоннель между Вермилионом и Пьютером.',
+        name: 'Пещера Диглеттов', desc: 'Подземный тоннель, прорытый Диглеттами. Соединяет Вермилион с Маршрутом 2.',
         image: 'wiki_images/Peshhera_Digletov.jpg', links: ['route_11', 'route_2'], encounters: ['diglett', 'dugtrio'], hasHeal: false, region: 'kanto'
       },
       'route_9': {
-        name: 'Маршрут 9', desc: 'Скалистая дорога от Церулина к Каменному Тоннелю.',
-        image: 'wiki_images/generic_route.png',
-        links: ['cerulean_city', 'route_10'], encounters: ['rattata', 'spearow', 'ekans', 'sandshrew'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 9', desc: 'Скалистая дорога на восток от Церулина к реке и Каменному Тоннелю.',
+        image: 'wiki_images/generic_route.png', links: ['cerulean_city', 'route_10'], encounters: ['rattata', 'spearow', 'ekans', 'sandshrew'], hasHeal: false, region: 'kanto'
       },
       'route_10': {
-        name: 'Маршрут 10', desc: 'Река перед Каменным Тоннелем.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_9', 'rock_tunnel', 'lavender_town'], encounters: ['voltorb', 'magnemite', 'machop'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 10', desc: 'Берег реки у Каменного Тоннеля. Популярное место рыбалки.',
+        image: 'wiki_images/generic_route.png', links: ['route_9', 'rock_tunnel', 'lavender_town'], encounters: ['voltorb', 'magnemite', 'machop'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'rock_tunnel': {
-        name: 'Каменный Тоннель', desc: 'Темная и длинная пещера.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_10'], encounters: ['zubat', 'geodude', 'machop', 'onix'], hasHeal: false, region: 'kanto'
+        name: 'Каменный Тоннель', desc: 'Тёмный и извилистый тоннель сквозь гору. Без фонарика не пройти.',
+        image: '', links: ['route_10'], encounters: ['zubat', 'geodude', 'machop', 'onix'], hasHeal: false, region: 'kanto'
       },
       'lavender_town': {
-        name: 'Лавендер', desc: 'Город призраков с Башней Покемонов.',
-        image: 'wiki_images/Lavandia.jpg', links: ['route_10', 'route_8', 'route_12'], encounters: ['gastly', 'haunter', 'cubone'], hasHeal: true, region: 'kanto'
+        name: 'Лавандия', desc: 'Город упокоения покемонов. Здесь находится Башня Призраков.',
+        image: 'wiki_images/Lavandia.jpg', links: ['route_10', 'route_8', 'route_12', 'lavender_bug_stadium', 'lavender_pokecenter', 'lavender_pokemarket', 'lavender_radio_tower'], encounters: ['gastly', 'haunter', 'cubone'], hasHeal: true, region: 'kanto'
+      },
+      'lavender_bug_stadium': {
+        name: 'Стадион Жуков', desc: 'Арена насекомых-покемонов.',
+        image: '', links: ['lavender_town'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'lavender_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Лавандии.',
+        image: '', links: ['lavender_town'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'kanto'
+      },
+      'lavender_pokemarket': {
+        name: 'Покемаркет', desc: 'Магазин товаров для тренеров.',
+        image: '', links: ['lavender_town'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'lavender_radio_tower': {
+        name: 'Радиобашня', desc: 'Радиобашня Лавандии.',
+        image: '', links: ['lavender_town'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_8': {
-        name: 'Маршрут 8', desc: 'Дорога в Шаффран.',
-        image: 'wiki_images/generic_route.png',
-        links: ['lavender_town', 'saffron'], encounters: ['pidgey', 'meowth', 'growlithe', 'vulpix'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 8', desc: 'Западная дорога от Лавандии в Шаффран через холмы.',
+        image: 'wiki_images/generic_route.png', links: ['lavender_town', 'saffron'], encounters: ['pidgey', 'meowth', 'growlithe', 'vulpix'], hasHeal: false, region: 'kanto'
       },
       'route_7': {
-        name: 'Маршрут 7', desc: 'Короткий путь из Селадона в Шаффран.',
-        image: 'wiki_images/generic_route.png',
-        links: ['celadon_city', 'saffron'], encounters: ['meowth', 'oddish', 'bellsprout'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 7', desc: 'Короткая дорога между Селадоном и Шаффраном.',
+        image: 'wiki_images/generic_route.png', links: ['celadon_city', 'saffron'], encounters: ['meowth', 'oddish', 'bellsprout'], hasHeal: false, region: 'kanto'
       },
       'celadon_city': {
-        name: 'Селадон', desc: 'Крупный торговый город с универмагом и казино.',
-        image: 'wiki_images/Celadon.jpg', links: ['route_7', 'route_16'], encounters: [], hasHeal: true, region: 'kanto'
+        name: 'Селадон', desc: 'Город развлечений с крупнейшим универмагом и игровым центром.',
+        image: 'wiki_images/Celadon.jpg', links: ['route_7', 'route_16', 'confectionery', 'celadon_stadium'], encounters: [], hasHeal: true, region: 'kanto'
+      },
+      'celadon_stadium': {
+        name: 'Травяной Стадион', desc: 'Арена травяных покемонов Эрики.',
+        image: '', links: ['celadon_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'confectionery': {
+        name: 'Кондитерская', desc: 'Знаменитая кондитерская Селадона. Сладкие покемоны обожают это место.',
+        image: '', links: ['celadon_city'], encounters: ['jigglypuff', 'clefairy', 'chansey'], hasHeal: false, region: 'kanto'
       },
       'route_16': {
-        name: 'Маршрут 16', desc: 'Выезд на велосипедную дорожку.',
-        image: 'wiki_images/generic_route.png',
-        links: ['celadon_city', 'route_17'], encounters: ['spearow', 'doduo', 'rattata', 'grimer'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 16', desc: 'Начало Велосипедной Дорожки. Соединяет Селадон с Фуксией.',
+        image: 'wiki_images/generic_route.png', links: ['celadon_city', 'route_17'], encounters: ['spearow', 'doduo', 'rattata', 'grimer'], hasHeal: false, region: 'kanto'
       },
       'route_17': {
-        name: 'Велосипедная дорожка (М17)', desc: 'Длинный мост байкеров.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_16', 'route_18'], encounters: ['doduo', 'fearow', 'grimer', 'ponyta'], hasHeal: false, region: 'kanto'
+        name: 'Велосипедная дорожка (М17)', desc: 'Длинный вело-мост над морем. Популярна у байкеров.',
+        image: 'wiki_images/generic_route.png', links: ['route_16', 'route_18'], encounters: ['doduo', 'fearow', 'grimer', 'ponyta'], hasHeal: false, region: 'kanto'
       },
       'route_18': {
-        name: 'Маршрут 18', desc: 'Конец дорожки у Фуксии.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_17', 'fuchsia_city'], encounters: ['doduo', 'fearow', 'rattata'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 18', desc: 'Конец Велосипедной Дорожки у ворот Фуксии.',
+        image: 'wiki_images/generic_route.png', links: ['route_17', 'fuchsia_city'], encounters: ['doduo', 'fearow', 'rattata'], hasHeal: false, region: 'kanto'
       },
       'fuchsia_city': {
-        name: 'Фуксия', desc: 'Город ниндзя и Сафари Зоны.',
-        image: 'wiki_images/Fuksija.jpg', links: ['route_18', 'safari_zone', 'route_15', 'route_19'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+        name: 'Фуксия', desc: 'Город ниндзя с Сафари-Зоной и древним зоопарком.',
+        image: 'wiki_images/Fuksija.jpg', links: ['route_18', 'safari_zone', 'route_15', 'route_19', 'fuchsia_pokecenter', 'fuchsia_pokemarket', 'fuchsia_dragon_stadium', 'fuchsia_beach'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+      },
+      'fuchsia_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Фуксии.',
+        image: '', links: ['fuchsia_city'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'kanto'
+      },
+      'fuchsia_pokemarket': {
+        name: 'Покемаркет', desc: 'Магазин товаров для тренеров.',
+        image: '', links: ['fuchsia_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'fuchsia_dragon_stadium': {
+        name: 'Ядовитый Стадион', desc: 'Арена ядовитых покемонов Коги.',
+        image: '', links: ['fuchsia_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
+      },
+      'fuchsia_beach': {
+        name: 'Пляж', desc: 'Пляж на окраине Фуксии.',
+        image: '', links: ['fuchsia_city'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'kanto'
+      },
+      'fuchsia_beach_pier': {
+        name: 'Пирс', desc: 'Пирс фуксийского пляжа.',
+        image: '', links: ['fuchsia_city'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'kanto'
       },
       'safari_zone': {
-        name: 'Сафари Зона', desc: 'Огромный заповедник редких покемонов.',
-        image: 'wiki_images/generic_route.png',
-        links: ['fuchsia_city'], encounters: ['nidoran-f', 'nidoran-m', 'exeggcute', 'rhyhorn', 'chansey', 'scyther', 'pinsir', 'tauros'], hasHeal: false, region: 'kanto'
+        name: 'Сафари Зона', desc: 'Огромный заповедник, где обитают редчайшие покемоны Канто.',
+        image: '', links: ['fuchsia_city'], encounters: ['nidoran-f', 'nidoran-m', 'exeggcute', 'rhyhorn', 'chansey', 'scyther', 'pinsir', 'tauros'], hasHeal: false, region: 'kanto'
       },
       'route_15': {
-        name: 'Маршрут 15', desc: 'Дорога на восток от Фуксии.',
-        image: 'wiki_images/generic_route.png',
-        links: ['fuchsia_city', 'route_14'], encounters: ['oddish', 'bellsprout', 'venonat', 'ditto'], hasHeal: false, region: 'kanto'
+        name: 'Маршрут 15', desc: 'Восточный тракт от Фуксии на север.',
+        image: 'wiki_images/generic_route.png', links: ['fuchsia_city', 'route_14'], encounters: ['oddish', 'bellsprout', 'venonat', 'ditto'], hasHeal: false, region: 'kanto'
       },
       'route_14': {
-        name: 'Маршрут 14', desc: 'Поворот на север.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_15', 'route_13'], encounters: ['pidgey', 'pidgeotto', 'ditto'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 14', desc: 'Прибрежная дорога с видом на море. Много диких уток.',
+        image: 'wiki_images/generic_route.png', links: ['route_15', 'route_13'], encounters: ['pidgey', 'pidgeotto', 'ditto'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'route_13': {
-        name: 'Маршрут 13', desc: 'Деревянный мост-лабиринт.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_14', 'route_12'], encounters: ['pidgey', 'oddish', 'bellsprout', 'venonat'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 13', desc: 'Деревянный мост-лабиринт через залив. Проверка на терпение.',
+        image: 'wiki_images/generic_route.png', links: ['route_14', 'route_12'], encounters: ['pidgey', 'oddish', 'bellsprout', 'venonat'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'route_12': {
-        name: 'Маршрут 12', desc: 'Мост рыбаков. Здесь спал Снорлакс.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_13', 'lavender_town', 'route_11'], encounters: ['tentacool', 'magikarp', 'snorlax'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 12', desc: 'Длинный мост рыбаков. Здесь когда-то спал гигантский Снорлакс.',
+        image: 'wiki_images/generic_route.png', links: ['route_13', 'lavender_town', 'route_11'], encounters: ['tentacool', 'magikarp', 'snorlax'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'route_19': {
-        name: 'Маршрут 19', desc: 'Морской путь от Фуксии.',
-        image: 'wiki_images/generic_route.png',
-        links: ['fuchsia_city', 'route_20'], encounters: ['tentacool', 'magikarp'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 19', desc: 'Морской маршрут от Фуксии к Островам Морской Пены.',
+        image: 'wiki_images/generic_route.png', links: ['fuchsia_city', 'route_20'], encounters: ['tentacool', 'magikarp'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'route_20': {
-        name: 'Маршрут 20', desc: 'Бурные воды у Островов Морской Пены.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_19', 'seafoam_islands', 'cinnabar_island'], encounters: ['tentacool', 'magikarp', 'lapras'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 20', desc: 'Бурные воды вокруг Островов Морской Пены. Только на плав-покемоне.',
+        image: 'wiki_images/generic_route.png', links: ['route_19', 'seafoam_islands', 'cinnabar_island'], encounters: ['tentacool', 'magikarp', 'lapras'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'seafoam_islands': {
-        name: 'Острова Морской Пены', desc: 'Ледяные пещеры, обитель Артикуно.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_20'], encounters: ['seel', 'slowpoke', 'zubat', 'golbat', 'jynx', 'articuno'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Острова Морской Пены', desc: 'Ледяные пещеры в сердце архипелага. Говорят, здесь обитает Артикуно.',
+        image: '', links: ['route_20'], encounters: ['seel', 'slowpoke', 'zubat', 'golbat', 'jynx', 'articuno'], hasHeal: false, hasWater: true, region: 'kanto'
       },
       'cinnabar_island': {
-        name: 'Синнабар', desc: 'Вулканический остров с заброшенной лабораторией.',
-        image: 'wiki_images/Vermilion.jpg', links: ['route_20', 'route_21'], encounters: ['grimer', 'muk', 'koffing', 'weezing'], hasHeal: true, hasWater: true, region: 'kanto'
+        name: 'Синнабар', desc: 'Вулканический остров с покемон-лабораторией. Жаркий климат круглый год.',
+        image: '', links: ['route_20', 'route_21', 'cinnabar_stadium'], encounters: ['grimer', 'muk', 'koffing', 'weezing'], hasHeal: true, hasWater: true, region: 'kanto'
+      },
+      'cinnabar_stadium': {
+        name: 'Огненный Стадион', desc: 'Арена огненных покемонов Блейна.',
+        image: '', links: ['cinnabar_island'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'kanto'
       },
       'route_21': {
-        name: 'Маршрут 21', desc: 'Водный путь прямо до Алабастии.',
-        image: 'wiki_images/generic_route.png',
-        links: ['cinnabar_island', 'pallet_town'], encounters: ['tentacool', 'tangela'], hasHeal: false, hasWater: true, region: 'kanto'
+        name: 'Маршрут 21', desc: 'Длинный морской путь от Синнабара до Алабастии.',
+        image: 'wiki_images/generic_route.png', links: ['cinnabar_island', 'pallet_town'], encounters: ['tentacool', 'tangela'], hasHeal: false, hasWater: true, region: 'kanto'
+      },
+      'bicycle_road': {
+        name: 'Велосипедная дорожка', desc: 'Скоростная трасса для велосипедистов через весь Канто.',
+        image: 'wiki_images/generic_route.png', links: ['celadon_city', 'fuchsia_city'], encounters: ['doduo', 'ponyta', 'rattata'], hasHeal: false, region: 'kanto'
+      },
+      'brick_bridge': {
+        name: 'Кирпичный мост', desc: 'Старинный кирпичный мост над рекой. Место встречи тренеров.',
+        image: 'wiki_images/Kirpichnyj_most.jpg', links: ['route_11', 'route_12'], encounters: ['magikarp', 'poliwag', 'goldeen'], hasHeal: false, hasWater: true, region: 'kanto'
+      },
+      'labyrinth': {
+        name: 'Лабиринт', desc: 'Запутанный природный лабиринт. Проверка на ориентирование для тренеров.',
+        image: '', links: ['route_11'], encounters: ['gastly', 'haunter', 'drowzee', 'abra'], hasHeal: false, region: 'kanto'
+      },
+      'potato_cave': {
+        name: 'Пещера Потатов', desc: 'Пещера, где обитают колонии покемонов-овощей.',
+        image: 'wiki_images/generic_route.png', links: ['route_24'], encounters: ['oddish', 'bellsprout', 'exeggcute', 'paras'], hasHeal: false, region: 'kanto'
+      },
+      'goldenrod_academy_branch': {
+        name: 'Филиал Академии Голденрода', desc: 'Кантоский филиал престижной Академии Голденрода.',
+        image: 'wiki_images/Goldenrod_Place.jpg', links: ['saffron'], encounters: [], hasHeal: true, region: 'kanto'
+      },
+      'power_plant': {
+        name: 'Электростанция', desc: 'Заброшенная электростанция у реки. Пристанище электрических покемонов.',
+        image: '', links: ['route_10'], encounters: ['voltorb', 'magnemite', 'magneton', 'electabuzz', 'zapdos'], hasHeal: false, region: 'kanto'
       },
       'victory_road': {
-        name: 'Дорога Победы', desc: 'Последнее испытание перед Лигой.',
-        image: 'wiki_images/generic_route.png',
-        links: ['route_22', 'indigo_plateau'], encounters: ['machop', 'geodude', 'zubat', 'onix'], hasHeal: false, region: 'kanto'
+        name: 'Дорога Победы', desc: 'Последнее и тяжелейшее испытание перед Плато Индиго. Элитные тренеры повсюду.',
+        image: 'wiki_images/generic_route.png', links: ['route_22', 'indigo_plateau'], encounters: ['machop', 'geodude', 'zubat', 'onix'], hasHeal: false, region: 'kanto'
       },
       'indigo_plateau': {
-        name: 'Плато Индиго', desc: 'Конец пути. Здесь заседает Элитная Четверка.',
-        image: 'wiki_images/generic_route.png',
-        links: ['victory_road'], encounters: [], hasHeal: true, region: 'kanto'
+        name: 'Плато Индиго', desc: 'Вершина Канто. Здесь заседает Элитная Четвёрка и Чемпион.',
+        image: 'wiki_images/generic_route.png', links: ['victory_road'], encounters: [], hasHeal: true, region: 'kanto'
       },
       'pokecenter': {
-        name: 'Покецентр', desc: 'Центр помощи покемонам. Сестра Джой и Питомник.',
-        image: 'wiki_images/generic_route.png',
-        links: [], encounters: [], hasHeal: false, region: 'kanto'
+        name: 'Покецентр', desc: 'Центр помощи покемонам. Сестра Джой и дневной питомник.',
+        image: '', links: [], encounters: [], hasHeal: false, region: 'kanto'
       }
     }
   },
@@ -212,84 +385,325 @@ const REGIONS = {
     name: 'Восточный Джото',
     locations: {
       'goldenrod': {
-        name: 'Голденрод', desc: 'Самый большой город мира Лиги 17, столица региона Восточный Джото.',
-        image: 'wiki_images/Goldenrod_Place.jpg', links: ['ej_route_1', 'ej_route_2', 'ej_route_3', 'ej_route_4', 'ej_route_8'],
+        name: 'Голденрод', desc: 'Столица Восточного Джото и крупнейший город мира Лиги 17. Здесь начинают путь все тренеры.',
+        image: '',
+        links: ['ej_route_1', 'ej_route_2', 'ej_route_3', 'ej_route_4', 'ej_route_8', 'goldenrod_prison', 'goldenrod_pokecenter', 'goldenrod_supermarket', 'goldenrod_institute', 'goldenrod_academy', 'goldenrod_bar', 'goldenrod_cityhall', 'goldenrod_stadium'],
         encounters: ['pidgey', 'zubat', 'grimer', 'murkrow'], hasHeal: true, region: 'east_johto'
       },
+      'goldenrod_stadium': {
+        name: 'Обычный Стадион', desc: 'Арена обычных покемонов Уитни.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_prison': {
+        name: 'Тюрьма', desc: 'Городская тюрьма Голденрода.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Голденроде.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_supermarket': {
+        name: 'Супермаркет', desc: 'Крупнейший супермаркет города.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_institute': {
+        name: 'Научный институт', desc: 'Исследовательский институт.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_academy': {
+        name: 'Академия Тренеров Покемонов', desc: 'Престижная академия подготовки тренеров.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_academy_training': {
+        name: 'Тренировочная зона', desc: 'Зона для тренировок в Академии.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_academy_aviary': {
+        name: 'Вольер', desc: 'Вольер с летающими покемонами.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_academy_green': {
+        name: 'Зелёная зона', desc: 'Парковая зона Академии.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_academy_lab': {
+        name: 'Лаборатория', desc: 'Научная лаборатория Академии.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_bar': {
+        name: 'Бар', desc: 'Популярный бар в центре.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_cityhall': {
+        name: 'Мэрия', desc: 'Здание мэрии Голденрода.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'goldenrod_cityhall_admin': {
+        name: 'Администраторская зона', desc: 'Административные помещения.',
+        image: '', links: ['goldenrod'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
       'ej_route_1': {
-        name: 'Дорога N1', desc: 'Тракт из Голденрода.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['goldenrod', 'ej_route_2', 'deserted_road_ej'],
+        name: 'Дорога №1', desc: 'Первый тракт от Голденрода. Оживлённая дорога для начинающих тренеров.',
+        image: 'wiki_images/generic_route.png', links: ['goldenrod', 'ej_route_2', 'deserted_road_ej'],
         encounters: ['sentret', 'pidgey', 'rattata'], hasHeal: false, region: 'east_johto'
       },
       'ej_route_2': {
-        name: 'Дорога N2', desc: 'Дорога к Мосту и Оливину.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['goldenrod', 'ej_route_1', 'bridge_ej', 'air_stadium_forest'],
+        name: 'Дорога №2', desc: 'Дорога к Мосту и Оливину. Развилка к Воздушному Стадиону.',
+        image: 'wiki_images/generic_route.png', links: ['goldenrod', 'ej_route_1', 'bridge_ej', 'air_stadium_forest'],
         encounters: ['sentret', 'hoothoot', 'spinarak'], hasHeal: false, region: 'east_johto'
       },
       'bridge_ej': {
-        name: 'Мост', desc: 'Кирпичный мост, соединяющий дороги Восточного Джото.',
-        image: 'wiki_images/Kirpichnyj_most.jpg', links: ['ej_route_2', 'olivine'],
+        name: 'Мост', desc: 'Кирпичный мост через пролив, соединяющий дороги с Оливином.',
+        image: 'wiki_images/generic_route.png', links: ['ej_route_2', 'olivine'],
         encounters: ['magikarp', 'tentacool'], hasHeal: false, region: 'east_johto'
       },
       'olivine': {
-        name: 'Оливин', desc: 'Небольшой портовый городок на берегу лазурного моря.',
-        image: 'wiki_images/Olivin.jpg', links: ['bridge_ej'],
+        name: 'Оливин', desc: 'Портовый город с маяком. Отсюда ходят корабли в Канто и на остров Селен.',
+        image: 'wiki_images/Olivin.jpg', links: ['bridge_ej', 'olivine_water_stadium', 'olivine_pokecenter', 'olivine_shop', 'olivine_bar_pirate', 'olivine_beach', 'olivine_aquapark', 'olivine_house_221'],
         encounters: ['shellder', 'wingull', 'krabby', 'magikarp'], hasHeal: true, hasWater: true, region: 'east_johto'
       },
+      'olivine_water_stadium': {
+        name: 'Стальной Стадион', desc: 'Арена стальных покемонов Жасмин.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'east_johto'
+      },
+      'olivine_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Оливине.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'east_johto'
+      },
+      'olivine_shop': {
+        name: 'Магазин Воттэр', desc: 'Фирменный магазин товаров.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'olivine_bar_pirate': {
+        name: 'Бар Пиратское убежище', desc: 'Бар в портовом районе.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'olivine_beach': {
+        name: 'Пляж', desc: 'Городской пляж Оливина.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'east_johto'
+      },
+      'olivine_beach_pier': {
+        name: 'Причал', desc: 'Причал оливинского пляжа.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'east_johto'
+      },
+      'olivine_beach_lighthouse': {
+        name: 'Маяк', desc: 'Старый маяк на побережье.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'east_johto'
+      },
+      'olivine_beach_malibu': {
+        name: 'Бар Malibu', desc: 'Пляжный бар на побережье.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'olivine_aquapark': {
+        name: 'Аквапарк', desc: 'Развлекательный водный комплекс.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'east_johto'
+      },
+      'olivine_house_221': {
+        name: 'Дом 221', desc: 'Жилой дом №221.',
+        image: '', links: ['olivine'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
       'ej_route_3': {
-        name: 'Дорога N3', desc: 'Дорога из Голденрода к Флауренции.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['goldenrod', 'flourence', 'overgrown_trail'],
+        name: 'Дорога №3', desc: 'Цветущая дорога из Голденрода в город цветов Флауренцию.',
+        image: 'wiki_images/generic_route.png', links: ['goldenrod', 'flourence', 'overgrown_trail'],
         encounters: ['pidgey', 'spearow', 'mareep'], hasHeal: false, region: 'east_johto'
       },
       'flourence': {
-        name: 'Флауренция', desc: 'Город цветов с теплым климатом, оранжереями и множеством кафе.',
-        image: 'wiki_images/Goldenrod_Place.jpg', links: ['ej_route_3', 'farm_ej'],
+        name: 'Флауренция', desc: 'Город цветов с тёплым климатом, оранжереями и первым гимом Джото.',
+        image: '', links: ['ej_route_3', 'farm_ej', 'flourence_greenhouse', 'flourence_pokecenter', 'flourence_recycling', 'flourence_tech_shop', 'flourence_stadium'],
         encounters: [], hasHeal: true, region: 'east_johto'
       },
+      'flourence_stadium': {
+        name: 'Воздушный Стадион', desc: 'Арена летающих покемонов Фолкнера.',
+        image: '', links: ['flourence'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'flourence_greenhouse': {
+        name: 'Оранжерея цветов', desc: 'Красивая оранжерея с редкими растениями.',
+        image: '', links: ['flourence'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'flourence_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Флауренции.',
+        image: '', links: ['flourence'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'east_johto'
+      },
+      'flourence_recycling': {
+        name: 'Пункт переработки', desc: 'Экологический пункт переработки.',
+        image: '', links: ['flourence'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'flourence_tech_shop': {
+        name: 'Магазин техники', desc: 'Магазин технических устройств.',
+        image: '', links: ['flourence'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
       'farm_ej': {
-        name: 'Ферма', desc: 'Сельская местность с покемонами-зверьками.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['flourence', 'ej_route_8'],
+        name: 'Ферма', desc: 'Сельская местность с пастбищами. Дом для Милтанков и Тауросов.',
+        image: '', links: ['flourence', 'ej_route_8'],
         encounters: ['miltank', 'tauros', 'mareep'], hasHeal: false, region: 'east_johto'
       },
       'ej_route_4': {
-        name: 'Дорога N4', desc: 'Дорога из Голденрода в Вархолл.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['goldenrod', 'warhall', 'rocks_ej'],
+        name: 'Дорога №4', desc: 'Дорога в новейший город Вархолл через скалистую местность.',
+        image: 'wiki_images/generic_route.png', links: ['goldenrod', 'warhall', 'rocks_ej'],
         encounters: ['growlithe', 'spearow', 'ekans'], hasHeal: false, region: 'east_johto'
       },
       'warhall': {
-        name: 'Вархолл', desc: 'Бывший храм ниндзя, ныне важный транспортный узел с автовокзалом.',
-        image: 'wiki_images/Varholl.jpg', links: ['ej_route_4'],
+        name: 'Вархолл', desc: 'Новейший город с автовокзалом. Отсюда ходят автобусы в Западное Джото.',
+        image: 'wiki_images/Varholl.jpg', links: ['ej_route_4', 'ej_route_9', 'warhall_pokecenter', 'warhall_bill_shop', 'warhall_bill_pawnshop', 'warhall_samurai_house', 'warhall_samurai_gym', 'warhall_battle_stadium', 'warhall_museum', 'warhall_bus_station'],
         encounters: [], hasHeal: true, region: 'east_johto'
+      },
+      'warhall_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Вархолле.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'east_johto'
+      },
+      'warhall_bill_shop': {
+        name: 'Магазин Билла', desc: 'Магазин изобретателя Билла.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'warhall_bill_pawnshop': {
+        name: 'Ломбард', desc: 'Ломбард при магазине Билла.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'warhall_samurai_house': {
+        name: 'Дом самурая', desc: 'Традиционный дом мастера.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'warhall_samurai_gym': {
+        name: 'Спортивный зал', desc: 'Тренировочный зал.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'warhall_battle_stadium': {
+        name: 'Призрачный Стадион', desc: 'Арена призрачных покемонов Морти.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'warhall_museum': {
+        name: 'Музей истории', desc: 'Музей истории Восточного Джото.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'warhall_museum_workshops': {
+        name: 'Мастерские', desc: 'Реставрационные мастерские.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'warhall_bus_station': {
+        name: 'Автовокзал', desc: 'Междугородний автовокзал.',
+        image: '', links: ['warhall'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
       },
       'ej_route_8': {
-        name: 'Дорога N8', desc: 'Дорога от Голденрода к Ферме.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['goldenrod', 'farm_ej'],
+        name: 'Дорога №8', desc: 'Прямая дорога от Голденрода к Ферме.',
+        image: 'wiki_images/generic_route.png', links: ['goldenrod', 'farm_ej'],
         encounters: ['pidgey', 'spearow', 'rattata'], hasHeal: false, region: 'east_johto'
       },
+      'ej_route_9': {
+        name: 'Дорога №9', desc: 'Путь от Вархолла на север через предгорья.',
+        image: 'wiki_images/generic_route.png', links: ['warhall', 'mountain_pass'],
+        encounters: ['geodude', 'machop', 'onix'], hasHeal: false, region: 'east_johto'
+      },
       'alston': {
-        name: 'Олстон', desc: 'Городок, основанный бродячими артистами, с цирком покемонов.',
-        image: 'wiki_images/Varholl.jpg', links: ['deserted_road_ej'],
+        name: 'Олстон', desc: 'Городок бродячих артистов с цирком покемонов. Расположен в горах.',
+        image: '', links: ['deserted_road_ej', 'mountain_pass', 'alston_circus', 'alston_pokecenter', 'alston_shop', 'alston_granny_house', 'alston_steel_stadium', 'alston_soul_stadium'],
         encounters: [], hasHeal: true, region: 'east_johto'
       },
+      'alston_circus': {
+        name: 'Цирк покемонов', desc: 'Знаменитый цирк с покемонами.',
+        image: '', links: ['alston'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'alston_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Олстоне.',
+        image: '', links: ['alston'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'east_johto'
+      },
+      'alston_shop': {
+        name: 'Магазин', desc: 'Местный магазин товаров.',
+        image: '', links: ['alston'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'alston_granny_house': {
+        name: 'Дом старушки', desc: 'Дом пожилой женщины.',
+        image: '', links: ['alston'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'alston_steel_stadium': {
+        name: 'Стадион Жуков', desc: 'Арена насекомых-покемонов Багси.',
+        image: '', links: ['alston'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
+      'alston_soul_stadium': {
+        name: 'Стадион Души', desc: 'Загадочная арена духовного типа.',
+        image: '', links: ['alston'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'east_johto'
+      },
       'deserted_road_ej': {
-        name: 'Безлюдная дорога', desc: 'Пустынная дорога, где ночью появляются Koffing.',
+        name: 'Безлюдная дорога', desc: 'Пустынная дорога у Олстона. Ночью здесь появляются призрачные Коффинги.',
         image: 'wiki_images/Bezljudnaja_doroga.jpg', links: ['alston', 'ej_route_1'],
         encounters: ['koffing', 'rattata', 'meowth'], hasHeal: false, region: 'east_johto'
       },
       'rocks_ej': {
-        name: 'Скалы (В.Джото)', desc: 'Скалистая местность Восточного Джото.',
+        name: 'Скалы', desc: 'Скалистая гряда Восточного Джото. Обитель каменных покемонов.',
         image: 'wiki_images/LOK_Восточный_Джото_Скалы.PNG', links: ['ej_route_4'],
         encounters: ['geodude', 'onix', 'machop'], hasHeal: false, region: 'east_johto'
       },
       'overgrown_trail': {
-        name: 'Заросшая тропа', desc: 'Заросшая растениями тропа.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['ej_route_3'],
+        name: 'Заросшая тропа', desc: 'Густо заросшая растениями тропа. Травяные покемоны процветают здесь.',
+        image: 'wiki_images/generic_route.png', links: ['ej_route_3'],
         encounters: ['oddish', 'bellsprout', 'paras'], hasHeal: false, region: 'east_johto'
       },
       'air_stadium_forest': {
-        name: 'Лес у Воздушного Стадиона', desc: 'Густой лес вокруг воздушной арены.',
+        name: 'Лес вокруг воздушного стадиона', desc: 'Густой лес с редкими летающими покемонами.',
         image: 'wiki_images/Les_vokrug_vozdushnogo_stadiona.jpg', links: ['ej_route_2'],
-        encounters: ['caterpie', 'weedle', 'hoothoot'], hasHeal: false, region: 'east_johto'
+        encounters: ['caterpie', 'weedle', 'hoothoot', 'pineco'], hasHeal: false, region: 'east_johto'
+      },
+      'mountain_pass': {
+        name: 'Горный перевал', desc: 'Высокогорный перевал через хребет. Путь к Олстону.',
+        image: 'wiki_images/generic_route.png', links: ['alston', 'ej_route_9'],
+        encounters: ['geodude', 'machop', 'zubat', 'clefairy'], hasHeal: false, region: 'east_johto'
+      },
+      'lowland_marshes': {
+        name: 'Низинные болота', desc: 'Обширные болота с редкими ядовитыми и водными покемонами.',
+        image: 'wiki_images/generic_route.png', links: ['overgrown_trail'],
+        encounters: ['ekans', 'grimer', 'poliwag', 'wooper'], hasHeal: false, region: 'east_johto'
+      },
+      'new_district': {
+        name: 'Новый район', desc: 'Современный район Голденрода с высотками и офисами Лиги.',
+        image: '', links: ['goldenrod'],
+        encounters: ['magnemite', 'voltorb', 'porygon'], hasHeal: true, region: 'east_johto'
+      },
+      'old_district': {
+        name: 'Старый район', desc: 'Исторический центр Голденрода. Узкие улочки и старинные здания.',
+        image: '', links: ['goldenrod'],
+        encounters: ['gastly', 'meowth', 'rattata'], hasHeal: false, region: 'east_johto'
       }
     }
   },
@@ -297,64 +711,179 @@ const REGIONS = {
     name: 'Западный Джото',
     locations: {
       'city_gates_wj': {
-        name: 'Ворота перед городом', desc: 'Въездные ворота в Западное Джото.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['summer'],
+        name: 'Ворота перед городом', desc: 'Въездные ворота в Западное Джото. Контрольный пункт для путников.',
+        image: '', links: ['summer'],
         encounters: [], hasHeal: false, region: 'west_johto'
       },
       'summer': {
-        name: 'Саммер', desc: 'Столица Западного Джото, бедный городок с фонтаном влюблённых и Покепарком.',
-        image: 'wiki_images/Vozviwennost.jpg', links: ['city_gates_wj', 'elevation_wj', 'wj_route_1', 'wj_route_3', 'wj_route_4'],
+        name: 'Саммер', desc: 'Столица Западного Джото. Здесь есть Покепарк и Научный институт.',
+        image: 'wiki_images/Vozviwennost.jpg', links: ['city_gates_wj', 'elevation_wj', 'wj_route_1', 'wj_route_3', 'wj_route_4', 'summer_pokemarket', 'summer_fountain', 'summer_pub', 'summer_library', 'summer_pokepark', 'summer_police', 'summer_institute', 'summer_pokecenter', 'summer_mountain_road', 'summer_mountain_fork', 'summer_nursery'],
         encounters: [], hasHeal: true, region: 'west_johto'
       },
+      'summer_pokemarket': {
+        name: 'Покемаркет', desc: 'Магазин товаров для тренеров.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_fountain': {
+        name: 'Фонтан', desc: 'Центральный фонтан Саммера.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_pub': {
+        name: 'Паб Хаус', desc: 'Уютный паб в районе фонтана.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_library': {
+        name: 'Библиотека', desc: 'Городская библиотека Саммера.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_pokepark': {
+        name: 'Поке-парк', desc: 'Парк для прогулок с покемонами.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_police': {
+        name: 'Полицейский участок', desc: 'Полицейский участок Саммера.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_institute': {
+        name: 'Институт Саммера', desc: 'Научно-исследовательский институт.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Саммере.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'west_johto'
+      },
+      'summer_mountain_road': {
+        name: 'Дорога к горе', desc: 'Дорога ведущая к горному перевалу.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_mountain_fork': {
+        name: 'Развилка', desc: 'Развилка на дороге к горе.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'summer_nursery': {
+        name: 'Питомник Западного Джото', desc: 'Питомник для разведения покемонов.',
+        image: '', links: ['summer'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
       'elevation_wj': {
-        name: 'Возвышенность', desc: 'Холмистая возвышенность в Западном Джото.',
-        image: 'wiki_images/Vozviwennost.jpg', links: ['summer', 'wj_route_1'],
+        name: 'Возвышенность', desc: 'Холмистая возвышенность над Саммером. Популярное место для тренировок.',
+        image: '', links: ['summer', 'wj_route_1'],
         encounters: ['geodude', 'sandshrew'], hasHeal: false, region: 'west_johto'
       },
       'wj_route_1': {
-        name: 'Маршрут N1', desc: 'Первый маршрут Западного Джото.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['summer', 'elevation_wj', 'wj_route_2', 'rocks_wj'],
+        name: 'Маршрут №1', desc: 'Первый маршрут Западного Джото — саванна с дикими огненными покемонами.',
+        image: 'wiki_images/generic_route.png', links: ['summer', 'elevation_wj', 'wj_route_2', 'rocks_wj'],
         encounters: ['growlithe', 'ekans', 'spearow'], hasHeal: false, region: 'west_johto'
       },
       'wj_route_2': {
-        name: 'Маршрут N2', desc: 'Дорога к Мелену.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['wj_route_1', 'melen'],
+        name: 'Маршрут №2', desc: 'Дорога через саванну в прибрежный Мелен.',
+        image: 'wiki_images/generic_route.png', links: ['wj_route_1', 'melen'],
         encounters: ['growlithe', 'ponyta', 'sandshrew'], hasHeal: false, region: 'west_johto'
       },
       'melen': {
-        name: 'Мелен', desc: 'Пастуший городок с причалом и дайвинг-центром.',
-        image: 'wiki_images/Vulkan.jpg', links: ['wj_route_2'],
-        encounters: ['poliwag', 'tentacool'], hasHeal: false, region: 'west_johto'
+        name: 'Мелен', desc: 'Прибрежный пастуший городок с дайвинг-центром и мастерской масок.',
+        image: 'wiki_images/Vulkan.jpg', links: ['wj_route_2', 'melen_craig_shop', 'melen_craig_director', 'melen_pier', 'melen_dive_center', 'melen_mask_workshop', 'melen_fiona_house', 'melen_albert_house'],
+        encounters: ['poliwag', 'tentacool'], hasHeal: true, region: 'west_johto'
+      },
+      'melen_craig_shop': {
+        name: 'Магазин Крейга', desc: 'Известный магазин коллекционера.',
+        image: '', links: ['melen'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'melen_craig_director': {
+        name: 'Комната директора', desc: 'Кабинет директора магазина.',
+        image: '', links: ['melen'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'melen_pier': {
+        name: 'Причал', desc: 'Причал в Мелене.',
+        image: '', links: ['melen'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'west_johto'
+      },
+      'melen_dive_center': {
+        name: 'Дайвинг-Центр', desc: 'Центр подводного плавания.',
+        image: '', links: ['melen'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'west_johto'
+      },
+      'melen_mask_workshop': {
+        name: 'Мастерская Масок', desc: 'Мастерская по изготовлению масок.',
+        image: '', links: ['melen'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'melen_fiona_house': {
+        name: 'Дом Фионы', desc: 'Дом тренера Фионы.',
+        image: '', links: ['melen'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
+      },
+      'melen_albert_house': {
+        name: 'Дом Альберта', desc: 'Дом исследователя Альберта.',
+        image: '', links: ['melen'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'west_johto'
       },
       'wj_route_3': {
-        name: 'Маршрут N3', desc: 'Третий маршрут Западного Джото.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['summer', 'stone_platform_wj'],
+        name: 'Маршрут №3', desc: 'Путь на восток от Саммера к каменным площадкам.',
+        image: 'wiki_images/generic_route.png', links: ['summer', 'stone_platform_wj'],
         encounters: ['machop', 'geodude'], hasHeal: false, region: 'west_johto'
       },
       'stone_platform_wj': {
-        name: 'Каменная площадка', desc: 'Ровная каменная платформа в саванне.',
+        name: 'Каменная площадка', desc: 'Ровная каменная платформа посреди саванны.',
         image: 'wiki_images/KamennayaPlowadka.jpg', links: ['wj_route_3', 'volcanic_plateau'],
         encounters: ['onix', 'geodude', 'rhyhorn'], hasHeal: false, region: 'west_johto'
       },
       'volcanic_plateau': {
-        name: 'Вулканическое плато', desc: 'Жаркое плато у потухшего вулкана.',
-        image: 'wiki_images/Vulkan.jpg', links: ['stone_platform_wj'],
+        name: 'Вулканическое плато', desc: 'Жаркое плато у потухшего вулкана. Огненные покемоны повсюду.',
+        image: 'wiki_images/generic_route.png', links: ['stone_platform_wj'],
         encounters: ['ponyta', 'magmar', 'growlithe'], hasHeal: false, region: 'west_johto'
       },
       'wj_route_4': {
-        name: 'Маршрут N4', desc: 'Четвёртый маршрут Западного Джото.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['summer', 'stream_wj'],
+        name: 'Маршрут №4', desc: 'Четвёртый маршрут — дорога на юг от Саммера к ручью.',
+        image: 'wiki_images/generic_route.png', links: ['summer', 'stream_wj'],
         encounters: ['spearow', 'rattata'], hasHeal: false, region: 'west_johto'
       },
       'stream_wj': {
-        name: 'Ручей', desc: 'Освежающий ручей в жаркой саванне.',
-        image: 'wiki_images/Ru4ey.jpg', links: ['wj_route_4'],
+        name: 'Ручей', desc: 'Освежающий ручей в жаркой саванне. Оазис для водных покемонов.',
+        image: 'wiki_images/Ru4ey.jpg', links: ['wj_route_4', 'abandoned_road_wj'],
         encounters: ['magikarp', 'poliwag', 'goldeen'], hasHeal: false, hasWater: true, region: 'west_johto'
       },
       'rocks_wj': {
-        name: 'Скалы (З.Джото)', desc: 'Скалистая гряда Западного Джото.',
+        name: 'Скалы (З.Джото)', desc: 'Скалистая гряда в Западном Джото. Диглетты изрыли здесь всё.',
         image: 'wiki_images/SkaliZD.jpg', links: ['wj_route_1'],
         encounters: ['geodude', 'onix', 'diglett'], hasHeal: false, region: 'west_johto'
+      },
+      'small_rock_wj': {
+        name: 'Небольшая скала', desc: 'Одинокая скала посреди саванны. Место обитания редких покемонов.',
+        image: '', links: ['wj_route_1'],
+        encounters: ['geodude', 'onix', 'aerodactyl'], hasHeal: false, region: 'west_johto'
+      },
+      'man_made_cave': {
+        name: 'Рукотворная пещера', desc: 'Искусственная пещера, вырытая шахтёрами. Лабиринт с сокровищами.',
+        image: 'wiki_images/generic_route.png', links: ['stone_platform_wj'],
+        encounters: ['zubat', 'geodude', 'onix', 'golbat'], hasHeal: false, region: 'west_johto'
+      },
+      'abandoned_road_wj': {
+        name: 'Заброшенная дорога (З.Джото)', desc: 'Старая дорога у ручья, ведущая в никуда.',
+        image: 'wiki_images/Zabroshennaja_doroga.jpg', links: ['stream_wj'],
+        encounters: ['rattata', 'spearow', 'mankey'], hasHeal: false, region: 'west_johto'
+      },
+      'empty_city': {
+        name: 'Опустевший город (Flёr)', desc: 'Древний заброшенный город Флёр. Доступ только после квеста и с запасом воды.',
+        image: 'wiki_images/Zabroshennoe_pomeste.jpg', links: ['wj_route_2'],
+        encounters: ['gastly', 'haunter', 'gengar', 'misdreavus'], hasHeal: false, region: 'west_johto'
+      },
+      'arena_wj': {
+        name: 'Арена Западного Джото', desc: 'Боевая арена под открытым небом. Место проведения турниров.',
+        image: '', links: ['summer'],
+        encounters: [], hasHeal: true, region: 'west_johto'
       }
     }
   },
@@ -362,199 +891,369 @@ const REGIONS = {
     name: 'Остров Селен',
     locations: {
       'ostaron': {
-        name: 'Остарон', desc: 'Столица острова Селен, благословлённая легендарным покемоном.',
-        image: 'wiki_images/Ostaron.jpg', links: ['sel_route_4', 'sel_route_5', 'sel_route_8'],
+        name: 'Остарон', desc: 'Столица Селена, благословлённая легендарным покемоном. Стадион Ледяных покемонов.',
+        image: 'wiki_images/Ostaron.jpg', links: ['sel_route_4', 'sel_route_5', 'sel_route_8', 'ostaron_pokecenter', 'ostaron_pokemarket', 'ostaron_bar', 'ostaron_cityhall', 'ostaron_ice_stadium'],
         encounters: [], hasHeal: true, region: 'selen_island'
       },
+      'ostaron_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Остароне.',
+        image: '', links: ['ostaron'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'selen_island'
+      },
+      'ostaron_pokemarket': {
+        name: 'Покемаркет', desc: 'Магазин товаров для тренеров.',
+        image: '', links: ['ostaron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'ostaron_bar': {
+        name: 'Бар Ледокол', desc: 'Популярный бар в портовом районе.',
+        image: '', links: ['ostaron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'ostaron_cityhall': {
+        name: 'Мэрия', desc: 'Здание мэрии Остарона.',
+        image: '', links: ['ostaron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'ostaron_ice_stadium': {
+        name: 'Боевой Стадион', desc: 'Арена боевых покемонов Чака.',
+        image: '', links: ['ostaron'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
       'sel_route_4': {
-        name: 'Маршрут 4 (Селен)', desc: 'Дорога от Остарона.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['ostaron', 'sel_route_5'],
+        name: 'Маршрут 4 (Селен)', desc: 'Дорога от столицы на юг острова.',
+        image: 'wiki_images/generic_route.png', links: ['ostaron', 'sel_route_5'],
         encounters: ['swinub', 'snorunt', 'delibird'], hasHeal: false, region: 'selen_island'
       },
       'sel_route_5': {
-        name: 'Маршрут 5 (Селен)', desc: 'Путь к Перекрёстку.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['ostaron', 'sel_route_4', 'crossroads_sel', 'abandoned_estate'],
+        name: 'Маршрут 5 (Селен)', desc: 'Центральный путь к Перекрёстку.',
+        image: 'wiki_images/generic_route.png', links: ['ostaron', 'sel_route_4', 'crossroads_sel', 'abandoned_estate'],
         encounters: ['swinub', 'bergmite'], hasHeal: false, region: 'selen_island'
       },
       'crossroads_sel': {
-        name: 'Перекрёсток', desc: 'Центральный перекрёсток дорог Селена.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['sel_route_5', 'sel_route_10', 'abandoned_road_sel', 'selen_forest'],
+        name: 'Перекрёсток', desc: 'Центральный перекрёсток дорог Селена — сердце транспортной сети.',
+        image: 'wiki_images/generic_route.png', links: ['sel_route_5', 'sel_route_10', 'abandoned_road_sel', 'selen_forest'],
         encounters: ['pidgey', 'spearow'], hasHeal: false, region: 'selen_island'
       },
       'sel_route_10': {
-        name: 'Маршрут 10 (Селен)', desc: 'Дорога к Сайрефу.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['crossroads_sel', 'sel_route_11', 'selen_forest'],
+        name: 'Маршрут 10 (Селен)', desc: 'Южная дорога к Сайрефу через леса.',
+        image: 'wiki_images/generic_route.png', links: ['crossroads_sel', 'sel_route_11', 'selen_forest'],
         encounters: ['swinub', 'delibird'], hasHeal: false, region: 'selen_island'
       },
       'sel_route_11': {
-        name: 'Маршрут 11 (Селен)', desc: 'Подход к пригороду Сайрефа.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['sel_route_10', 'sayref_suburb'],
+        name: 'Маршрут 11 (Селен)', desc: 'Подход к пригороду Сайрефа. Виднеются шпили города.',
+        image: 'wiki_images/generic_route.png', links: ['sel_route_10', 'sayref_suburb'],
         encounters: ['swinub', 'pidgey'], hasHeal: false, region: 'selen_island'
       },
       'sayref_suburb': {
-        name: 'Пригород Сайрефа', desc: 'Пригород с цифровым табло почёта.',
+        name: 'Пригород Сайрефа', desc: 'Пригород с цифровым табло почёта тренеров.',
         image: 'wiki_images/Prigorod_Sajrefa.jpg', links: ['sel_route_11', 'sayref'],
         encounters: ['swinub'], hasHeal: false, region: 'selen_island'
       },
       'sayref': {
-        name: 'Сайреф', desc: 'Второй по величине город Селена, соперничающий с Остароном.',
-        image: 'wiki_images/Sajref.jpg', links: ['sayref_suburb', 'sel_route_13'],
+        name: 'Сайреф', desc: 'Второй по величине город Селена. Снеговик-символ города.',
+        image: 'wiki_images/Sajref.jpg', links: ['sayref_suburb', 'sel_route_13', 'sel_route_16', 'sayref_pokemarket', 'sayref_pokecenter', 'sayref_air_stadium', 'sayref_cityhall'],
         encounters: [], hasHeal: true, region: 'selen_island'
       },
+      'sayref_pokemarket': {
+        name: 'Покемаркет', desc: 'Магазин товаров для тренеров.',
+        image: '', links: ['sayref'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'sayref_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Сайрефе.',
+        image: '', links: ['sayref'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'selen_island'
+      },
+      'sayref_air_stadium': {
+        name: 'Ледяной Стадион', desc: 'Арена ледяных покемонов Прайса.',
+        image: '', links: ['sayref'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'sayref_cityhall': {
+        name: 'Мэрия', desc: 'Здание мэрии Сайрефа.',
+        image: '', links: ['sayref'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
       'sel_route_13': {
-        name: 'Маршрут 13 (Селен)', desc: 'Путь к Восточному тракту.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['sayref', 'eastern_tract'],
+        name: 'Маршрут 13 (Селен)', desc: 'Путь к Восточному тракту и дальше к Эстайр сити.',
+        image: 'wiki_images/generic_route.png', links: ['sayref', 'eastern_tract'],
         encounters: ['pidgey', 'spearow'], hasHeal: false, region: 'selen_island'
       },
       'eastern_tract': {
-        name: 'Восточный тракт', desc: 'Восточная дорога к Эстайр сити.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['sel_route_13', 'sel_route_14'],
-        encounters: ['tauros', 'pidgeotto'], hasHeal: false, region: 'selen_island'
+        name: 'Восточный тракт', desc: 'Главная восточная магистраль Селена.',
+        image: 'wiki_images/generic_route.png', links: ['sayref', 'sel_route_14'],
+        encounters: ['tauros', 'pidgeotto'], hasHeal: false, hasWater: false, region: 'selen_island'
       },
       'sel_route_14': {
-        name: 'Маршрут 14 (Селен)', desc: 'Дорога к Эстайр сити.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['eastern_tract', 'estaire_city'],
+        name: 'Маршрут 14 (Селен)', desc: 'Подъездная дорога к торговому центру — Эстайр сити.',
+        image: 'wiki_images/generic_route.png', links: ['eastern_tract', 'estaire_city'],
         encounters: ['pidgey', 'rattata'], hasHeal: false, region: 'selen_island'
       },
       'estaire_city': {
         name: 'Эстайр сити', desc: 'Торговое сердце Селена с верфью, супермаркетом и аукционом.',
-        image: 'wiki_images/Estajr_siti.jpg', links: ['sel_route_14', 'sel_route_15'],
+        image: 'wiki_images/Estajr_siti.jpg', links: ['sel_route_14', 'sel_route_15', 'sel_route_17', 'estaire_pokecenter', 'estaire_daycare_center', 'estaire_supermarket', 'estaire_water_stadium', 'estaire_south_pier', 'estaire_museum', 'estaire_private_shop'],
         encounters: [], hasHeal: true, region: 'selen_island'
+      },
+      'estaire_pokecenter': {
+        name: 'Покецентр', desc: 'Центр лечения покемонов в Эстайр сити.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: true, hasWater: false, region: 'selen_island'
+      },
+      'estaire_daycare_center': {
+        name: 'Центр передержки', desc: 'Центр временной передержки.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'estaire_supermarket': {
+        name: 'Супермаркет', desc: 'Крупный супермаркет.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'estaire_supermarket_cozy': {
+        name: 'Уютные товары', desc: 'Отдел товаров для дома.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'estaire_supermarket_upper': {
+        name: 'Верхние этажи', desc: 'Верхние этажи супермаркета.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'estaire_water_stadium': {
+        name: 'Стадион водных покемонов', desc: 'Неработающий стадион водного типа.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'selen_island'
+      },
+      'estaire_south_pier': {
+        name: 'Южный причал Селена', desc: 'Южный причал острова.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: true, region: 'selen_island'
+      },
+      'estaire_museum': {
+        name: 'Музей истории', desc: 'Музей истории острова Селен.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
+      },
+      'estaire_private_shop': {
+        name: 'Частный магазин', desc: 'Эксклюзивный частный магазин.',
+        image: '', links: ['estaire_city'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'selen_island'
       },
       'sel_route_15': {
         name: 'Маршрут 15 (Селен)', desc: 'Живописная дорога у окраин Эстайра.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['estaire_city'],
+        image: 'wiki_images/generic_route.png', links: ['estaire_city'],
         encounters: ['pidgey', 'spearow', 'tauros'], hasHeal: false, region: 'selen_island'
       },
+      'sel_route_16': {
+        name: 'Маршрут 16 (Селен)', desc: 'Дорога от Сайрефа к Древней горе.',
+        image: 'wiki_images/generic_route.png', links: ['sayref', 'ancient_mountain', 'pasture'],
+        encounters: ['snorunt', 'swinub', 'bergmite'], hasHeal: false, region: 'selen_island'
+      },
+      'sel_route_17': {
+        name: 'Маршрут 17 (Селен)', desc: 'Дорога от Эстайра к мысу на север.',
+        image: 'wiki_images/generic_route.png', links: ['estaire_city', 'cape_sel'],
+        encounters: ['wingull', 'pidgeotto'], hasHeal: false, region: 'selen_island'
+      },
+      'sel_route_18': {
+        name: 'Маршрут 18 (Селен)', desc: 'Северная дорога к причалу.',
+        image: 'wiki_images/generic_route.png', links: ['cape_sel', 'north_pier_sel'],
+        encounters: ['pidgey', 'rattata'], hasHeal: false, region: 'selen_island'
+      },
+      'sel_route_3': {
+        name: 'Маршрут 3 (Селен)', desc: 'Западная дорога от Остарона к побережью.',
+        image: 'wiki_images/generic_route.png', links: ['ostaron', 'shore_sel'],
+        encounters: ['swinub', 'delibird', 'pidgey'], hasHeal: false, region: 'selen_island'
+      },
+      'sel_route_7': {
+        name: 'Маршрут 7 (Селен)', desc: 'Путь к Прибрежью с живописными видами.',
+        image: 'wiki_images/generic_route.png', links: ['crossroads_sel', 'coast_sel'],
+        encounters: ['wingull', 'krabby', 'magikarp'], hasHeal: false, hasWater: true, region: 'selen_island'
+      },
       'sel_route_8': {
-        name: 'Маршрут 8 (Селен)', desc: 'Дорога от Остарона в ледяные горы.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['ostaron', 'ice_mountain'],
+        name: 'Маршрут 8 (Селен)', desc: 'Заснеженная дорога в ледяные горы.',
+        image: 'wiki_images/generic_route.png', links: ['ostaron', 'ice_mountain'],
         encounters: ['snorunt', 'bergmite', 'cubchoo'], hasHeal: false, region: 'selen_island'
       },
       'ice_mountain': {
-        name: 'Ледяная гора', desc: 'Заснеженная гора с ледяными пещерами.',
+        name: 'Ледяная гора', desc: 'Величественная заснеженная гора с ледяными пещерами.',
         image: 'wiki_images/Ledjanaja_gora.jpg', links: ['sel_route_8', 'crystal_lake', 'mountain_village'],
         encounters: ['snorunt', 'bergmite', 'lapras', 'articuno'], hasHeal: false, region: 'selen_island'
       },
       'crystal_lake': {
-        name: 'Кристальное озеро', desc: 'Замёрзшее кристально чистое озеро.',
+        name: 'Кристальное озеро', desc: 'Замёрзшее кристально чистое озеро. Ледяные покемоны процветают.',
         image: 'wiki_images/Кристальная_пещера.jpg', links: ['ice_mountain'],
         encounters: ['seel', 'shellder', 'lapras'], hasHeal: false, hasWater: true, region: 'selen_island'
       },
+      'mountain_village': {
+        name: 'Горная деревушка', desc: 'Уютная деревня высоко в горах Селена.',
+        image: 'wiki_images/generic_route.png', links: ['ice_mountain'],
+        encounters: [], hasHeal: true, region: 'selen_island'
+      },
       'abandoned_estate': {
-        name: 'Заброшенное поместье', desc: 'Мрачное поместье, где обитают призрачные покемоны.',
-        image: 'wiki_images/Zabroshennoe_pomest\'e.jpg', links: ['sel_route_5'],
+        name: 'Заброшенное поместье', desc: 'Мрачное поместье, населённое призрачными покемонами.',
+        image: '', links: ['sel_route_5'],
         encounters: ['gastly', 'haunter', 'misdreavus'], hasHeal: false, region: 'selen_island'
       },
       'abandoned_road_sel': {
-        name: 'Заброшенная дорога', desc: 'Старая заброшенная дорога на Селене.',
-        image: 'wiki_images/Zabroshennaja_doroga.jpg', links: ['crossroads_sel'],
+        name: 'Заброшенная дорога', desc: 'Старая заброшенная дорога, заросшая травой.',
+        image: 'wiki_images/generic_route.png', links: ['crossroads_sel'],
         encounters: ['rattata', 'grimer', 'koffing'], hasHeal: false, region: 'selen_island'
       },
       'selen_forest': {
-        name: 'Лес Селена', desc: 'Густой лес в центре острова.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['crossroads_sel', 'sel_route_10'],
+        name: 'Лес Селена', desc: 'Густой лес в сердце острова. Огромное разнообразие травяных покемонов.',
+        image: 'wiki_images/generic_route.png', links: ['crossroads_sel', 'sel_route_10'],
         encounters: ['caterpie', 'weedle', 'oddish', 'bellsprout'], hasHeal: false, region: 'selen_island'
       },
-      'mountain_village': {
-        name: 'Горная деревушка', desc: 'Маленькая деревня высоко в горах Селена.',
-        image: 'wiki_images/Ostaron.jpg', links: ['ice_mountain'],
-        encounters: [], hasHeal: true, region: 'selen_island'
+      'ancient_mountain': {
+        name: 'Древняя гора', desc: 'Древняя гора с наскальными рисунками покемонов.',
+        image: 'wiki_images/generic_route.png', links: ['sel_route_16', 'plateau_sel'],
+        encounters: ['geodude', 'onix', 'aerodactyl', 'relicanth'], hasHeal: false, region: 'selen_island'
+      },
+      'plateau_sel': {
+        name: 'Плато', desc: 'Высокогорное плато с разреженным воздухом.',
+        image: 'wiki_images/generic_route.png', links: ['ancient_mountain'],
+        encounters: ['fearow', 'skarmory', 'gligar'], hasHeal: false, region: 'selen_island'
+      },
+      'pasture': {
+        name: 'Пастбище', desc: 'Зелёное пастбище с пасущимися покемонами.',
+        image: '', links: ['sel_route_16'],
+        encounters: ['mareep', 'tauros', 'miltank'], hasHeal: false, region: 'selen_island'
+      },
+      'antique_house': {
+        name: 'Антикварный дом', desc: 'Старинный дом с редкими антикварными предметами для покемонов.',
+        image: '', links: ['crossroads_sel'],
+        encounters: [], hasHeal: false, region: 'selen_island'
+      },
+      'shore_sel': {
+        name: 'Берег', desc: 'Живописный западный берег Селена с песчаными пляжами.',
+        image: '', links: ['sel_route_3', 'azure_shoreline'],
+        encounters: ['wingull', 'krabby', 'shellder'], hasHeal: false, hasWater: true, region: 'selen_island'
+      },
+      'azure_shoreline': {
+        name: 'Лазурная заводь', desc: 'Красивейшая лазурная бухта с коралловыми рифами.',
+        image: '', links: ['shore_sel', 'coast_sel'],
+        encounters: ['magikarp', 'goldeen', 'staryu', 'corsola'], hasHeal: false, hasWater: true, region: 'selen_island'
+      },
+      'coast_sel': {
+        name: 'Прибрежье', desc: 'Живописное прибрежье южного Селена.',
+        image: '', links: ['sel_route_7', 'azure_shoreline'],
+        encounters: ['tentacool', 'wingull', 'magikarp'], hasHeal: false, hasWater: true, region: 'selen_island'
+      },
+      'cape_sel': {
+        name: 'Мыс', desc: 'Северный мыс Селена с маяком. Ветреное место.',
+        image: '', links: ['sel_route_17', 'sel_route_18'],
+        encounters: ['wingull', 'pelipper', 'fearow'], hasHeal: false, region: 'selen_island'
+      },
+      'north_pier_sel': {
+        name: 'Северный причал Селена', desc: 'Причал на северной оконечности острова.',
+        image: '', links: ['sel_route_18', 'speedboat_sel'],
+        encounters: ['tentacool', 'magikarp', 'remoraid'], hasHeal: false, hasWater: true, region: 'selen_island'
+      },
+      'speedboat_sel': {
+        name: 'Катер', desc: 'Скоростной катер до Оливина.',
+        image: '', links: ['north_pier_sel'],
+        encounters: [], hasHeal: false, region: 'selen_island'
+      },
+      'winding_trail': {
+        name: 'Извилистая тропа', desc: 'Извилистая горная тропа с крутыми поворотами.',
+        image: 'wiki_images/generic_route.png', links: ['ancient_mountain'],
+        encounters: ['geodude', 'machop', 'meditite'], hasHeal: false, region: 'selen_island'
+      },
+      'chasm_sel': {
+        name: 'Провал', desc: 'Глубокий провал в земле — вход в подземный мир покемонов.',
+        image: '', links: ['abandoned_road_sel'],
+        encounters: ['zubat', 'geodude', 'diglett', 'onix'], hasHeal: false, region: 'selen_island'
+      },
+      'old_road_sel': {
+        name: 'Старая дорога', desc: 'Древняя каменная дорога неизвестного происхождения.',
+        image: 'wiki_images/generic_route.png', links: ['chasm_sel', 'ancient_mountain'],
+        encounters: ['rattata', 'spearow', 'sandshrew'], hasHeal: false, region: 'selen_island'
       }
     }
   },
-  tevas_islands: {
-    name: 'Теваские острова',
+  southern_archipelago: {
+    name: 'Южный Архипелаг',
     locations: {
-      'margarita': {
-        name: 'Маргарита', desc: 'Столица острова Селти, наполовину разрушенная катастрофой.',
-        image: 'wiki_images/Маргарита.jpg', links: ['harbor', 'port_square', 'azure_shore'],
-        encounters: [], hasHeal: true, region: 'tevas_islands'
+      'il_de_far': {
+        name: 'Иль де Фар', desc: 'Главный портовый город Южного Архипелага на острове Сифам. Отсюда начинается исследование региона.',
+        image: 'wiki_images/Маргарита.jpg', links: ['rocky_beach_sa', 'sandy_trail', 'ferry_sa', 'ilde_stadium'],
+        encounters: [], hasHeal: true, hasWater: true, region: 'southern_archipelago'
       },
-      'harbor': {
-        name: 'Гавань', desc: 'Портовая гавань острова Селти.',
-        image: 'wiki_images/Гавань.jpg', links: ['margarita', 'sea_road'],
-        encounters: ['wingull', 'magikarp', 'tentacool'], hasHeal: false, hasWater: true, region: 'tevas_islands'
+      'ilde_stadium': {
+        name: 'Драконий Стадион', desc: 'Арена драконьих покемонов Клер.',
+        image: '', links: ['il_de_far'], encounters: [],
+        hasHeal: false, hasWater: false, region: 'southern_archipelago'
       },
-      'port_square': {
-        name: 'Припортовая площадь', desc: 'Оживлённая площадь у порта.',
-        image: 'wiki_images/Припортовая_площадь.jpg', links: ['margarita', 'marina'],
-        encounters: [], hasHeal: false, hasWater: true, region: 'tevas_islands'
+      'sen_aspir': {
+        name: 'Сен Аспир', desc: 'Город на острове Синнабар у подножия вулкана. Стадион для битв с покемонами.',
+        image: '', links: ['foothills_sinnabung', 'rocky_bay'],
+        encounters: [], hasHeal: true, region: 'southern_archipelago'
       },
-      'marina': {
-        name: 'Марина', desc: 'Прибрежный городок на острове Селти.',
-        image: 'wiki_images/Марина.jpg', links: ['port_square', 'abandoned_beach'],
-        encounters: ['wingull', 'krabby'], hasHeal: true, hasWater: true, region: 'tevas_islands'
+      'rocky_beach_sa': {
+        name: 'Каменистый пляж', desc: 'Пляж усыпанный галькой и ракушками. Водные покемоны прячутся в камнях.',
+        image: 'wiki_images/Морская_дорога.jpg', links: ['il_de_far', 'strait_entre_iles', 'shallow_waters_sa'],
+        encounters: ['shellder', 'krabby', 'staryu'], hasHeal: false, hasWater: true, region: 'southern_archipelago'
       },
-      'abandoned_beach': {
-        name: 'Заброшенный пляж', desc: 'Пустынный пляж с редкими покемонами.',
-        image: 'wiki_images/Заброшенный_пляж.jpg', links: ['marina'],
-        encounters: ['shellder', 'staryu', 'krabby'], hasHeal: false, hasWater: true, region: 'tevas_islands'
+      'sandy_trail': {
+        name: 'Песчаная тропа', desc: 'Песчаная тропа через дюны вглубь острова Сифам.',
+        image: 'wiki_images/Каменная_тропа.jpg', links: ['il_de_far', 'old_park_sa'],
+        encounters: ['sandshrew', 'diglett', 'trapinch'], hasHeal: false, region: 'southern_archipelago'
       },
-      'sea_road': {
-        name: 'Морская дорога', desc: 'Дорога вдоль морского побережья.',
-        image: 'wiki_images/Морская_дорога.jpg', links: ['harbor', 'shallow_waters'],
-        encounters: ['wingull', 'pelipper', 'tentacool'], hasHeal: false, hasWater: true, region: 'tevas_islands'
+      'ferry_sa': {
+        name: 'Паром', desc: 'Паромная переправа между островами архипелага.',
+        image: 'wiki_images/Гавань.jpg', links: ['il_de_far', 'sen_aspir'],
+        encounters: ['magikarp', 'tentacool', 'wingull'], hasHeal: false, hasWater: true, region: 'southern_archipelago'
       },
-      'shallow_waters': {
-        name: 'Мелководье', desc: 'Тёплые мелкие воды с разнообразной фауной.',
-        image: 'wiki_images/Мелководье.jpg', links: ['sea_road', 'golden_forest'],
-        encounters: ['magikarp', 'poliwag', 'goldeen', 'staryu'], hasHeal: false, hasWater: true, region: 'tevas_islands'
+      'strait_entre_iles': {
+        name: 'Пролив Антр-Иль', desc: 'Узкий пролив между островами архипелага.',
+        image: '', links: ['rocky_beach_sa', 'coral_grove'],
+        encounters: ['tentacool', 'magikarp', 'horsea', 'chinchou'], hasHeal: false, hasWater: true, region: 'southern_archipelago'
       },
-      'golden_forest': {
-        name: 'Золотой лес', desc: 'Лес с золотистой листвой, полный редких покемонов.',
-        image: 'wiki_images/Золотой_лес.jpg', links: ['shallow_waters', 'forest_glade'],
-        encounters: ['caterpie', 'weedle', 'oddish', 'pikachu'], hasHeal: false, region: 'tevas_islands'
+      'coral_grove': {
+        name: 'Коралловая роща', desc: 'Подводная коралловая роща с уникальными покемонами.',
+        image: 'wiki_images/Мелководье.jpg', links: ['strait_entre_iles'],
+        encounters: ['corsola', 'staryu', 'shellder', 'clamperl'], hasHeal: false, hasWater: true, region: 'southern_archipelago'
       },
-      'forest_glade': {
-        name: 'Лесная поляна', desc: 'Светлая поляна в глубине Золотого леса.',
-        image: 'wiki_images/Лесная_поляна.jpg', links: ['golden_forest', 'wild_hives'],
-        encounters: ['oddish', 'bellsprout', 'paras'], hasHeal: false, region: 'tevas_islands'
+      'shallow_waters_sa': {
+        name: 'Мелководье', desc: 'Тёплые мелкие воды с большим разнообразием покемонов.',
+        image: '', links: ['rocky_beach_sa', 'flooded_grotto'],
+        encounters: ['magikarp', 'poliwag', 'goldeen', 'staryu'], hasHeal: false, hasWater: true, region: 'southern_archipelago'
       },
-      'wild_hives': {
-        name: 'Дикие улья', desc: 'Рои диких покемонов-насекомых.',
-        image: 'wiki_images/Дикие_улья.jpg', links: ['forest_glade', 'stone_path'],
-        encounters: ['weedle', 'caterpie', 'beedrill', 'butterfree'], hasHeal: false, region: 'tevas_islands'
+      'flooded_grotto': {
+        name: 'Затопленный грот', desc: 'Полузатопленная пещера, куда можно попасть только во время отлива.',
+        image: '', links: ['shallow_waters_sa'],
+        encounters: ['zubat', 'wooper', 'quagsire', 'chinchou'], hasHeal: false, region: 'southern_archipelago'
       },
-      'stone_path': {
-        name: 'Каменная тропа', desc: 'Вымощенная камнем тропа через степь.',
-        image: 'wiki_images/Каменная_тропа.jpg', links: ['wild_hives', 'steppe_zone'],
-        encounters: ['geodude', 'onix'], hasHeal: false, region: 'tevas_islands'
+      'foothills_sinnabung': {
+        name: 'Предгорье Синнабунга', desc: 'Предгорье вулкана Синнабунг на острове Синнабар.',
+        image: '', links: ['sen_aspir', 'volcanic_caves'],
+        encounters: ['growlithe', 'ponyta', 'geodude', 'rhyhorn'], hasHeal: false, region: 'southern_archipelago'
       },
-      'steppe_zone': {
-        name: 'Степная зона', desc: 'Бескрайняя степь с дикими покемонами.',
-        image: 'wiki_images/Степная_зона.jpg', links: ['stone_path', 'forbidden_route'],
-        encounters: ['ponyta', 'growlithe', 'tauros', 'spearow'], hasHeal: false, region: 'tevas_islands'
+      'volcanic_caves': {
+        name: 'Вулканические пещеры', desc: 'Горячие пещеры в жерле потухшего вулкана.',
+        image: 'wiki_images/generic_route.png', links: ['foothills_sinnabung'],
+        encounters: ['magmar', 'slugma', 'torkoal', 'numel'], hasHeal: false, region: 'southern_archipelago'
       },
-      'forbidden_route': {
-        name: 'Запретный маршрут', desc: 'Опасный маршрут, закрытый для обычных тренеров.',
-        image: 'wiki_images/Запретный_маршрут.jpg', links: ['steppe_zone', 'trash_spot'],
-        encounters: ['grimer', 'muk', 'koffing', 'weezing'], hasHeal: false, region: 'tevas_islands'
+      'rocky_bay': {
+        name: 'Скалистый залив', desc: 'Живописный залив со скалистыми берегами.',
+        image: '', links: ['sen_aspir', 'orlua_estate'],
+        encounters: ['tentacool', 'magikarp', 'krabby'], hasHeal: false, hasWater: true, region: 'southern_archipelago'
       },
-      'trash_spot': {
-        name: 'Мусорное пятно', desc: 'Загрязнённая зона с токсичными покемонами.',
-        image: 'wiki_images/Мусорное_пятно.jpg', links: ['forbidden_route', 'brick_building'],
-        encounters: ['grimer', 'koffing', 'trubbish'], hasHeal: false, region: 'tevas_islands'
+      'old_park_sa': {
+        name: 'Старый парк', desc: 'Заброшенный парк развлечений на Сифаме.',
+        image: 'wiki_images/Золотой_лес.jpg', links: ['sandy_trail'],
+        encounters: ['gastly', 'misdreavus', 'shuppet'], hasHeal: false, region: 'southern_archipelago'
       },
-      'brick_building': {
-        name: 'Кирпичное здание', desc: 'Старое кирпичное здание, приют редких покемонов.',
-        image: 'wiki_images/Кирпичное_здание.jpg', links: ['trash_spot'],
-        encounters: ['voltorb', 'magnemite', 'porygon'], hasHeal: false, region: 'tevas_islands'
+      'ice_cave_sa': {
+        name: 'Ледяная пещера', desc: 'Аномально холодная пещера посреди тропического архипелага.',
+        image: 'wiki_images/generic_route.png', links: ['foothills_sinnabung'],
+        encounters: ['snorunt', 'spheal', 'sneasel', 'lapras'], hasHeal: false, region: 'southern_archipelago'
       },
-      'azure_shore': {
-        name: 'Лазурный берег', desc: 'Тропический берег на острове Лагу-Сен.',
-        image: 'wiki_images/Vermilion.jpg', links: ['margarita', 'paradise_lands', 'old_pier'],
-        encounters: ['exeggcute', 'lapras', 'wingull'], hasHeal: false, hasWater: true, region: 'tevas_islands'
-      },
-      'paradise_lands': {
-        name: 'Райские земли', desc: 'Нетронутый райский уголок Лагу-Сена.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['azure_shore'],
-        encounters: ['chansey', 'tauros', 'tropius'], hasHeal: false, region: 'tevas_islands'
-      },
-      'old_pier': {
-        name: 'Старый причал', desc: 'Полуразрушенный причал на острове Лагу-Сен.',
-        image: 'wiki_images/Doroga_2.jpg', links: ['azure_shore'],
-        encounters: ['magikarp', 'tentacool', 'remoraid'], hasHeal: false, hasWater: true, region: 'tevas_islands'
+      'orlua_estate': {
+        name: 'Поместье Орлуа', desc: 'Роскошное поместье с привидениями. Мрачные тайны и редкие покемоны.',
+        image: '', links: ['rocky_bay'],
+        encounters: ['gastly', 'haunter', 'gengar', 'rotom'], hasHeal: false, region: 'southern_archipelago'
       }
     }
   }
@@ -579,17 +1278,16 @@ const TRANSPORT_HUBS = {
     { label: '🚢 Паром в Канто (Вермилион)', targetRegion: 'kanto', targetLoc: 'vermilion', ticket: 'ticketBoatJK' },
     { label: '🚤 Катер на о.Селен (Остарон)', targetRegion: 'selen_island', targetLoc: 'ostaron', ticket: 'ticketBoatJS' },
   ],
-  'vermilion': [
+  'vermilion_port': [
     { label: '🚢 Паром в Джото (Оливин)', targetRegion: 'east_johto', targetLoc: 'olivine', ticket: 'ticketBoatJK' },
-    { label: '⛴ Паром на Теваские о-ва (Маргарита)', targetRegion: 'tevas_islands', targetLoc: 'margarita', ticket: 'ticketFerryKT' },
   ],
-  'warhall': [
+  'warhall_bus_station': [
     { label: '🚌 Автобус в Зап.Джото (Саммер)', targetRegion: 'west_johto', targetLoc: 'summer', ticket: 'ticketBusJ' },
   ],
   'summer': [
     { label: '🚌 Автобус в Вост.Джото (Вархолл)', targetRegion: 'east_johto', targetLoc: 'warhall', ticket: 'ticketBusJ' },
   ],
-  'saffron': [
+  'saffron_east_station': [
     { label: '🚂 Поезд в Джото (Голденрод)', targetRegion: 'east_johto', targetLoc: 'goldenrod', ticket: 'ticketTrainJK' },
   ],
   'goldenrod': [
@@ -598,7 +1296,14 @@ const TRANSPORT_HUBS = {
   'ostaron': [
     { label: '🚤 Катер в Джото (Оливин)', targetRegion: 'east_johto', targetLoc: 'olivine', ticket: 'ticketBoatJS' },
   ],
+  'fuchsia_beach_pier': [
+    { label: '⛴ Паром в Южн. Архипелаг (Иль де Фар)', targetRegion: 'southern_archipelago', targetLoc: 'il_de_far', ticket: 'ticketFerryKS' },
+  ],
+  'il_de_far': [
+    { label: '⛴ Паром в Канто (Фуксия)', targetRegion: 'kanto', targetLoc: 'fuchsia_city', ticket: 'ticketFerryKS' },
+  ],
 };
+
 
 function travelToRegion(targetRegion, targetLoc, ticketItemId) {
   if (!hasItem(ticketItemId)) {
@@ -615,8 +1320,13 @@ function travelToRegion(targetRegion, targetLoc, ticketItemId) {
     schedule = [8, 12, 16, 20];
   } else if (ticketItemId === 'ticketBusJ') {
     schedule = [9, 13, 17, 21];
-  } else {
-    schedule = [0, 4, 8, 12, 16, 20];
+  } else if (ticketItemId === 'ticketFerryKS') {
+    schedule = [15]; // Only at 15:00
+    const day = new Date().getDate();
+    if (day % 2 === 0) {
+      showToast('Паром в Южный Архипелаг ходит только по нечётным числам месяца!', true);
+      return;
+    }
   }
 
   if (!schedule.includes(currentHour)) {
@@ -931,7 +1641,7 @@ const ITEMS = [
   { id: 'ticketTrainJK', nameRu: 'Билет на поезд Джото-Канто', category: 'tickets', desc: 'Быстрое путешествие. 1 час.', sprite: '163t.gif', spriteType: 'local', price: 200000, sellPrice: 100000, isUsable: false, isBall: false, implemented: true },
   { id: 'ticketBoatJS', nameRu: 'Билет на катер Джото-о.Селен', category: 'tickets', desc: 'Путешествие на остров Селен. 2 часа.', sprite: '192.gif', spriteType: 'local', price: 500000, sellPrice: 250000, isUsable: false, isBall: false, implemented: true },
   { id: 'ticketBusJ', nameRu: 'Билет на автобус по Джото', category: 'tickets', desc: 'Путешествие по Джото. 2 часа.', sprite: '285.gif', spriteType: 'local', price: 612000, sellPrice: 306000, isUsable: false, isBall: false, implemented: true },
-  { id: 'ticketFerryKT', nameRu: 'Билет на паром Канто-Тева', category: 'tickets', desc: 'На Теваские острова. 1 час.', sprite: '435.gif', spriteType: 'local', price: 470000, sellPrice: 235000, isUsable: false, isBall: false, implemented: true },
+  { id: 'ticketFerryKS', nameRu: 'Билет на паром Канто-Южн.Архипелаг', category: 'tickets', desc: 'В Южный Архипелаг. Нечётные числа месяца, 15:00.', sprite: '435.gif', spriteType: 'local', price: 470000, sellPrice: 235000, isUsable: false, isBall: false, implemented: true },
   { id: 'ticketPlaneJK', nameRu: 'Билет на самолет Джото-Канто', category: 'tickets', desc: 'Мгновенный перелет. 10 мин.', sprite: '180.gif', spriteType: 'local', price: 0, sellPrice: 50000, isUsable: false, isBall: false, implemented: true },
   { id: 'ticketPlaneEJS', nameRu: 'Билет на самолет Вост.Джото-о.Селен', category: 'tickets', desc: 'Мгновенный перелет.', sprite: '193.gif', spriteType: 'local', price: 0, sellPrice: 50000, isUsable: false, isBall: false, implemented: true },
   { id: 'ticketPlaneKS', nameRu: 'Билет на самолет Канто-о.Селен', category: 'tickets', desc: 'Мгновенный перелет.', sprite: '194.gif', spriteType: 'local', price: 0, sellPrice: 50000, isUsable: false, isBall: false, implemented: true },
@@ -1241,98 +1951,6 @@ const NPC_DATA = {
       { id: 'oak_research_2', type: 'collect_items', targetItem: 'parasSpores', targetQty: 2, desc: 'Принесите 2 Спора Параса', rewardMoney: 800, rewardItem: 'candy', rewardQty: 3, prereqQuest: 'oak_research_1' },
     ],
   },
-  'brock_gym': {
-    id: 'brock_gym', name: 'Брок', sprite: '⛏', location: 'pewter_city',
-    dialog: {
-      greet: 'Я Брок, лидер зала Пьютера. Каменные покемоны — моя страсть!',
-      default: 'Приходи сразиться, когда будешь готов.',
-      quest_offer: 'Принеси мне {target} {item} для изучения каменных покемонов.',
-      quest_complete: 'Великолепно! Ты настоящий тренер!',
-      quest_incomplete: 'Нужно больше образцов породы...',
-    },
-    quests: [
-      { id: 'brock_rocks', type: 'collect_items', targetItem: 'rockSample', targetQty: 5, desc: 'Принесите Броку 5 Образцов породы', rewardMoney: 600, rewardItem: 'greatBall', rewardQty: 3, prereqQuest: null },
-    ],
-  },
-  'misty_gym': {
-    id: 'misty_gym', name: 'Мисти', sprite: '💧', location: 'cerulean_city',
-    dialog: {
-      greet: 'Привет! Я Мисти, лидер зала Церулина! Обожаю водных покемонов!',
-      default: 'Водные покемоны самые элегантные!',
-      quest_offer: 'Найди для меня {target} {item}. Это для моего аквариума!',
-      quest_complete: 'Спасибо! Кристаллы прекрасно смотрятся в воде!',
-      quest_incomplete: 'Мне нужно больше кристаллов...',
-    },
-    quests: [
-      { id: 'misty_crystals', type: 'collect_items', targetItem: 'crystalShard', targetQty: 3, desc: 'Принесите Мисти 3 Осколка кристалла', rewardMoney: 500, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null },
-    ],
-  },
-  'surge_gym': {
-    id: 'surge_gym', name: 'Лейтенант Сёрдж', sprite: '⚡', location: 'vermilion',
-    dialog: {
-      greet: 'Ха! Ещё один салага. Я лейтенант Сёрдж!',
-      default: 'Электрические покемоны спасли меня на войне!',
-      quest_offer: 'Солдат, мне нужны магнитные детали. Принеси {target} {item}!',
-      quest_complete: 'Отлично, солдат! Держи награду!',
-      quest_incomplete: 'Где детали, солдат?!',
-    },
-    quests: [
-      { id: 'surge_magnets', type: 'collect_items', targetItem: 'magnemiteNut', targetQty: 4, desc: 'Принесите Сёрджу 4 Магнитных гайки', rewardMoney: 700, rewardItem: 'thunderStone', rewardQty: 1, prereqQuest: null },
-    ],
-  },
-  'erika_gym': {
-    id: 'erika_gym', name: 'Эрика', sprite: '🌿', location: 'celadon_city',
-    dialog: {
-      greet: 'Добро пожаловать. Я Эрика, лидер Селадона.',
-      default: 'Травяные покемоны прекрасны, не так ли?',
-      quest_offer: 'Моим растениям нужны удобрения. Принеси {target} {item}.',
-      quest_complete: 'Чудесно! Ты заботишься о природе.',
-      quest_incomplete: 'Растения ждут...',
-    },
-    quests: [
-      { id: 'erika_plants', type: 'collect_items', targetItem: 'plantSample', targetQty: 4, desc: 'Принесите Эрике 4 Образца растений', rewardMoney: 600, rewardItem: 'leafStone', rewardQty: 1, prereqQuest: null },
-    ],
-  },
-  'koga_gym': {
-    id: 'koga_gym', name: 'Кога', sprite: '☠', location: 'fuchsia_city',
-    dialog: {
-      greet: 'Тсс... Я Кога, мастер ядов и ниндзя.',
-      default: 'Яд — искусство, а не оружие.',
-      quest_offer: 'Мне нужны ядовитые компоненты. Принеси {target} {item}.',
-      quest_complete: 'Превосходно! Ты не так прост!',
-      quest_incomplete: 'Яд ещё не собран...',
-    },
-    quests: [
-      { id: 'koga_venom', type: 'collect_items', targetItem: 'seviperVenom', targetQty: 2, desc: 'Принесите Коге 2 Яда Сивайпера', rewardMoney: 900, rewardItem: 'fullRestore', rewardQty: 2, prereqQuest: null },
-    ],
-  },
-  'blaine_gym': {
-    id: 'blaine_gym', name: 'Блейн', sprite: '🔥', location: 'cinnabar_island',
-    dialog: {
-      greet: 'Ха-ха! Я Блейн, учёный и лидер Синнабара!',
-      default: 'Огонь — это наука!',
-      quest_offer: 'Для моего вулканического эксперимента нужны {target} {item}.',
-      quest_complete: 'Великолепно! Наука побеждает!',
-      quest_incomplete: 'Образцы ещё не готовы...',
-    },
-    quests: [
-      { id: 'blaine_fire', type: 'collect_items', targetItem: 'lavaCore', targetQty: 3, desc: 'Принесите Блейну 3 Ядра магмы', rewardMoney: 1000, rewardItem: 'fireStone', rewardQty: 1, prereqQuest: null },
-    ],
-  },
-  'celadon_trader': {
-    id: 'celadon_trader', name: 'Торговец', sprite: '💼', location: 'celadon_city',
-    dialog: {
-      greet: 'У меня лучшие товары в Канто! Интересует обмен?',
-      default: 'Заходи, если найдёшь что-то интересное.',
-      quest_offer: 'Я коллекционирую самородки. Принеси мне {target} {item}.',
-      quest_complete: 'Вот это находка! Держи редкий предмет!',
-      quest_incomplete: 'Приноси когда найдёшь...',
-    },
-    quests: [
-      { id: 'trader_amber', type: 'collect_items', targetItem: 'goldNugget', targetQty: 3, desc: 'Принесите Торговцу 3 Самородка', rewardMoney: 2000, rewardItem: 'sunStone', rewardQty: 1, prereqQuest: null },
-    ],
-  },
-
   // Nurse Joy in Pokemon Center
   'joy_pokecenter': {
     id: 'joy_pokecenter', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'pokecenter',
@@ -1354,23 +1972,394 @@ const NPC_DATA = {
   },
 
   // Tutorial NPC at starting location
-  'professor_tutorial': {
-    id: 'professor_tutorial', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'pallet_town',
-    dialog: {
-      greet: 'Здравствуй, юный тренер! Добро пожаловать в мир Покематрицы! Я помогу тебе освоиться.',
-      default: 'Возвращайся когда выполнишь текущее задание. Удачи!',
-      quest_offer: 'Я подготовил для тебя обучающий курс из 5 шагов. Готов начать?',
-      quest_incomplete: 'Ты ещё не выполнил задание. Продолжай стараться!',
-      quest_complete: 'Отлично! Вот твоя награда. Готов к следующему шагу?',
-    },
-    quests: [
-      { id: 'tutorial_1', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 диких покемона', rewardMoney: 500, rewardItem: 'pokeball', rewardQty: 5, prereqQuest: null },
-      { id: 'tutorial_2', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 диких покемонов', rewardMoney: 600, rewardItem: 'potion', rewardQty: 3, prereqQuest: 'tutorial_1' },
-      { id: 'tutorial_3', type: 'use_item', targetItem: null, targetQty: 2, desc: 'Используйте 2 предмета в бою', rewardMoney: 400, rewardItem: 'candy', rewardQty: 2, prereqQuest: 'tutorial_2' },
-      { id: 'tutorial_4', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 разных локации', rewardMoney: 500, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: 'tutorial_3' },
-      { id: 'tutorial_5', type: 'earn_money', targetItem: null, targetQty: 2000, desc: 'Заработайте $2000', rewardMoney: 1000, rewardItem: 'greatBall', rewardQty: 5, prereqQuest: 'tutorial_4' },
-    ],
+  // === EAST JOHTO NPCs ===
+  'goldenrod_officer': {
+    id: 'goldenrod_officer', name: 'Офицер Джес', sprite: '👮', location: 'goldenrod',
+    dialog: { greet: 'Добро пожаловать в Голденрод — столицу Восточного Джото!', default: 'Если заметите нарушения правил Лиги-17, обращайтесь ко мне.', quest_offer: 'Новичкам нужно снаряжение. Принеси мне {target} {item}.', quest_complete: 'Отлично! Теперь ты экипирован.', quest_incomplete: 'Приходи когда соберёшь всё.' },
+    quests: [{ id: 'gold_1', type: 'collect_items', targetItem: 'potion', targetQty: 3, desc: 'Принесите 3 Зелья', rewardMoney: 300, rewardItem: 'pokeball', rewardQty: 5, prereqQuest: null }],
   },
+  'goldenrod_michael': {
+    id: 'goldenrod_michael', name: 'Майкл', sprite: '🕵️', location: 'goldenrod',
+    dialog: { greet: 'Помогите! Похитили Батискафиш!', default: 'Квест "Похищение Батискафиш" ждёт тебя.', quest_offer: 'Найди похитителей! Принеси мне {target} {item} как улику.', quest_complete: 'Ты нашёл их! Спасибо!', quest_incomplete: 'Ищи улики в городе...' },
+    quests: [{ id: 'gold_2', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 диких покемонов в поисках улик', rewardMoney: 800, rewardItem: 'greatBall', rewardQty: 3, prereqQuest: 'gold_1' }],
+  },
+  'goldenrod_phill': {
+    id: 'goldenrod_phill', name: 'Филл', sprite: '🔬', location: 'goldenrod',
+    dialog: { greet: 'Покемоны исчезают из Института Голденрода!', default: 'Это загадка, которую нужно разгадать.', quest_offer: 'Для расследования мне нужны {target} {item}.', quest_complete: 'Превосходная работа, тренер!', quest_incomplete: 'Нужно больше данных...' },
+    quests: [{ id: 'gold_3', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 покемонов для исследования института', rewardMoney: 600, rewardItem: 'candy', rewardQty: 3, prereqQuest: 'gold_2' }, { id: 'gold_4', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 исследовательских центра', rewardMoney: 1000, rewardItem: 'tm', rewardQty: 2, prereqQuest: 'gold_3' }],
+  },
+  'olivine_captain': {
+    id: 'olivine_captain', name: 'Капитан порта', sprite: '⚓', location: 'olivine',
+    dialog: { greet: 'Добро пожаловать в порт Оливина! Корабли до Канто и Селена.', default: 'Расписание: 10, 14, 18, 22 часа.', quest_offer: 'Матросы просят {target} {item} для ремонта.', quest_complete: 'Корабль готов к плаванию!', quest_incomplete: 'Ремонт ещё не закончен...' },
+    quests: [{ id: 'oli_1', type: 'collect_items', targetItem: 'crystalShard', targetQty: 3, desc: 'Принесите 3 осколка кристалла для порта', rewardMoney: 500, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: null }, { id: 'oli_2', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 портовых города', rewardMoney: 800, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: 'oli_1' }],
+  },
+  'flourence_gardener': {
+    id: 'flourence_gardener', name: 'Садовник Флор', sprite: '🌸', location: 'flourence',
+    dialog: { greet: 'Флауренция — город цветов! Хочешь помочь в оранжерее?', default: 'Цветы и травяные покемоны — идеальная пара.', quest_offer: 'Принеси мне {target} {item} для новых саженцев.', quest_complete: 'Чудесно! Приходи ещё.', quest_incomplete: 'Растениям нужна подкормка...' },
+    quests: [{ id: 'flo_1', type: 'collect_items', targetItem: 'plantSample', targetQty: 4, desc: 'Принесите 4 Образца растений', rewardMoney: 400, rewardItem: 'leafStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'warhall_mayor': {
+    id: 'warhall_mayor', name: 'Мэр Вархолла', sprite: '🏛️', location: 'warhall',
+    dialog: { greet: 'Вархолл — новый город с древней историей ниндзя.', default: 'Автовокзал работает по расписанию.', quest_offer: 'Для города нужны стройматериалы: {target} {item}.', quest_complete: 'Город растёт благодаря тебе!', quest_incomplete: 'Стройка продолжается...' },
+    quests: [{ id: 'war_1', type: 'collect_items', targetItem: 'rockSample', targetQty: 5, desc: 'Принесите 5 Образцов породы', rewardMoney: 700, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'alston_circus': {
+    id: 'alston_circus', name: 'Директор цирка', sprite: '🎪', location: 'alston',
+    dialog: { greet: 'Добро пожаловать в цирк Олстона! Наши покемоны-артисты лучшие!', default: 'Цирк основан бродячими артистами.', quest_offer: 'Для нового номера нужны {target} {item}.', quest_complete: 'Браво! Потрясающее выступление!', quest_incomplete: 'Репетиции идут полным ходом...' },
+    quests: [{ id: 'als_1', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 покемонов для цирка', rewardMoney: 500, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }],
+  },
+  // === WEST JOHTO NPCs ===
+  'summer_institute': {
+    id: 'summer_institute', name: 'Учёный Саммера', sprite: '🔬', location: 'summer',
+    dialog: { greet: 'Научный институт Саммера исследует редких покемонов саванны.', default: 'Саванна полна загадок.', quest_offer: 'Принеси мне {target} {item} для исследований.', quest_complete: 'Отличный образец! Это продвинет науку.', quest_incomplete: 'Лаборатория ждёт образцов...' },
+    quests: [{ id: 'sum_1', type: 'collect_items', targetItem: 'lavaCore', targetQty: 2, desc: 'Принесите 2 ядра магмы для института', rewardMoney: 800, rewardItem: 'fireStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'summer_gibson': {
+    id: 'summer_gibson', name: 'Мистер Гибсон', sprite: '🤠', location: 'summer',
+    dialog: { greet: 'Я ищу Земли Прайда. Поможешь?', default: 'Земли Прайда ждут своего героя.', quest_offer: 'Подготовься: собери {target} {item} перед походом.', quest_complete: 'Ты готов! Отправляемся в Земли Прайда!', quest_incomplete: 'Снаряжение ещё не полное...' },
+    quests: [{ id: 'sum_2', type: 'defeat_x', targetItem: null, targetQty: 4, desc: 'Победите 4 диких покемонов в саванне', rewardMoney: 600, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: 'sum_1' }, { id: 'sum_3', type: 'explore', targetItem: null, targetQty: 4, desc: 'Исследуйте 4 локации Западного Джото', rewardMoney: 1000, rewardItem: 'sunStone', rewardQty: 1, prereqQuest: 'sum_2' }],
+  },
+  'melen_diver': {
+    id: 'melen_diver', name: 'Дайвер Мелена', sprite: '🤿', location: 'melen',
+    dialog: { greet: 'Дайвинг-центр Мелена — лучший в Джото!', default: 'Под водой скрываются редкие покемоны.', quest_offer: 'Нужен {target} {item} для нового снаряжения.', quest_complete: 'Снаряжение готово! Ныряем!', quest_incomplete: 'Мастерская масок поможет...' },
+    quests: [{ id: 'mel_1', type: 'collect_items', targetItem: 'crystalShard', targetQty: 2, desc: 'Принесите 2 Осколка кристалла', rewardMoney: 500, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null }],
+  },
+  // === SELEN ISLAND NPCs ===
+  'ostaron_sage': {
+    id: 'ostaron_sage', name: 'Мудрец Остарона', sprite: '🧙', location: 'ostaron',
+    dialog: { greet: 'Остарон благословлён легендарным покемоном.', default: 'Мудрость приходит с опытом.', quest_offer: 'Помоги найти пропавшего Меррипика: нужен {target} {item}.', quest_complete: 'Ты нашёл его! Благословляю тебя.', quest_incomplete: 'Меррипик где-то на острове...' },
+    quests: [{ id: 'ost_1', type: 'explore', targetItem: null, targetQty: 5, desc: 'Посетите 5 локаций острова Селен', rewardMoney: 1000, rewardItem: 'iceStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'ostaron_chris': {
+    id: 'ostaron_chris', name: 'Крис-покемоновед', sprite: '📋', location: 'ostaron',
+    dialog: { greet: 'Я перевоспитываю покемонов! 90% шанс сменить характер.', default: 'Характер влияет на статы.', quest_offer: 'Принеси {target} {item} для моих подопечных.', quest_complete: 'Покемоны счастливы! Спасибо!', quest_incomplete: 'Покемоны ждут угощения...' },
+    quests: [{ id: 'ost_2', type: 'use_item', targetItem: null, targetQty: 3, desc: 'Используйте 3 предмета на покемонах', rewardMoney: 400, rewardItem: 'candy', rewardQty: 5, prereqQuest: 'ost_1' }],
+  },
+  'sayref_mayor': {
+    id: 'sayref_mayor', name: 'Мэр Сайрефа', sprite: '🏛️', location: 'sayref',
+    dialog: { greet: 'Сайреф соперничает с Остароном за звание столицы!', default: 'Наш снеговик — символ города.', quest_offer: 'Укрепи позиции города: принеси {target} {item}.', quest_complete: 'Сайреф процветает!', quest_incomplete: 'Город нуждается в ресурсах...' },
+    quests: [{ id: 'say_1', type: 'collect_items', targetItem: 'rockSample', targetQty: 4, desc: 'Принесите 4 Образца породы', rewardMoney: 600, rewardItem: 'dawnStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'estaire_shipyard': {
+    id: 'estaire_shipyard', name: 'Мастер верфи', sprite: '🔧', location: 'estaire_city',
+    dialog: { greet: 'Верфь Эстайра строит лучшие корабли!', default: 'Мы строим и чиним корабли.', quest_offer: 'Для заказа нужны {target} {item}.', quest_complete: 'Корабль готов к спуску!', quest_incomplete: 'Детали в дефиците...' },
+    quests: [{ id: 'est_1', type: 'collect_items', targetItem: 'magnemiteNut', targetQty: 3, desc: 'Принесите 3 Магнитные гайки', rewardMoney: 700, rewardItem: 'shinyStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'mountain_village_elder': {
+    id: 'mountain_village_elder', name: 'Старейшина деревни', sprite: '👴', location: 'mountain_village',
+    dialog: { greet: 'Добро пожаловать в нашу горную деревню, путник.', default: 'Горы хранят древние тайны.', quest_offer: 'Найди {target} {item} в ледяных пещерах.', quest_complete: 'Ты достоин уважения гор.', quest_incomplete: 'Горы испытают тебя...' },
+    quests: [{ id: 'mv_1', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 покемонов в горах', rewardMoney: 900, rewardItem: 'iceStone', rewardQty: 1, prereqQuest: null }],
+  },
+  // === SOUTHERN ARCHIPELAGO NPCs ===
+  'ilde_marcel': {
+    id: 'ilde_marcel', name: 'Марсель де Фар', sprite: '🧭', location: 'il_de_far',
+    dialog: { greet: 'Добро пожаловать в Иль де Фар — сердце Южного Архипелага!', default: 'Здесь вы найдёте редких покемонов и удивительные места.', quest_offer: 'Для исследования островов нужен {target} {item}.', quest_complete: 'Ты готов к приключениям! Исследуй архипелаг.', quest_incomplete: 'Подготовься получше...' },
+    quests: [{ id: 'sa_1', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации Архипелага', rewardMoney: 800, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null }],
+  },
+  'sen_aspir_elder': {
+    id: 'sen_aspir_elder', name: 'Старейшина Сен Аспира', sprite: '🧓', location: 'sen_aspir',
+    dialog: { greet: 'Сен Аспир построен у подножия вулкана Синнабунг.', default: 'Вулкан даёт нам силу.', quest_offer: 'Принеси мне {target} {item} с вулканических склонов.', quest_complete: 'Вулкан благосклонен к тебе!', quest_incomplete: 'Вулкан ждёт подношений...' },
+    quests: [{ id: 'sa_2', type: 'collect_items', targetItem: 'lavaCore', targetQty: 3, desc: 'Принесите 3 ядра магмы для старейшины', rewardMoney: 1000, rewardItem: 'fireStone', rewardQty: 1, prereqQuest: 'sa_1' }],
+  },
+  'orlua_ghost': {
+    id: 'orlua_ghost', name: 'Призрак поместья', sprite: '👻', location: 'orlua_estate',
+    dialog: { greet: 'Добро пожаловать в моё поместье... навсегда.', default: 'Здесь обитают духи покемонов.', quest_offer: 'Освободи меня: найди {target} {item}.', quest_complete: 'Спасибо... я свободен...', quest_incomplete: 'Я жду освобождения...' },
+    quests: [{ id: 'sa_3', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 призрачных покемонов для освобождения', rewardMoney: 1500, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: 'sa_2' }],
+  },
+  // === EAST JOHTO QUEST NPCs (from wiki quests) ===
+  'ej_storn': {
+    id: 'ej_storn', name: 'Сторн', sprite: '🦸', location: 'goldenrod',
+    dialog: { greet: 'Я Сторн! Собери Великолепную Пятёрку!', default: 'Великолепная Пятёрка ждёт тебя.', quest_offer: 'Принеси мне {target} {item} для команды.', quest_complete: 'Теперь мы непобедимы!', quest_incomplete: 'Пятёрка ещё не в сборе...' },
+    quests: [{ id: 'ej_storn_1', type: 'catch_x', targetItem: null, targetQty: 5, desc: 'Поймайте 5 разных покемонов', rewardMoney: 1000, rewardItem: 'greatBall', rewardQty: 5, prereqQuest: null }],
+  },
+  'ej_bridge': {
+    id: 'ej_bridge', name: 'Дядюшка Бридж', sprite: '👴', location: 'bridge_ej',
+    dialog: { greet: 'Привет, путник! Я Дядюшка Бридж.', default: 'Мост соединяет судьбы.', quest_offer: 'Мне нужны материалы: {target} {item}.', quest_complete: 'Мост будет стоять вечно!', quest_incomplete: 'Мост требует ремонта...' },
+    quests: [{ id: 'ej_bridge_1', type: 'collect_items', targetItem: 'rockSample', targetQty: 3, desc: 'Принесите 3 Образца породы', rewardMoney: 400, rewardItem: 'potion', rewardQty: 5, prereqQuest: null }],
+  },
+  'ej_palmer': {
+    id: 'ej_palmer', name: 'Несчастный Пальмер', sprite: '😰', location: 'alston',
+    dialog: { greet: 'Ох... всё пошло не так...', default: 'Моя жизнь — череда неудач.', quest_offer: 'Помоги мне: нужен {target} {item}.', quest_complete: 'Наконец-то удача! Спасибо!', quest_incomplete: 'Опять не везёт...' },
+    quests: [{ id: 'ej_palmer_1', type: 'defeat_x', targetItem: null, targetQty: 3, desc: 'Победите 3 диких покемонов', rewardMoney: 500, rewardItem: 'luckyEgg', rewardQty: 1, prereqQuest: null }],
+  },
+  'ej_granny': {
+    id: 'ej_granny', name: 'Старушка', sprite: '👵', location: 'flourence',
+    dialog: { greet: 'Здравствуй, милок. Собираю камушки.', default: 'Камушки рассказывают истории.', quest_offer: 'Найди мне {target} {item}, будь добр.', quest_complete: 'Чудесные камушки! Держи награду.', quest_incomplete: 'Камушки где-то рядом...' },
+    quests: [{ id: 'ej_granny_1', type: 'collect_items', targetItem: 'crystalShard', targetQty: 5, desc: 'Принесите 5 Осколков кристалла', rewardMoney: 300, rewardItem: 'shinyStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'ej_richie': {
+    id: 'ej_richie', name: 'Богатенький Ричи', sprite: '💰', location: 'goldenrod',
+    dialog: { greet: 'Ха! Ещё один бедняк. Я Ричи — самый богатый в Джото!', default: 'Деньги решают всё.', quest_offer: 'Мне нужна редкая вещь: {target} {item}. Заплачу щедро!', quest_complete: 'Великолепно! Вот твоя награда, бедняк.', quest_incomplete: 'Где мой заказ?!' },
+    quests: [{ id: 'ej_richie_1', type: 'collect_items', targetItem: 'lavaCore', targetQty: 2, desc: 'Принесите Ричи 2 Ядра магмы', rewardMoney: 3000, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null }],
+  },
+  // === WEST JOHTO QUEST NPCs ===
+  'wj_mantej': {
+    id: 'wj_mantej', name: 'Мантедж', sprite: '💪', location: 'volcanic_plateau',
+    dialog: { greet: 'Я МАНТЕДЖ! Слышишь грохот?!', default: 'Вулкан — мой дом!', quest_offer: 'Докажи силу: принеси {target} {item}!', quest_complete: 'ХА! Ты достоин уважения!', quest_incomplete: 'Слабак! Приходи когда окрепнешь.' },
+    quests: [{ id: 'wj_mantej_1', type: 'defeat_x', targetItem: null, targetQty: 6, desc: 'Победите 6 диких покемонов', rewardMoney: 1200, rewardItem: 'fireStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'wj_maisho': {
+    id: 'wj_maisho', name: 'Маишо', sprite: '🧪', location: 'melen',
+    dialog: { greet: 'Я Маишо, алхимик Мелена. Нужно зелье?', default: 'Зелье Маишо — лучшее в Джото!', quest_offer: 'Для зелья нужен {target} {item}.', quest_complete: 'Зелье готово! Пользуйся с умом.', quest_incomplete: 'Ингредиенты ещё не собраны...' },
+    quests: [{ id: 'wj_maisho_1', type: 'collect_items', targetItem: 'seviperVenom', targetQty: 2, desc: 'Принесите 2 Яда Сивайпера', rewardMoney: 600, rewardItem: 'fullRestore', rewardQty: 3, prereqQuest: null }],
+  },
+  'wj_pantir': {
+    id: 'wj_pantir', name: 'Пантир', sprite: '🐾', location: 'empty_city',
+    dialog: { greet: 'Мой Пантир... потерялся в руинах.', default: 'Пантир где-то здесь...', quest_offer: 'Найди Пантира! Ищи {target} {item} как след.', quest_complete: 'Пантир! Ты жив! Спасибо, тренер!', quest_incomplete: 'Следы ведут глубже в руины...' },
+    quests: [{ id: 'wj_pantir_1', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 локации Западного Джото', rewardMoney: 800, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: null }],
+  },
+  // === KANTO QUEST NPCs ===
+  'kanto_lucy': {
+    id: 'kanto_lucy', name: 'Люси', sprite: '🎀', location: 'lavender_town',
+    dialog: { greet: 'Моя кукла... она потерялась...', default: 'Кукла Люси — всё что у меня есть.', quest_offer: 'Найди куклу! Нужен {target} {item} чтобы её найти.', quest_complete: 'Моя кукла! Ты нашёл её!', quest_incomplete: 'Кукла где-то в Лавандии...' },
+    quests: [{ id: 'k_lucy_1', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Принесите 3 Образца растений для поиска', rewardMoney: 400, rewardItem: 'candy', rewardQty: 3, prereqQuest: null }],
+  },
+  'kanto_swot': {
+    id: 'kanto_swot', name: 'Профессор Свот', sprite: '📚', location: 'goldenrod_academy_branch',
+    dialog: { greet: 'Я профессор Свот из Академии. Готов к исследованиям?', default: 'Академия ждёт твоих открытий.', quest_offer: 'Для диссертации нужен {target} {item}.', quest_complete: 'Превосходное исследование!', quest_incomplete: 'Данных недостаточно...' },
+    quests: [{ id: 'k_swot_1', type: 'catch_x', targetItem: null, targetQty: 4, desc: 'Поймайте 4 покемонов для Академии', rewardMoney: 900, rewardItem: 'tm', rewardQty: 2, prereqQuest: null }],
+  },
+  'vermilion_mayor': {
+    id: 'vermilion_mayor', name: 'Стивен Мейли', sprite: '👔', location: 'vermilion',
+    dialog: { greet: 'Я Стивен Мейли, мэр Вермилиона. Нужна помощь!', default: 'Городские дела не ждут.', quest_offer: 'Передай {target} {item} — это срочно!', quest_complete: 'Работа сделана! Город благодарит тебя.', quest_incomplete: 'Документы ещё не доставлены...' },
+    quests: [{ id: 'k_verm_1', type: 'explore', targetItem: null, targetQty: 2, desc: 'Посетите 2 локации Канто', rewardMoney: 600, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: null }],
+  },
+  // === SELEN ISLAND QUEST NPCs ===
+  'selen_mary': {
+    id: 'selen_mary', name: 'Мери', sprite: '👧', location: 'ostaron',
+    dialog: { greet: 'Мой Меррипик пропал! Помогите!', default: 'Меррипик — мой лучший друг.', quest_offer: 'Найди Меррипика! Понадобится {target} {item}.', quest_complete: 'Меррипик вернулся! Спасибо огромное!', quest_incomplete: 'Меррипик где-то на Селене...' },
+    quests: [{ id: 'sel_mary_1', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 локации Селена', rewardMoney: 700, rewardItem: 'iceStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'selen_museum': {
+    id: 'selen_museum', name: 'Куратор музея', sprite: '🏺', location: 'estaire_city',
+    dialog: { greet: 'Музей Эстайр сити ограблен!', default: 'Экспонаты всё ещё не найдены.', quest_offer: 'Найди похитителей! Нужен {target} {item}.', quest_complete: 'Экспонаты возвращены! Ты герой!', quest_incomplete: 'Расследование продолжается...' },
+    quests: [{ id: 'sel_museum_1', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 покемонов Команды R', rewardMoney: 1200, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: null }],
+  },
+  // === SOUTHERN ARCHIPELAGO QUEST NPCs ===
+  'sa_pirate': {
+    id: 'sa_pirate', name: 'Капитан пиратов', sprite: '🏴‍☠️', location: 'il_de_far',
+    dialog: { greet: 'Свистать всех наверх! Хочешь в команду?', default: 'Море зовёт!', quest_offer: 'Принеси мне {target} {item} для корабля.', quest_complete: 'Йо-хо-хо! Ты принят в команду!', quest_incomplete: 'Корабль ждёт припасов...' },
+    quests: [{ id: 'sa_pirate_1', type: 'collect_items', targetItem: 'crystalShard', targetQty: 4, desc: 'Принесите 4 Осколка кристалла', rewardMoney: 1000, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'sa_ice_cave': {
+    id: 'sa_ice_cave', name: 'Исследователь пещер', sprite: '🥶', location: 'ice_cave_sa',
+    dialog: { greet: 'Эта ледяная пещера... здесь скрыта тайна!', default: 'Холод не остановит науку!', quest_offer: 'Для экспедиции нужен {target} {item}.', quest_complete: 'Тайна раскрыта! Невероятно!', quest_incomplete: 'Пещера хранит свои секреты...' },
+    quests: [{ id: 'sa_ice_1', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 ледяных покемонов', rewardMoney: 800, rewardItem: 'iceStone', rewardQty: 1, prereqQuest: null }],
+  },
+  'cerulean_settler': { id: 'cerulean_settler', name: 'Местный поселенец', sprite: '👤', location: 'cerulean_city', dialog: { greet: 'Приветствую в Церулине! Наш город славится водой.', default: 'Церулин прекрасен в любое время года.' }, quests: [] },
+  'cerulean_barman_al': { id: 'cerulean_barman_al', name: 'Бармен Аль', sprite: '🍺', location: 'cerulean_tavern', dialog: { greet: 'Лучший бар в Церулине! Заходи.', default: 'Вечером у нас музыка.' }, quests: [] },
+  'cerulean_jack': { id: 'cerulean_jack', name: 'Джек', sprite: '🧢', location: 'cerulean_city', dialog: { greet: 'Я Джек, местный завсегдатай.', default: 'Всех тут знаю.' }, quests: [] },
+  'cerulean_auctioneer': { id: 'cerulean_auctioneer', name: 'Аукционист', sprite: '🔨', location: 'cerulean_pokemarket', dialog: { greet: 'Аукцион начинается! Кто даст больше?', default: 'Редкие лоты ждут.' }, quests: [] },
+  'cerulean_agent_james': { id: 'cerulean_agent_james', name: 'Агент Джеймс', sprite: '🕶️', location: 'cerulean_city', dialog: { greet: 'Агент Джеймс. Веду расследование.', default: 'Не видели ничего подозрительного?' }, quests: [] },
+  'cerulean_agent_stace': { id: 'cerulean_agent_stace', name: 'Агент Стейс', sprite: '🕶️', location: 'cerulean_city', dialog: { greet: 'Агент Стейс, напарница Джеймса.', default: 'Мы работаем под прикрытием.' }, quests: [] },
+  'cerulean_surfer': { id: 'cerulean_surfer', name: 'Сёрфингист', sprite: '🏄', location: 'cerulean_city', dialog: { greet: 'Волны Церулина — лучшие в Канто!', default: 'Сёрфинг — это свобода.' }, quests: [] },
+
+  'vermilion_judith': { id: 'vermilion_judith', name: 'Джудит', sprite: '👩', location: 'vermilion', dialog: { greet: 'Моя кукла Люси пропала...', default: 'Спасибо что помогаете искать!' }, quests: [{ id: 'k_lucy_doll', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Найдите 3 образца растений для поисков куклы Люси', rewardMoney: 600, rewardItem: 'lumBerry', rewardQty: 3, prereqQuest: null }] },
+  'vermilion_secretary': { id: 'vermilion_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'vermilion_stadium', dialog: { greet: 'Я секретарь стадиона. Лидер ждёт.', default: 'Запись на битву открыта.' }, quests: [] },
+  'vermilion_librarian': { id: 'vermilion_librarian', name: 'Библиотекарь', sprite: '📚', location: 'vermilion_library', dialog: { greet: 'Добро пожаловать в библиотеку!', default: 'У нас богатая коллекция книг о покемонах.' }, quests: [] },
+  'vermilion_kiosk': { id: 'vermilion_kiosk', name: 'Работник киоска', sprite: '🎫', location: 'vermilion_port', dialog: { greet: 'Свежие новости! Билеты на паром!', default: 'Киоск работает круглосуточно.' }, quests: [] },
+  'vermilion_ron': { id: 'vermilion_ron', name: 'Рон', sprite: '👨', location: 'vermilion_port', dialog: { greet: 'Я Рон, портовый рабочий.', default: 'Порт никогда не спит.' }, quests: [] },
+  'vermilion_seller1': { id: 'vermilion_seller1', name: 'Продавец', sprite: '🛒', location: 'vermilion_pokemarket', dialog: { greet: 'Покупайте товары!', default: 'Свежий завоз!' }, quests: [] },
+
+  'lavender_miss_trevis': { id: 'lavender_miss_trevis', name: 'Мисс Тревис', sprite: '👩‍🏫', location: 'lavender_town', dialog: { greet: 'Лавандия — город упокоения.', default: 'Башня Призраков хранит тайны.' }, quests: [] },
+  'lavender_secretary': { id: 'lavender_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'lavender_bug_stadium', dialog: { greet: 'Стадион Жуков открыт!', default: 'Лидер ждёт вас.' }, quests: [] },
+  'lavender_guard': { id: 'lavender_guard', name: 'Охранник', sprite: '💂', location: 'lavender_radio_tower', dialog: { greet: 'Порядок под контролем.', default: 'Не шалите.' }, quests: [] },
+  'lavender_seller': { id: 'lavender_seller', name: 'Продавец', sprite: '🛒', location: 'lavender_pokemarket', dialog: { greet: 'Товары для тренеров!', default: 'Заходите!' }, quests: [] },
+
+  'celadon_arthur_wilford': { id: 'celadon_arthur_wilford', name: 'Артур Вилфорд', sprite: '🎩', location: 'celadon_city', dialog: { greet: 'Я Артур Вилфорд, старейшина Целадона.', default: 'Целадон — город изобилия.' }, quests: [] },
+  'celadon_secretary': { id: 'celadon_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'celadon_city', dialog: { greet: 'Стадион Эрики открыт.', default: 'Лидер ждёт.' }, quests: [] },
+  'celadon_little_girl': { id: 'celadon_little_girl', name: 'Маленькая девочка', sprite: '👧', location: 'celadon_city', dialog: { greet: 'Я люблю гулять по Целадону!', default: 'У меня есть покемон-друг!' }, quests: [] },
+  'celadon_meteorologist': { id: 'celadon_meteorologist', name: 'Ведущий метеоролог', sprite: '🌤️', location: 'celadon_city', dialog: { greet: 'Прогноз погоды — наша работа.', default: 'Погода влияет на покемонов.' }, quests: [{ id: 'cel_weather', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации для сбора метеоданных', rewardMoney: 700, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
+  'celadon_pharmacist': { id: 'celadon_pharmacist', name: 'Аптекарь', sprite: '💊', location: 'celadon_city', dialog: { greet: 'Аптека Целадона.', default: 'Здоровье команды — наш приоритет.' }, quests: [] },
+  'celadon_tm_seller': { id: 'celadon_tm_seller', name: 'Продавец ТМ', sprite: '📀', location: 'celadon_city', dialog: { greet: 'Технические Машины!', default: 'Новинки каждую неделю!' }, quests: [] },
+  'celadon_stone_seller': { id: 'celadon_stone_seller', name: 'Продавец камней', sprite: '💎', location: 'celadon_city', dialog: { greet: 'Камни эволюции!', default: 'Редкие камни со всего мира.' }, quests: [] },
+  'celadon_barber': { id: 'celadon_barber', name: 'Парикмахер', sprite: '💇', location: 'celadon_city', dialog: { greet: 'Стильная стрижка для вас!', default: 'Новый образ — новые победы!' }, quests: [] },
+  'celadon_tattoo': { id: 'celadon_tattoo', name: 'Татуировщик', sprite: '🎨', location: 'celadon_city', dialog: { greet: 'Лучшие тату в Канто!', default: 'Татуировка — это навсегда.' }, quests: [] },
+  'celadon_electronics': { id: 'celadon_electronics', name: 'Продавец электроники', sprite: '📱', location: 'celadon_city', dialog: { greet: 'Техника для тренеров!', default: 'Новинки из Силф Ко!' }, quests: [] },
+  'celadon_balls': { id: 'celadon_balls', name: 'Продавец покеболов', sprite: '⚽', location: 'celadon_city', dialog: { greet: 'Покеболы всех видов!', default: 'Ловите с комфортом!' }, quests: [] },
+  'celadon_appliances': { id: 'celadon_appliances', name: 'Продавец техники', sprite: '🔌', location: 'celadon_city', dialog: { greet: 'Бытовая техника для дома.', default: 'Качество гарантирую.' }, quests: [] },
+  'celadon_craftsman': { id: 'celadon_craftsman', name: 'Продавец-ремесленник', sprite: '🔧', location: 'celadon_city', dialog: { greet: 'Ручная работа!', default: 'Каждая вещь с душой.' }, quests: [] },
+
+  'saffron_tailor': { id: 'saffron_tailor', name: 'Портниха', sprite: '🧵', location: 'saffron', dialog: { greet: 'Шью лучшие костюмы!', default: 'Стиль важен даже в битве.' }, quests: [] },
+  'saffron_secretary': { id: 'saffron_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'saffron_psychic_stadium', dialog: { greet: 'Стадион Сабрины — для сильных духом.', default: 'Психические покемоны чувствуют ауру.' }, quests: [] },
+  'saffron_cashier': { id: 'saffron_cashier', name: 'Кассир', sprite: '💲', location: 'saffron_east_station', dialog: { greet: 'Билеты на поезд!', default: 'Счастливого пути!' }, quests: [] },
+  'saffron_lottery': { id: 'saffron_lottery', name: 'Лотерейщик', sprite: '🎰', location: 'saffron_west_pokemarket', dialog: { greet: 'Лотерея Лиги-17!', default: 'Главный приз — редкий покемон!' }, quests: [] },
+
+  'fuchsia_olan': { id: 'fuchsia_olan', name: 'Олан', sprite: '🧙', location: 'fuchsia_city', dialog: { greet: 'Я Олан, хранитель традиций Фуксии.', default: 'Фуксия — город ниндзя.' }, quests: [] },
+  'fuchsia_branzer_richard': { id: 'fuchsia_branzer_richard', name: 'Бранзер Ричард', sprite: '🔥', location: 'fuchsia_city', dialog: { greet: 'Бранзеры — лучшие покемоны!', default: 'Мои Бранзеры — моя гордость.' }, quests: [] },
+  'fuchsia_sailboat': { id: 'fuchsia_sailboat', name: 'Парусник', sprite: '⛵', location: 'fuchsia_beach', dialog: { greet: 'Парусник до Архипелага!', default: 'Море зовёт!' }, quests: [] },
+
+  'goldenrod_prof_nils': { id: 'goldenrod_prof_nils', name: 'Профессор Нилс', sprite: '🔬', location: 'goldenrod_academy', dialog: { greet: 'Я профессор Нилс из Академии.', default: 'Эволюция — удивительный процесс!' }, quests: [] },
+  'goldenrod_prof_karmen': { id: 'goldenrod_prof_karmen', name: 'Профессор Кармен', sprite: '🔬', location: 'goldenrod_academy', dialog: { greet: 'Профессор Кармен.', default: 'Каждая атака имеет свою историю.' }, quests: [] },
+  'goldenrod_trainer_ted': { id: 'goldenrod_trainer_ted', name: 'Тренер Тэд', sprite: '🎓', location: 'goldenrod_academy', dialog: { greet: 'Я Тренер Тэд, выпускник Академии.', default: 'Академия дала мне всё.' }, quests: [] },
+  'goldenrod_barman': { id: 'goldenrod_barman', name: 'Бармен', sprite: '🍺', location: 'goldenrod_bar', dialog: { greet: 'Лучший бар в Голденроде!', default: 'После трудного дня — только сюда.' }, quests: [] },
+  'goldenrod_secretary': { id: 'goldenrod_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'goldenrod', dialog: { greet: 'Стадион Уитни открыт.', default: 'Нормальные покемоны сильнее чем кажутся!' }, quests: [] },
+  'goldenrod_kiosk': { id: 'goldenrod_kiosk', name: 'Работник киоска', sprite: '🎫', location: 'goldenrod_supermarket', dialog: { greet: 'Информация о городе!', default: 'Всё что нужно тренеру.' }, quests: [] },
+  'goldenrod_clan_commander': { id: 'goldenrod_clan_commander', name: 'Командир штаба', sprite: '🛡️', location: 'goldenrod_cityhall', dialog: { greet: 'Кланы — сила Лиги.', default: 'Вступите в клан!' }, quests: [] },
+  'goldenrod_clan_master': { id: 'goldenrod_clan_master', name: 'Клан-мастер', sprite: '👑', location: 'goldenrod_cityhall', dialog: { greet: 'Я Клан-мастер.', default: 'Клан — это семья.' }, quests: [] },
+  'goldenrod_clan_secretary': { id: 'goldenrod_clan_secretary', name: 'Клан-секретарь', sprite: '📝', location: 'goldenrod_cityhall', dialog: { greet: 'Веду учёт кланов.', default: 'Бюрократия — двигатель порядка.' }, quests: [] },
+  'goldenrod_editor': { id: 'goldenrod_editor', name: 'Главный редактор', sprite: '📰', location: 'new_district', dialog: { greet: 'Главный редактор газеты.', default: 'Свежий выпуск уже в печати!' }, quests: [] },
+
+  'old_district_sergeant': { id: 'old_district_sergeant', name: 'Сержант', sprite: '👮', location: 'old_district', dialog: { greet: 'Сержант полиции.', default: 'Не нарушайте закон.' }, quests: [] },
+  'old_district_veteran': { id: 'old_district_veteran', name: 'Ветеран', sprite: '🎖️', location: 'old_district', dialog: { greet: 'Я ветеран. Много битв за плечами.', default: 'Хочешь совет от старого бойца?' }, quests: [{ id: 'ej_memorable', type: 'defeat_x', targetItem: null, targetQty: 4, desc: 'Победите 4 покемонов в памятном бою', rewardMoney: 800, rewardItem: 'fullRestore', rewardQty: 2, prereqQuest: null }] },
+  'old_district_stuart': { id: 'old_district_stuart', name: 'Стюарт', sprite: '👨', location: 'old_district', dialog: { greet: 'Стюарт, житель Старого района.', default: 'Тут тихо и спокойно.' }, quests: [] },
+  'old_district_master_rob': { id: 'old_district_master_rob', name: 'Мастер Роб', sprite: '🔧', location: 'old_district', dialog: { greet: 'Мастер Роб. Чиню всё.', default: 'Приноси — починю.' }, quests: [] },
+
+  'new_district_lieutenant': { id: 'new_district_lieutenant', name: 'Лейтенант', sprite: '👮', location: 'new_district', dialog: { greet: 'Лейтенант полиции.', default: 'Новый район под защитой.' }, quests: [] },
+  'new_district_elen': { id: 'new_district_elen', name: 'Элен', sprite: '🦸', location: 'new_district', dialog: { greet: 'Я Элен из Великолепной Пятёрки.', default: 'Сторн собрал нас ради великой цели!' }, quests: [] },
+  'new_district_guard': { id: 'new_district_guard', name: 'Охранник', sprite: '💂', location: 'new_district', dialog: { greet: 'Охраняю Новый район.', default: 'Без пропуска не пройти.' }, quests: [] },
+  'new_district_mrs_booker': { id: 'new_district_mrs_booker', name: 'Миссис Букер', sprite: '👩', location: 'new_district', dialog: { greet: 'Миссис Букер.', default: 'Заходите на чай!' }, quests: [] },
+  'new_district_mr_booker': { id: 'new_district_mr_booker', name: 'Мистер Букер', sprite: '👨', location: 'new_district', dialog: { greet: 'Мистер Букер к вашим услугам.', default: 'Новый район — лучшее место.' }, quests: [] },
+  'new_district_richard': { id: 'new_district_richard', name: 'Ричард', sprite: '👨', location: 'new_district', dialog: { greet: 'Я Ричард. Работаю на радио.', default: 'Радиобашня вещает на всё Джото!' }, quests: [] },
+  'new_district_kristen': { id: 'new_district_kristen', name: 'Кристен', sprite: '🏃', location: 'new_district', dialog: { greet: 'Я Кристен. Ветер зовёт вперёд!', default: 'Бег — это жизнь!' }, quests: [{ id: 'ej_wind', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации в поисках ветра', rewardMoney: 600, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
+  'new_district_train': { id: 'new_district_train', name: 'Поезд', sprite: '🚂', location: 'new_district', dialog: { greet: 'Поезд до Шаффрана.', default: 'Занимайте места!' }, quests: [] },
+
+  'olivine_glen': { id: 'olivine_glen', name: 'Глен', sprite: '👨', location: 'olivine', dialog: { greet: 'Я Глен, портовый рабочий.', default: 'Оливинский порт — лучший в Джото.' }, quests: [] },
+  'olivine_evan': { id: 'olivine_evan', name: 'Эван', sprite: '👨', location: 'olivine_beach', dialog: { greet: 'Эван. Рыбачу 20 лет.', default: 'Рыбалка учит терпению.' }, quests: [] },
+  'olivine_arina': { id: 'olivine_arina', name: 'Арина', sprite: '👩', location: 'olivine', dialog: { greet: 'Арина. Люблю наблюдать за кораблями.', default: 'Море бесконечно.' }, quests: [] },
+  'olivine_barman_elvin': { id: 'olivine_barman_elvin', name: 'Бармен Элвин', sprite: '🍺', location: 'olivine_bar_pirate', dialog: { greet: 'Пиратское убежище открыто!', default: 'Лучший ром на побережье!' }, quests: [] },
+  'olivine_lighthouse_keeper': { id: 'olivine_lighthouse_keeper', name: 'Смотритель маяка', sprite: '🔦', location: 'olivine_beach_lighthouse', dialog: { greet: 'Я смотритель маяка.', default: 'Браконьеры? Да, видел их...' }, quests: [{ id: 'oli_brakonier', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 браконьеров у маяка', rewardMoney: 1000, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null }] },
+  'olivine_marta': { id: 'olivine_marta', name: 'Марта', sprite: '👩', location: 'olivine', dialog: { greet: 'Я Марта. У меня старая фотография.', default: 'На этой фотографии — моя молодость.' }, quests: [{ id: 'oli_photo', type: 'collect_items', targetItem: 'crystalShard', targetQty: 2, desc: 'Принесите 2 осколка кристалла для восстановления фотографии', rewardMoney: 400, rewardItem: 'oranBerry', rewardQty: 3, prereqQuest: null }] },
+  'olivine_janet': { id: 'olivine_janet', name: 'Жанет', sprite: '👩', location: 'olivine_house_221', dialog: { greet: 'Жанет. Ищу рецепт зелья памяти.', default: 'Говорят оно помогает вспомнить прошлое.' }, quests: [{ id: 'oli_memory', type: 'collect_items', targetItem: 'plantSample', targetQty: 4, desc: 'Принесите 4 образца растений для зелья памяти', rewardMoney: 500, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: null }] },
+
+  'flourence_pretty_girl': { id: 'flourence_pretty_girl', name: 'Симпатичная девушка', sprite: '👩', location: 'flourence', dialog: { greet: 'Флауренция — город цветов!', default: 'Люблю этот город.' }, quests: [] },
+  'flourence_trainer_jim': { id: 'flourence_trainer_jim', name: 'Тренер Джим', sprite: '🎒', location: 'flourence', dialog: { greet: 'Тренер Джим. Флауренция — мой дом.', default: 'Цветы и покемоны — идеально!' }, quests: [] },
+  'flourence_florist_helper': { id: 'flourence_florist_helper', name: 'Помощник флориста', sprite: '🌸', location: 'flourence_greenhouse', dialog: { greet: 'Помогаю в оранжерее.', default: 'Приходите любоваться цветами!' }, quests: [] },
+  'flourence_bulletin': { id: 'flourence_bulletin', name: 'Доска объявлений', sprite: '📌', location: 'flourence', dialog: { greet: 'Миссия: Флауренция!', default: 'Новые задания каждую неделю.' }, quests: [{ id: 'flo_mission', type: 'collect_items', targetItem: 'plantSample', targetQty: 5, desc: 'Принесите 5 образцов растений для города', rewardMoney: 500, rewardItem: 'leafStone', rewardQty: 1, prereqQuest: null }] },
+
+  'alston_granny': { id: 'alston_granny', name: 'Старушка', sprite: '👵', location: 'alston_granny_house', dialog: { greet: 'Я старушка из Олстона.', default: 'Каждый камень рассказывает историю.' }, quests: [] },
+  'alston_little_man': { id: 'alston_little_man', name: 'Маленький человек', sprite: '🎪', location: 'alston_circus', dialog: { greet: 'Цирк покемонов! Лучшее шоу!', default: 'Приходите всей семьёй!' }, quests: [{ id: 'als_circus_quest', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 покемонов для циркового представления', rewardMoney: 500, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
+  'alston_secretary1': { id: 'alston_secretary1', name: 'Секретарь Стального Стадиона', sprite: '📋', location: 'alston_steel_stadium', dialog: { greet: 'Стальной Стадион.', default: 'Лидер ждёт.' }, quests: [] },
+  'alston_secretary2': { id: 'alston_secretary2', name: 'Секретарь Стадиона Души', sprite: '📋', location: 'alston_soul_stadium', dialog: { greet: 'Стадион Души.', default: 'Готовы к испытанию духа?' }, quests: [] },
+
+  'summer_barman_miguel': { id: 'summer_barman_miguel', name: 'Бармен Мигель', sprite: '🍺', location: 'summer_pub', dialog: { greet: 'Паб Хаус — сердце Саммера!', default: 'Холодное пиво после жаркого дня!' }, quests: [] },
+  'summer_librarian': { id: 'summer_librarian', name: 'Библиотекарь', sprite: '📚', location: 'summer_library', dialog: { greet: 'Библиотека Саммера.', default: 'У нас редкие книги о покемонах.' }, quests: [] },
+  'summer_officer_jackie': { id: 'summer_officer_jackie', name: 'Офицер Джекки', sprite: '👮', location: 'summer_police', dialog: { greet: 'Офицер Джекки.', default: 'Порядок в городе — наша работа.' }, quests: [] },
+  'summer_prof_niro': { id: 'summer_prof_niro', name: 'Профессор Ниро', sprite: '🔬', location: 'summer_institute', dialog: { greet: 'Профессор Ниро.', default: 'Исследуем покемонов саванны!' }, quests: [] },
+  'summer_mary_research': { id: 'summer_mary_research', name: 'Мари', sprite: '👩', location: 'summer_institute', dialog: { greet: 'Я Мари, исследую вулканы.', default: 'Вулкан Синнабунг полон тайн.' }, quests: [{ id: 'sum_volcano', type: 'collect_items', targetItem: 'lavaCore', targetQty: 3, desc: 'Принесите 3 ядра магмы для исследований', rewardMoney: 800, rewardItem: 'fireStone', rewardQty: 1, prereqQuest: null }] },
+  'summer_kylie': { id: 'summer_kylie', name: 'Кайли', sprite: '👧', location: 'summer', dialog: { greet: 'Моя Мурысь сбежала!', default: 'Мурысь, где ты?' }, quests: [{ id: 'sum_murys', type: 'catch_x', targetItem: null, targetQty: 1, desc: 'Найдите и поймайте сбежавшую Мурысь', rewardMoney: 500, rewardItem: 'candy', rewardQty: 3, prereqQuest: null }] },
+  'summer_mila': { id: 'summer_mila', name: 'Мила', sprite: '👩', location: 'summer_pokepark', dialog: { greet: 'Я Мила.', default: 'Пантиры — удивительные покемоны.' }, quests: [{ id: 'sum_pantir_story', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 локации в поисках Пантира', rewardMoney: 700, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: null }] },
+  'summer_owner': { id: 'summer_owner', name: 'Владелец', sprite: '🏢', location: 'summer_pokepark', dialog: { greet: 'Владелец Поке-парка.', default: 'Новые аттракционы скоро!' }, quests: [{ id: 'sum_park', type: 'collect_items', targetItem: 'rockSample', targetQty: 5, desc: 'Принесите 5 образцов породы для строительства', rewardMoney: 900, rewardItem: 'sunStone', rewardQty: 1, prereqQuest: null }] },
+  'summer_fisk': { id: 'summer_fisk', name: 'Фиск', sprite: '💎', location: 'summer', dialog: { greet: 'Фиск. Скупаю ониксы.', default: 'Ониксы — камень удачи.' }, quests: [{ id: 'sum_onyx', type: 'collect_items', targetItem: 'rockSample', targetQty: 5, desc: 'Принесите 5 образцов породы для скупщика', rewardMoney: 1000, rewardItem: 'dawnStone', rewardQty: 1, prereqQuest: null }] },
+
+  'warhall_bill_char': { id: 'warhall_bill_char', name: 'Билл', sprite: '🔬', location: 'warhall_bill_shop', dialog: { greet: 'Я Билл, изобретатель.', default: 'Техника и покемоны — моя страсть.' }, quests: [] },
+  'warhall_auctioneer': { id: 'warhall_auctioneer', name: 'Аукционист', sprite: '🔨', location: 'warhall', dialog: { greet: 'Аукцион Вархолла!', default: 'Кто даст больше?' }, quests: [] },
+  'warhall_master_osaguro': { id: 'warhall_master_osaguro', name: 'Мастер Осагуро', sprite: '⚔️', location: 'warhall_samurai_house', dialog: { greet: 'Я Мастер Осагуро.', default: 'Тренируйся усердно.' }, quests: [] },
+  'warhall_kensei': { id: 'warhall_kensei', name: 'Кэнсэй', sprite: '🥋', location: 'warhall_samurai_gym', dialog: { greet: 'Кэнсэй, ученик мастера.', default: 'Тренировка не заканчивается.' }, quests: [] },
+  'warhall_kevin': { id: 'warhall_kevin', name: 'Кевин', sprite: '👨', location: 'warhall', dialog: { greet: 'Я Кевин, житель Вархолла.', default: 'Наш город славится историей.' }, quests: [] },
+  'warhall_museum_director': { id: 'warhall_museum_director', name: 'Директор музея', sprite: '🏛️', location: 'warhall_museum', dialog: { greet: 'Директор музея.', default: 'Новая экспозиция уже открыта!' }, quests: [] },
+
+  'melen_charlie': { id: 'melen_charlie', name: 'Чарли', sprite: '👨', location: 'melen', dialog: { greet: 'Чарли из Мелена.', default: 'Тишина и покой — вот что ценно.' }, quests: [] },
+  'melen_mrs_craig': { id: 'melen_mrs_craig', name: 'Миссис Крейг', sprite: '👩', location: 'melen_craig_shop', dialog: { greet: 'Миссис Крейг.', default: 'Заходите за покупками!' }, quests: [] },
+  'melen_old_fisherman': { id: 'melen_old_fisherman', name: 'Старый рыбак', sprite: '🎣', location: 'melen_pier', dialog: { greet: 'Рыбачу 40 лет.', default: 'Море — мой второй дом.' }, quests: [] },
+  'melen_silvestr': { id: 'melen_silvestr', name: 'Сильвестр', sprite: '👨', location: 'melen', dialog: { greet: 'Сильвестр.', default: 'Древние тайны ждут.' }, quests: [] },
+  'melen_mask_master': { id: 'melen_mask_master', name: 'Мастер масок', sprite: '🎭', location: 'melen_mask_workshop', dialog: { greet: 'Мастер масок.', default: 'Для карнавала или битвы?' }, quests: [] },
+  'melen_fiona': { id: 'melen_fiona', name: 'Фиона', sprite: '👩', location: 'melen_fiona_house', dialog: { greet: 'Я Фиона.', default: 'Заходите отдохнуть.' }, quests: [] },
+  'melen_albert': { id: 'melen_albert', name: 'Альберт', sprite: '👨', location: 'melen_albert_house', dialog: { greet: 'Альберт.', default: 'За пределами закона — там истина.' }, quests: [] },
+  'melen_kristian': { id: 'melen_kristian', name: 'Кристиан', sprite: '👨', location: 'melen_pier', dialog: { greet: 'Кристиан.', default: 'Мечты сбываются у моря.' }, quests: [] },
+  'melen_fisk': { id: 'melen_fisk', name: 'Фиск', sprite: '💎', location: 'melen', dialog: { greet: 'Фиск в Мелене.', default: 'Приносите ониксы — плачу хорошо.' }, quests: [{ id: 'mel_onyx', type: 'collect_items', targetItem: 'rockSample', targetQty: 3, desc: 'Принесите 3 оникса для Фиска', rewardMoney: 600, rewardItem: 'shinyStone', rewardQty: 1, prereqQuest: null }] },
+
+  'ostaron_ralf': { id: 'ostaron_ralf', name: 'Ральф', sprite: '👨', location: 'ostaron', dialog: { greet: 'Ральф, житель Остарона.', default: 'Столица Селена прекрасна!' }, quests: [] },
+  'ostaron_secretary': { id: 'ostaron_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'ostaron', dialog: { greet: 'Стадион Чака ждёт.', default: 'Лидер Остарона непобедим!' }, quests: [] },
+
+  'estaire_officer_jes': { id: 'estaire_officer_jes', name: 'Офицер Джес', sprite: '👮', location: 'estaire_city', dialog: { greet: 'Офицер Джес.', default: 'Соблюдайте закон!' }, quests: [] },
+  'estaire_bill': { id: 'estaire_bill', name: 'Билл', sprite: '🔬', location: 'estaire_city', dialog: { greet: 'Билл в Эстайре.', default: 'Техника для всех регионов!' }, quests: [] },
+  'estaire_mayor': { id: 'estaire_mayor', name: 'Мэр Эстайра', sprite: '🏛️', location: 'estaire_city', dialog: { greet: 'Мэр Эстайра.', default: 'Эстайр растёт и развивается.' }, quests: [] },
+  'estaire_happy': { id: 'estaire_happy', name: 'Хэппи', sprite: '😊', location: 'estaire_city', dialog: { greet: 'Счастье есть!', default: 'Улыбайтесь чаще!' }, quests: [{ id: 'sel_happy', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Принесите 3 образца растений для Хэппи', rewardMoney: 400, rewardItem: 'candy', rewardQty: 5, prereqQuest: null }] },
+  'estaire_toby': { id: 'estaire_toby', name: 'Тоби', sprite: '👨', location: 'estaire_city', dialog: { greet: 'Тоби из Эстайра.', default: 'Море рядом — что ещё нужно?' }, quests: [] },
+  'estaire_den': { id: 'estaire_den', name: 'Ден', sprite: '👨', location: 'estaire_city', dialog: { greet: 'Ден. Работаю в порту.', default: 'Корабли приходят и уходят.' }, quests: [] },
+  'estaire_auctioneer': { id: 'estaire_auctioneer', name: 'Аукционист', sprite: '🔨', location: 'estaire_city', dialog: { greet: 'Аукцион Эстайра!', default: 'Кто предложит больше?' }, quests: [] },
+  'estaire_appliances': { id: 'estaire_appliances', name: 'Продавец техники', sprite: '🔌', location: 'estaire_private_shop', dialog: { greet: 'Техника для острова.', default: 'Лучшие товары здесь!' }, quests: [] },
+  'estaire_cashier': { id: 'estaire_cashier', name: 'Кассир', sprite: '💲', location: 'estaire_south_pier', dialog: { greet: 'Билеты на паром.', default: 'Счастливого плавания!' }, quests: [] },
+
+  'sayref_keeper': { id: 'sayref_keeper', name: 'Смотритель покемонов', sprite: '🧹', location: 'sayref', dialog: { greet: 'Смотритель покемонов Сайрефа.', default: 'Покемоны — наши друзья.' }, quests: [] },
+  'sayref_ray': { id: 'sayref_ray', name: 'Рей', sprite: '👨', location: 'sayref', dialog: { greet: 'Рей из Сайрефа.', default: 'Снеговик — символ города.' }, quests: [] },
+  'sayref_fred_svarovski': { id: 'sayref_fred_svarovski', name: 'Фред Сваровски', sprite: '💎', location: 'sayref', dialog: { greet: 'Фред Сваровски.', default: 'Рипогиты — агрессивные покемоны.' }, quests: [{ id: 'sel_ripogit', type: 'defeat_x', targetItem: null, targetQty: 4, desc: 'Победите 4 Рипогитов', rewardMoney: 800, rewardItem: 'iceStone', rewardQty: 1, prereqQuest: null }] },
+  'sayref_peiri': { id: 'sayref_peiri', name: 'Пэйри', sprite: '👩', location: 'sayref', dialog: { greet: 'Пэйри.', default: 'Ледяные скульптуры — искусство.' }, quests: [] },
+  'sayref_ice_statue': { id: 'sayref_ice_statue', name: 'Снеговик', sprite: '⛄', location: 'sayref', dialog: { greet: 'Я — символ Сайрефа!', default: 'Приходите фотографироваться!' }, quests: [] },
+  'sayref_secretary': { id: 'sayref_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'sayref_air_stadium', dialog: { greet: 'Воздушный Стадион.', default: 'Летающие покемоны не знают границ!' }, quests: [] },
+
+  'sel_route8_nursery': { id: 'sel_route8_nursery', name: 'Работник питомника', sprite: '🥚', location: 'estaire_daycare_center', dialog: { greet: 'Оставляйте покемонов.', default: 'Покемоны растут пока вы путешествуете.' }, quests: [{ id: 'sel_nursery', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 покемонов для питомника', rewardMoney: 500, rewardItem: 'candy', rewardQty: 3, prereqQuest: null }] },
+  'sel_route8_prof_sten': { id: 'sel_route8_prof_sten', name: 'Профессор Стэн', sprite: '🔬', location: 'estaire_daycare_center', dialog: { greet: 'Профессор Стэн.', default: 'Питомник — идеальная лаборатория.' }, quests: [] },
+  'sel_route8_mad_scientist': { id: 'sel_route8_mad_scientist', name: 'Сумасшедший ученый', sprite: '🤪', location: 'estaire_daycare_center', dialog: { greet: 'Мои теории верны!', default: 'Наука не знает границ!' }, quests: [] },
+
+  'goldenrod_academy_worker': { id: 'goldenrod_academy_worker', name: 'Работник филиала', sprite: '👨‍💼', location: 'goldenrod_academy_branch', dialog: { greet: 'Работник филиала Академии.', default: 'Исследования идут полным ходом.' }, quests: [{ id: 'sel_academy_branch', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации для исследования филиала', rewardMoney: 600, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
+  'goldenrod_academy_miss_melani': { id: 'goldenrod_academy_miss_melani', name: 'Мисс Мелани', sprite: '👩‍🏫', location: 'goldenrod_academy_branch', dialog: { greet: 'Мисс Мелани.', default: 'Обучение — ключ к успеху.' }, quests: [{ id: 'academy_learn', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 покемонов для учебной практики', rewardMoney: 400, rewardItem: 'pokeball', rewardQty: 5, prereqQuest: null }] },
+
+  'ilde_guillaume': { id: 'ilde_guillaume', name: 'Гильом', sprite: '👨', location: 'il_de_far', dialog: { greet: 'Гильом.', default: 'Наш остров — лучший!' }, quests: [] },
+  'ilde_ferryman': { id: 'ilde_ferryman', name: 'Паромщик Травэр', sprite: '⛴️', location: 'il_de_far', dialog: { greet: 'Паромщик Травэр.', default: 'Паром ходит по расписанию.' }, quests: [] },
+  'ilde_cashier1': { id: 'ilde_cashier1', name: 'Кассир', sprite: '💲', location: 'il_de_far', dialog: { greet: 'Билеты на паром!', default: 'Места ограничены.' }, quests: [] },
+  'ilde_cashier2': { id: 'ilde_cashier2', name: 'Кассир', sprite: '💲', location: 'il_de_far', dialog: { greet: 'Касса порта открыта.', default: 'Приятного путешествия!' }, quests: [] },
+  'ilde_sailboat': { id: 'ilde_sailboat', name: 'Парусник', sprite: '⛵', location: 'il_de_far', dialog: { greet: 'Парусник до Канто!', default: 'Ветер попутный!' }, quests: [] },
+
+  'sen_aspir_prof_quince': { id: 'sen_aspir_prof_quince', name: 'Профессор Квинс', sprite: '🔬', location: 'sen_aspir', dialog: { greet: 'Профессор Квинс.', default: 'Здесь уникальная экосистема.' }, quests: [] },
+  'sen_aspir_passenger': { id: 'sen_aspir_passenger', name: 'Прохожий', sprite: '🚶', location: 'sen_aspir', dialog: { greet: 'Сен Аспир прекрасен.', default: 'Взгляд в прошлое — здесь история.' }, quests: [{ id: 'sa_past', type: 'explore', targetItem: null, targetQty: 2, desc: 'Посетите 2 исторические локации', rewardMoney: 500, rewardItem: 'dawnStone', rewardQty: 1, prereqQuest: null }] },
+  'sen_aspir_madame_odeur': { id: 'sen_aspir_madame_odeur', name: 'Мадам де Одер', sprite: '👩‍🦰', location: 'sen_aspir', dialog: { greet: 'Мадам де Одер.', default: 'Ароматы Архипелага уникальны.' }, quests: [] },
+  'sen_aspir_madame_chaber': { id: 'sen_aspir_madame_chaber', name: 'Мадам Шабэр', sprite: '👩', location: 'sen_aspir', dialog: { greet: 'Мадам Шабэр.', default: 'У вас есть что-то интересное?' }, quests: [] },
+  'sen_aspir_madame_lacerte': { id: 'sen_aspir_madame_lacerte', name: 'Мадам Ласерте', sprite: '👩', location: 'sen_aspir', dialog: { greet: 'Мадам Ласерте.', default: 'Красота спасёт мир.' }, quests: [] },
+  'sen_aspir_museum_worker': { id: 'sen_aspir_museum_worker', name: 'Работник музея', sprite: '🏺', location: 'sen_aspir', dialog: { greet: 'Работник музея.', default: 'Новый экспонат — древний покебол!' }, quests: [] },
+  'sen_aspir_paleontologist': { id: 'sen_aspir_paleontologist', name: 'Палеонтолог', sprite: '🦴', location: 'sen_aspir', dialog: { greet: 'Палеонтолог.', default: 'Окаменелости рассказывают историю.' }, quests: [] },
+  'sen_aspir_monsieur_korel': { id: 'sen_aspir_monsieur_korel', name: 'Месье Корэль', sprite: '🎩', location: 'sen_aspir', dialog: { greet: 'Месье Корэль.', default: 'Сен Аспир — город аристократов.' }, quests: [] },
+  'sen_aspir_ferryman': { id: 'sen_aspir_ferryman', name: 'Паромщик Травэр', sprite: '⛴️', location: 'sen_aspir', dialog: { greet: 'Паромщик Травэр.', default: 'Переправа на Иль де Фар.' }, quests: [] },
+  'sen_aspir_officer_jes': { id: 'sen_aspir_officer_jes', name: 'Офицер Джес', sprite: '👮', location: 'sen_aspir', dialog: { greet: 'Офицер Джес.', default: 'Порядок и на Архипелаге.' }, quests: [] },
+  'sen_aspir_appliances': { id: 'sen_aspir_appliances', name: 'Продавец техники', sprite: '🔌', location: 'sen_aspir', dialog: { greet: 'Техника для Архипелага.', default: 'Доставка на любой остров.' }, quests: [] },
+  'sen_aspir_cashier': { id: 'sen_aspir_cashier', name: 'Кассир', sprite: '💲', location: 'sen_aspir', dialog: { greet: 'Касса Сен Аспира.', default: 'Приятных покупок!' }, quests: [] },
+  'sen_aspir_lottery': { id: 'sen_aspir_lottery', name: 'Лотерейщик', sprite: '🎰', location: 'sen_aspir', dialog: { greet: 'Лотерея Архипелага!', default: 'Удача любит смелых.' }, quests: [] },
+
+  'ice_cave_aloha': { id: 'ice_cave_aloha', name: 'Алооха', sprite: '🥶', location: 'ice_cave_sa', dialog: { greet: 'Ледяная пещера полна тайн.', default: 'Холодно? Привыкай!' }, quests: [{ id: 'sel_ice_cave', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 ледяных покемонов в пещере', rewardMoney: 900, rewardItem: 'iceStone', rewardQty: 1, prereqQuest: null }] },
+
+  'air_stadium_forest_lenor': { id: 'air_stadium_forest_lenor', name: 'Ленор', sprite: '👧', location: 'air_stadium_forest', dialog: { greet: 'Я Ленор. Тренируюсь в лесу.', default: 'Хочешь битву?' }, quests: [{ id: 'ej_night', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 покемонов ночью в лесу', rewardMoney: 500, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: null }] },
+  'air_stadium_forest_elder': { id: 'air_stadium_forest_elder', name: 'Старый лидер', sprite: '🧓', location: 'air_stadium_forest', dialog: { greet: 'Я бывший лидер стадиона.', default: 'Время летит...' }, quests: [] },
+  'air_stadium_forest_guard': { id: 'air_stadium_forest_guard', name: 'Дежурный рейнджер', sprite: '🌲', location: 'air_stadium_forest', dialog: { greet: 'Лес патрулируется.', default: 'Рейнджеры всегда на страже.' }, quests: [{ id: 'ej_prutti', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 покемонов Прутти', rewardMoney: 600, rewardItem: 'greatBall', rewardQty: 5, prereqQuest: null }] },
+  'air_stadium_forest_alice': { id: 'air_stadium_forest_alice', name: 'Алиса', sprite: '👩', location: 'air_stadium_forest', dialog: { greet: 'Алиса.', default: 'Прутти такие милые!' }, quests: [{ id: 'ej_alice', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 покемонов для Алисы', rewardMoney: 300, rewardItem: 'candy', rewardQty: 5, prereqQuest: null }] },
+  'air_stadium_forest_farmer': { id: 'air_stadium_forest_farmer', name: 'Фермер', sprite: '👨‍🌾', location: 'air_stadium_forest', dialog: { greet: 'Моя пасека рядом с лесом.', default: 'Покемоны любят мой мёд!' }, quests: [{ id: 'ej_apiary', type: 'collect_items', targetItem: 'plantSample', targetQty: 4, desc: 'Принесите 4 образца растений для восстановления пасеки', rewardMoney: 400, rewardItem: 'sitrusBerry', rewardQty: 3, prereqQuest: null }] },
+
+  'empty_city_shannon': { id: 'empty_city_shannon', name: 'Лидер Шэннон', sprite: '⚫', location: 'empty_city', dialog: { greet: 'Я Лидер Шэннон.', default: 'Тьма — это тоже сила.' }, quests: [] },
+  'empty_city_silvestr': { id: 'empty_city_silvestr', name: 'Небритый Сильвестр', sprite: '🧔', location: 'empty_city', dialog: { greet: 'Тайна Потерянного города...', default: 'Город хранит секреты.' }, quests: [{ id: 'wj_lost_city', type: 'explore', targetItem: null, targetQty: 5, desc: 'Посетите 5 локаций в поисках Потерянного города', rewardMoney: 1000, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: null }] },
+
+  'volcanic_plateau_leonard': { id: 'volcanic_plateau_leonard', name: 'Леонард', sprite: '🧪', location: 'volcanic_plateau', dialog: { greet: 'Леонард.', default: 'Ингредиенты? Только вулканические.' }, quests: [{ id: 'wj_potion_quest', type: 'collect_items', targetItem: 'lavaCore', targetQty: 2, desc: 'Принесите 2 ядра магмы для зелья', rewardMoney: 600, rewardItem: 'fullRestore', rewardQty: 3, prereqQuest: null }] },
+  'volcanic_plateau_paulo': { id: 'volcanic_plateau_paulo', name: 'Пауло', sprite: '👨', location: 'volcanic_plateau', dialog: { greet: 'Пауло. Живу у вулкана.', default: 'Вулкан даёт силу.' }, quests: [] },
+
+  'rocks_wj_alvares': { id: 'rocks_wj_alvares', name: 'Альварес', sprite: '⛏️', location: 'rocks_wj', dialog: { greet: 'Альварес.', default: 'Стадион снова будет греметь!' }, quests: [{ id: 'wj_earth_stadium', type: 'collect_items', targetItem: 'rockSample', targetQty: 6, desc: 'Принесите 6 образцов породы для восстановления стадиона', rewardMoney: 1200, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: null }] },
+  'rocks_wj_hugo': { id: 'rocks_wj_hugo', name: 'Хьюго', sprite: '👨', location: 'rocks_wj', dialog: { greet: 'Хьюго.', default: 'Тишина скал успокаивает.' }, quests: [] },
+  'rocks_wj_old_man': { id: 'rocks_wj_old_man', name: 'Дряхлый Старик', sprite: '🧓', location: 'rocks_wj', dialog: { greet: 'Я видел рождение этих скал...', default: 'Время не щадит никого.' }, quests: [] },
+  'rocks_wj_pirate_char': { id: 'rocks_wj_pirate_char', name: 'Пират', sprite: '🏴‍☠️', location: 'rocks_wj', dialog: { greet: 'Пират на скалах!', default: 'Йо-хо-хо!' }, quests: [] },
+  'rocks_wj_tourist': { id: 'rocks_wj_tourist', name: 'Турист', sprite: '📸', location: 'rocks_wj', dialog: { greet: 'Турист.', default: 'Говорят, это легендарное место.' }, quests: [{ id: 'wj_pride', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации в поисках Земель Прайда', rewardMoney: 700, rewardItem: 'sunStone', rewardQty: 1, prereqQuest: null }] },
+
+  'deserted_road_blind': { id: 'deserted_road_blind', name: 'Незрячая', sprite: '🧑‍🦯', location: 'deserted_road_ej', dialog: { greet: 'Я не вижу, но чувствую мир.', default: 'Покемоны — мои глаза.' }, quests: [] },
+  'deserted_road_bruce': { id: 'deserted_road_bruce', name: 'Брюс', sprite: '👨', location: 'deserted_road_ej', dialog: { greet: 'Брюс.', default: 'Одиночество — мой спутник.' }, quests: [] },
+
+  'mountain_pass_scared_woman': { id: 'mountain_pass_scared_woman', name: 'Испуганная женщина', sprite: '😰', location: 'mountain_pass', dialog: { greet: 'Помогите! Здесь опасно!', default: 'Спасибо что помогли!' }, quests: [{ id: 'ej_scared', type: 'defeat_x', targetItem: null, targetQty: 3, desc: 'Победите 3 диких покемонов на горном перевале', rewardMoney: 500, rewardItem: 'potion', rewardQty: 3, prereqQuest: null }] },
+  'mountain_pass_kris': { id: 'mountain_pass_kris', name: 'Крис', sprite: '👨', location: 'mountain_pass', dialog: { greet: 'Крис.', default: 'Готов к подъёму?' }, quests: [] },
+
+  'mountain_village_archie': { id: 'mountain_village_archie', name: 'Арчи', sprite: '👨', location: 'mountain_village', dialog: { greet: 'Арчи из горной деревушки.', default: 'Горы хранят древние тайны.' }, quests: [] },
+  'mountain_village_secretary': { id: 'mountain_village_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'mountain_village', dialog: { greet: 'Стадион в горах открыт.', default: 'Лидер ждёт смелых.' }, quests: [] },
+
+  'wj_route3_kristi': { id: 'wj_route3_kristi', name: 'Жуколов Кристи', sprite: '🐛', location: 'wj_route_3', dialog: { greet: 'Жуколов Кристи.', default: 'Свадебный переполох? Я помогу!' }, quests: [{ id: 'wj_wedding', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Принесите 3 образца растений для свадебного букета', rewardMoney: 500, rewardItem: 'lumBerry', rewardQty: 2, prereqQuest: null }] },
+
+  'cross_alfred': { id: 'cross_alfred', name: 'Альфред', sprite: '💌', location: 'lavender_town', dialog: { greet: 'Альфред.', default: 'Любовь не знает границ.' }, quests: [{ id: 'k_lovers', type: 'explore', targetItem: null, targetQty: 2, desc: 'Посетите 2 города чтобы передать письмо', rewardMoney: 600, rewardItem: 'lumBerry', rewardQty: 2, prereqQuest: null }] },
+  'cross_clown_freddy': { id: 'cross_clown_freddy', name: 'Клоун Фредди', sprite: '🤡', location: 'celadon_city', dialog: { greet: 'Цирк уехал, а клоуны остались!', default: 'Грустить нельзя!' }, quests: [{ id: 'cross_clown', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 города в поисках цирка', rewardMoney: 600, rewardItem: 'candy', rewardQty: 3, prereqQuest: null }] },
+  'cross_lenart': { id: 'cross_lenart', name: 'Человек в тёмной накидке', sprite: '🥷', location: 'empty_city', dialog: { greet: 'Залечь на дно — мой план.', default: 'Не привлекайте внимания.' }, quests: [{ id: 'cross_hide', type: 'defeat_x', targetItem: null, targetQty: 3, desc: 'Победите 3 преследователей', rewardMoney: 700, rewardItem: 'fullRestore', rewardQty: 2, prereqQuest: null }] },
+  'cross_dr_fins': { id: 'cross_dr_fins', name: 'Доктор Финс', sprite: '🧬', location: 'goldenrod_institute', dialog: { greet: 'Доктор Финс.', default: 'Генетика изменит мир покемонов.' }, quests: [{ id: 'cross_selection', type: 'catch_x', targetItem: null, targetQty: 4, desc: 'Поймайте 4 покемонов для исследований', rewardMoney: 1000, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
+  'cross_journalist_erika': { id: 'cross_journalist_erika', name: 'Журналист Эрика', sprite: '🎤', location: 'new_district', dialog: { greet: 'Журналист Эрика.', default: 'Правда должна быть раскрыта.' }, quests: [{ id: 'cross_selection2', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Принесите 3 образца для расследования', rewardMoney: 700, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: 'cross_selection' }] },
+  'cross_trainer_tanni': { id: 'cross_trainer_tanni', name: 'Тренер Танни', sprite: '🏃', location: 'route_19', dialog: { greet: 'Тренер Танни.', default: 'Я видел странные вещи на метеостанции.' }, quests: [{ id: 'k_meteo2', type: 'collect_items', targetItem: 'magnemiteNut', targetQty: 3, desc: 'Принесите 3 магнитные гайки для ремонта метеостанции', rewardMoney: 600, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: null }] },
+  'cross_pirate_captain': { id: 'cross_pirate_captain', name: 'Капитан пиратов', sprite: '🏴‍☠️', location: 'il_de_far', dialog: { greet: 'Свистать всех наверх!', default: 'Море зовёт!' }, quests: [{ id: 'sa_pirate_quest', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 острова Архипелага', rewardMoney: 800, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null }] },
+  'cross_boy_fishing': { id: 'cross_boy_fishing', name: 'Мальчик с удочкой', sprite: '🎣', location: 'rocky_beach_sa', dialog: { greet: 'Рыбачу на пляже!', default: 'Клюёт! Ой, сорвалось...' }, quests: [{ id: 'sa_fishing', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 водных покемонов', rewardMoney: 700, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null }] },
+  'cross_guide_sweets': { id: 'cross_guide_sweets', name: 'Провожатый', sprite: '🍬', location: 'confectionery', dialog: { greet: 'Провожатый в Сладкое царство.', default: 'Кондитерская — самое вкусное место!' }, quests: [{ id: 'k_sweets', type: 'collect_items', targetItem: 'plantSample', targetQty: 5, desc: 'Соберите 5 образцов растений для кондитерской', rewardMoney: 500, rewardItem: 'candy', rewardQty: 5, prereqQuest: null }] },
+  'cross_trainer_derti': { id: 'cross_trainer_derti', name: 'Тренер Дёрти', sprite: '🥊', location: 'route_11', dialog: { greet: 'Тренер Дёрти.', default: 'Готов к сражению?' }, quests: [] },
+  'cross_trainer_nambi': { id: 'cross_trainer_nambi', name: 'Тренер Намби', sprite: '🥊', location: 'route_8', dialog: { greet: 'Тренер Намби.', default: 'Битва — моя стихия.' }, quests: [] },
+  'cross_trainer_vetti': { id: 'cross_trainer_vetti', name: 'Тренер Ветти', sprite: '🥊', location: 'route_12', dialog: { greet: 'Тренер Ветти.', default: 'Сразись со мной!' }, quests: [] },
+  'cross_elite_trainer': { id: 'cross_elite_trainer', name: 'Элитный тренер', sprite: '⭐', location: 'indigo_plateau', dialog: { greet: 'Элитный тренер.', default: 'Хочешь стать таким же? Тренируйся!' }, quests: [] },
+  'cross_experienced_trainer': { id: 'cross_experienced_trainer', name: 'Опытный тренер', sprite: '🔰', location: 'victory_road', dialog: { greet: 'Опытный тренер.', default: 'Каждая битва делает сильнее.' }, quests: [] },
+  'cross_director_station': { id: 'cross_director_station', name: 'Директор станции', sprite: '⚡', location: 'power_plant', dialog: { greet: 'Директор электростанции.', default: 'Энергия для всего Канто!' }, quests: [{ id: 'k_power', type: 'defeat_x', targetItem: null, targetQty: 4, desc: 'Победите 4 покемонов на электростанции', rewardMoney: 800, rewardItem: 'thunderStone', rewardQty: 1, prereqQuest: null }] },
+  'kanto_route18_tracy': { id: 'kanto_route18_tracy', name: 'Трейси', sprite: '📷', location: 'route_18', dialog: { greet: 'Трейси, фотограф.', default: 'Никак не поймаю удачный кадр!' }, quests: [{ id: 'k_photo', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 покемонов для фотосессии', rewardMoney: 400, rewardItem: 'greatBall', rewardQty: 3, prereqQuest: null }] },
+  'summer_trainer_steve': { id: 'summer_trainer_steve', name: 'Тренер Стив', sprite: '🏄', location: 'azure_shoreline', dialog: { greet: 'Я Тренер Стив.', default: 'Расскажу интересные факты о побережье.' }, quests: [] },
+  'summer_collector': { id: 'summer_collector', name: 'Коллекционер', sprite: '🎩', location: 'summer_fountain', dialog: { greet: 'Я известный коллекционер со всего региона! Моя коллекция уникальных предметов и редких покемонов ждет пополнения.', default: 'У вас есть что-то интересное для моей коллекции?', quest_offer: 'Для пополнения коллекции нужен {target} {item}.', quest_complete: 'Великолепное пополнение! Вот ваша награда.', quest_incomplete: 'Моя коллекция еще не полна...' }, quests: [{ id: 'sum_collect_1', type: 'collect_items', targetItem: 'rockSample', targetQty: 3, desc: 'Принесите 3 редких образца породы для коллекции', rewardMoney: 2000, rewardItem: 'dawnStone', rewardQty: 1, prereqQuest: 'sum_onyx' }, { id: 'sum_collect_2', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 редких покемонов для коллекции', rewardMoney: 3000, rewardItem: 'shinyStone', rewardQty: 1, prereqQuest: 'sum_collect_1' }] },
+  'summer_nursery_worker': { id: 'summer_nursery_worker', name: 'Работник питомника', sprite: '🥚', location: 'summer_nursery', dialog: { greet: 'Добро пожаловать в Питомник Западного Джото! Здесь вы можете получить случайных покемонов для тренировки.', default: 'Питомник всегда открыт для тренеров. Новые покемоны появляются регулярно.', quest_offer: 'Выберите набор покемонов для тренировки!', quest_complete: 'Отличная работа с питомцами! Держите награду.', quest_incomplete: 'Покемоны еще растут. Приходите позже.' }, quests: [{ id: 'sum_nursery_1', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Вырастите 3 покемонов из питомника (поймайте 3 разных вида)', rewardMoney: 1500, rewardItem: 'masterBall', rewardQty: 3, prereqQuest: null }] },
+  'ostaron_mayor': { id: 'ostaron_mayor', name: 'Мэр Остарона', sprite: '🏛️', location: 'ostaron_cityhall', dialog: { greet: 'Я мэр Остарона! Наш великий город нуждается в вашей помощи в войне с Сайрефом.', default: 'Вы уже выбрали сторону? Остарон ждет вашей поддержки.', quest_offer: 'Для победы над Сайрефом нужен {target} {item}.', quest_complete: 'Остарон благодарит вас! Победа будет за нами!', quest_incomplete: 'Битва еще не выиграна...' }, quests: [{ id: 'ost_mayor_war', type: 'explore', targetItem: null, targetQty: 5, desc: 'Посетите 5 локаций Остарона для укрепления позиций', rewardMoney: 5000, rewardItem: 'duskStone', rewardQty: 1, prereqQuest: 'k_verm_1' }] },
+  'melen_albert_quest': { id: 'melen_albert_quest', name: 'Альберт', sprite: '🕵️', location: 'melen_albert_house', dialog: { greet: 'Я Альберт. Моя племянница пропала! Банда захватила город... Нужно действовать за пределами закона.', default: 'Банда всё ещё там. Нужно больше подготовки.', quest_offer: 'Для спасения племянницы нужен {target} {item}.', quest_complete: 'Племянница спасена! Вы настоящий герой!', quest_incomplete: 'Племянница всё ещё в плену...' }, quests: [{ id: 'mel_albert_1', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 членов банды в Мелене', rewardMoney: 2000, rewardItem: 'fullRestore', rewardQty: 3, prereqQuest: 'sum_pantir_story' }, { id: 'mel_albert_2', type: 'collect_items', targetItem: 'crystalShard', targetQty: 3, desc: 'Принесите 3 осколка для взлома убежища банды', rewardMoney: 3000, rewardItem: 'waterStone', rewardQty: 2, prereqQuest: 'mel_albert_1' }] },
+  'estaire_officer_jes_quest': { id: 'estaire_officer_jes_quest', name: 'Офицер Джес (расследование)', sprite: '👮‍♀️', location: 'estaire_city', dialog: { greet: 'Офицер Джес. Команда R похитила Батискафиш! Нужно расследование. У вас ранг выше 650?', default: 'Расследование продолжается. Команда R где-то рядом.', quest_offer: 'Для расследования нужен {target} {item}.', quest_complete: 'Дело раскрыто! Батискафиш в безопасности.', quest_incomplete: 'Расследование не закончено...' }, quests: [{ id: 'est_bati_1', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 локации для расследования похищения', rewardMoney: 3000, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null }] },
+
 };
 
 // Centralized inventory
@@ -1542,12 +2531,14 @@ function initAdminPanel() {
   });
 
   // Populate user dropdown when opening admin panel
+  let adminSelectPopulated = false;
   fab.addEventListener('click', async () => {
     modal.style.display = 'flex';
     const select = document.getElementById('admin-user-select');
-    if (select.options.length <= 1) {
+    if (!adminSelectPopulated) {
+      adminSelectPopulated = true;
       try {
-        const res = await fetch('/api/trainers/all');
+        const res = await fetch('/api/profile/trainers/all');
         const data = await res.json();
         if (data.users) {
           data.users.forEach(u => {
@@ -1558,13 +2549,13 @@ function initAdminPanel() {
           });
         }
       } catch(e) {}
+      select.addEventListener('change', () => {
+        if (select.value) {
+          document.getElementById('admin-target-id').value = select.value;
+          document.getElementById('admin-lookup').click();
+        }
+      });
     }
-    select.addEventListener('change', () => {
-      if (select.value) {
-        document.getElementById('admin-target-id').value = select.value;
-        document.getElementById('admin-lookup').click();
-      }
-    });
   });
 
   // ID-based admin actions
@@ -1684,273 +2675,274 @@ function lsKey(name) { return `league17_${name}_${getTrainerId()}`; }
 // BADGES (NEW)
 let badges = [];
 
-// GYM LEADERS DATA (NEW)
+// GYM LEADERS DATA (NEW) — scaled for challenge
 const gymLeaders = {
-  pewter_city: {
+  pewter_stadium: {
     name: 'Брок', title: 'Лидер Зала Пьютера', type: 'rock',
     team: [
-      { name: 'geodude', level: 12, move1: 'tackle', move2: 'defense-curl' },
-      { name: 'onix', level: 14, move1: 'tackle', move2: 'screech' }
+      { name: 'geodude', level: 18, move1: 'rock-throw', move2: 'defense-curl' },
+      { name: 'onix', level: 22, move1: 'rock-throw', move2: 'screech' }
     ],
-    badgeName: 'Boulder Badge', moneyReward: 1500
+    badgeName: 'Boulder Badge', moneyReward: 2000
   },
-  cerulean_city: {
+  cerulean_stadium: {
     name: 'Мисти', title: 'Лидер Зала Церулина', type: 'water',
     team: [
-      { name: 'staryu', level: 18, move1: 'water-gun', move2: 'harden' },
-      { name: 'starmie', level: 21, move1: 'water-gun', move2: 'swift' }
+      { name: 'staryu', level: 26, move1: 'water-gun', move2: 'harden' },
+      { name: 'goldeen', level: 24, move1: 'water-gun', move2: 'horn-attack' },
+      { name: 'starmie', level: 30, move1: 'water-gun', move2: 'swift' }
     ],
-    badgeName: 'Cascade Badge', moneyReward: 2000
+    badgeName: 'Cascade Badge', moneyReward: 3000
   },
-  vermilion: {
+  vermilion_stadium: {
     name: 'Лейтенант Сёрдж', title: 'Лидер Зала Вермилиона', type: 'electric',
     team: [
-      { name: 'voltorb', level: 21, move1: 'tackle', move2: 'sonic-boom' },
-      { name: 'pikachu', level: 18, move1: 'thunder-shock', move2: 'quick-attack' },
-      { name: 'raichu', level: 24, move1: 'thunder-shock', move2: 'swift' }
+      { name: 'voltorb', level: 28, move1: 'thunder-shock', move2: 'sonic-boom' },
+      { name: 'magnemite', level: 26, move1: 'thunder-shock', move2: 'supersonic' },
+      { name: 'raichu', level: 32, move1: 'thunderbolt', move2: 'swift' }
     ],
-    badgeName: 'Thunder Badge', moneyReward: 2500
+    badgeName: 'Thunder Badge', moneyReward: 3500
   },
-  celadon_city: {
+  celadon_stadium: {
     name: 'Эрика', title: 'Лидер Зала Селадона', type: 'grass',
     team: [
-      { name: 'victreebel', level: 29, move1: 'vine-whip', move2: 'acid' },
-      { name: 'tangela', level: 24, move1: 'vine-whip', move2: 'bind' },
-      { name: 'vileplume', level: 29, move1: 'petal-dance', move2: 'acid' }
+      { name: 'tangela', level: 34, move1: 'vine-whip', move2: 'bind' },
+      { name: 'weepinbell', level: 35, move1: 'razor-leaf', move2: 'acid' },
+      { name: 'vileplume', level: 38, move1: 'petal-dance', move2: 'sleep-powder' }
     ],
-    badgeName: 'Rainbow Badge', moneyReward: 3000
+    badgeName: 'Rainbow Badge', moneyReward: 4000
   },
-  saffron: {
+  saffron_psychic_stadium: {
     name: 'Сабрина', title: 'Лидер Зала Шаффрана', type: 'psychic',
     team: [
-      { name: 'abra', level: 33, move1: 'confusion', move2: 'disable' },
-      { name: 'kadabra', level: 38, move1: 'psychic', move2: 'recover' },
-      { name: 'kadabra_2', level: 38, move1: 'psychic', move2: 'recover' }
+      { name: 'mr-mime', level: 42, move1: 'confusion', move2: 'barrier' },
+      { name: 'kadabra', level: 45, move1: 'psychic', move2: 'recover' },
+      { name: 'alakazam', level: 48, move1: 'psychic', move2: 'reflect' }
     ],
-    badgeName: 'Marsh Badge', moneyReward: 3500
+    badgeName: 'Marsh Badge', moneyReward: 4500
   },
-  fuchsia_city: {
+  fuchsia_dragon_stadium: {
     name: 'Кога', title: 'Лидер Зала Фуксии', type: 'poison',
     team: [
-      { name: 'koffing', level: 37, move1: 'sludge', move2: 'smokescreen' },
-      { name: 'koffing_2', level: 37, move1: 'sludge', move2: 'smokescreen' },
-      { name: 'weezing', level: 39, move1: 'sludge', move2: 'haze' }
+      { name: 'koffing', level: 45, move1: 'sludge', move2: 'smokescreen' },
+      { name: 'muk', level: 47, move1: 'sludge', move2: 'harden' },
+      { name: 'weezing', level: 50, move1: 'sludge-bomb', move2: 'haze' }
     ],
-    badgeName: 'Soul Badge', moneyReward: 4000
+    badgeName: 'Soul Badge', moneyReward: 5000
   },
-  cinnabar_island: {
+  cinnabar_stadium: {
     name: 'Блейн', title: 'Лидер Зала Синнабара', type: 'fire',
     team: [
-      { name: 'growlithe', level: 42, move1: 'flamethrower', move2: 'roar' },
-      { name: 'ponyta', level: 40, move1: 'fire-blast', move2: 'stomp' },
-      { name: 'rapidash', level: 42, move1: 'fire-blast', move2: 'stomp' },
-      { name: 'arcanine', level: 47, move1: 'flamethrower', move2: 'take-down' }
+      { name: 'growlithe', level: 50, move1: 'flamethrower', move2: 'roar' },
+      { name: 'magmar', level: 48, move1: 'fire-punch', move2: 'smokescreen' },
+      { name: 'rapidash', level: 52, move1: 'fire-blast', move2: 'stomp' },
+      { name: 'arcanine', level: 55, move1: 'flamethrower', move2: 'extreme-speed' }
     ],
-    badgeName: 'Volcano Badge', moneyReward: 4500
+    badgeName: 'Volcano Badge', moneyReward: 5500
   },
-  viridian_city: {
+  viridian_stadium: {
     name: 'Джованни', title: 'Босс Команды R', type: 'ground',
     team: [
-      { name: 'dugtrio', level: 43, move1: 'dig', move2: 'scratch' },
-      { name: 'kangaskhan', level: 45, move1: 'bite', move2: 'roar' },
-      { name: 'rhyhorn', level: 45, move1: 'horn-attack', move2: 'stomp' },
-      { name: 'mewtwo', level: 50, move1: 'psychic', move2: 'barrier' }
+      { name: 'dugtrio', level: 52, move1: 'earthquake', move2: 'slash' },
+      { name: 'nidoking', level: 54, move1: 'earth-power', move2: 'poison-jab' },
+      { name: 'rhydon', level: 55, move1: 'stone-edge', move2: 'earthquake' },
+      { name: 'mewtwo', level: 60, move1: 'psychic', move2: 'recover' }
     ],
-    badgeName: 'Earth Badge', moneyReward: 5000
+    badgeName: 'Earth Badge', moneyReward: 6000
   },
   // --- Johto Gym Leaders ---
-  flourence: {
+  flourence_stadium: {
     name: 'Фолкнер', title: 'Лидер Зала Флоренса', type: 'flying',
     team: [
-      { name: 'pidgey', level: 9, move1: 'gust', move2: 'sand-attack' },
-      { name: 'pidgeotto', level: 13, move1: 'gust', move2: 'quick-attack' }
+      { name: 'hoothoot', level: 15, move1: 'gust', move2: 'hypnosis' },
+      { name: 'pidgeotto', level: 18, move1: 'gust', move2: 'quick-attack' }
     ],
-    badgeName: 'Zephyr Badge', moneyReward: 1800
+    badgeName: 'Zephyr Badge', moneyReward: 2500
   },
-  alston: {
+  alston_steel_stadium: {
     name: 'Багси', title: 'Лидер Зала Алстона', type: 'bug',
     team: [
-      { name: 'metapod', level: 14, move1: 'tackle', move2: 'harden' },
-      { name: 'kakuna', level: 14, move1: 'poison-sting', move2: 'harden' },
-      { name: 'scyther', level: 16, move1: 'quick-attack', move2: 'slash' }
+      { name: 'butterfree', level: 20, move1: 'gust', move2: 'sleep-powder' },
+      { name: 'beedrill', level: 20, move1: 'twineedle', move2: 'fury-attack' },
+      { name: 'scyther', level: 24, move1: 'slash', move2: 'wing-attack' }
     ],
-    badgeName: 'Hive Badge', moneyReward: 2000
+    badgeName: 'Hive Badge', moneyReward: 2800
   },
-  goldenrod: {
+  goldenrod_stadium: {
     name: 'Уитни', title: 'Лидер Зала Голденрода', type: 'normal',
     team: [
-      { name: 'clefairy', level: 18, move1: 'doubleslap', move2: 'sing' },
-      { name: 'miltank', level: 20, move1: 'stomp', move2: 'milk-drink' }
+      { name: 'clefairy', level: 24, move1: 'doubleslap', move2: 'sing' },
+      { name: 'miltank', level: 28, move1: 'stomp', move2: 'milk-drink' }
     ],
-    badgeName: 'Plain Badge', moneyReward: 2500
+    badgeName: 'Plain Badge', moneyReward: 3000
   },
-  warhall: {
+  warhall_battle_stadium: {
     name: 'Морти', title: 'Лидер Зала Вархолла', type: 'ghost',
     team: [
-      { name: 'gastly', level: 21, move1: 'night-shade', move2: 'hypnosis' },
-      { name: 'haunter', level: 21, move1: 'shadow-ball', move2: 'lick' },
-      { name: 'gengar_2', level: 25, move1: 'shadow-ball', move2: 'hypnosis' }
+      { name: 'gastly', level: 28, move1: 'night-shade', move2: 'hypnosis' },
+      { name: 'haunter', level: 30, move1: 'shadow-ball', move2: 'lick' },
+      { name: 'gengar', level: 34, move1: 'shadow-ball', move2: 'hypnosis' }
     ],
-    badgeName: 'Fog Badge', moneyReward: 2800
+    badgeName: 'Fog Badge', moneyReward: 3500
   },
-  ostaron: {
+  ostaron_ice_stadium: {
     name: 'Чак', title: 'Лидер Зала Остарона', type: 'fighting',
     team: [
-      { name: 'primeape', level: 27, move1: 'karate-chop', move2: 'low-kick' },
-      { name: 'poliwrath', level: 30, move1: 'submission', move2: 'hypnosis' }
+      { name: 'primeape', level: 34, move1: 'karate-chop', move2: 'low-kick' },
+      { name: 'poliwrath', level: 38, move1: 'submission', move2: 'hypnosis' }
     ],
-    badgeName: 'Storm Badge', moneyReward: 3000
+    badgeName: 'Storm Badge', moneyReward: 4000
   },
-  olivine: {
+  olivine_water_stadium: {
     name: 'Жасмин', title: 'Лидер Зала Оливина', type: 'steel',
     team: [
-      { name: 'magnemite', level: 30, move1: 'thunder-shock', move2: 'sonic-boom' },
-      { name: 'magnemite_2', level: 30, move1: 'thunder-shock', move2: 'supersonic' },
-      { name: 'steelix', level: 35, move1: 'rock-throw', move2: 'bind' }
+      { name: 'magnemite', level: 36, move1: 'thunderbolt', move2: 'sonic-boom' },
+      { name: 'skarmory', level: 38, move1: 'steel-wing', move2: 'agility' },
+      { name: 'steelix', level: 42, move1: 'rock-throw', move2: 'iron-tail' }
     ],
-    badgeName: 'Mineral Badge', moneyReward: 3500
+    badgeName: 'Mineral Badge', moneyReward: 4500
   },
-  sayref: {
+  sayref_air_stadium: {
     name: 'Прайс', title: 'Лидер Зала Сайрефа', type: 'ice',
     team: [
-      { name: 'seel', level: 31, move1: 'aurora-beam', move2: 'headbutt' },
-      { name: 'dewgong', level: 33, move1: 'ice-beam', move2: 'headbutt' },
-      { name: 'piloswine', level: 34, move1: 'ice-beam', move2: 'take-down' }
+      { name: 'seel', level: 38, move1: 'aurora-beam', move2: 'headbutt' },
+      { name: 'dewgong', level: 40, move1: 'ice-beam', move2: 'headbutt' },
+      { name: 'piloswine', level: 44, move1: 'ice-beam', move2: 'take-down' }
     ],
-    badgeName: 'Glacier Badge', moneyReward: 3800
+    badgeName: 'Glacier Badge', moneyReward: 5000
   },
-  margarita: {
-    name: 'Клер', title: 'Лидер Зала Маргариты', type: 'dragon',
+  ilde_stadium: {
+    name: 'Клер', title: 'Лидер Зала Иль де Фар', type: 'dragon',
     team: [
-      { name: 'dragonair', level: 37, move1: 'dragon-rage', move2: 'thunderbolt' },
-      { name: 'dragonair_2', level: 37, move1: 'dragon-rage', move2: 'surf' },
-      { name: 'gyarados', level: 38, move1: 'hydro-pump', move2: 'dragon-rage' },
-      { name: 'kingdra', level: 40, move1: 'hydro-pump', move2: 'hyper-beam' }
+      { name: 'dragonair', level: 44, move1: 'dragon-rage', move2: 'thunderbolt' },
+      { name: 'dragonair_2', level: 44, move1: 'dragon-rage', move2: 'surf' },
+      { name: 'gyarados', level: 46, move1: 'hydro-pump', move2: 'dragon-rage' },
+      { name: 'kingdra', level: 50, move1: 'hydro-pump', move2: 'hyper-beam' }
     ],
-    badgeName: 'Rising Badge', moneyReward: 4500
+    badgeName: 'Rising Badge', moneyReward: 6000
   }
 };
 
-// ELITE FOUR DATA (NEW)
+// ELITE FOUR DATA (NEW) — scaled up
 const eliteFour = [
   {
     name: 'Лорели', title: 'Элитная Четверка — Лед', type: 'ice',
     team: [
-      { name: 'dewgong', level: 52, move1: 'aurora-beam', move2: 'rest' },
-      { name: 'cloyster', level: 51, move1: 'ice-beam', move2: 'supersonic' },
-      { name: 'slowbro', level: 52, move1: 'surf', move2: 'psychic' },
-      { name: 'jynx', level: 54, move1: 'blizzard', move2: 'psychic' },
-      { name: 'lapras', level: 54, move1: 'ice-beam', move2: 'confuse-ray' }
-    ],
-    moneyReward: 6000
-  },
-  {
-    name: 'Бруно', title: 'Элитная Четверка — Бой', type: 'fighting',
-    team: [
-      { name: 'machamp', level: 54, move1: 'seismic-toss', move2: 'karate-chop' },
-      { name: 'hitmonlee', level: 53, move1: 'jump-kick', move2: 'rolling-kick' },
-      { name: 'hitmonchan', level: 53, move1: 'ice-punch', move2: 'fire-punch' },
-      { name: 'onix_2', level: 54, move1: 'rock-slide', move2: 'bind' },
-      { name: 'machamp', level: 56, move1: 'submission', move2: 'strength' }
-    ],
-    moneyReward: 7000
-  },
-  {
-    name: 'Агата', title: 'Элитная Четверка — Призрак', type: 'ghost',
-    team: [
-      { name: 'gengar', level: 56, move1: 'shadow-ball', move2: 'hypnosis' },
-      { name: 'golbat', level: 56, move1: 'wing-attack', move2: 'confuse-ray' },
-      { name: 'haunter', level: 55, move1: 'shadow-ball', move2: 'night-shade' },
-      { name: 'arbok', level: 56, move1: 'wrap', move2: 'poison-sting' },
-      { name: 'gengar', level: 58, move1: 'shadow-ball', move2: 'night-shade' }
+      { name: 'dewgong', level: 58, move1: 'aurora-beam', move2: 'rest' },
+      { name: 'cloyster', level: 57, move1: 'ice-beam', move2: 'supersonic' },
+      { name: 'slowbro', level: 58, move1: 'surf', move2: 'psychic' },
+      { name: 'jynx', level: 60, move1: 'blizzard', move2: 'psychic' },
+      { name: 'lapras', level: 62, move1: 'ice-beam', move2: 'hydro-pump' }
     ],
     moneyReward: 8000
   },
   {
-    name: 'Лэнс', title: 'Элитная Четверка — Дракон', type: 'dragon',
+    name: 'Бруно', title: 'Элитная Четверка — Бой', type: 'fighting',
     team: [
-      { name: 'gyarados', level: 58, move1: 'hydro-pump', move2: 'dragon-rage' },
-      { name: 'dragonair', level: 56, move1: 'hyper-beam', move2: 'dragon-rage' },
-      { name: 'dragonair_2', level: 56, move1: 'hyper-beam', move2: 'dragon-rage' },
-      { name: 'aerodactyl', level: 60, move1: 'hyper-beam', move2: 'fly' },
-      { name: 'dragonite', level: 62, move1: 'hyper-beam', move2: 'dragon-rage' }
+      { name: 'hitmonlee', level: 60, move1: 'jump-kick', move2: 'rolling-kick' },
+      { name: 'hitmonchan', level: 60, move1: 'ice-punch', move2: 'fire-punch' },
+      { name: 'onix', level: 61, move1: 'rock-slide', move2: 'earthquake' },
+      { name: 'machamp', level: 63, move1: 'submission', move2: 'cross-chop' },
+      { name: 'machamp', level: 65, move1: 'dynamic-punch', move2: 'earthquake' }
     ],
     moneyReward: 9000
+  },
+  {
+    name: 'Агата', title: 'Элитная Четверка — Призрак', type: 'ghost',
+    team: [
+      { name: 'gengar', level: 63, move1: 'shadow-ball', move2: 'hypnosis' },
+      { name: 'crobat', level: 62, move1: 'wing-attack', move2: 'confuse-ray' },
+      { name: 'gengar', level: 64, move1: 'shadow-ball', move2: 'night-shade' },
+      { name: 'arbok', level: 63, move1: 'sludge-bomb', move2: 'glare' },
+      { name: 'gengar', level: 66, move1: 'shadow-ball', move2: 'dream-eater' }
+    ],
+    moneyReward: 10000
+  },
+  {
+    name: 'Лэнс', title: 'Элитная Четверка — Дракон', type: 'dragon',
+    team: [
+      { name: 'gyarados', level: 65, move1: 'hydro-pump', move2: 'hyper-beam' },
+      { name: 'dragonair', level: 64, move1: 'dragon-rage', move2: 'thunderbolt' },
+      { name: 'dragonair', level: 64, move1: 'dragon-rage', move2: 'ice-beam' },
+      { name: 'aerodactyl', level: 66, move1: 'hyper-beam', move2: 'ancient-power' },
+      { name: 'dragonite', level: 70, move1: 'hyper-beam', move2: 'dragon-rage' }
+    ],
+    moneyReward: 12000
   }
 ];
 
 const champion = {
   name: 'Голд (Чемпион)', title: 'Чемпион Лиги', type: 'water',
   team: [
-    { name: 'pidgeot', level: 61, move1: 'fly', move2: 'quick-attack' },
-    { name: 'alakazam', level: 63, move1: 'psychic', move2: 'recover' },
-    { name: 'rhydon', level: 63, move1: 'earthquake', move2: 'horn-drill' },
-    { name: 'exeggutor', level: 61, move1: 'psychic', move2: 'hypnosis' },
-    { name: 'gyarados', level: 63, move1: 'hydro-pump', move2: 'hyper-beam' },
-    { name: 'blastoise', level: 65, move1: 'hydro-pump', move2: 'skull-bash' }
+    { name: 'pidgeot', level: 68, move1: 'fly', move2: 'sky-attack' },
+    { name: 'alakazam', level: 70, move1: 'psychic', move2: 'recover' },
+    { name: 'rhydon', level: 70, move1: 'earthquake', move2: 'stone-edge' },
+    { name: 'exeggutor', level: 68, move1: 'psychic', move2: 'solar-beam' },
+    { name: 'gyarados', level: 72, move1: 'hydro-pump', move2: 'hyper-beam' },
+    { name: 'blastoise', level: 74, move1: 'hydro-pump', move2: 'ice-beam' }
   ],
-  moneyReward: 10000
+  moneyReward: 15000
 };
 
-// JOHTO ELITE FOUR
+// JOHTO ELITE FOUR — scaled up
 const johtoEliteFour = [
   {
     name: 'Уилл', title: 'Элитная Четверка Джото — Экстрасенс', type: 'psychic',
     team: [
-      { name: 'xatu', level: 40, move1: 'psychic', move2: 'confuse-ray' },
-      { name: 'exeggutor', level: 41, move1: 'psychic', move2: 'hypnosis' },
-      { name: 'slowbro', level: 41, move1: 'surf', move2: 'psychic' },
-      { name: 'jynx', level: 41, move1: 'ice-punch', move2: 'psychic' },
-      { name: 'xatu', level: 42, move1: 'psychic', move2: 'fly' }
-    ],
-    moneyReward: 5000
-  },
-  {
-    name: 'Кога', title: 'Элитная Четверка Джото — Яд', type: 'poison',
-    team: [
-      { name: 'ariados', level: 40, move1: 'sludge-bomb', move2: 'spider-web' },
-      { name: 'venomoth', level: 41, move1: 'psychic', move2: 'gust' },
-      { name: 'muk', level: 42, move1: 'sludge', move2: 'minimize' },
-      { name: 'weezing', level: 43, move1: 'sludge', move2: 'explosion' },
-      { name: 'crobat', level: 44, move1: 'wing-attack', move2: 'poison-fang' }
-    ],
-    moneyReward: 6000
-  },
-  {
-    name: 'Бруно', title: 'Элитная Четверка Джото — Бой', type: 'fighting',
-    team: [
-      { name: 'hitmontop', level: 42, move1: 'rolling-kick', move2: 'quick-attack' },
-      { name: 'hitmonlee', level: 42, move1: 'jump-kick', move2: 'rolling-kick' },
-      { name: 'hitmonchan', level: 42, move1: 'ice-punch', move2: 'fire-punch' },
-      { name: 'machamp', level: 44, move1: 'cross-chop', move2: 'rock-slide' },
-      { name: 'machamp', level: 46, move1: 'submission', move2: 'strength' }
+      { name: 'xatu', level: 50, move1: 'psychic', move2: 'confuse-ray' },
+      { name: 'exeggutor', level: 52, move1: 'psychic', move2: 'solar-beam' },
+      { name: 'slowbro', level: 52, move1: 'surf', move2: 'psychic' },
+      { name: 'jynx', level: 53, move1: 'ice-punch', move2: 'psychic' },
+      { name: 'espeon', level: 55, move1: 'psychic', move2: 'morning-sun' }
     ],
     moneyReward: 7000
   },
   {
-    name: 'Карен', title: 'Элитная Четверка Джото — Тьма', type: 'dark',
+    name: 'Кога', title: 'Элитная Четверка Джото — Яд', type: 'poison',
     team: [
-      { name: 'umbreon', level: 42, move1: 'faint-attack', move2: 'confuse-ray' },
-      { name: 'vileplume', level: 42, move1: 'petal-dance', move2: 'acid' },
-      { name: 'murkrow', level: 44, move1: 'shadow-ball', move2: 'drill-peck' },
-      { name: 'gengar', level: 45, move1: 'shadow-ball', move2: 'destiny-bond' },
-      { name: 'houndoom', level: 47, move1: 'crunch', move2: 'flamethrower' }
+      { name: 'ariados', level: 51, move1: 'sludge-bomb', move2: 'spider-web' },
+      { name: 'venomoth', level: 52, move1: 'psychic', move2: 'sludge-bomb' },
+      { name: 'muk', level: 54, move1: 'sludge', move2: 'minimize' },
+      { name: 'weezing', level: 55, move1: 'sludge-bomb', move2: 'explosion' },
+      { name: 'crobat', level: 56, move1: 'wing-attack', move2: 'poison-fang' }
     ],
     moneyReward: 8000
+  },
+  {
+    name: 'Бруно', title: 'Элитная Четверка Джото — Бой', type: 'fighting',
+    team: [
+      { name: 'hitmontop', level: 54, move1: 'rolling-kick', move2: 'quick-attack' },
+      { name: 'hitmonlee', level: 55, move1: 'jump-kick', move2: 'rolling-kick' },
+      { name: 'hitmonchan', level: 55, move1: 'ice-punch', move2: 'fire-punch' },
+      { name: 'machamp', level: 57, move1: 'cross-chop', move2: 'rock-slide' },
+      { name: 'machamp', level: 59, move1: 'dynamic-punch', move2: 'strength' }
+    ],
+    moneyReward: 9000
+  },
+  {
+    name: 'Карен', title: 'Элитная Четверка Джото — Тьма', type: 'dark',
+    team: [
+      { name: 'umbreon', level: 56, move1: 'faint-attack', move2: 'confuse-ray' },
+      { name: 'vileplume', level: 55, move1: 'petal-dance', move2: 'sludge-bomb' },
+      { name: 'murkrow', level: 57, move1: 'shadow-ball', move2: 'drill-peck' },
+      { name: 'gengar', level: 58, move1: 'shadow-ball', move2: 'destiny-bond' },
+      { name: 'houndoom', level: 60, move1: 'crunch', move2: 'flamethrower' }
+    ],
+    moneyReward: 10000
   }
 ];
 
 const johtoChampion = {
   name: 'Лэнс (Чемпион Джото)', title: 'Чемпион Лиги Джото', type: 'dragon',
   team: [
-    { name: 'gyarados', level: 44, move1: 'hydro-pump', move2: 'dragon-rage' },
-    { name: 'dragonite', level: 47, move1: 'hyper-beam', move2: 'dragon-rage' },
-    { name: 'charizard', level: 46, move1: 'flamethrower', move2: 'fly' },
-    { name: 'aerodactyl', level: 46, move1: 'hyper-beam', move2: 'fly' },
-    { name: 'dragonite', level: 49, move1: 'hyper-beam', move2: 'outrage' },
-    { name: 'dragonite', level: 50, move1: 'hyper-beam', move2: 'thunder' }
+    { name: 'gyarados', level: 58, move1: 'hydro-pump', move2: 'dragon-rage' },
+    { name: 'dragonite', level: 60, move1: 'hyper-beam', move2: 'dragon-rage' },
+    { name: 'charizard', level: 59, move1: 'flamethrower', move2: 'fly' },
+    { name: 'aerodactyl', level: 60, move1: 'hyper-beam', move2: 'ancient-power' },
+    { name: 'dragonite', level: 62, move1: 'hyper-beam', move2: 'outrage' },
+    { name: 'dragonite', level: 64, move1: 'hyper-beam', move2: 'thunder' }
   ],
-  moneyReward: 10000
+  moneyReward: 15000
 };
 
 // TEAM ROSTER (Max 6)
@@ -2000,7 +2992,8 @@ let breedingPairs = []; // [{ boxIdx, mon1Uid, mon2Uid, startTime, readyTime }]
 let eggs = [];          // [{ uid, species, apiData, readyTime, boxIdx, parent1Uid, parent2Uid }]
 const EGG_TIME = 10 * 60 * 1000;      // 10 min to produce egg
 const EGG_BONUS_TIME = 5 * 60 * 1000;  // 5 min with matching nature
-const EGG_HATCH_TIME = 7 * 24 * 60 * 60 * 1000; // 7 days to hatch
+// Random hatch time between 3-8 days
+function randomHatchTime() { return (3 + Math.floor(Math.random() * 6)) * 24 * 60 * 60 * 1000; }
 const BREEDING_CHECK_INTERVAL = 60 * 1000; // check every minute
 
 // --- STAR RATINGS ---
@@ -2312,6 +3305,7 @@ const ADMIN_IDS = new Set([1394113078]);
 const ADMIN_USERNAMES = new Set(['DjafarAdjarov', 'nineinchkn5atmythroat']);
 
 document.addEventListener('DOMContentLoaded', async () => {
+  try { // GLOBAL INIT ERROR CATCHER
   initAppNav();
   initShopEvents();
   initGymEvents();
@@ -2365,7 +3359,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  renderLocation(currentLocationId);
+  try { renderLocation(currentLocationId); } catch(e) { console.error('renderLocation failed:', e); document.body.innerHTML += '<div style="position:fixed;top:30px;left:0;right:0;background:#ff3b30;color:#fff;padding:10px;z-index:99999;font-size:12px">RENDER: '+e.message+' | STACK: '+e.stack+'</div>'; }
   renderTeamGrid();
   updateInventoryDisplay();
   updateMoneyDisplay();
@@ -2406,29 +3400,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (btnClosePokedex) btnClosePokedex.addEventListener('click', () => {
     document.getElementById('pokedex-modal').style.display = 'none';
   });
-
-  const searchInput = document.getElementById('pokedex-search');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      const q = e.target.value.trim().toLowerCase();
-      const grid = document.getElementById('pokedex-grid');
-      if (!grid) return;
-      const cells = grid.querySelectorAll('.pokedex-cell');
-      cells.forEach(cell => {
-        const name = cell.getAttribute('data-name');
-        const id = cell.getAttribute('data-id');
-        let match = false;
-        if (q === '') {
-          match = true;
-        } else if (q.startsWith('#')) {
-          match = String(id).includes(q.slice(1));
-        } else {
-          match = name.includes(q);
-        }
-        cell.style.display = match ? '' : 'none';
-      });
-    });
-  }
 
   // TM modal close
   const btnCloseTM = document.getElementById('btn-close-tm');
@@ -2533,6 +3504,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
+  } catch(e) { document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:#ff3b30;color:#fff;padding:15px;z-index:99999;font-size:14px;white-space:pre-wrap"><b>INIT ERROR:</b> '+e.message+'<br><small>'+e.stack+'</small></div>'; console.error(e); }
 });
 
 // --- SAVE / LOAD (NEW) ---
@@ -2583,11 +3555,13 @@ function openDaycareDeposit() {
       const mon2 = remaining[i2].m;
       const idx1 = myTeam.indexOf(mon1);
       const idx2 = myTeam.indexOf(mon2);
-      const higherIdx = Math.max(idx1, idx2);
-      const lowerIdx = Math.min(idx1, idx2);
-
-      daycareMons.push({ mon: myTeam.splice(higherIdx, 1)[0], depositTime: Date.now() });
-      daycareMons.push({ mon: myTeam.splice(lowerIdx, 1)[0], depositTime: Date.now() });
+      let hi = Math.max(idx1, idx2);
+      let lo = Math.min(idx1, idx2);
+      // Remove higher index first (lower index unaffected), then lower
+      const depositMon2 = myTeam.splice(hi, 1)[0];
+      const depositMon1 = myTeam.splice(lo, 1)[0];
+      daycareMons.push({ mon: depositMon2, depositTime: Date.now() });
+      daycareMons.push({ mon: depositMon1, depositTime: Date.now() });
 
       appendToLog(`${mon1.nickname || mon1.apiData?.name} и ${mon2.nickname || mon2.apiData?.name} оставлены в Питомнике!`, false, 'quest');
       showToast('Покемоны оставлены в Питомнике!', false);
@@ -2716,16 +3690,19 @@ async function checkBreeding() {
         const egg = {
           uid: eggUid,
           species,
-          readyTime: now + EGG_HATCH_TIME,
+          readyTime: now + randomHatchTime(),
           boxIdx,
           parent1Uid: existingPair.mon1Uid,
           parent2Uid: existingPair.mon2Uid
         };
         eggs.push(egg);
+        // Permanent breed mark — once bred, never again
+        if (m1) m1.hasBred = true;
+        if (m2) m2.hasBred = true;
         addNotification('🥚 Новое яйцо!', `В Боксе ${boxIdx + 1} появилось яйцо ${species}!`);
         appendToLog(`🥚 В Боксе ${boxIdx + 1} появилось яйцо! (${species})`, false, 'quest');
       }
-      // Remove pair — they produce one egg, need to be re-paired
+      // Remove pair — they produce one egg, need manual re-pair (move out/in PC)
       breedingPairs = breedingPairs.filter(p => p !== existingPair);
     }
 
@@ -2735,6 +3712,8 @@ async function checkBreeding() {
         for (let j = i + 1; j < box.length; j++) {
           const m1 = box[i], m2 = box[j];
           if (!m1.apiData || !m2.apiData) continue;
+          // Skip pokemon that have already bred — permanent sterility
+          if (m1.hasBred || m2.hasBred) continue;
           const groups1 = await getMonEggGroups(m1);
           const groups2 = await getMonEggGroups(m2);
           if (areBreedingCompatible(m1, m2, groups1, groups2)) {
@@ -2797,7 +3776,8 @@ async function hatchEgg(egg) {
       heldItem: null,
       berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
       learnableMoves: [],
-      isEgg: false
+      isEgg: false,
+      hasBred: false
     };
     // Inherit one random IV from each parent
     if (egg.parent1Uid && egg.parent2Uid) {
@@ -2956,7 +3936,8 @@ function renderPCSlots(view) {
       div.querySelector('button').onclick = () => {
         if (myTeam.length <= 1) { showToast('Нельзя оставить команду пустой!', true); return; }
         const targetBox = pcBoxes.length > 0 ? 0 : (pcBoxes.push([]), 0);
-        pcBoxes[targetBox].push(myTeam.splice(i, 1)[0]);
+        const movedMon = myTeam.splice(i, 1)[0];
+        pcBoxes[targetBox].push(movedMon);
         if (activePlayerMon && activePlayerMon === mon && myTeam.length > 0) {
           activePlayerMon = myTeam[0];
         }
@@ -3018,7 +3999,8 @@ function renderPCSlots(view) {
       };
       btnTeam.onclick = () => {
         if (myTeam.length >= 6) { showToast('Команда полна (6/6)! Освободите место.', true); return; }
-        myTeam.push(box.splice(i, 1)[0]);
+        const movedMon = box.splice(i, 1)[0];
+        myTeam.push(movedMon);
         if (box.length === 0) { pcBoxes.splice(boxIdx, 1); }
         openPC();
       };
@@ -3267,6 +4249,14 @@ function loadGame() {
 
     currentLocationId = data.currentLocationId || 'pallet_town';
     currentRegion = data.currentRegion || 'kanto';
+    // Migrate old region keys
+    if (currentRegion === 'tevas_islands') currentRegion = 'southern_archipelago';
+    if (!REGIONS[currentRegion]) currentRegion = 'kanto';
+    // Validate location exists
+    if (!getLocation(currentLocationId)) {
+      currentLocationId = 'pallet_town';
+      currentRegion = 'kanto';
+    }
 
     if (data.inventory) {
       inventory = { ...data.inventory };
@@ -3318,7 +4308,15 @@ function loadGame() {
       if (!m.uid) m.uid = generateUID();
       if (m.currentHp === undefined || m.currentHp < 0) m.currentHp = m.maxHp || 50;
       if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+      // Migrate old _bredWith to hasBred
+      if (m._bredWith !== undefined) { m.hasBred = m._bredWith.length > 0; delete m._bredWith; }
+      if (m.hasBred === undefined) m.hasBred = false;
     }));
+    // Migrate team pokemon too
+    myTeam.forEach(m => {
+      if (m._bredWith !== undefined) { m.hasBred = m._bredWith.length > 0; delete m._bredWith; }
+      if (m.hasBred === undefined) m.hasBred = false;
+    });
     daycareMons = data.daycareMons || [];
     daycareMons.forEach(e => { if (!e.mon.currentHp || e.mon.currentHp < 0) e.mon.currentHp = e.mon.maxHp || 50; });
     daycareEgg = data.daycareEgg || null;
@@ -3774,7 +4772,16 @@ function renderLocation(locId) {
 
   document.getElementById('loc-name').innerText = loc.name;
   document.getElementById('loc-desc').innerText = loc.desc;
-  document.getElementById('loc-image').style.backgroundImage = loc.image.startsWith('http') ? `url('${loc.image}')` : `url('${loc.image}')`;
+  const img = loc.image;
+  const locImgEl = document.getElementById('loc-image');
+  if (locImgEl) {
+    if (img && img.length > 0) {
+      const imgUrl = img.startsWith('http') ? img : (img.startsWith('/') ? img : '/' + img);
+      locImgEl.style.backgroundImage = `url('${imgUrl}')`;
+    } else {
+      locImgEl.style.backgroundImage = 'none';
+    }
+  }
 
   // Region display
   const regionEl = document.getElementById('loc-region');
@@ -3793,24 +4800,16 @@ function renderLocation(locId) {
 
   const actionsContainer = document.getElementById('loc-actions');
   actionsContainer.innerHTML = '';
+  actionsContainer.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:4px';
 
-  if (loc.hasHeal) {
+  // Pokemarket — shop button
+  if (locId.endsWith('_pokemarket') || locId === 'pokemarket') {
     const btnShop = document.createElement('button');
     btnShop.className = 'btn-use';
     btnShop.style.backgroundColor = '#ff9500';
     btnShop.innerText = '🛒 Магазин';
     btnShop.onclick = () => openShop();
     actionsContainer.appendChild(btnShop);
-
-    const btnPokecenter = document.createElement('button');
-    btnPokecenter.className = 'btn-use';
-    btnPokecenter.style.backgroundColor = '#ff3b30';
-    btnPokecenter.innerText = '🏥 Покецентр';
-    btnPokecenter.onclick = () => {
-      lastLocation = locId;
-      renderLocation('pokecenter');
-    };
-    actionsContainer.appendChild(btnPokecenter);
   }
 
   // Fishing button on water locations
@@ -3824,7 +4823,7 @@ function renderLocation(locId) {
   }
 
   // Pokemon Center location
-  if (locId === 'pokecenter') {
+  if (locId === 'pokecenter' || locId.endsWith('_pokecenter')) {
     checkDaycare();
 
     const btnTrade = document.createElement('button');
@@ -3939,13 +4938,19 @@ function renderLocation(locId) {
   const npcPanel = document.getElementById('npc-panel');
   const npcButtons = document.getElementById('npc-buttons');
   npcButtons.innerHTML = '';
-  const npcsHere = Object.values(NPC_DATA).filter(n => n.location === locId);
+  npcButtons.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:4px';
+  let npcsHere = Object.values(NPC_DATA).filter(n => n.location === locId);
+  if (locId.endsWith('_pokecenter')) {
+    const pcNpcs = Object.values(NPC_DATA).filter(n => n.location === 'pokecenter');
+    npcsHere = [...npcsHere, ...pcNpcs];
+  }
   if (npcsHere.length > 0) {
     npcPanel.style.display = 'block';
     npcsHere.forEach(npc => {
       const npcBtn = document.createElement('button');
       npcBtn.className = 'btn-nav';
-      npcBtn.innerHTML = `<span>${npc.sprite} ${npc.name}</span> <span>💬</span>`;
+      npcBtn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
+      npcBtn.innerHTML = `<span>${npc.sprite} ${npc.name}</span>`;
       npcBtn.onclick = () => openNPCDialog(npc.id);
       npcButtons.appendChild(npcBtn);
     });
@@ -3955,31 +4960,55 @@ function renderLocation(locId) {
 
   const navContainer = document.getElementById('nav-buttons');
   navContainer.innerHTML = '';
+  navContainer.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:4px';
 
+  // Split: external routes vs sub-locations
+  const subLinks = [], extLinks = [];
   loc.links.forEach(linkId => {
     const linkLoc = getLocation(linkId);
     if (!linkLoc) return;
+    if (linkId.startsWith(locId + '_')) subLinks.push({ id: linkId, loc: linkLoc });
+    else extLinks.push({ id: linkId, loc: linkLoc });
+  });
+
+  extLinks.forEach(({ id: linkId, loc: linkLoc }) => {
     const btn = document.createElement('button');
     btn.className = 'btn-nav';
-    btn.innerHTML = `<span>Идти в: ${linkLoc.name}</span> <span>➔</span>`;
+    btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
+    btn.innerHTML = `<span>➔ ${linkLoc.name}</span>`;
     btn.onclick = () => {
-      if (!visitedLocations.has(linkId)) {
-        visitedLocations.add(linkId);
-        checkQuestProgress('explore');
-      }
+      if (!visitedLocations.has(linkId)) { visitedLocations.add(linkId); checkQuestProgress('explore'); }
       renderLocation(linkId);
     };
     navContainer.appendChild(btn);
   });
 
+  if (subLinks.length > 0) {
+    const sep = document.createElement('div');
+    sep.style.cssText = 'grid-column:1/-1;font-size:11px;color:#888;text-align:center;padding:4px 0 2px';
+    sep.innerText = '🏙 В городе';
+    navContainer.appendChild(sep);
+    subLinks.forEach(({ id: linkId, loc: linkLoc }) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-nav';
+      btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:#555';
+      btn.innerHTML = `<span>🏠 ${linkLoc.name}</span>`;
+      btn.onclick = () => {
+        if (!visitedLocations.has(linkId)) { visitedLocations.add(linkId); checkQuestProgress('explore'); }
+        renderLocation(linkId);
+      };
+      navContainer.appendChild(btn);
+    });
+  }
+
   // Back from pokecenter
-  if (locId === 'pokecenter' && lastLocation) {
+  if ((locId === 'pokecenter' || locId.endsWith('_pokecenter')) && lastLocation) {
     const backLoc = getLocation(lastLocation);
     if (backLoc) {
       const btnBack = document.createElement('button');
       btnBack.className = 'btn-nav';
-      btnBack.style.borderColor = 'var(--tma-accent)';
-      btnBack.innerHTML = `<span>↩ Назад в: ${backLoc.name}</span> <span>🚪</span>`;
+      btnBack.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:var(--tma-accent)';
+      btnBack.innerHTML = `<span>↩ ${backLoc.name}</span>`;
       btnBack.onclick = () => {
         renderLocation(lastLocation);
         lastLocation = null;
@@ -3994,8 +5023,8 @@ function renderLocation(locId) {
     hubs.forEach(hub => {
       const btn = document.createElement('button');
       btn.className = 'btn-nav';
-      btn.style.borderColor = 'var(--tma-accent)';
-      btn.innerHTML = `<span>${hub.label}</span> <span>🎫</span>`;
+      btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:var(--tma-accent)';
+      btn.innerHTML = `<span>🎫 ${hub.label}</span>`;
       btn.onclick = () => travelToRegion(hub.targetRegion, hub.targetLoc, hub.ticket);
       navContainer.appendChild(btn);
     });
@@ -4323,6 +5352,7 @@ const STATUS_NAMES = {
 };
 
 const evolutionCache = {};
+const evolvesFromMap = {}; // reverse: species → [prevo names]
 
 let POKEDEX_ALL = [];
 let pokedexData = {};
@@ -4330,7 +5360,7 @@ let pokedexTotal = 0;
 
 async function loadPokedexData() {
   try {
-    const res = await fetch('/pokedex_data.json');
+    const res = await fetch(import.meta.env.BASE_URL + 'pokedex_data.json');
     pokedexData = await res.json();
     POKEDEX_ALL = Object.keys(pokedexData);
     pokedexTotal = POKEDEX_ALL.length;
@@ -5089,9 +6119,11 @@ async function useMove(moveIndex) {
 
     if (isCrit) appendToLog('Критический удар!', false, 'dmg');
 
-    // Focus Sash: survive at 1 HP
+    // Focus Sash: survive at 1 HP (consumed on use)
     if (activeWild.heldItem === 'focusSash' && wildCurHP === wildMaxHP && dmg >= wildCurHP) {
       dmg = wildCurHP - 1;
+      appendToLog(`${activeWild.name} держится благодаря Фокусному поясу!`);
+      activeWild.heldItem = null;
     }
 
     wildCurHP -= dmg;
@@ -5309,10 +6341,22 @@ function handlePlayerFaint() {
 
 function enemyTurn() {
   // Check wild status before attacking
-  checkStatusTurn(activeWild, false);
+  if (!checkStatusTurn(activeWild, false)) return;
   applyStatusEndOfTurn(activeWild, false);
   if (wildCurHP <= 0) {
     appendToLog(`Дикий ${activeWild.name} побежден!`);
+    // Award EXP for status knockout
+    const baseExp = wildLvl * 30;
+    let expGain = Math.floor(baseExp / activePlayerMon.myTeam.filter(m => m.currentHp > 0).length);
+    if (expShareActive) expGain = Math.floor(baseExp / activePlayerMon.myTeam.length);
+    activePlayerMon.currentExp = (activePlayerMon.currentExp || 0) + expGain;
+    if (activePlayerMon.currentExp >= (activePlayerMon.expToNext || 100)) {
+      activePlayerMon.baseLevel++;
+      activePlayerMon.currentExp -= activePlayerMon.expToNext;
+      activePlayerMon.expToNext = Math.floor(activePlayerMon.expToNext * 1.2);
+      appendToLog(`${activePlayerMon.apiData.name} достиг ${activePlayerMon.baseLevel} уровня!`);
+    }
+    checkQuestProgress('defeat_x');
     if (Math.random() < 0.10) { addItem('candy'); appendToLog('Вы нашли Сладкую Конфету!', false, 'quest'); }
     const dropResults = processMonsterDrop(activeWild.name);
     if (dropResults.length > 0) {
@@ -5320,6 +6364,7 @@ function enemyTurn() {
       appendToLog(`Добыча: ${dropText}`, false, 'quest');
     }
     money += wildLvl * 15;
+    checkQuestProgress('earn_money', wildLvl * 15);
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
     clearBattleState();
@@ -5389,9 +6434,11 @@ function enemyTurn() {
     appendToLog('Атака не возымела эффекта...');
   }
 
-  // Focus Sash: player survives at 1 HP
+  // Focus Sash: player survives at 1 HP (consumed on use)
   if (activePlayerMon.heldItem === 'focusSash' && activePlayerMon.currentHp === activePlayerMon.maxHp && dmg >= activePlayerMon.currentHp) {
     dmg = activePlayerMon.currentHp - 1;
+    appendToLog(`${activePlayerMon.apiData.name} держится благодаря Фокусному поясу!`);
+    activePlayerMon.heldItem = null;
   }
 
   appendToLog(`Дикий ${activeWild.name} использует ${enemyMoveName}! (-${dmg} HP)`, false, 'dmg');
@@ -5526,7 +6573,7 @@ function initEncounterEvents() {
       // Love Ball: x8 if opposite gender
       if (item === 'loveBall') {
         const wildGender = activeWild.wildGender;
-        const playerGender = activePlayerMon?.apiData?.gender || Math.random() < 0.5 ? 'male' : 'female';
+        const playerGender = activePlayerMon?.apiData?.gender || (Math.random() < 0.5 ? 'male' : 'female');
         if (wildGender && playerGender && wildGender !== playerGender) catchRate *= 8;
       }
 
@@ -5883,6 +6930,7 @@ async function startGymNextPokemon() {
     const leader = gymLeaders[gymLeaderKey];
     badges.push(leader.badgeName);
     money += leader.moneyReward;
+    checkQuestProgress('earn_money', leader.moneyReward);
     appendToLog(`Победа! Вы получили ${leader.badgeName} и ¥${leader.moneyReward}!`);
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
@@ -5997,6 +7045,18 @@ async function useMoveGym(moveIndex) {
           document.getElementById('wild-status-icon').innerText = getStatusIcon(wildStatus);
           appendToLog(`${activeWild.name} получил ${STATUS_NAMES[targetStatus]}!`);
         }
+      }
+    }
+    // Stat changes for non-damaging moves in gym battles
+    const statChanges = move.stat_changes || [];
+    for (const sc of statChanges) {
+      const change = sc.change;
+      const statName = sc.stat.name;
+      const statMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
+      const short = statMap[statName];
+      if (short) {
+        if (change > 0) statStageModify(activePlayerMon, short, change);
+        else statStageModify(activeWild, short, change);
       }
     }
     appendToLog('Но ничего не произошло...');
@@ -6168,7 +7228,7 @@ async function useMoveGym(moveIndex) {
 }
 
 function enemyTurnGym() {
-  checkStatusTurn(activeWild, false);
+  if (!checkStatusTurn(activeWild, false)) return;
   applyStatusEndOfTurn(activeWild, false);
   if (wildCurHP <= 0) {
     appendToLog(`${activeWild.name} побежден!`);
@@ -6392,6 +7452,7 @@ async function startEliteNextPokemon() {
   // If all pokemon of this elite member are defeated
   if (gymTeamIndexInMember >= gymTeamData.length) {
     money += eliteFour[gymTeamIndex].moneyReward;
+    checkQuestProgress('earn_money', eliteFour[gymTeamIndex].moneyReward);
     updateMoneyDisplay();
     gymTeamIndex++;
     gymTeamData = null;
@@ -6481,6 +7542,7 @@ async function championBattle() {
 async function startChampionNextPokemon() {
   if (gymTeamIndexInMember >= gymTeamData.length) {
     money += champion.moneyReward;
+    checkQuestProgress('earn_money', champion.moneyReward);
     updateMoneyDisplay();
     appendToLog('ПОБЕДА! Вы стали Чемпионом Лиги!');
     document.getElementById('battle-main-menu').style.display = 'none';
@@ -6808,7 +7870,7 @@ function renderTeamGrid() {
             <img src="${mon.apiData.sprites?.other?.['official-artwork']?.front_default || mon.apiData.sprites.front_default}" alt="sprite" style="background:${typeBg};">
             ${trainLabel}
           </div>
-          <div class="slot-name">${mon.nickname || mon.apiData.name} ${statusIcon}</div>
+          <div class="slot-name">${escHtml(mon.nickname || mon.apiData.name)} ${statusIcon}</div>
           <div class="slot-lvl">${renderStars(pwStars2, rStars2)} Lvl ${curLvl} | ${mon.currentHp}/${mon.maxHp} HP</div>
         `;
       }
@@ -6914,14 +7976,17 @@ function refreshProfileUI() {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.getAttribute('data-lm'));
         const move = mon.learnableMoves[idx];
-        showConfirmModal('Выучить атаку?', `${move.name} (⚡${move.power}) — заменить первую атаку?`, () => {
-          if (!mon.apiData.moves[0]) mon.apiData.moves[0] = {};
-          mon.apiData.moves[0].move = { name: move.name, url: move.url };
+        const slotItems = (mon.apiData.moves || []).filter(m => m).map((m, i) => ({
+          label: m.move.name, subtitle: `Слот ${i + 1}`
+        }));
+        showSelectionModal(`Выучить ${move.name} (⚡${move.power}) в какой слот?`, slotItems, (slotPick) => {
+          if (!mon.apiData.moves[slotPick]) mon.apiData.moves[slotPick] = {};
+          mon.apiData.moves[slotPick].move = { name: move.name, url: move.url };
           mon.learnableMoves.splice(idx, 1);
           refreshProfileUI();
-          showToast(`${move.name} выучено!`, false);
+          showToast(`${move.name} выучено в слот ${slotPick + 1}!`, false);
           autoSave();
-        });
+        }, true);
       });
     });
   }
@@ -7160,7 +8225,7 @@ function renderBattleItemSelect() {
   const select = document.getElementById('battle-item-select');
   if (!select) return;
   select.innerHTML = '';
-  const battleItems = ITEMS.filter(i => i.implemented && (
+  const battleItems = ITEMS.filter(i => i.implemented && getItemQty(i.id) > 0 && (
     i.isBall || i.isUsable || i.category === 'statusCure' || i.category === 'ppRecovery' ||
     i.category === 'evolutionStones'
   ));
@@ -7208,6 +8273,49 @@ function renderInventory() {
     </div>
   `;
   container.appendChild(moneyGrid);
+
+  // Show eggs in inventory
+  if (eggs.length > 0) {
+    const eggTitle = document.createElement('div');
+    eggTitle.className = 'inv-category-title';
+    eggTitle.textContent = '🥚 Яйца';
+    container.appendChild(eggTitle);
+
+    const eggGrid = document.createElement('div');
+    eggGrid.className = 'inv-grid';
+    const now = Date.now();
+    eggs.forEach((egg, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'inv-grid-item';
+      cell.style.cssText = 'cursor:pointer;border-color:#34c759;';
+
+      const emoji = document.createElement('div');
+      emoji.style.cssText = 'font-size:24px;';
+      emoji.textContent = '🥚';
+      cell.appendChild(emoji);
+
+      const name = document.createElement('div');
+      name.className = 'inv-grid-name';
+      name.textContent = egg.species || 'Яйцо';
+      cell.appendChild(name);
+
+      const timeLeft = Math.max(0, egg.readyTime - now);
+      const badge = document.createElement('div');
+      badge.className = 'inv-grid-badge';
+      badge.style.cssText = 'background:#34c759;font-size:0.5rem;min-width:28px;';
+      if (timeLeft <= 0) {
+        badge.textContent = '✓';
+        cell.addEventListener('click', () => hatchEgg(egg));
+      } else {
+        const mins = Math.ceil(timeLeft / 60000);
+        badge.textContent = mins > 60 ? `${Math.floor(mins/60)}ч` : `${mins}м`;
+      }
+      cell.appendChild(badge);
+
+      eggGrid.appendChild(cell);
+    });
+    container.appendChild(eggGrid);
+  }
 
   // Group items by category
   const categories = {
@@ -7507,10 +8615,10 @@ function useItem(itemId) {
       })();
       break;
     }
-    // Status cures — usable from backpack
+    // Status cures — usable from backpack (uses short status codes)
     case 'antidote': {
       if (!mon.status) return showToast('У покемона нет статуса!', true);
-      if (mon.status !== 'poison') return showToast('Антидот лечит только отравление!', true);
+      if (mon.status !== 'psn') return showToast('Антидот лечит только отравление!', true);
       mon.status = null;
       removeItem(itemId);
       if (currentPokemonIndex !== null) refreshProfileUI();
@@ -7519,7 +8627,7 @@ function useItem(itemId) {
     }
     case 'antiparalyze': {
       if (!mon.status) return showToast('У покемона нет статуса!', true);
-      if (mon.status !== 'paralysis') return showToast('Антипаралич лечит только паралич!', true);
+      if (mon.status !== 'par') return showToast('Антипаралич лечит только паралич!', true);
       mon.status = null;
       removeItem(itemId);
       if (currentPokemonIndex !== null) refreshProfileUI();
@@ -7528,7 +8636,7 @@ function useItem(itemId) {
     }
     case 'energyDrink': {
       if (!mon.status) return showToast('У покемона нет статуса!', true);
-      if (mon.status !== 'sleep') return showToast('Энергетик лечит только сон!', true);
+      if (mon.status !== 'slp') return showToast('Энергетик лечит только сон!', true);
       mon.status = null;
       mon.sleepTurns = 0;
       removeItem(itemId);
@@ -7538,7 +8646,7 @@ function useItem(itemId) {
     }
     case 'fireExtinguisher': {
       if (!mon.status) return showToast('У покемона нет статуса!', true);
-      if (mon.status !== 'burn') return showToast('Огнетушитель лечит только ожог!', true);
+      if (mon.status !== 'brn') return showToast('Огнетушитель лечит только ожог!', true);
       mon.status = null;
       removeItem(itemId);
       if (currentPokemonIndex !== null) refreshProfileUI();
@@ -7547,7 +8655,7 @@ function useItem(itemId) {
     }
     case 'antiSputin': case 'healingHerb': {
       if (!mon.status) return showToast('У покемона нет статуса!', true);
-      const statusNames = { poison: 'отравления', paralysis: 'паралича', sleep: 'сна', burn: 'ожога', freeze: 'заморозки' };
+      const statusNames = { psn: 'отравления', par: 'паралича', slp: 'сна', brn: 'ожога', frz: 'заморозки' };
       showToast(`${mon.nickname || mon.apiData.name} вылечен от ${statusNames[mon.status] || mon.status}!`, false);
       mon.status = null;
       mon.sleepTurns = 0;
@@ -8011,16 +9119,25 @@ async function authTelegram() {
   initTelegram();
   showLoginScreen('Авторизация через Telegram...', false);
 
+  // Dev mode: allow localhost testing without Telegram
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const devMode = new URLSearchParams(window.location.search).has('dev');
+
   if (!window.Telegram || !window.Telegram.WebApp || !window.Telegram.WebApp.initData) {
-    showLoginScreen('Игра доступна только через Telegram', true);
-    return;
+    if (isLocalhost || devMode) {
+      console.log('🔧 Dev mode: bypassing Telegram auth');
+    } else {
+      showLoginScreen('Игра доступна только через Telegram', true);
+      return;
+    }
   }
 
   try {
+    const initData = (isLocalhost || devMode) ? 'test' : window.Telegram.WebApp.initData;
     const res = await fetch(`${API_BASE}/auth/tg`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: window.Telegram.WebApp.initData })
+      body: JSON.stringify({ initData: initData })
     });
     if (!res.ok) {
       showLoginScreen('Ошибка авторизации. Попробуйте перезапустить бота.', true);
@@ -8121,6 +9238,12 @@ function applyCloudSave(data) {
   console.log(`[sync] Server v${cloudV} > local v${saveVersion} — applying server data`);
   currentLocationId = data.currentLocationId || currentLocationId;
   currentRegion = data.currentRegion || currentRegion;
+  if (currentRegion === 'tevas_islands') currentRegion = 'southern_archipelago';
+  if (!REGIONS[currentRegion]) currentRegion = 'kanto';
+  if (!getLocation(currentLocationId)) {
+    currentLocationId = 'pallet_town';
+    currentRegion = 'kanto';
+  }
   if (data.inventory) inventory = { ...data.inventory };
   money = data.money ?? money;
   badges = data.badges || badges;
@@ -8187,7 +9310,7 @@ async function openLeaderboard() {
       html += `
         <div class="leaderboard-entry">
           <span class="leaderboard-rank">${medal}</span>
-          <span class="leaderboard-name">${name}</span>
+          <span class="leaderboard-name">${escHtml(name)}</span>
           <span class="leaderboard-badges">🏅${entry.badges_count}</span>
           <span class="leaderboard-stat">🐾${pkmn}</span>
           <span class="leaderboard-stat">✨${leg}</span>
@@ -8229,17 +9352,20 @@ async function fetchEvolutionChain(pokemonName) {
     const chainRes = await fetch(speciesData.evolution_chain.url);
     const chainData = await chainRes.json();
     let chain = chainData.chain;
+    // Traverse full chain tree and populate both forward + reverse maps
     const queue = [chain];
     while (queue.length > 0) {
       const node = queue.shift();
-      if (node.species.name === pokemonName) {
-        evolutionCache[pokemonName] = node.evolves_to;
-        return node.evolves_to;
+      const curName = node.species.name;
+      if (!evolutionCache[curName]) evolutionCache[curName] = node.evolves_to;
+      for (const child of node.evolves_to) {
+        const childName = child.species.name;
+        if (!evolvesFromMap[childName]) evolvesFromMap[childName] = [];
+        if (!evolvesFromMap[childName].includes(curName)) evolvesFromMap[childName].push(curName);
+        queue.push(child);
       }
-      node.evolves_to.forEach(child => queue.push(child));
     }
-    evolutionCache[pokemonName] = [];
-    return [];
+    return evolutionCache[pokemonName] || [];
   } catch (e) {
     console.warn('Evolution fetch failed for', pokemonName, e);
     evolutionCache[pokemonName] = [];
@@ -8249,6 +9375,10 @@ async function fetchEvolutionChain(pokemonName) {
 
 async function getEvolutions(pokemonName) {
   if (evolutionCache[pokemonName] !== undefined) {
+    // Reverse map may be empty if cached before the fix — populate it
+    if (evolvesFromMap[pokemonName] === undefined) {
+      await fetchEvolutionChain(pokemonName);
+    }
     return evolutionCache[pokemonName].map(evo => {
       const d = evo.evolution_details && evo.evolution_details[0] ? evo.evolution_details[0] : {};
       return {
@@ -8280,7 +9410,8 @@ async function checkEvolution(pokemon, useStone = false, stoneItem = null) {
     }
     if (useStone && evo.trigger === 'use-item') {
       if (stoneItem && STONE_ITEM_MAP[stoneItem]) {
-        if (evo.item && evo.item.name === STONE_ITEM_MAP[stoneItem]) {
+        // evo.item is a string (item name), not an object
+        if (evo.item && evo.item === STONE_ITEM_MAP[stoneItem]) {
           return evo;
         }
       } else {
@@ -8381,48 +9512,85 @@ function openPokedex() {
   const countEl = document.getElementById('pokedex-count');
   const searchEl = document.getElementById('pokedex-search');
   const detailEl = document.getElementById('pokedex-detail');
-  grid.innerHTML = '';
+  const genFilter = document.getElementById('pokedex-gen-filter');
+  const statusFilter = document.getElementById('pokedex-status-filter');
+
   if (detailEl) detailEl.style.display = 'none';
   if (searchEl) { searchEl.value = ''; searchEl.style.display = 'block'; }
   if (grid) { grid.style.display = 'grid'; grid.style.visibility = 'visible'; grid.style.position = 'relative'; }
+  if (genFilter) genFilter.value = 'all';
+  if (statusFilter) statusFilter.value = 'all';
 
-  POKEDEX_ALL.forEach((name, idx) => {
-    const dexId = idx + 1;
-    const cell = document.createElement('div');
-    cell.className = 'pokedex-cell';
-    cell.setAttribute('data-name', name);
-    cell.setAttribute('data-id', dexId);
+  function renderGrid() {
+    grid.innerHTML = '';
+    const searchTerm = searchEl?.value.toLowerCase().trim() || '';
+    const genVal = genFilter?.value || 'all';
+    const statusVal = statusFilter?.value || 'all';
 
-    let statusClass = 'unknown';
-    if (pokedexCaught.has(name)) {
-      statusClass = 'caught';
-    } else if (pokedexSeen.has(name)) {
-      statusClass = 'seen';
-    }
+    let visible = 0;
+    POKEDEX_ALL.forEach((name, idx) => {
+      const dexId = idx + 1;
 
-    cell.classList.add(statusClass);
-    const imgSrc = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${name}.png`;
-    cell.innerHTML = `
-      <img src="${imgSrc}" alt="${name}" loading="lazy" onerror="this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${name}.png'">
-      <span class="poke-name">${name}</span>
-    `;
-    grid.appendChild(cell);
-    cell.addEventListener('click', () => showPokedexInfo(name));
-  });
+      // Generation filter
+      if (genVal !== 'all') {
+        const gen = parseInt(genVal);
+        if (gen === 1 && dexId > 151) return;
+        if (gen === 2 && (dexId < 152 || dexId > 251)) return;
+        if (gen === 3 && (dexId < 252 || dexId > 386)) return;
+        if (gen === 4 && dexId < 387) return;
+      }
 
-  const caughtQty = pokedexCaught.size;
-  countEl.innerText = `${caughtQty}/${pokedexTotal}`;
+      // Status filter
+      const isCaught = pokedexCaught.has(name);
+      const isSeen = pokedexSeen.has(name);
+      if (statusVal === 'caught' && !isCaught) return;
+      if (statusVal === 'seen' && !isSeen) return;
+      if (statusVal === 'unknown' && (isCaught || isSeen)) return;
+
+      // Search filter
+      if (searchTerm) {
+        if (!name.includes(searchTerm) && String(dexId) !== searchTerm) return;
+      }
+
+      visible++;
+      const cell = document.createElement('div');
+      cell.className = 'pokedex-cell';
+
+      let statusClass = 'unknown';
+      if (isCaught) statusClass = 'caught';
+      else if (isSeen) statusClass = 'seen';
+
+      cell.classList.add(statusClass);
+      cell.innerHTML = `
+        <span class="dex-num">#${dexId}</span>
+        <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${name}.png" alt="${name}" loading="lazy" onerror="this.style.opacity='0.3'">
+        <span class="poke-name">${name}</span>
+      `;
+      grid.appendChild(cell);
+      cell.addEventListener('click', () => showPokedexInfo(name));
+    });
+
+    countEl.innerText = `Поймано: ${pokedexCaught.size} / ${pokedexTotal}`;
+  }
+
+  renderGrid();
+
+  searchEl.oninput = renderGrid;
+  if (genFilter) genFilter.onchange = renderGrid;
+  if (statusFilter) statusFilter.onchange = renderGrid;
 }
 
 async function showPokedexInfo(speciesName) {
   const detailEl = document.getElementById('pokedex-detail');
   const gridEl = document.getElementById('pokedex-grid');
   const searchEl = document.getElementById('pokedex-search');
+  const filtersEl = document.getElementById('pokedex-filters');
   if (!detailEl || !gridEl) return;
 
   gridEl.style.visibility = 'hidden';
   gridEl.style.position = 'absolute';
   if (searchEl) searchEl.style.display = 'none';
+  if (filtersEl) filtersEl.style.display = 'none';
   detailEl.style.display = 'flex';
   detailEl.innerHTML = '<div class="pokedex-detail-loading">Загрузка...</div>';
 
@@ -8464,13 +9632,45 @@ async function showPokedexInfo(speciesName) {
     const gymUsers = [];
     for (const [key, leader] of Object.entries(gymLeaders)) {
       if (leader.team) {
-        const names = leader.team.flatMap(m => m.pokemon || []);
+        const names = leader.team.flatMap(m => m.name ? [m.name] : []);
         if (names.some(n => n.replace('_2','') === speciesName)) gymUsers.push(leader.name);
       }
     }
 
+    // Evolution info
+    const evolutions = await getEvolutions(speciesName);
+    let evoHtml = '';
+    if (evolutions.length > 0) {
+      evoHtml = `<div class="pokedex-detail-method" style="background:rgba(52,199,89,0.1);border-color:#34c759;">
+        <div class="method-row"><b>🔮 Эволюции:</b></div>
+        ${evolutions.map(evo => {
+          const cond = evo.minLevel ? `Ур.${evo.minLevel}` : evo.trigger === 'use-item' ? (evo.item || 'Камень') : (evo.trigger || 'Особая');
+          return `<div class="method-row" style="cursor:pointer;color:var(--tma-primary);margin-top:3px;" onclick="showPokedexInfo('${evo.name}')">→ ${evo.name} (${cond})</div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    // Find pokemon that evolve INTO this one (from reverse map populated by chain fetch above)
+    const evolvesFrom = evolvesFromMap[speciesName] || [];
+    let prevoHtml = '';
+    if (evolvesFrom.length > 0) {
+      prevoHtml = `<div class="pokedex-detail-method" style="background:rgba(0,122,255,0.1);border-color:#007aff;">
+        <div class="method-row"><b>Эволюция из:</b></div>
+        ${evolvesFrom.map(name => `<div class="method-row" style="cursor:pointer;color:var(--tma-primary);margin-top:3px;" onclick="showPokedexInfo('${name}')">← ${name}</div>`).join('')}
+      </div>`;
+    }
+
+    // Prev/Next navigation
+    const curIdx = POKEDEX_ALL.indexOf(speciesName);
+    const prevName = curIdx > 0 ? POKEDEX_ALL[curIdx - 1] : null;
+    const nextName = curIdx < POKEDEX_ALL.length - 1 ? POKEDEX_ALL[curIdx + 1] : null;
+
     detailEl.innerHTML = `
       <button class="pokedex-detail-back" id="pokedex-detail-back">← Назад</button>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        ${prevName ? `<button class="pokedex-detail-back" style="flex:1;text-align:center;margin:0;padding:6px;" onclick="showPokedexInfo('${prevName}')">◀ ${prevName}</button>` : '<span style="flex:1;"></span>'}
+        ${nextName ? `<button class="pokedex-detail-back" style="flex:1;text-align:center;margin:0;padding:6px;" onclick="showPokedexInfo('${nextName}')">${nextName} ▶</button>` : '<span style="flex:1;"></span>'}
+      </div>
       <div class="pokedex-detail-header">
         <div class="pokedex-detail-sprite-box" style="background:${detailTypeBg};" id="dex-sprite-box">
           <img class="pokedex-detail-sprite" id="dex-sprite" src="${spriteUrl}" alt="${data.name}">
@@ -8496,6 +9696,8 @@ async function showPokedexInfo(speciesName) {
       <div class="pokedex-detail-method" style="background:rgba(175,82,222,0.15);border-color:#af52de;">
         <div class="method-row"><b>⚔ Используется лидерами:</b> ${gymUsers.join(', ')}</div>
       </div>` : ''}
+      ${prevoHtml}
+      ${evoHtml}
       <div class="pokedex-detail-stats">
         <h4>Базовые статы</h4>
         ${statsHtml}
@@ -8520,12 +9722,15 @@ async function showPokedexInfo(speciesName) {
       gridEl.style.visibility = 'visible';
       gridEl.style.position = 'relative';
       if (searchEl) searchEl.style.display = 'block';
+      if (filtersEl) filtersEl.style.display = 'flex';
     });
 
   } catch (e) {
     detailEl.innerHTML = '<div class="pokedex-detail-loading">Ошибка загрузки</div>';
   }
 }
+
+window.showPokedexInfo = showPokedexInfo;
 
 // ================================================================
 // ================================================================
@@ -8552,10 +9757,11 @@ async function checkNewMovesOnLevelUp(pokemon, newLevel) {
     const allMoves = pokeData.moves || [];
     const knownNames = new Set((pokemon.apiData.moves || []).filter(m => m).map(m => m.move.name));
 
+    const prevCheckLevel = pokemon.lastMoveCheckLevel || 1;
     const newMoves = [];
     for (const entry of allMoves) {
       for (const detail of entry.version_group_details) {
-        if (detail.move_learn_method.name === 'level-up' && detail.level_learned_at === newLevel) {
+        if (detail.move_learn_method.name === 'level-up' && detail.level_learned_at > prevCheckLevel && detail.level_learned_at <= newLevel) {
           if (!knownNames.has(entry.move.name)) {
             newMoves.push(entry.move);
           }
@@ -8563,6 +9769,7 @@ async function checkNewMovesOnLevelUp(pokemon, newLevel) {
         }
       }
     }
+    pokemon.lastMoveCheckLevel = newLevel;
 
     for (const move of newMoves) {
       const learned = await offerLearnMove(pokemon, move);
@@ -8993,7 +10200,7 @@ async function loadAllTrainers() {
   if (!listEl) return;
   listEl.innerHTML = '<div style="text-align:center;color:var(--tma-text-muted);padding:20px;">Загрузка...</div>';
   try {
-    const res = await fetch('/api/trainers/all');
+    const res = await fetch('/api/profile/trainers/all');
     const data = await res.json();
     trainersAllData = data.users || [];
     if (trainersAllData.length === 0) {
@@ -9008,10 +10215,14 @@ async function loadAllTrainers() {
         ? `<img src="${u.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
         : `<span style="font-size:1.5rem;">${u.avatar || '👤'}</span>`;
       const lastSeen = u.lastSeen ? u.lastSeen.slice(0,16).replace('T',' ') : u.created_at?.slice(0,10) || '';
+      const isOnline = onlinePlayersList.some(p => p.userId === u.id);
+      const onlineDot = isOnline
+        ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#34c759;margin-right:4px;box-shadow:0 0 4px #34c759;"></span>'
+        : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:4px;"></span>';
       card.innerHTML = `
         <div class="trainer-list-avatar">${avatarHtml}</div>
         <div class="trainer-list-info">
-          <div class="trainer-list-name">${u.nickname || u.first_name || u.username || 'Тренер'} ${u.registered ? '✅' : '🆕'}</div>
+          <div class="trainer-list-name">${onlineDot}${escHtml(u.nickname || u.first_name || u.username || 'Тренер')} ${u.registered ? '✅' : '🆕'}</div>
           <div class="trainer-list-id">🏅${u.badges||0} | 💰${u.money||0} | 🐾${u.teamSize||0}</div>
           <div class="trainer-list-id">📍${u.region || '?'} | 🕐${lastSeen}</div>
         </div>`;
@@ -9193,7 +10404,12 @@ async function openTrainerProfile(userId) {
     }
 
     const p = data.profile;
-    document.getElementById('modal-trainer-name').innerText = p.first_name || p.username || `Trainer#${p.id}`;
+    const isOnline = onlinePlayersList.some(op => op.userId === userId);
+    const onlineDot = isOnline
+      ? '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#34c759;margin-right:6px;box-shadow:0 0 6px #34c759;vertical-align:middle;"></span>'
+      : '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#555;margin-right:6px;vertical-align:middle;"></span>';
+    const statusText = isOnline ? ' (В сети)' : ' (Не в сети)';
+    document.getElementById('modal-trainer-name').innerHTML = onlineDot + escHtml(p.first_name || p.username || `Trainer#${p.id}`) + `<span style="font-size:0.7rem;color:${isOnline ? '#34c759' : '#888'};">${statusText}</span>`;
     document.getElementById('modal-trainer-money').innerText = `¥${p.money}`;
     document.getElementById('modal-trainer-badges').innerText = p.badges;
 
@@ -9574,6 +10790,11 @@ function initTradeSocket() {
     initChatSocket();
   });
 
+  socket.on('disconnect', () => {
+    onlinePlayersList = [];
+    renderOnlinePlayers();
+  });
+
   // Real-time location updates for trainer list
   socket.on('location_update', (data) => {
     if (data.locationId === currentLocationId && data.userId !== (tgUser?.id || 0)) {
@@ -9584,6 +10805,7 @@ function initTradeSocket() {
   socket.on('online_players', (players) => {
     onlinePlayersList = players.filter(p => p.id !== socket.id);
     renderTradePlayerList();
+    renderOnlinePlayers();
   });
 
   socket.on('trade_request_received', (data) => {
@@ -9959,7 +11181,7 @@ function renderTradePickGrid() {
 
     card.innerHTML = `
       <img src="${m.sprite || m.apiData?.sprites?.front_default || ''}" alt="${m.apiData?.name || '?'}" loading="lazy">
-      <div class="name">${m.nickname || m.apiData?.name || '???'}</div>
+      <div class="name">${escHtml(m.nickname || m.apiData?.name || '???')}</div>
       <div class="lvl">Lv${m.level || 1}</div>
     `;
 
@@ -10025,7 +11247,7 @@ function renderTradeOffers() {
     if (!offer) return '<span style="color:var(--tma-text-muted);">Не выбрано</span>';
     if (offer.type === 'pokemon') {
       const m = offer.data;
-      return `<img class="trade-offer-sprite" src="${m.sprite || m.apiData?.sprites?.front_default || ''}" alt="${m.apiData?.name || '?'}"><div class="trade-offer-name">${m.nickname || m.apiData?.name || '???'}</div><div class="trade-offer-level">Lv${m.level || 1}</div>`;
+      return `<img class="trade-offer-sprite" src="${m.sprite || m.apiData?.sprites?.front_default || ''}" alt="${escHtml(m.apiData?.name || '?')}"><div class="trade-offer-name">${escHtml(m.nickname || m.apiData?.name || '???')}</div><div class="trade-offer-level">Lv${m.level || 1}</div>`;
     }
     if (offer.type === 'item') {
       const it = offer.data;
