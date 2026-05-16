@@ -51,7 +51,7 @@ router.get('/', adminAuth, async (req, res) => {
     `<option value="${u.id}">#${u.id} ${esc(u.username||'?')} (${esc(u.first_name||'')})</option>`
   ).join('');
 
-  const lbTable = `<td><th>Игрок</th><th>Значки</th><th>Покемонов</th><th>¥</th></tr>
+  const lbTable = `<table><tr><th>Игрок</th><th>Значки</th><th>Покемонов</th><th>¥</th></tr>
     ${lb.map(e => `<tr><td>${esc(e.first_name||e.username||'?')}</td><td>${e.badges_count}</td><td>${e.pokemon_count||0}</td><td>${e.money||0}</td></tr>`).join('')}</table>`;
 
   let html = ADMIN_HTML
@@ -132,9 +132,7 @@ router.get('/api', adminAuth, async (req, res) => {
       const pick = legends[Math.floor(Math.random()*legends.length)];
       try {
         const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+pick);
-        // FIX: Обработка сжатого ответа от PokeAPI
-        const pokeText = await pokeRes.text();
-        const pokeData = JSON.parse(pokeText);
+        const pokeData = await pokeRes.json();
         const newMon = makeMon(pokeData, u.id, 70);
         save.myTeam = save.myTeam || [];
         if (save.myTeam.length >= 6) save.myTeam[0] = newMon;
@@ -188,10 +186,7 @@ router.get('/api', adminAuth, async (req, res) => {
       if (species && species !== mon.apiData?.name) {
         try {
           const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+species);
-          // FIX: Обработка сжатого ответа от PokeAPI
-          const pokeText = await pokeRes.text();
-          const pokeData = JSON.parse(pokeText);
-          mon.apiData = pokeData;
+          mon.apiData = await pokeRes.json();
           mon.abilityName = mon.apiData.abilities[0]?.ability?.name || null;
         } catch(e) { result.warn = 'Species fetch failed'; }
       }
@@ -211,10 +206,7 @@ router.get('/api', adminAuth, async (req, res) => {
       const { species, level, shiny, maxIV, target } = params;
       try {
         const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+(species||'bulbasaur'));
-        // FIX: Обработка сжатого ответа от PokeAPI
-        const pokeText = await pokeRes.text();
-        const pokeData = JSON.parse(pokeText);
-        const mon = makeMon(pokeData, u.id, level||50);
+        const mon = makeMon(await pokeRes.json(), u.id, level||50);
         if (maxIV) mon.ivs = {hp:31,atk:31,def:31,spa:31,spd:31,spe:31};
         if (shiny) mon.shiny = true;
         mon.hasBred = false;
