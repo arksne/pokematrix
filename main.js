@@ -312,9 +312,9 @@ function initAdminPanel() {
     ['🎣 Дать удочки', () => { ['oldRod','goodRod','superRod'].forEach(id => { inventory[id] = 1; }); updateInventoryDisplay(); autoSave(); showToast('Все удочки получены!', false); }],
     ['🥚 Дать яйцо', () => { addItem('egg', 1); updateInventoryDisplay(); autoSave(); showToast('Яйцо получено!', false); }],
     ['🔔 Графитовый колокол', () => { addItem('graphiteBell', 1); updateInventoryDisplay(); autoSave(); showToast('Графитовый колокол получен!', false); }],
-    ['🗺️ Все локации', () => { regions.forEach(r => { r.locations.forEach(l => { if (l.id) discoveredLocations[l.id] = true; }); }); showToast('Все локации открыты!', false); }],
-    ['📊 Покедекс ВСЕ', async () => { try { const r = await fetch('/pokedex_data.json'); const pd = await r.json(); Object.keys(pd).forEach(k => { if (!pokedexCaught.includes(k)) pokedexCaught.push(k); if (!pokedexSeen.includes(k)) pokedexSeen.push(k); }); showToast(`Покедекс: ${pokedexCaught.length}/${pokedexTotal}`, false); } catch(e) { showToast('Ошибка', true); } }],
-    ['🔁 Сбросить квесты', () => { quests = []; questProgress = {}; completedQuests = []; npcQuestProgress = {}; completedNPCQuests = []; showToast('Квесты сброшены', false); }],
+    ['✨ Шайни-команда', () => { myTeam.forEach(m => { m.isShiny = true; }); refreshProfileUI(); renderTeamGrid(); autoSave(); showToast('Вся пати теперь шайни!', false); }],
+    ['📊 Покедекс ВСЕ', async () => { try { const r = await fetch('/pokedex_data.json'); const pd = await r.json(); Object.keys(pd).forEach(k => { if (!pokedexCaught.has(k)) pokedexCaught.add(k); if (!pokedexSeen.has(k)) pokedexSeen.add(k); }); autoSave(); showToast(`Покедекс: ${pokedexCaught.size}/${pokedexTotal}`, false); } catch(e) { showToast('Ошибка', true); } }],
+    ['🔁 Сбросить квесты', () => { quests = []; questProgress = {}; completedQuests = []; npcQuestProgress = {}; completedNPCQuests = []; autoSave(); showToast('Квесты сброшены', false); }],
     ['💾 Форс-сейв', () => { saveGame(); cloudSave(); showToast('Сохранено!', false); }],
   ];
 
