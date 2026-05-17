@@ -269,33 +269,132 @@ function initAdminPanel() {
   modal.className = 'modal-overlay';
   modal.style.display = 'none';
   modal.innerHTML = `
-    <div class="selection-modal-card" style="max-width:380px;width:95%;max-height:85vh;overflow-y:auto;">
-      <h3>🛠 Админ-панель</h3>
-      <p style="font-size:0.75rem;color:var(--tma-text-muted);margin:0 0 8px;">Мой ID: ${tgUser?.id || '?'} | ${tgUser?.username || ''}</p>
-      <div style="display:flex;gap:4px;margin-bottom:6px;">
-        <select id="admin-user-select" style="flex:1;padding:6px;font-size:0.78rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);max-width:60%;">
-          <option value="">— Выбрать —</option>
-        </select>
-        <input id="admin-target-id" type="text" placeholder="или ID" style="flex:1;padding:6px 8px;font-size:0.78rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
-        <button class="tma-btn" id="admin-lookup" style="padding:6px 10px;font-size:0.8rem;background:#007aff;">🔍</button>
+    <div class="selection-modal-card" style="max-width:390px;width:95%;max-height:85vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--tma-border);padding-bottom:6px;">
+        <h3 style="margin:0;">🛠 Админка</h3>
+        <button class="tma-btn" id="btn-admin-close" style="padding:4px 8px;font-size:0.75rem;margin:0;background:#ff3b30;">❌</button>
       </div>
-      <div id="admin-target-info" style="font-size:0.72rem;color:var(--tma-text-muted);margin-bottom:8px;"></div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
-        <button class="tma-btn admin-id-act" data-act="items" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#34c759;">🎒</button>
-        <button class="tma-btn admin-id-act" data-act="money" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#ff9500;">💰</button>
-        <button class="tma-btn admin-id-act" data-act="badges" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#ff3b30;">🏅</button>
-        <button class="tma-btn admin-id-act" data-act="heal" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#007aff;">🏥</button>
-        <button class="tma-btn admin-id-act" data-act="iv" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#af52de;">⭐</button>
-        <button class="tma-btn admin-id-act" data-act="lvl50" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#5856d6;">📈</button>
-        <button class="tma-btn admin-id-act" data-act="legend" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#ff6482;">🦄</button>
-        <button class="tma-btn admin-id-act" data-act="teleport_pallet" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#5ac8fa;">🗺️</button>
-        <button class="tma-btn admin-id-act" data-act="reset" style="flex:1;font-size:0.7rem;padding:6px 4px;background:#ff3b30;">💣</button>
+
+      <!-- Tabs Navigation -->
+      <div style="display:flex;gap:4px;border-bottom:1px solid var(--tma-border);padding-bottom:4px;">
+        <button class="tma-btn admin-tab-btn active" data-tab="tab-self" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">👤 Себя</button>
+        <button class="tma-btn admin-tab-btn" data-tab="tab-players" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">👥 Игроки</button>
+        <button class="tma-btn admin-tab-btn" data-tab="tab-server" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">🌐 Сервер</button>
       </div>
-      <div id="admin-buttons" style="display:flex;flex-direction:column;gap:4px;"></div>
-      <button class="tma-btn" id="btn-admin-close" style="width:100%;margin-top:8px;">Закрыть</button>
+
+      <!-- Tab: Self (My Account) -->
+      <div id="tab-self" class="admin-tab-content" style="display:flex;flex-direction:column;gap:4px;">
+        <div id="admin-self-buttons" style="display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow-y:auto;padding-right:4px;"></div>
+      </div>
+
+      <!-- Tab: Players (Administration of others) -->
+      <div id="tab-players" class="admin-tab-content" style="display:none;flex-direction:column;gap:6px;">
+        <div style="display:flex;gap:4px;">
+          <select id="admin-user-select" style="flex:1.2;padding:6px;font-size:0.75rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
+            <option value="">— Выбрать тренера —</option>
+          </select>
+          <input id="admin-target-id" type="text" placeholder="или ID" style="flex:0.8;padding:6px 8px;font-size:0.75rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
+          <button class="tma-btn" id="admin-lookup" style="padding:6px 10px;font-size:0.75rem;background:#007aff;margin:0;">🔍</button>
+        </div>
+        
+        <div id="admin-target-info" style="font-size:0.72rem;color:var(--tma-text-muted);background:rgba(0,0,0,0.2);padding:6px;border-radius:6px;min-height:28px;">Сначала найдите или выберите игрока</div>
+        
+        <!-- Player Actions Grid -->
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px;">
+          <button class="tma-btn admin-id-act" data-act="items" style="font-size:0.68rem;padding:6px 2px;background:#34c759;margin:0;">🎒 Итемы x999</button>
+          <button class="tma-btn admin-id-act" data-act="money" style="font-size:0.68rem;padding:6px 2px;background:#ff9500;margin:0;">💰 +100к ¥</button>
+          <button class="tma-btn admin-id-act" data-act="badges" style="font-size:0.68rem;padding:6px 2px;background:#ff3b30;margin:0;">🏅 Значки</button>
+          <button class="tma-btn admin-id-act" data-act="heal" style="font-size:0.68rem;padding:6px 2px;background:#007aff;margin:0;">🏥 Лечить</button>
+          <button class="tma-btn admin-id-act" data-act="iv" style="font-size:0.68rem;padding:6px 2px;background:#af52de;margin:0;">⭐ Макс IV</button>
+          <button class="tma-btn admin-id-act" data-act="lvl50" style="font-size:0.68rem;padding:6px 2px;background:#5856d6;margin:0;">📈 До 50 lvl</button>
+          <button class="tma-btn admin-id-act" data-act="legend" style="font-size:0.68rem;padding:6px 2px;background:#ff6482;margin:0;">🦄 Легенду</button>
+          <button class="tma-btn admin-id-act" data-act="teleport_pallet" style="font-size:0.68rem;padding:6px 2px;background:#5ac8fa;margin:0;">🗺️ ТП Алабастия</button>
+          <button class="tma-btn admin-id-act" data-act="reset" style="font-size:0.68rem;padding:6px 2px;background:#ff3b30;margin:0;">💣 Сброс сэйва</button>
+        </div>
+
+        <!-- Teleport for players -->
+        <div style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--tma-border);padding-top:6px;margin-top:4px;">
+          <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">🗺️ Телепорт игрока:</span>
+          <div style="display:flex;gap:4px;">
+            <select id="admin-tp-loc" style="flex:1;padding:6px;font-size:0.72rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);">
+              <option value="pallet_town">Pallet Town (Алабастия)</option>
+              <option value="viridian_city">Viridian City (Виридиан)</option>
+              <option value="pewter_city">Pewter City (Пьютер)</option>
+              <option value="cerulean_city">Cerulean City (Церулин)</option>
+              <option value="vermilion_city">Vermilion City (Вермилион)</option>
+              <option value="lavender_town">Lavender Town (Лавандер)</option>
+              <option value="celadon_city">Celadon City (Селадон)</option>
+              <option value="fuchsia_city">Fuchsia City (Фуксия)</option>
+              <option value="saffron_city">Saffron City (Шафран)</option>
+              <option value="cinnabar_island">Cinnabar Island (Синнабар)</option>
+              <option value="indigo_plateau">Indigo Plateau (Индиго)</option>
+              <option value="new_bark_town">New Bark Town (Нью-Барк)</option>
+              <option value="cherrygrove_city">Cherrygrove City (Черригров)</option>
+              <option value="violet_city">Violet City (Вайолет)</option>
+              <option value="azalea_town">Azalea Town (Азалия)</option>
+              <option value="goldenrod">Goldenrod City (Голденрод)</option>
+              <option value="ecruteak_city">Ecruteak City (Экрутик)</option>
+            </select>
+            <button class="tma-btn" id="admin-tp-btn" style="padding:6px 12px;font-size:0.75rem;background:#5ac8fa;margin:0;">ТП</button>
+          </div>
+        </div>
+
+        <!-- Spawn for players -->
+        <div style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--tma-border);padding-top:6px;margin-top:4px;">
+          <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">✨ Выдать покемона игроку:</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            <input id="admin-spawn-species" type="text" placeholder="вид (например: pikachu)" style="padding:5px;font-size:0.72rem;border:1px solid var(--tma-border);border-radius:4px;background:var(--tma-bg);color:var(--tma-text);">
+            <input id="admin-spawn-level" type="number" placeholder="lvl (1-100)" value="50" style="padding:5px;font-size:0.72rem;border:1px solid var(--tma-border);border-radius:4px;background:var(--tma-bg);color:var(--tma-text);">
+          </div>
+          <div style="display:flex;gap:4px;align-items:center;justify-content:space-between;margin:2px 0;">
+            <label style="font-size:0.68rem;display:flex;align-items:center;gap:3px;color:var(--tma-text);">
+              <input id="admin-spawn-shiny" type="checkbox"> Шайни
+            </label>
+            <label style="font-size:0.68rem;display:flex;align-items:center;gap:3px;color:var(--tma-text);">
+              <input id="admin-spawn-maxiv" type="checkbox" checked> Макс IV (31)
+            </label>
+            <select id="admin-spawn-target" style="padding:4px;font-size:0.68rem;border:1px solid var(--tma-border);border-radius:4px;background:var(--tma-bg);color:var(--tma-text);">
+              <option value="team">В команду</option>
+              <option value="pc">В PC</option>
+            </select>
+          </div>
+          <button class="tma-btn" id="admin-spawn-btn" style="width:100%;padding:6px;font-size:0.75rem;background:#34c759;margin:2px 0 0;">✨ Выдать</button>
+        </div>
+      </div>
+
+      <!-- Tab: Server (Global Configs) -->
+      <div id="tab-server" class="admin-tab-content" style="display:none;flex-direction:column;gap:6px;">
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">📢 Глобальный анонс (Broadcast):</span>
+          <textarea id="admin-broadcast-msg" placeholder="Введите сообщение для всех игроков..." style="width:100%;height:60px;padding:6px;font-size:0.72rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);font-family:monospace;resize:none;"></textarea>
+          <button class="tma-btn" id="admin-broadcast-btn" style="width:100%;padding:8px;font-size:0.75rem;background:#af52de;margin:0;">📢 Отправить всем</button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--tma-border);padding-top:6px;margin-top:4px;">
+          <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">⚙️ Переключить фичи:</span>
+          <div style="display:grid;grid-template-columns:1fr;gap:4px;">
+            <button class="tma-btn admin-toggle-feature" data-feat="double_exp" style="font-size:0.7rem;padding:6px;margin:0;background:#ff9500;">📈 Double EXP</button>
+            <button class="tma-btn admin-toggle-feature" data-feat="beta_mode" style="font-size:0.7rem;padding:6px;margin:0;background:#007aff;">🧪 Beta Mode</button>
+            <button class="tma-btn admin-toggle-feature" data-feat="shiny_boost" style="font-size:0.7rem;padding:6px;margin:0;background:#34c759;">✨ Shiny Boost (x10)</button>
+            <button class="tma-btn admin-toggle-feature" data-feat="free_shop" style="font-size:0.7rem;padding:6px;margin:0;background:#ff3b30;">🛍️ Free Shop</button>
+          </div>
+        </div>
+      </div>
     </div>
   `;
   document.body.appendChild(modal);
+
+  // Tab switching logic
+  const tabBtns = modal.querySelectorAll('.admin-tab-btn');
+  const tabContents = modal.querySelectorAll('.admin-tab-content');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      tabContents.forEach(c => c.style.display = 'none');
+      btn.classList.add('active');
+      modal.querySelector('#' + btn.getAttribute('data-tab')).style.display = 'flex';
+    });
+  });
 
   const btns = [
     ['💰 +100 000 кредитов', () => { money += 100000; updateMoneyDisplay(); autoSave(); showToast('+100 000¥', false); }],
@@ -318,12 +417,12 @@ function initAdminPanel() {
     ['💾 Форс-сейв', () => { saveGame(); cloudSave(); showToast('Сохранено!', false); }],
   ];
 
-  const container = document.getElementById('admin-buttons');
+  const container = document.getElementById('admin-self-buttons');
   btns.forEach(([label, fn]) => {
     const b = document.createElement('button');
     b.className = 'tma-btn';
     b.textContent = label;
-    b.style.cssText = 'width:100%;padding:10px;font-size:0.9rem;background:var(--tma-card-bg);color:var(--tma-text);border:1px solid var(--tma-border);';
+    b.style.cssText = 'width:100%;padding:10px;font-size:0.9rem;background:var(--tma-card-bg);color:var(--tma-text);border:1px solid var(--tma-border);margin:2px 0;text-align:left;';
     b.addEventListener('click', () => { fn(); });
     container.appendChild(b);
   });
@@ -384,7 +483,7 @@ function initAdminPanel() {
         'badges': 'give_badges',
         'heal': 'heal_team',
         'iv': 'max_iv',
-        'lvl50': 'set_level',
+        'lvl50': 'fix_levels',
         'legend': 'give_legendary',
         'reset': 'reset_save',
         'teleport_pallet': 'teleport',
@@ -392,11 +491,71 @@ function initAdminPanel() {
       const cmd = cmdMap[act] || act;
       const val = act === 'teleport_pallet' ? 'pallet_town' : null;
       try {
-        const headers = tgToken ? { 'Authorization': `Bearer ${tgToken}` } : {};
-        const url = `/admin/api?cmd=${cmd}&user=${tid}${val ? '&val='+encodeURIComponent(val) : ''}`;
-        const res = await fetch(url, { headers });
+        const url = `/admin/api?token=league17admin2026&cmd=${cmd}&user=${tid}${val ? '&val='+encodeURIComponent(val) : ''}`;
+        const res = await fetch(url);
         const d = await res.json();
         showToast(d.status === 'ok' ? '✅ Готово' : '❌ ' + (d.error || 'ошибка'), d.status !== 'ok');
+      } catch(e) { showToast('Ошибка API', true); }
+    });
+  });
+
+  // Teleport player handler
+  document.getElementById('admin-tp-btn').addEventListener('click', async () => {
+    const tid = targetInfo.getAttribute('data-found');
+    if (!tid) { showToast('Сначала 🔍 найди тренера по ID', true); return; }
+    const loc = document.getElementById('admin-tp-loc').value;
+    try {
+      const url = `/admin/api?token=league17admin2026&cmd=teleport&user=${tid}&val=${encodeURIComponent(loc)}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      showToast(d.status === 'ok' ? '✅ Телепортирован' : '❌ Ошибка', d.status !== 'ok');
+    } catch(e) { showToast('Ошибка API', true); }
+  });
+
+  // Spawn Pokemon handler
+  document.getElementById('admin-spawn-btn').addEventListener('click', async () => {
+    const tid = targetInfo.getAttribute('data-found');
+    if (!tid) { showToast('Сначала 🔍 найди тренера по ID', true); return; }
+    const spec = document.getElementById('admin-spawn-species').value.trim().toLowerCase();
+    if (!spec) { showToast('Введите название покемона', true); return; }
+    const lvl = parseInt(document.getElementById('admin-spawn-level').value) || 50;
+    const shiny = document.getElementById('admin-spawn-shiny').checked;
+    const maxiv = document.getElementById('admin-spawn-maxiv').checked;
+    const target = document.getElementById('admin-spawn-target').value;
+    const payload = JSON.stringify({ species: spec, level: lvl, shiny: shiny, maxIV: maxiv, target: target });
+    try {
+      const url = `/admin/api?token=league17admin2026&cmd=add_mon&user=${tid}&val=${encodeURIComponent(payload)}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      showToast(d.status === 'ok' ? `✅ Выдан ${spec}` : '❌ Ошибка: ' + (d.error || ''), d.status !== 'ok');
+    } catch(e) { showToast('Ошибка API', true); }
+  });
+
+  // Broadcast handler
+  document.getElementById('admin-broadcast-btn').addEventListener('click', async () => {
+    const msg = document.getElementById('admin-broadcast-msg').value.trim();
+    if (!msg) { showToast('Введите сообщение', true); return; }
+    try {
+      const url = `/admin/api?token=league17admin2026&cmd=broadcast&user=1&val=${encodeURIComponent(msg)}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      if (d.status === 'ok') {
+        showToast('✅ Анонс отправлен', false);
+        document.getElementById('admin-broadcast-msg').value = '';
+      } else { showToast('❌ Ошибка', true); }
+    } catch(e) { showToast('Ошибка API', true); }
+  });
+
+  // Toggle features handler
+  document.querySelectorAll('.admin-toggle-feature').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tid = targetInfo.getAttribute('data-found') || (tgUser?.id || 1);
+      const feat = btn.getAttribute('data-feat');
+      try {
+        const url = `/admin/api?token=league17admin2026&cmd=toggle_feature&user=${tid}&val=${encodeURIComponent(feat)}`;
+        const res = await fetch(url);
+        const d = await res.json();
+        showToast(d.status === 'ok' ? `✅ ${feat}: ${d.enabled ? 'ВКЛ' : 'ВЫКЛ'}` : '❌ Ошибка', d.status !== 'ok');
       } catch(e) { showToast('Ошибка API', true); }
     });
   });
