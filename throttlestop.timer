@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply throttlestop settings
+
+[Timer]
+Unit=throttlestop.service
+OnBootSec=4min
+OnUnitActiveSec=30s
+
+[Install]
+WantedBy=multi-user.target

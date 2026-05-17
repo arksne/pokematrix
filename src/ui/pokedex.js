@@ -1,7 +1,9 @@
 import { 
-  getPokedexState, getTypeColor, getTypeGradient, getEvolutions, 
-  evolvesFromMap, getPowerStars, getRarityStars 
+  getPokedexState, getTypeColor, getTypeGradient, 
+  getPowerStars, getRarityStars 
 } from '../../main.js';
+import { getEvolutions } from './evolution.js';
+import { evolvesFromMap } from '../battle/core.js';
 import { gymLeaders } from '../data/gyms.js';
 
 // ================================================================
