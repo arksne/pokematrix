@@ -44,7 +44,7 @@ function loginPage() {
 <style>body{font-family:monospace;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 input{padding:10px;font-size:1.2rem;border:2px solid #333;border-radius:6px;background:#111;color:#fff;width:200px}
 button{padding:10px 20px;font-size:1.2rem;border:none;border-radius:6px;background:#af52de;color:#fff;cursor:pointer}
-</style></head><body><form onsubmit="location.href='?token='+encodeURIComponent(document.getElementById('p').value)"><input id="p" type="password" placeholder="Password" autofocus><button>Login</button></form></body></html>`;
+</style></head><body><form onsubmit="event.preventDefault(); location.href='?token='+encodeURIComponent(document.getElementById('p').value)"><input id="p" type="password" placeholder="Password" autofocus><button>Login</button></form></body></html>`;
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
