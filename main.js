@@ -1565,7 +1565,7 @@ function renderPCSlots(view) {
         const targetBox = pcBoxes.length > 0 ? 0 : (pcBoxes.push([]), 0);
         const movedMon = myTeam.splice(i, 1)[0];
         pcBoxes[targetBox].push(movedMon);
-        if (activePlayerMon && activePlayerMon === mon && myTeam.length > 0) {
+        if (typeof activePlayerMon !== 'undefined' && activePlayerMon && activePlayerMon === mon && myTeam.length > 0) {
           activePlayerMon = myTeam[0];
         }
         openPC();

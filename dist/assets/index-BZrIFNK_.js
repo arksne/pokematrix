@@ -260,7 +260,7 @@ var e=Object.defineProperty,t=(t,n)=>{let r={};for(var i in t)e(r,i,{get:t[i],en
           <span>HP: ${e.currentHp}/${e.maxHp}</span>
         </div>
         <button class="btn-use" style="background:#5856d6;padding:4px 10px;">В PC</button>
-      `,r.querySelector(`button`).onclick=()=>{if(V.length<=1){Q(`Нельзя оставить команду пустой!`,!0);return}H.length>0||H.push([]);let t=V.splice(n,1)[0];H[0].push(t),activePlayerMon&&activePlayerMon===e&&V.length>0&&(activePlayerMon=V[0]),ta()},t.appendChild(r)});else{let n=parseInt(e),r=H[n];if(!r)return;bi.filter(e=>e.boxIdx===n&&!e.inTeam).forEach(e=>{let n=document.createElement(`div`);n.className=`pc-slot`,n.style.background=`rgba(255,215,0,0.1)`,n.style.borderColor=`#ffd700`;let r=Math.max(0,Math.ceil((e.readyTime-Date.now())/(1440*60*1e3))),i=r>0?`~${r} дн`:`Готово!`;n.innerHTML=`
+      `,r.querySelector(`button`).onclick=()=>{if(V.length<=1){Q(`Нельзя оставить команду пустой!`,!0);return}H.length>0||H.push([]);let t=V.splice(n,1)[0];H[0].push(t),typeof activePlayerMon<`u`&&activePlayerMon&&activePlayerMon===e&&V.length>0&&(activePlayerMon=V[0]),ta()},t.appendChild(r)});else{let n=parseInt(e),r=H[n];if(!r)return;bi.filter(e=>e.boxIdx===n&&!e.inTeam).forEach(e=>{let n=document.createElement(`div`);n.className=`pc-slot`,n.style.background=`rgba(255,215,0,0.1)`,n.style.borderColor=`#ffd700`;let r=Math.max(0,Math.ceil((e.readyTime-Date.now())/(1440*60*1e3))),i=r>0?`~${r} дн`:`Готово!`;n.innerHTML=`
         <span style="font-size:32px;">🥚</span>
         <div class="pc-slot-info">
           <b>Яйцо ${e.species?`(${e.species})`:``}</b>
