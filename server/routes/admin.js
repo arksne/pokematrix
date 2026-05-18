@@ -156,7 +156,21 @@ router.get('/api', adminAuth, async (req, res) => {
       } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
 
     } else if (cmd === 'give_egg') {
-      const speciesList = val ? val.split(',') : ['bulbasaur','charmander','squirtle','pikachu','eevee','clefairy','jigglypuff','psyduck','growlithe','poliwag','machop','tentacool','ponyta','slowpoke','magnemite','doduo','seel','grimer','drowzee','krabby','exeggcute','cubone','kangaskhan','horsea','goldeen','staryu','scyther','pinsir','tauros','magikarp','lapras','ditto','porygon','chikorita','cyndaquil','totodile','hoothoot','mareep','wooper','sneasel','houndour','larvitar','ralts','slakoth','wingull','shroomish','trapinch','swablu','bagon','beldum','starly','shinx','riolu','gible','zorua','goomy','deino','froakie','fennekin','honedge','noibat','rowlet','popplio','grubbin','rockruff','mimikyu','drampa'];
+      let speciesList;
+      if (val) {
+        speciesList = val.split(',');
+      } else {
+        try {
+          const { readFileSync } = await import('fs'); const { join } = await import('path');
+          const pdata = JSON.parse(readFileSync(join(process.cwd(), 'public/pokedex_data.json'), 'utf8'));
+          // Только первая эволюция: исключаем тех, у кого method === 'Эволюция'
+          speciesList = Object.entries(pdata)
+            .filter(([_, v]) => v.method !== 'Эволюция')
+            .map(([k]) => k);
+        } catch(e) {
+          speciesList = ['bulbasaur','charmander','squirtle','pikachu','eevee'];
+        }
+      }
       const pick = speciesList[Math.floor(Math.random()*speciesList.length)];
       try {
         const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+pick);
