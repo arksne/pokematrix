@@ -259,7 +259,7 @@ export const REGIONS = {
       },
       'fuchsia_city': {
         name: 'Фуксия', desc: 'Город ниндзя с Сафари-Зоной и древним зоопарком.',
-        image: 'wiki_images/Fuksija.jpg', links: ['route_18', 'safari_zone', 'route_15', 'route_19', 'fuchsia_pokecenter', 'fuchsia_pokemarket', 'fuchsia_poison_stadium', 'fuchsia_beach'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
+        image: 'wiki_images/Fuksija.jpg', links: ['route_18', 'safari_zone', 'route_15', 'route_19', 'fuchsia_pokecenter', 'fuchsia_pokemarket', 'fuchsia_poison_stadium', 'fuchsia_beach', 'fuchsia_beach_pier'], encounters: [], hasHeal: true, hasWater: true, region: 'kanto'
       },
       'fuchsia_pokecenter': {
         name: 'Покецентр', desc: 'Центр лечения покемонов в Фуксии.',

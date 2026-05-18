@@ -58,12 +58,12 @@ export function initSocket(server, allowedOrigin) {
     socket.on('trade_accept', (targetSocketId) => {
       const p1 = targetSocketId;
       const p2 = socket.id;
-      const tradeId = `${p1}-${p2}`;
+      const tradeId = `${p1}-${p2}-${Date.now()}`;
 
       activeTrades.set(tradeId, { p1, p2, p1Offers: [], p2Offers: [], p1Confirm: false, p2Confirm: false });
 
-      io.to(p1).emit('trade_started', { tradeId, partnerUsername: onlinePlayers.get(p2)?.username });
-      io.to(p2).emit('trade_started', { tradeId, partnerUsername: onlinePlayers.get(p1)?.username });
+      io.to(p1).emit('trade_started', { tradeId, partnerUsername: onlinePlayers.get(p2)?.username || 'Неизвестный' });
+      io.to(p2).emit('trade_started', { tradeId, partnerUsername: onlinePlayers.get(p1)?.username || 'Неизвестный' });
     });
 
     // Reject trade
@@ -148,14 +148,14 @@ export function initSocket(server, allowedOrigin) {
       const battle = pvpBattles.get(data?.battleId);
       if (!battle) return;
       const opponent = battle.p1 === socket.id ? battle.p2 : battle.p1;
-      io.to(opponent).emit('pvp_opponent_action', data.action);
+      io.to(opponent).emit('pvp_opponent_action', data?.action || { type: 'forfeit' });
     });
 
     socket.on('pvp_end', (data) => {
       const battle = pvpBattles.get(data?.battleId);
       if (battle) {
         const opponent = battle.p1 === socket.id ? battle.p2 : battle.p1;
-        io.to(opponent).emit('pvp_opponent_action', data.action);
+        io.to(opponent).emit('pvp_opponent_action', data?.action || { type: 'forfeit' });
         pvpBattles.delete(data.battleId);
       }
     });
@@ -179,7 +179,7 @@ export function initSocket(server, allowedOrigin) {
       for (const [tradeId, trade] of activeTrades.entries()) {
         if (trade.p1 === socket.id || trade.p2 === socket.id) {
           const partner = trade.p1 === socket.id ? trade.p2 : trade.p1;
-          io.to(partner).emit('trade_cancelled', 'Партнёр отключился');
+          io.to(partner).emit('trade_cancelled', { reason: 'Партнёр отключился' });
           activeTrades.delete(tradeId);
         }
       }

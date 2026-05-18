@@ -296,7 +296,7 @@ function calculateStat(pokemon, statName, isWild) {
   }
 
   // Apply stat stages
-  if (!isWild && pokemon.statStages) {
+  if (pokemon.statStages) {
     const stageMapName = { 'hp': 'hp', 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' }[statName];
     if (stageMapName && pokemon.statStages[stageMapName] !== undefined) {
       const stage = pokemon.statStages[stageMapName];
@@ -1424,9 +1424,7 @@ async function useMove(moveIndex) {
     return;
   }
 
-  if (wildCurHP <= 0) {
-    applyStatusEndOfTurn(activeWild, false);
-  }
+  applyStatusEndOfTurn(activeWild, false);
 
   if (wildCurHP === 0) {
     appendToLog(`Дикий ${activeWild.name} побежден!`);
@@ -1543,7 +1541,7 @@ function handlePlayerFaint() {
 
 function enemyTurn() {
   // Check wild status before attacking
-  if (!checkStatusTurn(activeWild, false)) return;
+  const wildCanAct = checkStatusTurn(activeWild, false);
   applyStatusEndOfTurn(activeWild, false);
   if (wildCurHP <= 0) {
     appendToLog(`Дикий ${activeWild.name} побежден!`);
@@ -1573,6 +1571,15 @@ function enemyTurn() {
     updateInventoryDisplay();
     updateMoneyDisplay();
     autoSave();
+    return;
+  }
+
+  if (!wildCanAct) {
+    battleRound++;
+    saveBattleState();
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
     return;
   }
 
@@ -2470,6 +2477,8 @@ async function useMoveGym(moveIndex) {
     return;
   }
 
+  applyStatusEndOfTurn(activeWild, false);
+
   if (wildCurHP === 0) {
     appendToLog(`${activeWild.name} побежден!`);
 
@@ -2549,7 +2558,7 @@ async function useMoveGym(moveIndex) {
 }
 
 function enemyTurnGym() {
-  if (!checkStatusTurn(activeWild, false)) return;
+  const wildCanAct = checkStatusTurn(activeWild, false);
   applyStatusEndOfTurn(activeWild, false);
   if (wildCurHP <= 0) {
     appendToLog(`${activeWild.name} побежден!`);
@@ -2563,6 +2572,14 @@ function enemyTurnGym() {
       gymTeamIndexInMember++;
       setTimeout(() => { startChampionNextPokemon(); }, 1000);
     }
+    return;
+  }
+
+  if (!wildCanAct) {
+    battleRound++;
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
     return;
   }
 

@@ -2407,6 +2407,8 @@ function healTeam() {
   descEl.style.color = 'var(--tma-accent)';
   setTimeout(() => { descEl.innerText = oldText; descEl.style.color = ''; }, 2000);
   autoSave();
+  renderTeamGrid();
+  refreshProfileUI();
 }
 
 export function renderLocation(locId) {
@@ -2814,7 +2816,7 @@ function updateBadgeDisplay() {
       const leader = Object.values(gymLeaders).find(l => l.badgeName === b);
       return leader?.badgeIcon || '🏅';
     });
-    el.innerText = `Значки (${badges.length}/16): ${icons.join(' ')}`;
+    el.innerText = `Значки (${badges.length}/${Object.keys(gymLeaders).length}): ${icons.join(' ')}`;
   }
 }
 
@@ -3155,7 +3157,7 @@ function initProfileEvents() {
     input.addEventListener('input', (e) => {
       let val = parseInt(e.target.value) || 0;
       if (val < 0) val = 0;
-      if (val > 126) val = 126;
+      if (val > 252) val = 252;
       e.target.value = val;
       updateDynamicEVs();
     });

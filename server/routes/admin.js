@@ -78,7 +78,7 @@ router.get('/api', adminAuth, async (req, res) => {
   let result = { cmd, user };
 
   async function resolveUser(idOrName) {
-    const byId = await db.get('SELECT id FROM users WHERE id = ?', parseInt(idOrName));
+    const byId = await db.get('SELECT id FROM users WHERE id = ?', parseInt(idOrName, 10));
     if (byId) return byId;
     return await db.get('SELECT id FROM users WHERE username = ?', idOrName);
   }
@@ -125,7 +125,7 @@ router.get('/api', adminAuth, async (req, res) => {
 
     if (cmd === 'give_items') {
       if (!save.inventory) save.inventory = {};
-      const ALL_ITEMS = ['pokeball','greatBall','ultraBall','masterBall','quickBall','friendBall','loveBall','duskBall','timerBall','darkBall','potion','superPotion','fullRestore','candy','vitamin','train','weaken','evolutionStone','fireStone','waterStone','leafStone','thunderStone','moonStone','sunStone','shinyStone','duskStone','iceStone','dawnStone','tm','ppUp','sitrusBerry','oranBerry','lumBerry','chestoBerry','rawstBerry','antidote','antiparalyze','energyDrink','fireExtinguisher','healingHerb','weakElixir','elixir','strongElixir','xAttack','xDefense','xSpDefense','xSpAttack','xSpeed','protein','iron','calcium','zinc','carbos','luckyEgg','expShare','oldRod','goodRod','superRod','darkBall'];
+      const ALL_ITEMS = ['pokeball','greatBall','ultraBall','masterBall','quickBall','friendBall','loveBall','duskBall','timerBall','darkBall','potion','superPotion','fullRestore','candy','vitamin','train','weaken','evolutionStone','fireStone','waterStone','leafStone','thunderStone','moonStone','sunStone','shinyStone','duskStone','iceStone','dawnStone','tm','ppUp','sitrusBerry','oranBerry','lumBerry','chestoBerry','rawstBerry','antidote','antiparalyze','energyDrink','fireExtinguisher','healingHerb','weakElixir','elixir','strongElixir','xAttack','xDefense','xSpDefense','xSpAttack','xSpeed','protein','iron','calcium','zinc','carbos','luckyEgg','expShare','oldRod','goodRod','superRod'];
       ALL_ITEMS.forEach(id => { save.inventory[id] = 999; });
       save.money = (save.money || 0) + 500000;
       await putSave(u, save);
