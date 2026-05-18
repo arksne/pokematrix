@@ -3701,7 +3701,7 @@ function applyCloudSave(data) {
   lastLocation = data.lastLocation || lastLocation;
   expShareActive = data.expShareActive || expShareActive;
   breedingPairs = data.breedingPairs || breedingPairs;
-  eggs = data.eggs || eggs;
+  eggs = data.eggs && data.eggs.length > 0 ? data.eggs : eggs;
   quests = data.quests || quests;
   questProgress = data.questProgress || questProgress;
   completedQuests = data.completedQuests || completedQuests;
