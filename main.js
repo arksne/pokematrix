@@ -952,17 +952,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (tgToken) {
     // Always check cloud first — it's the source of truth
     const cloudData = await cloudLoad();
-    // Cloud is source of truth — apply even if myTeam is empty (e.g. admin reset)
+    // Cloud is source of truth — but empty team means reset/new game
     if (cloudData && cloudData.myTeam) {
       applyCloudSave(cloudData);
       saveGame(); // sync to localStorage
-      gameLoaded = true;
+      if (myTeam.length > 0) {
+        gameLoaded = true;
+      }
     }
   }
   if (!gameLoaded) {
     // Fall back to localStorage
     const localLoaded = loadGame();
-    if (localLoaded) {
+    if (localLoaded && myTeam.length > 0) {
       gameLoaded = true;
       // Sync local to cloud
       if (tgToken) cloudSave();
@@ -1990,8 +1992,18 @@ export function autoSave() {
 }
 
 function resetGame() {
-  showConfirmModal('Сброс прогресса', 'Это действие необратимо! Вы уверены?', () => {
+  showConfirmModal('Сброс прогресса', 'Это действие необратимо! Вы уверены?', async () => {
     localStorage.removeItem(lsKey('save'));
+    // Also clear cloud save so reload gives starter
+    if (tgToken) {
+      try {
+        await fetch(`${API_BASE}/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tgToken },
+          body: JSON.stringify({ saveData: { _v: Date.now(), myTeam: [], inventory: {}, money: 500, badges: [] } })
+        });
+      } catch(e) { console.warn('Cloud reset failed', e); }
+    }
     location.reload();
   });
 }
