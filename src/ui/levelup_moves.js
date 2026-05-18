@@ -62,29 +62,14 @@ export function offerLearnMove(pokemon, move) {
       return;
     }
 
-    // All slots full — ask which to replace
-    const slotItems = (pokemon.apiData.moves || []).filter(m => m).map((m, i) => ({
-      label: m.move.name,
-      subtitle: `Слот ${i + 1}`
-    }));
-    slotItems.push({ label: 'Отказаться', subtitle: 'Сохранить в резерв' });
-    showSelectionModal(`Заменить атаку на ${moveName}?`, slotItems, (pick) => {
-      const url = move.url || `https://pokeapi.co/api/v2/move/${moveName}/`;
-      if (pick < 4) {
-        const oldMove = pokemon.apiData.moves[pick]?.move?.name || 'неизвестную атаку';
-        pokemon.apiData.moves[pick].move = { name: moveName, url };
-        appendToLog(`${monName} забыл ${oldMove} и выучил ${moveName}!`, false, 'system');
-        resolve(true);
-      } else {
-        // Save to reserve
-        if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
-        if (!pokemon.learnableMoves.some(m => m.name === moveName)) {
-          pokemon.learnableMoves.push({ name: moveName, url, power: move.power || 0, type: move.type?.name || 'normal' });
-        }
-        appendToLog(`${monName} не стал учить ${moveName}. Атака сохранена в резерв.`, false, 'system');
-        resolve(false);
-      }
-    }, true);
+    // All slots full — auto-save to reserve
+    const url = move.url || `https://pokeapi.co/api/v2/move/${moveName}/`;
+    if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
+    if (!pokemon.learnableMoves.some(m => m.name === moveName)) {
+      pokemon.learnableMoves.push({ name: moveName, url, power: move.power || 0, type: move.type?.name || 'normal' });
+    }
+    appendToLog(`${monName} выучил ${moveName} (резерв)!`, false, 'system');
+    resolve(false);
   });
 }
 

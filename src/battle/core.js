@@ -1,7 +1,7 @@
 console.log("CORE.JS START");
 import {
   getLocation, showToast, showSelectionModal, addItem, removeItem, getItemQty, itemDef, autoSave, updateMoneyDisplay, modifyMoney, updateInventoryDisplay, checkEvolution, triggerEvolution, lsKey, checkTutorialProgress,
-  getGameState, updateBattleSpriteBgs, showGymRewardSelection
+  getGameState, updateBattleSpriteBgs, showGymRewardSelection, processMonsterDrop
 } from '../../main.js';
 import { natures } from '../data/natures.js';
 import { ITEMS } from '../data/items.js';

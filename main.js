@@ -146,6 +146,7 @@ function processMonsterDrop(pokemonName) {
   }
   return drops;
 }
+export { processMonsterDrop };
 
 // --- NPC DATA ---
 
