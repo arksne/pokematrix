@@ -155,6 +155,31 @@ router.get('/api', adminAuth, async (req, res) => {
         result = { status: 'ok', pokemon: pick };
       } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
 
+    } else if (cmd === 'give_egg') {
+      const speciesList = val ? val.split(',') : ['bulbasaur','charmander','squirtle','pikachu','eevee','clefairy','jigglypuff','psyduck','growlithe','poliwag','machop','tentacool','ponyta','slowpoke','magnemite','doduo','seel','grimer','drowzee','krabby','exeggcute','cubone','kangaskhan','horsea','goldeen','staryu','scyther','pinsir','tauros','magikarp','lapras','ditto','porygon','chikorita','cyndaquil','totodile','hoothoot','mareep','wooper','sneasel','houndour','larvitar','ralts','slakoth','wingull','shroomish','trapinch','swablu','bagon','beldum','starly','shinx','riolu','gible','zorua','goomy','deino','froakie','fennekin','honedge','noibat','rowlet','popplio','grubbin','rockruff','mimikyu','drampa'];
+      const pick = speciesList[Math.floor(Math.random()*speciesList.length)];
+      try {
+        const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+pick);
+        const pokeData = await pokeRes.json();
+        const eggTypes = pokeData.types || [{ type: { name: 'normal' } }];
+        const ivs = { hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32), def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32), spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32) };
+        const egg = {
+          uid: Date.now().toString(36)+Math.random().toString(36).substr(2,6),
+          species: pick,
+          types: eggTypes,
+          ivs,
+          readyTime: Date.now() + Math.floor(Math.random()*3+1)*86400000, // 1-3 days
+          boxIdx: 0,
+          parent1Uid: 'admin',
+          parent2Uid: 'admin',
+          inTeam: false
+        };
+        if (!save.eggs) save.eggs = [];
+        save.eggs.push(egg);
+        await putSave(u, save);
+        result = { status: 'ok', pokemon: pick, ivs, hatchIn: Math.ceil((egg.readyTime-Date.now())/86400000)+'d' };
+      } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
+
     } else if (cmd === 'heal_team') {
       (save.myTeam||[]).forEach(m => { m.currentHp = m.maxHp; m.status = null; m.sleepTurns = 0; });
       await putSave(u, save);
