@@ -1321,9 +1321,20 @@ async function checkBreeding() {
       if (m1 && m2) {
         const eggUid = generateUID();
         const species = m1.apiData?.species?.name || m1.apiData?.name;
+        const eggTypes = m1.apiData?.types || [{ type: { name: 'normal' } }];
+        const eggIvs = {
+          hp: Math.floor(Math.random()*32),
+          atk: Math.floor(Math.random()*32),
+          def: Math.floor(Math.random()*32),
+          spa: Math.floor(Math.random()*32),
+          spd: Math.floor(Math.random()*32),
+          spe: Math.floor(Math.random()*32)
+        };
         const egg = {
           uid: eggUid,
           species,
+          types: eggTypes,
+          ivs: eggIvs,
           readyTime: now + randomHatchTime(),
           boxIdx,
           parent1Uid: existingPair.mon1Uid,
@@ -1394,7 +1405,7 @@ export async function hatchEgg(egg) {
       caughtLocation: 'breeding',
       apiData: pokeData,
       maxHp: 50, currentHp: 50,
-      ivs: { hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32), def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32), spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32) },
+      ivs: egg.ivs || { hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32), def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32), spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32) },
       evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
       baseLevel: 1, exp: 0, expToNext: 8,
       candiesEaten: 0, vitaminsEaten: 0,
@@ -1589,15 +1600,20 @@ function renderPCSlots(view) {
     boxEggs.forEach(egg => {
       const div = document.createElement('div');
       div.className = 'pc-slot';
-      div.style.background = 'rgba(255,215,0,0.1)';
-      div.style.borderColor = '#ffd700';
+      const eggTypes = egg.types || [{ type: { name: 'normal' } }];
+      const eggColor = getTypeColor(eggTypes[0]?.type?.name || 'normal');
+      div.style.background = `${eggColor}22`;
+      div.style.borderColor = eggColor;
       const remaining = Math.max(0, Math.ceil((egg.readyTime - Date.now()) / (24*60*60*1000)));
       const remainingText = remaining > 0 ? `~${remaining} дн` : 'Готово!';
+      const iv = egg.ivs || {};
+      const geneStr = `h${iv.hp || 0}a${iv.atk || 0}d${iv.def || 0}s${iv.spe || 0}sa${iv.spa || 0}sd${iv.spd || 0}`;
       div.innerHTML = `
-        <span style="font-size:32px;">🥚</span>
+        <img src="assets/egg.png" width="32" height="32" style="image-rendering:pixelated;">
         <div class="pc-slot-info">
           <b>Яйцо ${egg.species ? `(${egg.species})` : ''}</b>
-          <span style="color:#ffd700;">${remainingText}</span>
+          <span style="color:${eggColor};font-size:0.75rem;">${geneStr}</span>
+          <span style="color:#ffd700;font-size:0.7rem;">${remainingText}</span>
         </div>
         <div class="pc-slot-actions">
           <button class="btn-use" style="background:#ff9500;padding:4px 10px;">Забрать</button>
@@ -1807,7 +1823,7 @@ function getFullSaveData() {
     }))),
     daycareMons, daycareEgg, lastLocation, expShareActive,
     breedingPairs: breedingPairs.map(p => ({ boxIdx: p.boxIdx, mon1Uid: p.mon1Uid, mon2Uid: p.mon2Uid, startTime: p.startTime, readyTime: p.readyTime })),
-    eggs: eggs.map(e => ({ uid: e.uid, species: e.species, readyTime: e.readyTime, boxIdx: e.boxIdx, parent1Uid: e.parent1Uid, parent2Uid: e.parent2Uid, inTeam: e.inTeam })),
+    eggs: eggs.map(e => ({ uid: e.uid, species: e.species, types: e.types, ivs: e.ivs, readyTime: e.readyTime, boxIdx: e.boxIdx, parent1Uid: e.parent1Uid, parent2Uid: e.parent2Uid, inTeam: e.inTeam })),
     notifications: notifications.slice(0, 30),
   };
 }
@@ -2942,12 +2958,15 @@ function renderTeamGrid() {
       if (mon.isEgg) {
         const eggData = eggs.find(e => e.uid === mon.uid);
         const remaining = eggData ? Math.max(0, Math.ceil((eggData.readyTime - Date.now()) / 60000)) : '?';
+        const eggIvs = eggData?.ivs || {};
+        const geneDisplay = `h${eggIvs.hp || 0}a${eggIvs.atk || 0}d${eggIvs.def || 0}s${eggIvs.spe || 0}sa${eggIvs.spa || 0}sd${eggIvs.spd || 0}`;
         slot.innerHTML = `
           <div class="team-sprite-wrap">
-            <span style="font-size:48px;">🥚</span>
+            <img src="assets/egg.png" width="48" height="48" style="image-rendering:pixelated;">
           </div>
           <div class="slot-name">Яйцо</div>
-          <div class="slot-lvl">Вылупится через ~${remaining} мин</div>
+          <div class="slot-lvl" style="font-size:0.65rem;">Вылупится через ~${remaining} мин</div>
+          <div class="slot-lvl" style="font-size:0.6rem;color:#4682B4;font-family:monospace;">${geneDisplay}</div>
         `;
       } else {
         const pwStars2 = getPowerStars(mon);

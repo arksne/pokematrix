@@ -5,7 +5,7 @@ import {
   refreshProfileUI, checkEvolution, triggerEvolution,
   cureStatus, openCrafting, openMoveRelearner,
   hatchEgg, giveBerryToMon, autoSave,
-  saveActiveMonData, showItemInfoModal
+  saveActiveMonData, showItemInfoModal, getTypeColor
 } from '../../main.js';
 import { natures } from '../data/natures.js';
 
@@ -208,22 +208,32 @@ export function renderInventory() {
     getInvState().eggs.forEach((egg, idx) => {
       const cell = document.createElement('div');
       cell.className = 'inv-grid-item';
-      cell.style.cssText = 'cursor:pointer;border-color:#34c759;';
+      const eggTypes = egg.types || [{ type: { name: 'normal' } }];
+      const eggColor = getTypeColor(eggTypes[0]?.type?.name || 'normal');
+      cell.style.cssText = `cursor:pointer;border-color:${eggColor};`;
+      cell.style.background = `${eggColor}22`;
 
-      const emoji = document.createElement('div');
-      emoji.style.cssText = 'font-size:24px;';
-      emoji.textContent = '🥚';
-      cell.appendChild(emoji);
+      const eggImg = document.createElement('img');
+      eggImg.src = 'assets/egg.png';
+      eggImg.style.cssText = 'width:32px;height:32px;image-rendering:pixelated;';
+      cell.appendChild(eggImg);
 
       const name = document.createElement('div');
       name.className = 'inv-grid-name';
       name.textContent = egg.species || 'Яйцо';
       cell.appendChild(name);
 
+      const iv = egg.ivs || {};
+      const geneStr = `h${iv.hp || 0}a${iv.atk || 0}d${iv.def || 0}s${iv.spe || 0}sa${iv.spa || 0}sd${iv.spd || 0}`;
+      const geneDiv = document.createElement('div');
+      geneDiv.style.cssText = 'font-size:0.5rem;color:#4682B4;font-family:monospace;';
+      geneDiv.textContent = geneStr;
+      cell.appendChild(geneDiv);
+
       const timeLeft = Math.max(0, egg.readyTime - now);
       const badge = document.createElement('div');
       badge.className = 'inv-grid-badge';
-      badge.style.cssText = 'background:#34c759;font-size:0.5rem;min-width:28px;';
+      badge.style.cssText = `background:${eggColor};font-size:0.5rem;min-width:28px;`;
       if (timeLeft <= 0) {
         badge.textContent = '✓';
         cell.addEventListener('click', () => hatchEgg(egg));
