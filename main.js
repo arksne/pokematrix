@@ -1322,13 +1322,16 @@ async function checkBreeding() {
         const eggUid = generateUID();
         const species = m1.apiData?.species?.name || m1.apiData?.name;
         const eggTypes = m1.apiData?.types || [{ type: { name: 'normal' } }];
+        const inheritIV = (parentVal) =>
+          Math.min(31, Math.max(0, parentVal + (Math.random() < 0.5 ? 2 : -2)));
+        const avgIV = (stat) => Math.round((m1.ivs[stat] + m2.ivs[stat]) / 2);
         const eggIvs = {
-          hp: Math.floor(Math.random()*32),
-          atk: Math.floor(Math.random()*32),
-          def: Math.floor(Math.random()*32),
-          spa: Math.floor(Math.random()*32),
-          spd: Math.floor(Math.random()*32),
-          spe: Math.floor(Math.random()*32)
+          hp: inheritIV(avgIV('hp')),
+          atk: inheritIV(avgIV('atk')),
+          def: inheritIV(avgIV('def')),
+          spa: inheritIV(avgIV('spa')),
+          spd: inheritIV(avgIV('spd')),
+          spe: inheritIV(avgIV('spe'))
         };
         const egg = {
           uid: eggUid,
