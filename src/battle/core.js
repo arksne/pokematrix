@@ -34,8 +34,7 @@ let GS;
 function initBattleRefs() {
   GS = getGameState();
 }
-// Call once after main.js is loaded
-setTimeout(initBattleRefs, 0);
+GS = getGameState();
 
 // --- WEATHER ---
 export const WEATHERS = ['clear', 'rain', 'sun', 'sandstorm', 'hail'];
