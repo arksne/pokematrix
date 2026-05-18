@@ -91,6 +91,10 @@ router.get('/api', adminAuth, async (req, res) => {
 
   async function putSave(u, data) {
     await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
+    try {
+      const { notifyUser } = await import('../socket.js');
+      notifyUser(u.id, 'save_updated', {});
+    } catch(e) {}
   }
 
   try {

@@ -690,11 +690,10 @@ function switchPokemon() {
 
     appendToLog(`${oldActive.name || oldActive.apiData?.name}, возвращайся! Вперёд, ${newActive.name || newActive.apiData?.name}!`, false, 'switch');
 
-    // Rebuild player moves
-    playerMovesDetailed = activePlayerMon.apiData?.moves?.filter(m => {
-      const vgd = m.version_group_details;
-      return vgd && vgd.length && activePlayerMon.movesPP?.some(pp => pp?.moveName === m.move.name);
-    }) || [];
+    // Reload move buttons for the new active pokemon
+    playerMovesDetailed = [];
+    const handler = battleType === 'wild' ? useMove : useMoveGym;
+    loadMoveButtons(activePlayerMon, handler);
 
     // Update UI
     document.getElementById('player-name').innerText = activePlayerMon.nickname || activePlayerMon.apiData.name;
@@ -1061,14 +1060,44 @@ async function startHunt(encountersArray) {
 
 function loadMoveButtons(activeMon, clickHandler) {
   playerMovesDetailed = [];
+
+  // Get level-up moves at or below the pokemon's current level
+  const curLvl = activeMon.baseLevel + (activeMon.candiesEaten || 0);
+  const levelMoves = [];
+  const seenMoves = new Set();
+
+  if (activeMon.apiData?.moves) {
+    for (const entry of activeMon.apiData.moves) {
+      if (!entry.move?.url) continue;
+      const vgd = entry.version_group_details || [];
+      let learnLevel = 0;
+      let isLevelUp = false;
+      for (const detail of vgd) {
+        if (detail.move_learn_method?.name === 'level-up') {
+          learnLevel = detail.level_learned_at || 0;
+          isLevelUp = true;
+          break;
+        }
+      }
+      if (isLevelUp && learnLevel <= curLvl && !seenMoves.has(entry.move.name)) {
+        seenMoves.add(entry.move.name);
+        levelMoves.push({ name: entry.move.name, url: entry.move.url, level: learnLevel });
+      }
+    }
+  }
+
+  // Sort by learn level descending (most recent first), take top 4
+  levelMoves.sort((a, b) => b.level - a.level);
+  const topMoves = levelMoves.slice(0, 4);
+
   for (let i = 0; i < 4; i++) {
     const mBtn = document.getElementById(`move-btn-${i}`);
-    if (activeMon.apiData.moves[i]) {
+    const moveEntry = topMoves[i];
+    if (moveEntry) {
       mBtn.innerText = '...';
       mBtn.classList.add('disabled');
       mBtn.onclick = null;
-      const url = activeMon.apiData.moves[i].move.url;
-      fetch(url)
+      fetch(moveEntry.url)
         .then(r => r.json())
         .then(d => {
           playerMovesDetailed[i] = d;
@@ -1076,13 +1105,13 @@ function loadMoveButtons(activeMon, clickHandler) {
           if (!activeMon.movesPP[i]) {
             activeMon.movesPP[i] = { current: d.pp || 30, max: d.pp || 30 };
           }
-          mBtn.innerText = activeMon.apiData.moves[i].move.name;
+          mBtn.innerText = d.name || moveEntry.name;
           mBtn.classList.remove('disabled');
           mBtn.onclick = () => clickHandler(i);
           updateMoveButtonUI(i, d);
         })
         .catch(() => {
-          mBtn.innerText = activeMon.apiData.moves[i].move.name;
+          mBtn.innerText = moveEntry.name;
           mBtn.classList.remove('disabled');
           mBtn.onclick = () => clickHandler(i);
         });
@@ -1098,6 +1127,11 @@ function updateMoveButtonUI(index, moveData) {
   if (!activePlayerMon.movesPP || !activePlayerMon.movesPP[index]) return;
   const pp = activePlayerMon.movesPP[index];
   const mBtn = document.getElementById(`move-btn-${index}`);
+  if (!mBtn) return;
+  mBtn.classList.remove('move-type-physical', 'move-type-special', 'move-type-status');
+  if (moveData.damage_class?.name) {
+    mBtn.classList.add(`move-type-${moveData.damage_class.name}`);
+  }
   if (pp.current <= 0) {
     mBtn.innerText = `${moveData.name} (PP: 0/${pp.max})`;
     mBtn.classList.add('disabled');
@@ -1516,8 +1550,8 @@ function enemyTurn() {
     appendToLog(`Дикий ${activeWild.name} побежден!`);
     // Award EXP for status knockout
     const baseExp = wildLvl * 30;
-    let expGain = Math.floor(baseExp / activePlayerMon.GS.myTeam.filter(m => m.currentHp > 0).length);
-    if (GS.expShareActive) expGain = Math.floor(baseExp / activePlayerMon.GS.myTeam.length);
+    let expGain = Math.floor(baseExp / GS.myTeam.filter(m => m.currentHp > 0).length);
+    if (GS.expShareActive) expGain = Math.floor(baseExp / GS.myTeam.length);
     activePlayerMon.currentExp = (activePlayerMon.currentExp || 0) + expGain;
     if (activePlayerMon.currentExp >= (activePlayerMon.expToNext || 100)) {
       activePlayerMon.baseLevel++;

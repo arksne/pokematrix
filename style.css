@@ -790,6 +790,9 @@ body::before {
 .reborn-move-link:hover { background: linear-gradient(160deg, #284060 0%, #203050 100%); border-color: #3a5a7a; }
 .reborn-move-link:active { background: linear-gradient(160deg, #182840 0%, #14203a 100%); }
 .reborn-move-link.disabled { color: #4a6a7a; cursor: not-allowed; background: #141c2a; border-color: #1a2a3a; }
+.reborn-move-link.move-type-physical { border-left: 3px solid #ff6b4a; }
+.reborn-move-link.move-type-special { border-left: 3px solid #4a9eff; }
+.reborn-move-link.move-type-status { border-left: 3px solid #4ade80; }
 
 .reborn-actions {
   display: flex;
@@ -2640,7 +2643,8 @@ input[type="number"] {
 .trade-offer-slot {
   min-height: 110px;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   border: 2px dashed var(--tma-border);
@@ -2648,6 +2652,13 @@ input[type="number"] {
   margin-bottom: 10px;
   padding: 8px;
   transition: border-color 0.2s;
+}
+.trade-offer-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 72px;
 }
 .trade-offer-slot.filled {
   border-color: var(--tma-primary);

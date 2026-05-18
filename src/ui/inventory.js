@@ -1,5 +1,5 @@
 import {
-  getTeamState, getInvState, toggleExpShare, 
+  getTeamState, getInvState, toggleExpShare,
   addItem, removeItem, getItemQty, itemDef,
   showToast, showConfirmModal, showSelectionModal,
   refreshProfileUI, checkEvolution, triggerEvolution,
@@ -25,7 +25,7 @@ export function initInventoryEvents() {
   }
 }
 
-export function updateDynamicEVs(changedInput = null) {
+export function updateDynamicEVs() {
   if (getTeamState().currentPokemonIndex === null) return;
   const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
 
@@ -36,26 +36,34 @@ export function updateDynamicEVs(changedInput = null) {
   let currentTotal = 0;
   evInputs.forEach(input => currentTotal += parseInt(input.value) || 0);
 
+  document.getElementById('ev-remaining').innerText = maxTotalEV - currentTotal;
+}
+
+export function applyEVs() {
+  if (getTeamState().currentPokemonIndex === null) return;
+  const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
+
+  const maxTotalEV = (mon.candiesEaten * 4) + (mon.vitaminsEaten * 10);
+  const evInputs = document.querySelectorAll('.reborn-input-ev');
+  let currentTotal = 0;
+  evInputs.forEach(input => currentTotal += parseInt(input.value) || 0);
+
   if (currentTotal > maxTotalEV) {
     let diff = currentTotal - maxTotalEV;
-    if (changedInput && parseInt(changedInput.value) >= diff) {
-      changedInput.value = parseInt(changedInput.value) - diff;
-      currentTotal -= diff;
-    } else {
-      document.querySelectorAll('.reborn-input-ev').forEach(input => {
-        let val = parseInt(input.value) || 0;
-        if (val > 0 && diff > 0) {
-          let toSubtract = Math.min(val, diff);
-          input.value = val - toSubtract;
-          diff -= toSubtract;
-          currentTotal -= toSubtract;
-        }
-      });
-    }
-    saveActiveMonData();
+    document.querySelectorAll('.reborn-input-ev').forEach(input => {
+      let val = parseInt(input.value) || 0;
+      if (val > 0 && diff > 0) {
+        let toSubtract = Math.min(val, diff);
+        input.value = val - toSubtract;
+        diff -= toSubtract;
+        currentTotal -= toSubtract;
+      }
+    });
   }
 
-  document.getElementById('ev-remaining').innerText = maxTotalEV - currentTotal;
+  saveActiveMonData();
+  updateDynamicEVs();
+  showToast('EV распределение сохранено! Теперь эти очки нельзя перенести в другие статы.', false);
 }
 
 function updateStats() {
@@ -343,10 +351,16 @@ export function useItem(itemId) {
   if (!item) return showToast('Предмет не найден!', true);
   if (getItemQty(itemId) <= 0) return showToast(`Нет ${item.nameRu}!`, true);
   if (!item.isUsable) return showToast(`${item.nameRu} нельзя использовать из рюкзака.`, true);
-  if (getTeamState().currentPokemonIndex === null) return showToast('Сначала выберите покемона во вкладке "Команда"!', true);
+  // Items that don't require a selected pokemon
+  const noPokemonItems = ['craftersKit', 'oldRod', 'goodRod', 'superRod'];
+  const needsPokemon = !noPokemonItems.includes(itemId);
 
-  const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
-  if (!mon) return showToast('Покемон не найден!', true);
+  if (needsPokemon && getTeamState().currentPokemonIndex === null) {
+    return showToast('Сначала выберите покемона во вкладке "Команда"!', true);
+  }
+
+  const mon = needsPokemon ? getTeamState().myTeam[getTeamState().currentPokemonIndex] : null;
+  if (needsPokemon && !mon) return showToast('Покемон не найден!', true);
 
   switch (itemId) {
     case 'potion': {

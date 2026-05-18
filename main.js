@@ -28,8 +28,8 @@ export { loadChatMessages, startChatPolling, initChatSocket, stopChatPolling, se
 import { loadAllTrainers, initTrainersTab, showAccountPanel } from './src/ui/trainers.js';
 export { loadAllTrainers, initTrainersTab, showAccountPanel };
 
-import { initInventoryEvents, updateDynamicEVs, updateInventoryDisplay, renderBattleItemSelect, updateQADisplays, renderInventory, useItem, getHeldItemName, openHeldItemPicker } from './src/ui/inventory.js';
-export { initInventoryEvents, updateDynamicEVs, updateInventoryDisplay, renderBattleItemSelect, updateQADisplays, renderInventory, useItem, getHeldItemName, openHeldItemPicker };
+import { initInventoryEvents, updateDynamicEVs, applyEVs, updateInventoryDisplay, renderBattleItemSelect, updateQADisplays, renderInventory, useItem, getHeldItemName, openHeldItemPicker } from './src/ui/inventory.js';
+export { initInventoryEvents, updateDynamicEVs, applyEVs, updateInventoryDisplay, renderBattleItemSelect, updateQADisplays, renderInventory, useItem, getHeldItemName, openHeldItemPicker };
 import { getDailyWeather, evolutionCache, evolvesFromMap, getWeatherMultiplier, saveBattleState, clearBattleState, restoreBattleState, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars, POKEDEX_ALL, pokedexData, pokedexTotal, WEATHER_ICONS, WEATHER_NAMES, huntActive, huntTimer } from './src/battle/core.js';
 export { getDailyWeather, evolutionCache, evolvesFromMap, getWeatherMultiplier, saveBattleState, clearBattleState, restoreBattleState, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars, POKEDEX_ALL, pokedexData, pokedexTotal, WEATHER_ICONS, WEATHER_NAMES, huntActive, huntTimer };
 import { REGIONS } from './src/data/regions.js';
@@ -2384,6 +2384,31 @@ function checkNPCQuestProgress(itemId, qty) {
 }
 
 // --- LOCATION ENGINE ---
+function healTeam() {
+  if (myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
+  let healed = false;
+  myTeam.forEach(mon => {
+    if (!mon || !mon.apiData) return;
+    const baseHp = mon.apiData.stats[0].base_stat;
+    const curLvl = mon.baseLevel + mon.candiesEaten;
+    const newMaxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * curLvl) + curLvl + 10;
+    if (mon.currentHp < newMaxHp || mon.status || mon.maxHp !== newMaxHp) healed = true;
+    mon.maxHp = newMaxHp;
+    mon.currentHp = newMaxHp;
+    mon.status = null;
+    mon.sleepTurns = 0;
+    mon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+    if (mon.movesPP) mon.movesPP.forEach(pp => { if (pp && pp.current < pp.max) { pp.current = pp.max; healed = true; } });
+  });
+  const msg = healed ? 'Сестра Джой вылечила всю команду!' : 'Все покемоны уже здоровы!';
+  const descEl = document.getElementById('loc-desc');
+  const oldText = descEl.innerText;
+  descEl.innerText = msg;
+  descEl.style.color = 'var(--tma-accent)';
+  setTimeout(() => { descEl.innerText = oldText; descEl.style.color = ''; }, 2000);
+  autoSave();
+}
+
 export function renderLocation(locId) {
   currentLocationId = locId;
   updatePlayerLocation();
@@ -2438,6 +2463,16 @@ export function renderLocation(locId) {
     actionsContainer.appendChild(btnShop);
   }
 
+  // Heal button for locations with hasHeal (cities etc.)
+  if (loc.hasHeal && locId !== 'pokecenter' && !locId.endsWith('_pokecenter')) {
+    const btnHeal = document.createElement('button');
+    btnHeal.className = 'btn-use';
+    btnHeal.style.backgroundColor = '#34c759';
+    btnHeal.innerText = '🏥 Вылечить команду';
+    btnHeal.onclick = () => healTeam();
+    actionsContainer.appendChild(btnHeal);
+  }
+
   // Pokemon Center location
   if (locId === 'pokecenter' || locId.endsWith('_pokecenter')) {
     checkDaycare();
@@ -2453,30 +2488,7 @@ export function renderLocation(locId) {
     btnHeal.className = 'btn-use';
     btnHeal.style.backgroundColor = '#34c759';
     btnHeal.innerText = '🏥 Вылечить команду';
-    btnHeal.onclick = () => {
-      if (myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
-      let healed = false;
-      myTeam.forEach(mon => {
-        if (!mon || !mon.apiData) return;
-        const baseHp = mon.apiData.stats[0].base_stat;
-        const curLvl = mon.baseLevel + mon.candiesEaten;
-        const newMaxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * curLvl) + curLvl + 10;
-        if (mon.currentHp < newMaxHp || mon.status || mon.maxHp !== newMaxHp) healed = true;
-        mon.maxHp = newMaxHp;
-        mon.currentHp = newMaxHp;
-        mon.status = null;
-        mon.sleepTurns = 0;
-        mon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
-        if (mon.movesPP) mon.movesPP.forEach(pp => { if (pp && pp.current < pp.max) { pp.current = pp.max; healed = true; } });
-      });
-      const msg = healed ? 'Сестра Джой вылечила всю команду!' : 'Все покемоны уже здоровы!';
-      const descEl = document.getElementById('loc-desc');
-      const oldText = descEl.innerText;
-      descEl.innerText = msg;
-      descEl.style.color = 'var(--tma-accent)';
-      setTimeout(() => { descEl.innerText = oldText; descEl.style.color = ''; }, 2000);
-      autoSave();
-    };
+    btnHeal.onclick = () => healTeam();
     actionsContainer.appendChild(btnHeal);
 
     const btnPC = document.createElement('button');
@@ -3145,15 +3157,15 @@ function initProfileEvents() {
       if (val < 0) val = 0;
       if (val > 126) val = 126;
       e.target.value = val;
-
-      saveActiveMonData();
-      updateDynamicEVs(e.target);
-      updateStats();
+      updateDynamicEVs();
     });
   });
+
+  const applyBtn = document.getElementById('btn-ev-apply');
+  if (applyBtn) applyBtn.onclick = () => { applyEVs(); updateStats(); };
 }
 
-function updateStats() {
+export function updateStats() {
   if (currentPokemonIndex === null) return;
   const mon = myTeam[currentPokemonIndex];
   const stats = [
@@ -3898,8 +3910,8 @@ export async function openTrainerProfile(userId) {
 export let socket = null;
 let onlinePlayersList = [];
 let activeTradeId = null;
-let myTradeOffer = null;
-let partnerTradeOffer = null;
+let myTradeOffers = [];
+let partnerTradeOffers = [];
 let iAmP1 = false;
 
 export function showToast(msg, isError) {
@@ -4073,6 +4085,7 @@ let pvpOpponentName = '';
 let pvpMyMon = null;
 let pvpOppMon = null;
 let pvpMyTurn = false;
+let pvpMovesDetailed = []; // Cached move data for PvP
 
 function openPvPArena(battleId, opponent, myFirst) {
   pvpBattleId = battleId;
@@ -4161,11 +4174,49 @@ function updatePvPUI() {
 
   const movesDiv = document.getElementById('pvp-moves');
   movesDiv.innerHTML = '';
-  const moves = mon.apiData?.moves?.filter(m => m) || [];
-  moves.forEach((m, i) => {
+  pvpMovesDetailed = [];
+
+  // Filter to level-up moves at or below current level (up to 4)
+  const seen = new Set();
+  const lm = [];
+  if (mon.apiData?.moves) {
+    for (const entry of mon.apiData.moves) {
+      if (!entry.move?.url) continue;
+      const vgd = entry.version_group_details || [];
+      let learnLevel = 0;
+      let isLevelUp = false;
+      for (const detail of vgd) {
+        if (detail.move_learn_method?.name === 'level-up') {
+          learnLevel = detail.level_learned_at || 0;
+          isLevelUp = true;
+          break;
+        }
+      }
+      if (isLevelUp && learnLevel <= curLvl && !seen.has(entry.move.name)) {
+        seen.add(entry.move.name);
+        lm.push({ name: entry.move.name, url: entry.move.url, level: learnLevel });
+      }
+    }
+  }
+  // Sort by learn level descending (most recent first), take top 4
+  lm.sort((a, b) => b.level - a.level);
+  const topMoves = lm.slice(0, 4);
+  pvpMovesDetailed = topMoves.map(() => null);
+
+  topMoves.forEach((m, i) => {
+    // Fetch move power asynchronously
+    fetch(m.url).then(r => r.json()).then(d => {
+      pvpMovesDetailed[i] = d;
+      const btns = movesDiv.querySelectorAll('.reborn-move-link');
+      if (btns[i]) {
+        btns[i].classList.remove('move-type-physical', 'move-type-special', 'move-type-status');
+        if (d.damage_class?.name) btns[i].classList.add(`move-type-${d.damage_class.name}`);
+      }
+    }).catch(() => {});
+
     const btn = document.createElement('span');
     btn.className = 'reborn-move-link';
-    btn.textContent = m.move.name;
+    btn.textContent = m.name;
     btn.style.opacity = pvpMyTurn ? '1' : '0.5';
     btn.onclick = () => {
       if (!pvpMyTurn) { showToast('Сейчас ход соперника!', true); return; }
@@ -4177,11 +4228,11 @@ function updatePvPUI() {
 
 function doPvPAttack(moveIdx) {
   if (!pvpMyMon || !pvpBattleId) return;
-  const move = pvpMyMon.apiData?.moves?.[moveIdx]?.move;
-  const moveName = move?.name || 'Атака';
+  const detailed = pvpMovesDetailed[moveIdx];
+  const moveName = detailed?.name || 'Атака';
   const lvl = pvpMyMon.baseLevel + (pvpMyMon.candiesEaten || 0);
   const atk = (pvpMyMon.apiData?.stats?.[1]?.base_stat || 60);
-  const power = move ? (move.power || 60) : 60;
+  const power = detailed?.power || 60;
   const rawDmg = Math.floor(((lvl * power * (atk / 100)) / 15) * (0.85 + Math.random() * 0.3));
   const crit = Math.random() < 0.0625;
   const dmg = crit ? Math.floor(rawDmg * 1.5) : rawDmg;
@@ -4231,6 +4282,18 @@ function initTradeSocket() {
     renderOnlinePlayers();
   });
 
+  socket.on('save_updated', async () => {
+    const data = await cloudLoad();
+    if (data) {
+      saveVersion = 0;
+      applyCloudSave(data);
+      updateMoneyDisplay();
+      updateInventoryDisplay();
+      if (typeof renderTeamGrid === 'function') renderTeamGrid();
+      showToast('Сохранение обновлено администратором', false);
+    }
+  });
+
   socket.on('trade_request_received', (data) => {
     showTradeRequestModal(data.fromUsername, data.fromId);
   });
@@ -4242,13 +4305,13 @@ function initTradeSocket() {
   socket.on('trade_started', (data) => {
     activeTradeId = data.tradeId;
     iAmP1 = data.tradeId.startsWith(socket.id);
-    myTradeOffer = null;
-    partnerTradeOffer = null;
+    myTradeOffers = [];
+    partnerTradeOffers = [];
     openTradeWindow(data.partnerUsername);
   });
 
-  socket.on('trade_partner_offer', (offer) => {
-    partnerTradeOffer = offer;
+  socket.on('trade_partner_offers', (offers) => {
+    partnerTradeOffers = Array.isArray(offers) ? offers : [];
     renderTradeOffers();
   });
 
@@ -4256,29 +4319,39 @@ function initTradeSocket() {
     updateTradeConfirmUI(status);
   });
 
-  socket.on('trade_execute', (receivedOffer) => {
-    // Remove what I offered
-    if (myTradeOffer) {
-      if (myTradeOffer.type === 'pokemon') {
-        const idx = myTeam.findIndex(m => m.uid === myTradeOffer.data.uid || m === myTradeOffer.data);
-        if (idx !== -1) myTeam.splice(idx, 1);
-      } else if (myTradeOffer.type === 'item') {
-        removeItem(myTradeOffer.data.id, myTradeOffer.data.qty || 1);
-      }
+  socket.on('trade_execute', (receivedOffers) => {
+    // Remove what I offered from my inventory/team
+    if (myTradeOffers.length > 0) {
+      myTradeOffers.forEach(offer => {
+        if (offer.type === 'pokemon') {
+          const idx = myTeam.findIndex(m => m.uid === offer.data.uid || m === offer.data);
+          if (idx !== -1) myTeam.splice(idx, 1);
+        } else if (offer.type === 'item') {
+          removeItem(offer.data.id, offer.data.qty || 1);
+        }
+      });
     }
 
     // Receive what partner offered
-    if (receivedOffer) {
-      if (receivedOffer.type === 'pokemon') {
-        receivedOffer.data.previousOwner = receivedOffer.data.originalTrainer;
-        receivedOffer.data.uid = generateUID();
-        receivedOffer.data.originalTrainer = getTrainerId();
-        receivedOffer.data.createdAt = Date.now();
-        myTeam.push(receivedOffer.data);
-      } else if (receivedOffer.type === 'item') {
-        addItem(receivedOffer.data.id, receivedOffer.data.qty || 1);
-        showToast(`Получено: ${receivedOffer.data.name} x${receivedOffer.data.qty || 1}!`, false);
-      }
+    if (Array.isArray(receivedOffers)) {
+      receivedOffers.forEach(offer => {
+        if (offer.type === 'pokemon') {
+          offer.data.previousOwner = offer.data.originalTrainer;
+          offer.data.uid = generateUID();
+          offer.data.originalTrainer = getTrainerId();
+          offer.data.createdAt = Date.now();
+          if (myTeam.length < 6) {
+            myTeam.push(offer.data);
+          } else {
+            if (pcBoxes.length === 0) pcBoxes.push([]);
+            pcBoxes[0].push(offer.data);
+            addNotification('📦 Покемон в PC', `${offer.data.name || 'Покемон'} отправлен в Бокс 1 (команда полна).`);
+          }
+        } else if (offer.type === 'item') {
+          addItem(offer.data.id, offer.data.qty || 1);
+          showToast(`Получено: ${offer.data.name} x${offer.data.qty || 1}!`, false);
+        }
+      });
     }
 
     showToast('Обмен успешно завершён!', false);
@@ -4541,7 +4614,7 @@ function openTradeWindow(partnerName) {
 
     document.getElementById('btn-trade-confirm').addEventListener('click', () => {
       // Allow one-way: can confirm if you offered something OR partner offered something
-      if (!myTradeOffer && !partnerTradeOffer) { showToast('Выберите что-то для обмена или дождитесь предложения!', true); return; }
+      if (myTradeOffers.length === 0 && partnerTradeOffers.length === 0) { showToast('Добавьте хотя бы один предмет или покемона для обмена!', true); return; }
       socket.emit('trade_confirm', activeTradeId);
       document.getElementById('btn-trade-confirm').textContent = '✓ Ожидание партнёра...';
       document.getElementById('btn-trade-confirm').disabled = true;
@@ -4549,8 +4622,8 @@ function openTradeWindow(partnerName) {
     });
 
     document.getElementById('btn-trade-clear-my').addEventListener('click', () => {
-      myTradeOffer = null;
-      socket.emit('trade_offer', { tradeId: activeTradeId, offer: null });
+      myTradeOffers = [];
+      socket.emit('trade_offer', { tradeId: activeTradeId, offers: [] });
       renderTradeOffers();
       renderTradePickGrid();
       renderTradeItemGrid();
@@ -4563,8 +4636,8 @@ function openTradeWindow(partnerName) {
     tw.addEventListener('click', (e) => { if (e.target === tw) { if (activeTradeId) socket.emit('trade_cancel', activeTradeId); closeTradeWindow(); } });
   }
 
-  myTradeOffer = null;
-  partnerTradeOffer = null;
+  myTradeOffers = [];
+  partnerTradeOffers = [];
   document.getElementById('trade-partner-name').textContent = partnerName;
   document.getElementById('trade-my-status').textContent = '⏳ Ожидание';
   document.getElementById('trade-my-status').className = 'trade-status waiting';
@@ -4591,12 +4664,14 @@ function renderTradePickGrid() {
     return;
   }
 
+  const offeredUids = new Set(myTradeOffers.filter(o => o.type === 'pokemon').map(o => o.data.uid));
+
   myTeam.forEach((m, i) => {
     const card = document.createElement('div');
     card.className = 'trade-pokemon-card';
-    if (myTradeOffer && myTradeOffer.data === m) card.classList.add('selected');
+    if (offeredUids.has(m.uid)) card.classList.add('selected');
 
-    const untradeable = myTeam.length <= 1;
+    const untradeable = myTeam.length <= 1 && !offeredUids.has(m.uid);
     if (untradeable) {
       card.classList.add('untradeable');
       card.title = 'Нельзя отдать единственного покемона';
@@ -4605,13 +4680,18 @@ function renderTradePickGrid() {
     card.innerHTML = `
       <img src="${m.sprite || m.apiData?.sprites?.front_default || ''}" alt="${m.apiData?.name || '?'}" loading="lazy">
       <div class="name">${escHtml(m.nickname || m.apiData?.name || '???')}</div>
-      <div class="lvl">Lv${m.level || 1}</div>
+      <div class="lvl">Lv${m.baseLevel + (m.candiesEaten || 0)}</div>
     `;
 
     if (!untradeable) {
       card.addEventListener('click', () => {
-        myTradeOffer = { type: 'pokemon', data: m };
-        socket.emit('trade_offer', { tradeId: activeTradeId, offer: myTradeOffer });
+        // Toggle pokemon in offers array
+        if (offeredUids.has(m.uid)) {
+          myTradeOffers = myTradeOffers.filter(o => !(o.type === 'pokemon' && o.data.uid === m.uid));
+        } else {
+          myTradeOffers.push({ type: 'pokemon', data: m });
+        }
+        socket.emit('trade_offer', { tradeId: activeTradeId, offers: myTradeOffers });
         renderTradeOffers();
         renderTradePickGrid();
       });
@@ -4632,11 +4712,13 @@ function renderTradeItemGrid() {
     return;
   }
 
+  const offeredItemIds = new Set(myTradeOffers.filter(o => o.type === 'item').map(o => o.data.id));
+
   tradeItems.forEach(item => {
     const qty = inventory[item.id] || 0;
     const card = document.createElement('div');
     card.className = 'trade-pokemon-card';
-    if (myTradeOffer && myTradeOffer.type === 'item' && myTradeOffer.data.id === item.id) card.classList.add('selected');
+    if (offeredItemIds.has(item.id)) card.classList.add('selected');
 
     card.innerHTML = `
       <div>${getItemSpriteImg(item.id, 32)}</div>
@@ -4645,13 +4727,13 @@ function renderTradeItemGrid() {
     `;
 
     card.addEventListener('click', () => {
-      // Toggle: if already selected, clear; else select this item
-      if (myTradeOffer && myTradeOffer.type === 'item' && myTradeOffer.data.id === item.id) {
-        myTradeOffer = null;
+      // Toggle item in offers array
+      if (offeredItemIds.has(item.id)) {
+        myTradeOffers = myTradeOffers.filter(o => !(o.type === 'item' && o.data.id === item.id));
       } else {
-        myTradeOffer = { type: 'item', data: { id: item.id, name: item.nameRu, qty: 1 } };
+        myTradeOffers.push({ type: 'item', data: { id: item.id, name: item.nameRu, qty: 1 } });
       }
-      socket.emit('trade_offer', { tradeId: activeTradeId, offer: myTradeOffer });
+      socket.emit('trade_offer', { tradeId: activeTradeId, offers: myTradeOffers });
       renderTradeOffers();
       renderTradeItemGrid();
       renderTradePickGrid();
@@ -4666,23 +4748,25 @@ function renderTradeOffers() {
   const pDiv = document.getElementById('trade-partner-offer');
   if (!myDiv || !pDiv) return;
 
-  const renderOffer = (offer) => {
-    if (!offer) return '<span style="color:var(--tma-text-muted);">Не выбрано</span>';
-    if (offer.type === 'pokemon') {
-      const m = offer.data;
-      return `<img class="trade-offer-sprite" src="${m.sprite || m.apiData?.sprites?.front_default || ''}" alt="${escHtml(m.apiData?.name || '?')}"><div class="trade-offer-name">${escHtml(m.nickname || m.apiData?.name || '???')}</div><div class="trade-offer-level">Lv${m.level || 1}</div>`;
-    }
-    if (offer.type === 'item') {
-      const it = offer.data;
-      return `<div>${getItemSpriteImg(it.id, 40)}</div><div class="trade-offer-name">${it.name}</div><div class="trade-offer-level">x${it.qty || 1}</div>`;
-    }
-    return '<span style="color:var(--tma-text-muted);">Не выбрано</span>';
+  const renderOffers = (offers) => {
+    if (!Array.isArray(offers) || offers.length === 0) return '<span style="color:var(--tma-text-muted);">Не выбрано</span>';
+    return offers.map(o => {
+      if (o.type === 'pokemon') {
+        const m = o.data;
+        return `<div class="trade-offer-entry"><img class="trade-offer-sprite" src="${m.sprite || m.apiData?.sprites?.front_default || ''}" alt="${escHtml(m.apiData?.name || '?')}"><div class="trade-offer-name">${escHtml(m.nickname || m.apiData?.name || '???')}</div><div class="trade-offer-level">Lv${m.baseLevel + (m.candiesEaten || 0)}</div></div>`;
+      }
+      if (o.type === 'item') {
+        const it = o.data;
+        return `<div class="trade-offer-entry"><div>${getItemSpriteImg(it.id, 32)}</div><div class="trade-offer-name">${it.name}</div><div class="trade-offer-level">x${it.qty || 1}</div></div>`;
+      }
+      return '';
+    }).join('');
   };
 
-  myDiv.innerHTML = renderOffer(myTradeOffer);
-  myDiv.className = myTradeOffer ? 'trade-offer-slot filled' : 'trade-offer-slot';
-  pDiv.innerHTML = renderOffer(partnerTradeOffer);
-  pDiv.className = partnerTradeOffer ? 'trade-offer-slot filled' : 'trade-offer-slot';
+  myDiv.innerHTML = renderOffers(myTradeOffers);
+  myDiv.className = myTradeOffers.length > 0 ? 'trade-offer-slot filled' : 'trade-offer-slot';
+  pDiv.innerHTML = renderOffers(partnerTradeOffers);
+  pDiv.className = partnerTradeOffers.length > 0 ? 'trade-offer-slot filled' : 'trade-offer-slot';
 }
 
 function updateTradeConfirmUI(status) {
@@ -4718,8 +4802,8 @@ function closeTradeWindow() {
   const tw = document.getElementById('trade-window-modal');
   if (tw) tw.style.display = 'none';
   activeTradeId = null;
-  myTradeOffer = null;
-  partnerTradeOffer = null;
+  myTradeOffers = [];
+  partnerTradeOffers = [];
 }
 
 

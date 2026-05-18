@@ -2,10 +2,20 @@ import { Server } from 'socket.io';
 
 let io;
 const onlinePlayers = new Map(); // socket.id -> { username, userId }
-const activeTrades = new Map();  // tradeId -> { p1, p2, p1Offer, p2Offer, p1Confirm, p2Confirm }
+const userSockets = new Map();   // userId -> Set<socketId>
+const activeTrades = new Map();  // tradeId -> { p1, p2, p1Offers[], p2Offers[], p1Confirm, p2Confirm }
 const pvpBattles = new Map();   // battleId -> { p1, p2 }
 
 export function getIO() { return io; }
+
+export function notifyUser(userId, event, data) {
+  const sockets = userSockets.get(String(userId));
+  if (sockets) {
+    for (const sid of sockets) {
+      io.to(sid).emit(event, data);
+    }
+  }
+}
 
 export function initSocket(server, allowedOrigin) {
   io = new Server(server, {
@@ -30,6 +40,9 @@ export function initSocket(server, allowedOrigin) {
     socket.on('join_lobby', (data) => {
       if (!data || !data.username) return;
       onlinePlayers.set(socket.id, { username: data.username, userId: data.userId });
+      const uid = String(data.userId);
+      if (!userSockets.has(uid)) userSockets.set(uid, new Set());
+      userSockets.get(uid).add(socket.id);
       io.emit('online_players', Array.from(onlinePlayers.entries()).map(([id, info]) => ({ id, ...info })));
     });
 
@@ -47,7 +60,7 @@ export function initSocket(server, allowedOrigin) {
       const p2 = socket.id;
       const tradeId = `${p1}-${p2}`;
 
-      activeTrades.set(tradeId, { p1, p2, p1Offer: null, p2Offer: null, p1Confirm: false, p2Confirm: false });
+      activeTrades.set(tradeId, { p1, p2, p1Offers: [], p2Offers: [], p1Confirm: false, p2Confirm: false });
 
       io.to(p1).emit('trade_started', { tradeId, partnerUsername: onlinePlayers.get(p2)?.username });
       io.to(p2).emit('trade_started', { tradeId, partnerUsername: onlinePlayers.get(p1)?.username });
@@ -58,17 +71,17 @@ export function initSocket(server, allowedOrigin) {
       io.to(targetSocketId).emit('trade_rejected');
     });
 
-    // Offer item/pokemon
+    // Offer items/pokemon (send full offers array)
     socket.on('trade_offer', (data) => {
       const trade = activeTrades.get(data?.tradeId);
       if (!trade) return;
 
       if (trade.p1 === socket.id) {
-        trade.p1Offer = data.offer;
-        io.to(trade.p2).emit('trade_partner_offer', data.offer);
+        trade.p1Offers = Array.isArray(data.offers) ? data.offers : [];
+        io.to(trade.p2).emit('trade_partner_offers', trade.p1Offers);
       } else if (trade.p2 === socket.id) {
-        trade.p2Offer = data.offer;
-        io.to(trade.p1).emit('trade_partner_offer', data.offer);
+        trade.p2Offers = Array.isArray(data.offers) ? data.offers : [];
+        io.to(trade.p1).emit('trade_partner_offers', trade.p2Offers);
       }
 
       trade.p1Confirm = false;
@@ -89,8 +102,8 @@ export function initSocket(server, allowedOrigin) {
       io.to(trade.p2).emit('trade_confirm_status', { p1: trade.p1Confirm, p2: trade.p2Confirm });
 
       if (trade.p1Confirm && trade.p2Confirm) {
-        io.to(trade.p1).emit('trade_execute', trade.p2Offer);
-        io.to(trade.p2).emit('trade_execute', trade.p1Offer);
+        io.to(trade.p1).emit('trade_execute', trade.p2Offers);
+        io.to(trade.p2).emit('trade_execute', trade.p1Offers);
         activeTrades.delete(tradeId);
       }
     });
@@ -153,6 +166,12 @@ export function initSocket(server, allowedOrigin) {
 
     socket.on('disconnect', (reason) => {
       console.log('User disconnected:', socket.id, `(${reason})`);
+      const info = onlinePlayers.get(socket.id);
+      if (info) {
+        const uid = String(info.userId);
+        const sockets = userSockets.get(uid);
+        if (sockets) { sockets.delete(socket.id); if (sockets.size === 0) userSockets.delete(uid); }
+      }
       onlinePlayers.delete(socket.id);
       io.emit('online_players', Array.from(onlinePlayers.entries()).map(([id, info]) => ({ id, ...info })));
 
