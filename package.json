@@ -22,6 +22,7 @@
     "vite": "^8.0.12"
   },
   "dependencies": {
+    "@rolldown/binding-linux-x64-gnu": "^1.0.1",
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",

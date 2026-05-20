@@ -7,7 +7,15 @@ export async function checkNewMovesOnLevelUp(pokemon, newLevel) {
     const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemon.apiData.id}`);
     const pokeData = await res.json();
     const allMoves = pokeData.moves || [];
-    const knownNames = new Set((pokemon.apiData.moves || []).filter(m => m).map(m => m.move.name));
+
+    // Known moves = current 4-slot moveset (apiData.moves has ALL PokeAPI moves
+    // for a fresh pokemon, so we only check the first 4 displayed slots)
+    const knownNames = new Set();
+    for (let i = 0; i < 4; i++) {
+      if (pokemon.apiData.moves[i]?.move?.name) {
+        knownNames.add(pokemon.apiData.moves[i].move.name);
+      }
+    }
 
     const prevCheckLevel = pokemon.lastMoveCheckLevel || 1;
     const newMoves = [];
@@ -62,13 +70,66 @@ export function offerLearnMove(pokemon, move) {
       return;
     }
 
-    // All 4 slots full — send to reserve automatically
-    if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
-    if (!pokemon.learnableMoves.some(m => m.name === moveName)) {
-      pokemon.learnableMoves.push({ name: moveName, url, power: move.power || 0, type: move.type?.name || 'normal' });
+    // All 4 slots full — show replacement picker
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+    let slotsHTML = '';
+    for (let i = 0; i < 4; i++) {
+      const currentName = pokemon.apiData.moves[i]?.move?.name || '-';
+      slotsHTML += `<button class="selection-item-btn replace-slot" data-slot="${i}">
+        Слот ${i + 1}: ${currentName}
+      </button>`;
     }
-    appendToLog(`${monName}: ${moveName} упал в резерв (все слоты заняты).`, false, 'system');
-    resolve(false);
+    modal.innerHTML = `
+      <div class="selection-modal-card">
+        <h3>${monName} хочет выучить ${moveName}</h3>
+        <p style="font-size:0.85rem;color:var(--tma-hint);margin:4px 0 12px;">Выберите слот для замены:</p>
+        <div class="selection-items">
+          ${slotsHTML}
+          <button class="selection-item-btn reserve-btn" style="border-color:var(--tma-link);">
+            📥 В резерв (не учить сейчас)
+          </button>
+        </div>
+        <button class="confirm-btn confirm-btn-no" id="learn-skip" style="width:100%;margin-top:8px;">Пропустить</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const cleanup = () => {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+    };
+
+    modal.querySelectorAll('.replace-slot').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const slot = parseInt(btn.getAttribute('data-slot'));
+        pokemon.apiData.moves[slot].move = { name: moveName, url };
+        appendToLog(`${monName}: ${moveName} заменил ${pokemon.apiData.moves[slot].move.name} в слоте ${slot + 1}!`, false, 'system');
+        cleanup();
+        resolve(true);
+      });
+    });
+    modal.querySelector('.reserve-btn').addEventListener('click', () => {
+      if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
+      if (!pokemon.learnableMoves.some(m => m.name === moveName)) {
+        pokemon.learnableMoves.push({ name: moveName, url, power: move.power || 0, type: move.type?.name || 'normal' });
+      }
+      appendToLog(`${monName}: ${moveName} упал в резерв (все слоты заняты).`, false, 'system');
+      cleanup();
+      resolve(false);
+    });
+    modal.querySelector('#learn-skip').addEventListener('click', () => {
+      appendToLog(`${monName}: пропустил изучение ${moveName}.`, false, 'system');
+      cleanup();
+      resolve(false);
+    });
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        appendToLog(`${monName}: пропустил изучение ${moveName}.`, false, 'system');
+        cleanup();
+        resolve(false);
+      }
+    });
   });
 }
 

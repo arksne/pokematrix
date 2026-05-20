@@ -1429,6 +1429,15 @@ async function checkBreeding() {
 }
 
 export async function hatchEgg(egg) {
+  // Save egg data in case we need to recover from a failed fetch
+  const eggData = { ...egg };
+  // Remove egg from team and eggs array immediately to prevent
+  // duplicate hatching if checkBreeding is re-entered (via setInterval or openPC)
+  const eggIdx = myTeam.findIndex(m => m.uid === egg.uid);
+  if (eggIdx !== -1) myTeam.splice(eggIdx, 1);
+  eggs = eggs.filter(e => e !== egg);
+  renderTeamGrid();
+
   try {
     const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${egg.species}`);
     const pokeData = await res.json();
@@ -1439,7 +1448,7 @@ export async function hatchEgg(egg) {
       caughtLocation: 'breeding',
       apiData: pokeData,
       maxHp: 50, currentHp: 50,
-      ivs: egg.ivs || { hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32), def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32), spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32) },
+      ivs: eggData.ivs || { hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32), def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32), spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32) },
       evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
       baseLevel: 1, exp: 0, expToNext: 8,
       candiesEaten: 0, vitaminsEaten: 0,
@@ -1458,14 +1467,11 @@ export async function hatchEgg(egg) {
       isEgg: false,
       hasBred: false
     };
-    // Remove egg from team to prevent duplication
-    const eggIdx = myTeam.findIndex(m => m.uid === egg.uid);
-    if (eggIdx !== -1) myTeam.splice(eggIdx, 1);
     // Inherit one random IV from each parent
-    if (egg.parent1Uid && egg.parent2Uid) {
+    if (eggData.parent1Uid && eggData.parent2Uid) {
       const allMons = [...myTeam, ...pcBoxes.flat()];
-      const p1 = allMons.find(m => m.uid === egg.parent1Uid);
-      const p2 = allMons.find(m => m.uid === egg.parent2Uid);
+      const p1 = allMons.find(m => m.uid === eggData.parent1Uid);
+      const p2 = allMons.find(m => m.uid === eggData.parent2Uid);
       if (p1) {
         const stats = ['hp','atk','def','spa','spd','spe'];
         const s1 = stats[Math.floor(Math.random()*stats.length)];
@@ -1485,11 +1491,32 @@ export async function hatchEgg(egg) {
       addNotification('🎉 Яйцо вылупилось!', `${pokeData.name} вылупился и отправлен в PC (команда полна).`);
       appendToLog(`🎉 Из яйца вылупился ${pokeData.name}! (отправлен в PC)`, false, 'quest');
     }
-    eggs = eggs.filter(e => e !== egg);
     renderTeamGrid();
     saveGame();
   } catch(e) {
     console.error('Hatch failed:', e);
+    // Restore egg if the API call failed, to avoid data loss
+    eggs.push(eggData);
+    const eggMon = {
+      uid: eggData.uid,
+      apiData: { name: 'яйцо', sprites: { front_default: '' }, types: [], stats: [], moves: [], abilities: [] },
+      maxHp: 10, currentHp: 10,
+      ivs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+      evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+      baseLevel: 0, exp: 0, expToNext: 0,
+      candiesEaten: 0, vitaminsEaten: 0,
+      training: null, trainingStage: 0, trainingStat: null,
+      happiness: 0, natureIdx: Math.floor(Math.random() * natures.length), breedLetter: 'A',
+      gender: null, status: null, sleepTurns: 0,
+      movesPP: [], statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+      abilityName: null, heldItem: null,
+      berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
+      learnableMoves: [], isEgg: true
+    };
+    myTeam.push(eggMon);
+    renderTeamGrid();
+    saveGame();
+    showToast('Ошибка вылупления, яйцо восстановлено', true);
   }
 }
 
