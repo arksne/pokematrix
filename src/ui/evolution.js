@@ -112,10 +112,40 @@ export async function triggerEvolution(pokemon, targetName) {
   try {
     const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${targetName}`);
     const newData = await res.json();
+    // Preserve current moves so evolution doesn't wipe them
+    const oldMoves = pokemon.apiData.moves ? [...pokemon.apiData.moves] : [];
+    const oldPP = pokemon.movesPP ? [...pokemon.movesPP] : [];
+    const oldLearnable = pokemon.learnableMoves ? [...pokemon.learnableMoves] : [];
+    const oldLastCheckLevel = pokemon.lastMoveCheckLevel;
+
     pokemon.apiData = newData;
 
-    const baseHp = newData.stats[0].base_stat;
+    // Restore the 4-slot moveset (evolution doesn't change known moves)
+    if (oldMoves.length > 0) pokemon.apiData.moves = oldMoves;
+    if (oldPP.length > 0) pokemon.movesPP = oldPP;
+    if (oldLearnable.length > 0) pokemon.learnableMoves = oldLearnable;
+    pokemon.lastMoveCheckLevel = oldLastCheckLevel || 1;
+
+    // Auto-add new evolution moves to reserve (learnableMoves)
     const curLvl = pokemon.baseLevel + (pokemon.candiesEaten || 0);
+    const knownMoveNames = new Set();
+    for (let i = 0; i < 4; i++) {
+      if (pokemon.apiData.moves[i]?.move?.name) knownMoveNames.add(pokemon.apiData.moves[i].move.name);
+    }
+    if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
+    const reserveNames = new Set(pokemon.learnableMoves.map(m => m.name));
+    for (const entry of (newData.moves || [])) {
+      for (const detail of entry.version_group_details) {
+        if (detail.move_learn_method.name === 'level-up' && detail.level_learned_at <= curLvl) {
+          if (!knownMoveNames.has(entry.move.name) && !reserveNames.has(entry.move.name)) {
+            pokemon.learnableMoves.push({ name: entry.move.name, url: entry.move.url, power: 0, type: 'normal' });
+          }
+          break;
+        }
+      }
+    }
+
+    const baseHp = newData.stats[0].base_stat;
     const newMaxHp = Math.floor(0.01 * (2 * baseHp + pokemon.ivs.hp + Math.floor(0.25 * pokemon.evs.hp)) * curLvl) + curLvl + 10;
     const oldMaxHp = pokemon.maxHp;
     pokemon.maxHp = newMaxHp;

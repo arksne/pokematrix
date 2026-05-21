@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { initDB, getDB, closeDB } from './db.js';
+import { MONSTER_DROP_TABLE } from '../src/data/drops.js';
 import authRoutes from './routes/auth.js';
 import saveRoutes from './routes/save.js';
 import leaderboardRoutes from './routes/leaderboard.js';
@@ -27,10 +28,17 @@ const allowedOrigin = process.env.ALLOWED_ORIGIN;
 app.use(cors(allowedOrigin ? { origin: allowedOrigin } : {}));
 app.use(express.json({ limit: '10mb' }));
 
-// Request logging
+// Request logging + file log
+const logStream = fs.createWriteStream('/tmp/pokematrix-server.log', { flags: 'a' });
 app.use((req, res, next) => {
+  const start = Date.now();
   res.on('finish', () => {
-    console.log(`${req.method} ${req.path} → ${res.statusCode}`);
+    const ms = Date.now() - start;
+    const line = `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} → ${res.statusCode} ${ms}ms`;
+    logStream.write(line + '\n');
+    if (res.statusCode >= 400) {
+      logStream.write(`  ERROR: ${req.method} ${req.originalUrl} → ${res.statusCode}\n`);
+    }
   });
   next();
 });
@@ -54,6 +62,16 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/profile', profileRoutes);
 
+// Client-side error log endpoint
+const clientLogStream = fs.createWriteStream('/tmp/pokematrix-client-errors.log', { flags: 'a' });
+app.post('/api/log-client-error', (req, res) => {
+  const { msg, src, line, col, stack, url } = req.body || {};
+  const line2 = `[${new Date().toISOString()}] ${msg} (${src}:${line}:${col}) ${url || ''}`;
+  clientLogStream.write(line2 + '\n');
+  if (stack) clientLogStream.write('  STACK: ' + stack.slice(0, 500) + '\n');
+  res.json({ ok: true });
+});
+
 // Health check
 app.get('/api/health', async (req, res) => {
   try {
@@ -63,6 +81,24 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     res.status(503).json({ status: 'degraded', db: 'disconnected', error: e.message });
   }
+});
+
+// Drop config endpoint (public, for clients)
+app.get('/api/drops', (req, res) => {
+  const dropsPath = path.join(__dirname, '../data/drop_config.json');
+  if (fs.existsSync(dropsPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(dropsPath, 'utf8'));
+      return res.json(config);
+    } catch (e) {
+      // fall through to default
+    }
+  }
+  // Fallback: serve from MONSTER_DROP_TABLE + UNIVERSAL_DROPS
+  res.json({
+    universalDrops: [],
+    monsterDrops: MONSTER_DROP_TABLE,
+  });
 });
 
 // Serve static files with caching (reduce 429s on assets)

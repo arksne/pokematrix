@@ -6,6 +6,7 @@ import {
 import { natures } from '../data/natures.js';
 import { ITEMS } from '../data/items.js';
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';
+import { calculateStat as calcStat, applyStatusEffect as applyStatusEffectLogic, cureStatus as cureStatusLogic, checkStatusTurn as checkStatusTurnLogic, applyStatusEndOfTurn as applyStatusEndOfTurnLogic, statStageModify as statStageModifyLogic, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy, getMoveCategory } from './logic.js';
 
 // === BATTLE STATE ===
 let activeWild = null;
@@ -20,6 +21,7 @@ let wildMovesPP = null;
 let battleRound = 0;
 let activePlayerMon = null;
 let playerMovesDetailed = [];
+let enemyChosenMove = null;
 let battleType = 'wild';
 let gymLeaderKey = null;
 let gymTeamIndex = 0;
@@ -28,6 +30,16 @@ let gymTeamIndexInMember = 0;
 let huntActive = false;
 let huntTimer = null;
 let currentWeather = 'clear';
+
+// Screen / barrier state
+let playerReflectTurns = 0;
+let playerLightScreenTurns = 0;
+let enemyReflectTurns = 0;
+let enemyLightScreenTurns = 0;
+let protectActive = false;
+let substituteHP = 0;
+let enemyProtectActive = false;
+let enemySubstituteHP = 0;
 
 // Reference types - mutations visible across modules
 let GS;
@@ -86,7 +98,11 @@ function saveBattleState() {
     currentWeather,
     escapeAttempts,
     battleRound,
-    itemsUsedInBattle: GS.itemsUsedInBattle
+    itemsUsedInBattle: GS.itemsUsedInBattle,
+    playerReflectTurns,
+    playerLightScreenTurns,
+    enemyReflectTurns,
+    enemyLightScreenTurns
   };
   if (battleType === 'wild' && activeWild) {
     state.wildPkmName = activeWild.name;
@@ -116,6 +132,7 @@ function saveBattleState() {
 
 function clearBattleState() {
   try { localStorage.removeItem(lsKey('battle_state')); } catch(e) {}
+  clearScreens();
 }
 
 async function restoreBattleState() {
@@ -148,6 +165,10 @@ async function restoreBattleState() {
   escapeAttempts = state.escapeAttempts || 0;
   battleRound = state.battleRound || 0;
   GS.itemsUsedInBattle = state.itemsUsedInBattle || 0;
+  playerReflectTurns = state.playerReflectTurns || 0;
+  playerLightScreenTurns = state.playerLightScreenTurns || 0;
+  enemyReflectTurns = state.enemyReflectTurns || 0;
+  enemyLightScreenTurns = state.enemyLightScreenTurns || 0;
 
   if (battleType === 'wild' && state.wildPkmName) {
     try {
@@ -230,6 +251,7 @@ function renderBattleUI() {
   document.getElementById('player-status-icon').innerText = getStatusIcon(activePlayerMon.status);
   updateBattleSpriteBgs(activePlayerMon, activeWild);
   updatePlayerHpUI();
+  updateAbilityDisplay();
 }
 const MAX_IV = 70;
 
@@ -343,6 +365,186 @@ function appendToLog(text, clear = false, type) {
   if (type) p.className = 'chat-' + type;
   logEl.appendChild(p);
   logEl.scrollTop = logEl.scrollHeight;
+}
+
+// --- SCREEN / BARRIER HELPERS ---
+function modifyScreenTurns(screen, delta, isPlayer) {
+  if (screen === 'reflect') {
+    if (isPlayer) playerReflectTurns = Math.max(0, playerReflectTurns + delta);
+    else enemyReflectTurns = Math.max(0, enemyReflectTurns + delta);
+  } else if (screen === 'light-screen') {
+    if (isPlayer) playerLightScreenTurns = Math.max(0, playerLightScreenTurns + delta);
+    else enemyLightScreenTurns = Math.max(0, enemyLightScreenTurns + delta);
+  }
+}
+
+function applyBarrierMod(damage, move, defenderIsPlayer) {
+  const isPhysical = move.damage_class?.name === 'physical';
+  if (defenderIsPlayer) {
+    if (playerReflectTurns > 0 && isPhysical) return 0.5;
+    if (playerLightScreenTurns > 0 && !isPhysical) return 0.5;
+  } else {
+    if (enemyReflectTurns > 0 && isPhysical) return 0.5;
+    if (enemyLightScreenTurns > 0 && !isPhysical) return 0.5;
+  }
+  return 1;
+}
+
+function clearScreens() {
+  playerReflectTurns = 0;
+  playerLightScreenTurns = 0;
+  enemyReflectTurns = 0;
+  enemyLightScreenTurns = 0;
+  protectActive = false;
+  substituteHP = 0;
+  enemyProtectActive = false;
+  enemySubstituteHP = 0;
+}
+
+function handlePlayerStatusEffects(move) {
+  // Returns true if anything meaningful happened
+
+  // 1. Healing moves (Recover, Roost, Moonlight, Synthesis, etc.)
+  const healPct = move.meta?.healing;
+  if (healPct) {
+    const healAmount = Math.floor(activePlayerMon.maxHp * healPct);
+    if (healAmount > 0) {
+      activePlayerMon.currentHp = Math.min(activePlayerMon.maxHp, activePlayerMon.currentHp + healAmount);
+      updatePlayerHpUI();
+      appendToLog(`${activePlayerMon.apiData.name} восстановил ${healAmount} HP!`, false, 'heal');
+    } else {
+      appendToLog('Но HP уже полное...');
+    }
+    return true;
+  }
+
+  // 2. Reflect & Light Screen
+  if (move.name === 'reflect') {
+    playerReflectTurns = 5;
+    appendToLog(`${activePlayerMon.apiData.name} создал Защиту! Физ. урон снижен вдвое.`, false, 'system');
+    return true;
+  }
+  if (move.name === 'light-screen') {
+    playerLightScreenTurns = 5;
+    appendToLog(`${activePlayerMon.apiData.name} создал Световой Экран! Спец. урон снижен вдвое.`, false, 'system');
+    return true;
+  }
+
+  // 3. Protect
+  if (move.name === 'protect') {
+    protectActive = true;
+    appendToLog(`${activePlayerMon.apiData.name} защищается!`);
+    return true;
+  }
+
+  // 4. Substitute
+  if (move.name === 'substitute') {
+    const cost = Math.max(1, Math.floor(activePlayerMon.maxHp * 0.25));
+    if (activePlayerMon.currentHp > cost) {
+      activePlayerMon.currentHp -= cost;
+      substituteHP = Math.floor(activePlayerMon.maxHp * 0.25);
+      updatePlayerHpUI();
+      appendToLog(`${activePlayerMon.apiData.name} создал Заменителя! (-${cost} HP)`, false, 'system');
+    } else {
+      appendToLog('Недостаточно HP для создания Заменителя!');
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function handleEnemyStatusEffects(move) {
+  // Handle status moves used by gym enemy
+  // Returns true if anything meaningful happened
+
+  // 1. Healing for enemy
+  const healPct = move.meta?.healing;
+  if (healPct) {
+    const healAmount = Math.floor(wildMaxHP * healPct);
+    if (healAmount > 0 && wildCurHP < wildMaxHP) {
+      wildCurHP = Math.min(wildMaxHP, wildCurHP + healAmount);
+      updateWildHpUI();
+      appendToLog(`${activeWild.name} восстановил ${healAmount} HP!`, false, 'heal');
+    } else {
+      appendToLog('Но HP противника уже полное...');
+    }
+    return true;
+  }
+
+  // 2. Reflect & Light Screen
+  if (move.name === 'reflect') {
+    enemyReflectTurns = 5;
+    appendToLog(`${activeWild.name} создал Защиту! Физ. урон снижен вдвое.`, false, 'system');
+    return true;
+  }
+  if (move.name === 'light-screen') {
+    enemyLightScreenTurns = 5;
+    appendToLog(`${activeWild.name} создал Световой Экран! Спец. урон снижен вдвое.`, false, 'system');
+    return true;
+  }
+
+  // 3. Protect
+  if (move.name === 'protect') {
+    enemyProtectActive = true;
+    appendToLog(`${activeWild.name} защищается!`);
+    return true;
+  }
+
+  // 4. Substitute
+  if (move.name === 'substitute') {
+    const cost = Math.max(1, Math.floor(wildMaxHP * 0.25));
+    if (wildCurHP > cost) {
+      wildCurHP -= cost;
+      enemySubstituteHP = Math.floor(wildMaxHP * 0.25);
+      updateWildHpUI();
+      appendToLog(`${activeWild.name} создал Заменителя! (-${cost} HP)`, false, 'system');
+    } else {
+      appendToLog('Недостаточно HP для создания Заменителя!');
+    }
+    return true;
+  }
+
+  // 5. Enemy stat changes (Swords Dance, etc.)
+  if (move.stat_changes && move.stat_changes.length > 0) {
+    const monName = activeWild.name;
+    const statNameMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
+    move.stat_changes.forEach(sc => {
+      const statKey = statNameMap[sc.stat.name];
+      if (statKey) {
+        statStageModify(activeWild, statKey, sc.change);
+        const newStage = activeWild.statStages[statKey];
+        const sign = newStage >= 0 ? '+' : '';
+        const dir = sc.change > 0 ? 'повышена' : 'понижена';
+        const labels = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
+        appendToLog(`${labels[statKey] || statKey} ${monName} ${dir} (${sign}${newStage})`, false, 'system');
+      }
+    });
+    return true;
+  }
+
+  // 6. Enemy status ailment on player
+  const ailment = move.meta?.ailment?.name;
+  if (ailment && ailment !== 'none' && ailment !== 'unknown') {
+    const statusMap = {
+      'poison': 'psn', 'badly-poison': 'psn',
+      'burn': 'brn', 'paralysis': 'par',
+      'sleep': 'slp', 'freeze': 'frz'
+    };
+    const targetStatus = statusMap[ailment];
+    if (targetStatus && !activePlayerMon.status) {
+      if (applyStatusEffect(activePlayerMon, targetStatus)) {
+        document.getElementById('player-status-icon').innerText = getStatusIcon(targetStatus);
+        appendToLog(`${activePlayerMon.apiData.name} получил ${STATUS_NAMES[targetStatus] || targetStatus}!`);
+        return true;
+      } else {
+        appendToLog(`Но ${activeWild.name} не удалось наложить статус...`);
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // --- ABILITY EFFECTS (Feature 2e) ---
@@ -701,6 +903,7 @@ function switchPokemon() {
     document.getElementById('player-sprite').src = playerSpriteUrl;
     document.getElementById('player-status-icon').innerText = getStatusIcon(activePlayerMon.status);
     updatePlayerHpUI();
+    updateAbilityDisplay();
 
     // Enemy gets a turn after switch
     document.getElementById('battle-main-menu').style.display = 'none';
@@ -837,6 +1040,7 @@ function getLocationEncounters() {
 }
 
 function startAutoHunt() {
+  if (huntActive) return; // prevent duplicate timer loops
   const encounters = getLocationEncounters();
   if (encounters.length === 0) return;
 
@@ -865,6 +1069,10 @@ function startAutoHunt() {
 
   const doTick = () => {
     if (!huntActive) return;
+    if (huntPending) {
+      huntTimer = setTimeout(doTick, 2000);
+      return;
+    }
     if (document.getElementById('encounter-modal')?.style.display === 'flex') {
       huntTimer = setTimeout(doTick, 2000);
       return;
@@ -946,16 +1154,24 @@ function getBestRod() {
   return null;
 }
 
-async function startHunt(encountersArray) {
-  GS.itemsUsedInBattle = 0;
-  battleRound = 0;
-  const activeMonIndex = GS.myTeam.findIndex(m => m.currentHp > 0);
-  if (activeMonIndex === -1) {
-    return showToast('Вам нужен хотя бы один живой покемон для битвы!', true);
-  }
+let huntPending = false;
 
-  battleType = 'wild';
-  activePlayerMon = GS.myTeam[activeMonIndex];
+async function startHunt(encountersArray) {
+  if (huntPending) return;
+  huntPending = true;
+    GS.itemsUsedInBattle = 0;
+    battleRound = 0;
+    const activeMonIndex = GS.myTeam.findIndex(m => m.currentHp > 0);
+    if (activeMonIndex === -1) {
+      huntPending = false;
+      return showToast('Вам нужен хотя бы один живой покемон для битвы!', true);
+    }
+
+    // Close any previous battle end menu
+    document.getElementById('battle-end-menu').style.display = 'none';
+
+    battleType = 'wild';
+    activePlayerMon = GS.myTeam[activeMonIndex];
   activePlayerMon.choiceLockedMove = undefined;
   currentWeather = getDailyWeather(GS.currentLocationId);
 
@@ -1059,49 +1275,33 @@ async function startHunt(encountersArray) {
   } catch (e) {
     battleLog.innerText = 'Ошибка загрузки...';
     setTimeout(() => { modal.style.display = 'none'; }, 1000);
+  } finally {
+    huntPending = false;
   }
 }
 
 function loadMoveButtons(activeMon, clickHandler) {
   playerMovesDetailed = [];
 
-  // Get level-up moves at or below the pokemon's current level
-  const curLvl = activeMon.baseLevel + (activeMon.candiesEaten || 0);
-  const levelMoves = [];
-  const seenMoves = new Set();
-
+  // Use the 4-slot moveset directly from apiData.moves (matches team page display)
+  const knownMoves = [];
   if (activeMon.apiData?.moves) {
-    for (const entry of activeMon.apiData.moves) {
-      if (!entry.move?.url) continue;
-      const vgd = entry.version_group_details || [];
-      let learnLevel = 0;
-      let isLevelUp = false;
-      for (const detail of vgd) {
-        if (detail.move_learn_method?.name === 'level-up') {
-          learnLevel = detail.level_learned_at || 0;
-          isLevelUp = true;
-          break;
-        }
-      }
-      if (isLevelUp && learnLevel <= curLvl && !seenMoves.has(entry.move.name)) {
-        seenMoves.add(entry.move.name);
-        levelMoves.push({ name: entry.move.name, url: entry.move.url, level: learnLevel });
+    for (let i = 0; i < 4; i++) {
+      const entry = activeMon.apiData.moves[i];
+      if (entry?.move?.url) {
+        knownMoves.push(entry);
       }
     }
   }
 
-  // Sort by learn level descending (most recent first), take top 4
-  levelMoves.sort((a, b) => b.level - a.level);
-  const topMoves = levelMoves.slice(0, 4);
-
   for (let i = 0; i < 4; i++) {
     const mBtn = document.getElementById(`move-btn-${i}`);
-    const moveEntry = topMoves[i];
+    const moveEntry = knownMoves[i];
     if (moveEntry) {
       mBtn.innerText = '...';
       mBtn.classList.add('disabled');
       mBtn.onclick = null;
-      fetch(moveEntry.url)
+      fetch(moveEntry.move.url)
         .then(r => r.json())
         .then(d => {
           playerMovesDetailed[i] = d;
@@ -1109,13 +1309,13 @@ function loadMoveButtons(activeMon, clickHandler) {
           if (!activeMon.movesPP[i]) {
             activeMon.movesPP[i] = { current: d.pp || 30, max: d.pp || 30 };
           }
-          mBtn.innerText = d.name || moveEntry.name;
+          mBtn.innerText = d.name || moveEntry.move.name;
           mBtn.classList.remove('disabled');
           mBtn.onclick = () => clickHandler(i);
           updateMoveButtonUI(i, d);
         })
         .catch(() => {
-          mBtn.innerText = moveEntry.name;
+          mBtn.innerText = moveEntry.move.name;
           mBtn.classList.remove('disabled');
           mBtn.onclick = () => clickHandler(i);
         });
@@ -1149,6 +1349,17 @@ function updateMoveButtonUIs() {
     if (playerMovesDetailed[i]) {
       updateMoveButtonUI(i, playerMovesDetailed[i]);
     }
+  }
+}
+
+function updateAbilityDisplay() {
+  if (activePlayerMon) {
+    const abilityName = getAbilityName(activePlayerMon, false);
+    document.getElementById('player-ability').innerText = abilityName ? `【${abilityName}】` : '';
+  }
+  if (activeWild) {
+    const wildAbility = activeWild.abilities?.[0]?.ability?.name || '';
+    document.getElementById('wild-ability').innerText = wildAbility ? `【${wildAbility}】` : '';
   }
 }
 
@@ -1227,6 +1438,25 @@ async function useMove(moveIndex) {
     activePlayerMon.choiceLockedMove = moveIndex;
   }
 
+  // Accuracy check
+  const accResult = checkAccuracy(move);
+  if (!accResult.hit) {
+    appendToLog(accResult.message);
+    document.getElementById('battle-main-menu').style.display = 'none';
+    saveBattleState();
+    setTimeout(() => { enemyTurn(); }, 1000);
+    return;
+  }
+
+  // Sucker Punch: fail if opponent uses status move
+  if (checkSuckerPunchFail(move, enemyChosenMove)) {
+    appendToLog(`${activePlayerMon.apiData.name} использовал Sucker Punch, но провалился!`);
+    document.getElementById('battle-main-menu').style.display = 'none';
+    saveBattleState();
+    setTimeout(() => { enemyTurn(); }, 1000);
+    return;
+  }
+
   appendToLog(`${activePlayerMon.apiData.name} использует ${move.name}!`);
 
   const power = move.power;
@@ -1246,7 +1476,10 @@ async function useMove(moveIndex) {
       };
       const targetStatus = statusMap[ailment];
       if (targetStatus && !wildStatus) {
-        if (applyStatusEffect(activeWild, targetStatus)) {
+        // Check type/ability immunity before applying
+        if (isStatusImmune(ailment, activeWild)) {
+          appendToLog(`У дикого ${activeWild.name} иммунитет к ${STATUS_NAMES[targetStatus] || targetStatus}!`);
+        } else if (applyStatusEffect(activeWild, targetStatus)) {
           wildStatus = activeWild.status;
           document.getElementById('wild-status-icon').innerText = getStatusIcon(wildStatus);
           appendToLog(`Дикий ${activeWild.name} получил ${STATUS_NAMES[targetStatus]}!`);
@@ -1276,10 +1509,40 @@ async function useMove(moveIndex) {
       });
     }
 
-    if (!appliedStat && (!ailment || ailment === 'none' || ailment === 'unknown')) {
+    // Role Play: copy target ability
+    if (move.name === 'role-play') {
+      const targetAbility = activeWild.abilities?.[0]?.ability?.name;
+      if (targetAbility) {
+        activePlayerMon.abilityName = targetAbility;
+        appendToLog(`${activePlayerMon.apiData.name} скопировал способность ${activeWild.name}: ${targetAbility}!`);
+        updateAbilityDisplay();
+      } else {
+        appendToLog('Но не удалось скопировать способность...');
+      }
+      appliedStat = true;
+    }
+
+    // Check special status effects (healing, Reflect, Light Screen, Protect, Substitute)
+    const appliedSpecial = handlePlayerStatusEffects(move);
+
+    if (!appliedSpecial && !appliedStat && (!ailment || ailment === 'none' || ailment === 'unknown')) {
       appendToLog('Но ничего не произошло...');
     }
   } else {
+    // Check enemy Protect
+    if (enemyProtectActive) {
+      appendToLog(`${activeWild.name} защитился от атаки!`);
+      enemyProtectActive = false;
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
+    // Substitute absorbs damage
+    if (enemySubstituteHP > 0) {
+      appendToLog(`${activeWild.name} защищается Заменителем!`);
+    }
+
     const isPhysical = move.damage_class.name === 'physical';
     const attackStat = isPhysical ? 'attack' : 'special-attack';
     const defenseStat = isPhysical ? 'defense' : 'special-defense';
@@ -1322,7 +1585,8 @@ async function useMove(moveIndex) {
     // lifeOrb: x1.3 damage
     if (activePlayerMon.heldItem === 'lifeOrb') heldMult = 1.3;
 
-    let dmg = Math.floor(baseDmg * stab * effTypeMult * weatherMult * randMod * critMult * heldMult);
+    const bMod = applyBarrierMod(1, move, false);
+    let dmg = Math.floor(baseDmg * stab * effTypeMult * weatherMult * randMod * critMult * heldMult * bMod);
 
     if (isCrit) appendToLog('Критический удар!', false, 'dmg');
 
@@ -1333,6 +1597,18 @@ async function useMove(moveIndex) {
       activeWild.heldItem = null;
     }
 
+    const preWildHP = wildCurHP;
+    // Substitute absorbs damage
+    if (enemySubstituteHP > 0) {
+      const subDmg = Math.min(enemySubstituteHP, dmg);
+      enemySubstituteHP -= subDmg;
+      dmg -= subDmg;
+      if (dmg > 0) appendToLog(`Заменитель поглотил ${subDmg} урона!`);
+      if (enemySubstituteHP <= 0) {
+        appendToLog('Заменитель разрушен!');
+        enemySubstituteHP = 0;
+      }
+    }
     wildCurHP -= dmg;
     if (wildCurHP < 0) wildCurHP = 0;
 
@@ -1354,9 +1630,9 @@ async function useMove(moveIndex) {
       updatePlayerHpUI();
     }
 
-    // Sturdy check: survive OHKO from full HP
+    // Sturdy check: survive OHKO only if at full HP before the hit
     const wildAbil = activeWild.abilities?.[0]?.ability?.name;
-    if (wildAbil === 'sturdy' && wildCurHP === 0 && dmg >= wildMaxHP) {
+    if (checkSturdy(wildAbil, preWildHP, wildMaxHP, wildCurHP)) {
       wildCurHP = 1;
       appendToLog(`${activeWild.name} выдерживает удар благодаря Прочной Броне!`);
     }
@@ -1383,7 +1659,7 @@ async function useMove(moveIndex) {
           'sleep': 'slp', 'freeze': 'frz'
         };
         const targetStatus = statusMap[move.meta.ailment.name];
-        if (targetStatus && !wildStatus) {
+        if (targetStatus && !wildStatus && !isStatusImmune(move.meta.ailment.name, activeWild)) {
           if (applyStatusEffect(activeWild, targetStatus)) {
             wildStatus = activeWild.status;
             document.getElementById('wild-status-icon').innerText = getStatusIcon(wildStatus);
@@ -1528,6 +1804,7 @@ function handlePlayerFaint() {
     updateBattleSpriteBgs(activePlayerMon, activeWild);
     document.getElementById('player-status-icon').innerText = getStatusIcon(activePlayerMon.status);
     updatePlayerHpUI();
+    updateAbilityDisplay();
 
     // Load moves for new mon
     const handler = battleType === 'wild' ? useMove : useMoveGym;
@@ -1594,7 +1871,7 @@ function enemyTurn() {
   let chosenIdx = -1;
   for (let attempt = 0; attempt < 20; attempt++) {
     const idx = Math.floor(Math.random() * wildMovesDetailed.length);
-    if (wildMovesDetailed[idx] && wildMovesDetailed[idx].power) {
+    if (wildMovesDetailed[idx]) {
       // Check PP if tracking
       if (wildMovesPP && wildMovesPP[idx] && wildMovesPP[idx].current <= 0) continue;
       chosenMove = wildMovesDetailed[idx];
@@ -1605,12 +1882,51 @@ function enemyTurn() {
   if (!chosenMove) {
     chosenMove = { power: 30, damage_class: { name: 'physical' }, type: { name: 'normal' }, name: 'Атака' };
   }
+  // Save enemy's move for Sucker Punch check (and accuracy check below)
+  enemyChosenMove = chosenMove;
   const enemyMoveName = chosenMove.name || 'Атака';
   // Decrement wild PP
   if (chosenIdx >= 0 && wildMovesPP && wildMovesPP[chosenIdx]) {
     wildMovesPP[chosenIdx].current--;
   }
+
+  // Accuracy check for enemy move
+  const enemyAcc = checkAccuracy(chosenMove);
+  if (!enemyAcc.hit) {
+    appendToLog(`Дикий ${activeWild.name} использует ${enemyMoveName}, но промахнулся!`);
+    battleRound++;
+    saveBattleState();
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
   const power = chosenMove.power;
+
+  // Handle status moves (no power) — was missing, causing wild to change mid-battle
+  if (!power) {
+    appendToLog(`Дикий ${activeWild.name} использует ${enemyMoveName}!`);
+    handleEnemyStatusEffects(chosenMove);
+    battleRound++;
+    saveBattleState();
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
+
+  // Player Protect check
+  if (protectActive && power) {
+    appendToLog(`${activePlayerMon.apiData.name} защитился от атаки!`);
+    protectActive = false;
+    battleRound++;
+    saveBattleState();
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
+
   const isPhysical = chosenMove.damage_class.name === 'physical';
   const attackStat = isPhysical ? 'attack' : 'special-attack';
   const defenseStat = isPhysical ? 'defense' : 'special-defense';
@@ -1637,7 +1953,8 @@ function enemyTurn() {
   const isCrit = Math.random() < 0.0625;
   const critMult = isCrit ? 1.5 : 1.0;
   const randMod = 0.85 + Math.random() * 0.15;
-  let dmg = Math.floor(baseDmg * wildStab * wildEffTypeMult * weatherMult * randMod * critMult * wildHeldMult);
+  const bMod = applyBarrierMod(1, chosenMove, true);
+  let dmg = Math.floor(baseDmg * wildStab * wildEffTypeMult * weatherMult * randMod * critMult * wildHeldMult * bMod);
 
   if (isCrit) appendToLog('Критический удар!', false, 'dmg');
   if (wildEffTypeMult > 1) {
@@ -1653,6 +1970,18 @@ function enemyTurn() {
     dmg = activePlayerMon.currentHp - 1;
     appendToLog(`${activePlayerMon.apiData.name} держится благодаря Фокусному поясу!`);
     activePlayerMon.heldItem = null;
+  }
+
+  // Player Substitute absorbs damage
+  if (substituteHP > 0 && dmg > 0) {
+    const subBlock = Math.min(substituteHP, dmg);
+    substituteHP -= subBlock;
+    dmg -= subBlock;
+    appendToLog(`Заменитель поглотил ${subBlock} урона!`);
+    if (substituteHP <= 0) {
+      appendToLog('Заменитель разрушен!');
+      substituteHP = 0;
+    }
   }
 
   appendToLog(`Дикий ${activeWild.name} использует ${enemyMoveName}! (-${dmg} HP)`, false, 'dmg');
@@ -1685,6 +2014,12 @@ function enemyTurn() {
     updateWildHpUI();
     appendToLog(`Шиповатое тело ${activePlayerMon.apiData.name} ранит ${activeWild.name}! (-${recoil} HP)`);
   }
+
+  // Decrement player screen turns at end of enemy turn
+  if (playerReflectTurns > 0) { playerReflectTurns--; if (playerReflectTurns === 0) appendToLog('Защита рассеялась!', false, 'system'); }
+  if (playerLightScreenTurns > 0) { playerLightScreenTurns--; if (playerLightScreenTurns === 0) appendToLog('Световой Экран рассеялся!', false, 'system'); }
+  // Reset Protect at end of opponent's turn
+  protectActive = false;
 
   // Berry auto-use for player
   if (activePlayerMon.currentHp > 0) checkBerryAutoUse(activePlayerMon, true);
@@ -2361,6 +2696,23 @@ async function useMoveGym(moveIndex) {
     return;
   }
 
+  // Accuracy check
+  const accResult = checkAccuracy(move);
+  if (!accResult.hit) {
+    appendToLog(accResult.message);
+    document.getElementById('battle-main-menu').style.display = 'none';
+    setTimeout(() => { enemyTurnGym(); }, 1000);
+    return;
+  }
+
+  // Sucker Punch: fail if opponent uses status move
+  if (checkSuckerPunchFail(move, enemyChosenMove)) {
+    appendToLog(`${activePlayerMon.apiData.name} использовал Sucker Punch, но провалился!`);
+    document.getElementById('battle-main-menu').style.display = 'none';
+    setTimeout(() => { enemyTurnGym(); }, 1000);
+    return;
+  }
+
   appendToLog(`${activePlayerMon.apiData.name} использует ${move.name}!`);
 
   const power = move.power;
@@ -2376,7 +2728,9 @@ async function useMoveGym(moveIndex) {
       const statusMap = { 'poison': 'psn', 'badly-poison': 'psn', 'burn': 'brn', 'paralysis': 'par', 'sleep': 'slp', 'freeze': 'frz' };
       const targetStatus = statusMap[ailment];
       if (targetStatus && !wildStatus) {
-        if (applyStatusEffect(activeWild, targetStatus)) {
+        if (isStatusImmune(ailment, activeWild)) {
+          appendToLog(`У ${activeWild.name} иммунитет к ${STATUS_NAMES[targetStatus] || targetStatus}!`);
+        } else if (applyStatusEffect(activeWild, targetStatus)) {
           wildStatus = activeWild.status;
           document.getElementById('wild-status-icon').innerText = getStatusIcon(wildStatus);
           appendToLog(`${activeWild.name} получил ${STATUS_NAMES[targetStatus]}!`);
@@ -2406,10 +2760,39 @@ async function useMoveGym(moveIndex) {
         }
       }
     }
-    if (!appliedAilment && !appliedStat) {
+
+    // Role Play: copy target ability
+    if (move.name === 'role-play') {
+      const targetAbility = activeWild.abilities?.[0]?.ability?.name;
+      if (targetAbility) {
+        activePlayerMon.abilityName = targetAbility;
+        appendToLog(`${activePlayerMon.apiData.name} скопировал способность ${activeWild.name}: ${targetAbility}!`);
+        updateAbilityDisplay();
+      } else {
+        appendToLog('Но не удалось скопировать способность...');
+      }
+      appliedStat = true;
+    }
+    // Check special status effects (healing, Reflect, Light Screen, Protect, Substitute)
+    const appliedSpecial = handlePlayerStatusEffects(move);
+
+    if (!appliedSpecial && !appliedAilment && !appliedStat) {
       appendToLog('Но ничего не произошло...');
     }
   } else {
+    // Check enemy Protect
+    if (enemyProtectActive) {
+      appendToLog(`${activeWild.name} защитился от атаки!`);
+      enemyProtectActive = false;
+      document.getElementById('battle-main-menu').style.display = 'none';
+      setTimeout(() => { enemyTurnGym(); }, 1000);
+      return;
+    }
+    // Substitute absorbs damage
+    if (enemySubstituteHP > 0) {
+      appendToLog(`${activeWild.name} защищается Заменителем!`);
+    }
+
     const isPhysical = move.damage_class.name === 'physical';
     const attackStat = isPhysical ? 'attack' : 'special-attack';
     const defenseStat = isPhysical ? 'defense' : 'special-defense';
@@ -2450,7 +2833,8 @@ async function useMoveGym(moveIndex) {
     if (activePlayerMon.heldItem === 'expertBelt' && effTypeMult > 1) heldMult = 1.2;
     if (activePlayerMon.heldItem === 'lifeOrb') heldMult = 1.3;
 
-    let dmg = Math.floor(baseDmg * stab * effTypeMult * weatherMult * randMod * critMult * heldMult);
+    const bMod = applyBarrierMod(1, move, false);
+    let dmg = Math.floor(baseDmg * stab * effTypeMult * weatherMult * randMod * critMult * heldMult * bMod);
 
     if (isCrit) appendToLog('Критический удар!', false, 'dmg');
 
@@ -2461,6 +2845,18 @@ async function useMoveGym(moveIndex) {
       activeWild.heldItem = null;
     }
 
+    const preWildHP = wildCurHP;
+    // Substitute absorbs damage
+    if (enemySubstituteHP > 0) {
+      const subDmg = Math.min(enemySubstituteHP, dmg);
+      enemySubstituteHP -= subDmg;
+      dmg -= subDmg;
+      if (dmg > 0) appendToLog(`Заменитель поглотил ${subDmg} урона!`);
+      if (enemySubstituteHP <= 0) {
+        appendToLog('Заменитель разрушен!');
+        enemySubstituteHP = 0;
+      }
+    }
     wildCurHP -= dmg;
     if (wildCurHP < 0) wildCurHP = 0;
 
@@ -2483,8 +2879,8 @@ async function useMoveGym(moveIndex) {
     }
 
     // Sturdy check
-    const wildAbil = activeWild.abilities?.[0]?.ability?.name;
-    if (wildAbil === 'sturdy' && wildCurHP === 0 && dmg >= wildMaxHP) {
+    const wildAbil = getAbilityName(activeWild, true);
+    if (checkSturdy(wildAbil, preWildHP, wildMaxHP, wildCurHP)) {
       wildCurHP = 1;
       appendToLog(`${activeWild.name} выдерживает удар благодаря Прочной Броне!`);
     }
@@ -2502,7 +2898,7 @@ async function useMoveGym(moveIndex) {
       if (Math.random() * 100 < chance) {
         const statusMap = { 'poison': 'psn', 'badly-poison': 'psn', 'burn': 'brn', 'paralysis': 'par', 'sleep': 'slp', 'freeze': 'frz' };
         const targetStatus = statusMap[move.meta.ailment.name];
-        if (targetStatus && !wildStatus) {
+        if (targetStatus && !wildStatus && !isStatusImmune(move.meta.ailment.name, activeWild)) {
           if (applyStatusEffect(activeWild, targetStatus)) {
             wildStatus = activeWild.status;
             document.getElementById('wild-status-icon').innerText = getStatusIcon(wildStatus);
@@ -2675,7 +3071,46 @@ function enemyTurnGym() {
   if (chosenIdx >= 0 && wildMovesPP && wildMovesPP[chosenIdx]) {
     wildMovesPP[chosenIdx].current--;
   }
+
+  // Save enemy's move for Sucker Punch check
+  enemyChosenMove = chosenMove;
+
+  // Accuracy check for enemy move
+  const enemyAcc = checkAccuracy(chosenMove);
+  if (!enemyAcc.hit) {
+    appendToLog(`${activeWild.name} использует ${enemyMoveName}, но промахнулся!`);
+    battleRound++;
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
+
   const power = chosenMove.power;
+
+  // Handle status moves used by gym enemy
+  if (!power) {
+    appendToLog(`${activeWild.name} использует ${enemyMoveName}!`);
+    handleEnemyStatusEffects(chosenMove);
+    // End turn normally (skip damage)
+    battleRound++;
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
+
+  // Player Protect check
+  if (protectActive) {
+    appendToLog(`${activePlayerMon.apiData.name} защитился от атаки!`);
+    protectActive = false;
+    battleRound++;
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
+
   const isPhysical = chosenMove.damage_class.name === 'physical';
   const attackStat = isPhysical ? 'attack' : 'special-attack';
   const defenseStat = isPhysical ? 'defense' : 'special-defense';
@@ -2695,7 +3130,8 @@ function enemyTurnGym() {
   const wildTypeMult = getTypeMultiplier(chosenMove.type.name, activePlayerMon.apiData.types);
   const weatherMult = getWeatherMultiplier(chosenMove.type.name, currentWeather);
   const randMod = 0.85 + Math.random() * 0.15;
-  let dmg = Math.floor(baseDmg * wildStab * wildTypeMult * weatherMult * randMod * critMult);
+  const bMod = applyBarrierMod(1, chosenMove, true);
+  let dmg = Math.floor(baseDmg * wildStab * wildTypeMult * weatherMult * randMod * critMult * bMod);
 
   if (isCrit) appendToLog('Критический удар!', false, 'dmg');
   if (wildTypeMult > 1) {
@@ -2720,6 +3156,12 @@ function enemyTurnGym() {
     updateWildHpUI();
     appendToLog(`Шиповатое тело ${activePlayerMon.apiData.name} ранит ${activeWild.name}! (-${recoil} HP)`);
   }
+
+  // Decrement player screen turns at end of enemy turn
+  if (playerReflectTurns > 0) { playerReflectTurns--; if (playerReflectTurns === 0) appendToLog('Защита рассеялась!', false, 'system'); }
+  if (playerLightScreenTurns > 0) { playerLightScreenTurns--; if (playerLightScreenTurns === 0) appendToLog('Световой Экран рассеялся!', false, 'system'); }
+  // Reset Protect at end of opponent's turn
+  protectActive = false;
 
   // Berry auto-use for player
   if (activePlayerMon.currentHp > 0) checkBerryAutoUse(activePlayerMon, true);
@@ -2769,6 +3211,7 @@ function handleGymPlayerFaint() {
     updateBattleSpriteBgs(activePlayerMon, activeWild);
     document.getElementById('player-status-icon').innerText = getStatusIcon(activePlayerMon.status);
     updatePlayerHpUI();
+    updateAbilityDisplay();
 
     loadMoveButtons(activePlayerMon, useMoveGym);
 

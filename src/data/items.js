@@ -6,14 +6,14 @@ export const ITEMS = [
   { id: 'greatBall', nameRu: 'Гритбол', category: 'balls', desc: 'Шанс поимки x1.5', sprite: 'Ball2.png', spriteType: 'local', price: 600, sellPrice: 300, isUsable: false, isBall: true, ballMult: 1.5, implemented: true },
   { id: 'ultraBall', nameRu: 'Ультрабол', category: 'balls', desc: 'Шанс поимки x2', sprite: 'Ball3.png', spriteType: 'local', price: 1200, sellPrice: 600, isUsable: false, isBall: true, ballMult: 2, implemented: true },
   { id: 'masterBall', nameRu: 'Мастербол', category: 'balls', desc: '100% поимка', sprite: '62.png', spriteType: 'local', price: 0, sellPrice: 5000, isUsable: false, isBall: true, ballMult: 255, implemented: true },
-  { id: 'quickBall', nameRu: 'Квикбол', category: 'balls', desc: 'x5 в первом раунде', sprite: 'Ball5.png', spriteType: 'local', price: 3000, sellPrice: 1500, isUsable: false, isBall: true, ballMult: 1, implemented: true },
-  { id: 'friendBall', nameRu: 'Френдбол', category: 'balls', desc: 'Характер → Мирный', sprite: 'Ball4.png', spriteType: 'local', price: 5000, sellPrice: 2500, isUsable: false, isBall: true, ballMult: 1, implemented: true },
-  { id: 'loveBall', nameRu: 'Лавбол', category: 'balls', desc: 'x8 если противоп. пол', sprite: 'Ball6.png', spriteType: 'local', price: 3000, sellPrice: 1500, isUsable: false, isBall: true, ballMult: 1, implemented: true },
+  { id: 'quickBall', nameRu: 'Квикбол', category: 'balls', desc: 'x5 в первом раунде', sprite: 'Ball5.png', spriteType: 'local', price: 100000, sellPrice: 50000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
+  { id: 'friendBall', nameRu: 'Френдбол', category: 'balls', desc: 'Характер → Мирный', sprite: 'Ball4.png', spriteType: 'local', price: 500000, sellPrice: 250000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
+  { id: 'loveBall', nameRu: 'Лавбол', category: 'balls', desc: 'x8 если противоп. пол', sprite: 'Ball6.png', spriteType: 'local', price: 100000, sellPrice: 50000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
   { id: 'duskBall', nameRu: 'Даскбол', category: 'balls', desc: 'x3 в ночное время', sprite: 'Daskbol.png', spriteType: 'local', price: 0, sellPrice: 1000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
   { id: 'timerBall', nameRu: 'Таймербол', category: 'balls', desc: 'x1 +0.3/раунд', sprite: 'P78.png', spriteType: 'local', price: 0, sellPrice: 1000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
   { id: 'cloneBall', nameRu: 'Клонбол', category: 'balls', desc: 'Для поимки клонов', sprite: 'klonbol.png', spriteType: 'local', price: 0, sellPrice: 500, isUsable: false, isBall: true, ballMult: 1, implemented: true },
   { id: 'centerBall', nameRu: 'Центрбол', category: 'balls', desc: 'x2, игнор. лимит', sprite: 'ball7.png', spriteType: 'local', price: 0, sellPrice: 2000, isUsable: false, isBall: true, ballMult: 2, implemented: true },
-  { id: 'darkBall', nameRu: 'Даркбол', category: 'balls', desc: 'x2, +5 гены', sprite: '72.png', spriteType: 'local', price: 0, sellPrice: 3000, isUsable: false, isBall: true, ballMult: 2, implemented: true },
+  { id: 'darkBall', nameRu: 'Даркбол', category: 'balls', desc: 'x2, +5 гены', sprite: '72.png', spriteType: 'local', price: 100000, sellPrice: 50000, isUsable: false, isBall: true, ballMult: 2, implemented: true },
 
   // ── Восстановление HP ──
   { id: 'potion', nameRu: 'Аптечка', category: 'healing', desc: '+20 HP', sprite: '38.gif', spriteType: 'local', price: 300, sellPrice: 150, isUsable: true, isBall: false, implemented: true },
@@ -32,19 +32,19 @@ export const ITEMS = [
 
   // ── Восстановление PP ──
   { id: 'weakElixir', nameRu: 'Слабый эликсир', category: 'ppRecovery', desc: '+10 PP всем атакам', sprite: '15.gif', spriteType: 'local', price: 500, sellPrice: 250, isUsable: true, isBall: false, implemented: true },
-  { id: 'elixir', nameRu: 'Эликсир', category: 'ppRecovery', desc: '+20 PP всем атакам', sprite: '16.gif', spriteType: 'local', price: 1000, sellPrice: 500, isUsable: true, isBall: false, implemented: true },
+  { id: 'elixir', nameRu: 'Эликсир', category: 'ppRecovery', desc: '+20 PP всем атакам', sprite: '16.gif', spriteType: 'local', price: 100000, sellPrice: 50000, isUsable: true, isBall: false, implemented: true },
   { id: 'strongElixir', nameRu: 'Мощный эликсир', category: 'ppRecovery', desc: '+40 PP всем атакам', sprite: '17.gif', spriteType: 'local', price: 2000, sellPrice: 1000, isUsable: true, isBall: false, implemented: true },
 
   // ── Витамины ──
-  { id: 'vitamin', nameRu: 'Витамин', category: 'vitamins', desc: '+10 макс. EV', sprite: '59.gif', spriteType: 'local', price: 2000, sellPrice: 1000, isUsable: true, isBall: false, implemented: true },
-  { id: 'protein', nameRu: 'Протеин', category: 'vitamins', desc: '+10 EV Атаки', sprite: '59.gif', spriteType: 'local', price: 2500, sellPrice: 1250, isUsable: true, isBall: false, implemented: true },
-  { id: 'iron', nameRu: 'Железо', category: 'vitamins', desc: '+10 EV Защиты', sprite: '39.gif', spriteType: 'local', price: 2500, sellPrice: 1250, isUsable: true, isBall: false, implemented: true },
-  { id: 'calcium', nameRu: 'Кальций', category: 'vitamins', desc: '+10 EV Спец.Атаки', sprite: '23.gif', spriteType: 'local', price: 2500, sellPrice: 1250, isUsable: true, isBall: false, implemented: true },
-  { id: 'zinc', nameRu: 'Цинк', category: 'vitamins', desc: '+10 EV Спец.Защиты', sprite: '11.gif', spriteType: 'local', price: 2500, sellPrice: 1250, isUsable: true, isBall: false, implemented: true },
-  { id: 'carbos', nameRu: 'Углеводы', category: 'vitamins', desc: '+10 EV Скорости', sprite: '24.gif', spriteType: 'local', price: 2500, sellPrice: 1250, isUsable: true, isBall: false, implemented: true },
+  { id: 'vitamin', nameRu: 'Витамин', category: 'vitamins', desc: '+10 макс. EV', sprite: '59.gif', spriteType: 'local', price: 25000, sellPrice: 12500, isUsable: true, isBall: false, implemented: true },
+  { id: 'protein', nameRu: 'Протеин', category: 'vitamins', desc: '+10 EV Атаки', sprite: '59.gif', spriteType: 'local', price: 25000, sellPrice: 12500, isUsable: true, isBall: false, implemented: true },
+  { id: 'iron', nameRu: 'Железо', category: 'vitamins', desc: '+10 EV Защиты', sprite: '39.gif', spriteType: 'local', price: 25000, sellPrice: 12500, isUsable: true, isBall: false, implemented: true },
+  { id: 'calcium', nameRu: 'Кальций', category: 'vitamins', desc: '+10 EV Спец.Атаки', sprite: '23.gif', spriteType: 'local', price: 25000, sellPrice: 12500, isUsable: true, isBall: false, implemented: true },
+  { id: 'zinc', nameRu: 'Цинк', category: 'vitamins', desc: '+10 EV Спец.Защиты', sprite: '11.gif', spriteType: 'local', price: 25000, sellPrice: 12500, isUsable: true, isBall: false, implemented: true },
+  { id: 'carbos', nameRu: 'Углеводы', category: 'vitamins', desc: '+10 EV Скорости', sprite: '24.gif', spriteType: 'local', price: 25000, sellPrice: 12500, isUsable: true, isBall: false, implemented: true },
 
   // ── Камни Эволюции ──
-  { id: 'evolutionStone', nameRu: 'Камень Эволюции', category: 'evolutionStones', desc: 'Вызывает эволюцию', sprite: '136.gif', spriteType: 'local', price: 5000, sellPrice: 2500, isUsable: true, isBall: false, implemented: true },
+  { id: 'evolutionStone', nameRu: 'Камень Эволюции', category: 'evolutionStones', desc: 'Вызывает эволюцию', sprite: '136.gif', spriteType: 'local', price: 500000, sellPrice: 250000, isUsable: true, isBall: false, implemented: true },
   { id: 'fireStone', nameRu: 'Огненный камень', category: 'evolutionStones', desc: 'Эволюция огненных', sprite: '131.gif', spriteType: 'local', price: 120000, sellPrice: 60000, isUsable: true, isBall: false, implemented: true },
   { id: 'waterStone', nameRu: 'Водный камень', category: 'evolutionStones', desc: 'Эволюция водных', sprite: '132.gif', spriteType: 'local', price: 500000, sellPrice: 250000, isUsable: true, isBall: false, implemented: true },
   { id: 'leafStone', nameRu: 'Лиственный камень', category: 'evolutionStones', desc: 'Эволюция травяных', sprite: '133.gif', spriteType: 'local', price: 300000, sellPrice: 150000, isUsable: true, isBall: false, implemented: true },
@@ -72,22 +72,22 @@ export const ITEMS = [
   { id: 'wikiBerry', nameRu: 'Вики Ягода', category: 'berries', desc: 'Ягода', sprite: 'wiki-berry.png', spriteType: 'local', price: 0, sellPrice: 50, isUsable: false, isBall: false, implemented: true },
 
   // ── Тренировка ──
-  { id: 'train', nameRu: 'Набор Тренировки', category: 'training', desc: 'Улучшает случайный стат', sprite: 'train.gif', spriteType: 'local', price: 5000, sellPrice: 2500, isUsable: true, isBall: false, implemented: true },
-  { id: 'weaken', nameRu: 'Набор Ослабления', category: 'training', desc: 'Снижает тренировку на 1', sprite: 'oslab.png', spriteType: 'local', price: 1000, sellPrice: 500, isUsable: true, isBall: false, implemented: true },
+  { id: 'train', nameRu: 'Набор Тренировки', category: 'training', desc: 'Улучшает случайный стат', sprite: 'train.gif', spriteType: 'local', price: 500000, sellPrice: 250000, isUsable: true, isBall: false, implemented: true },
+  { id: 'weaken', nameRu: 'Набор Ослабления', category: 'training', desc: 'Снижает тренировку на 1', sprite: 'oslab.png', spriteType: 'local', price: 100000, sellPrice: 50000, isUsable: true, isBall: false, implemented: true },
   { id: 'personalTrain', nameRu: 'Личный набор тренировки', category: 'training', desc: 'Улучшает стат (личный)', sprite: 'lich.png', spriteType: 'local', price: 0, sellPrice: 3000, isUsable: false, isBall: false, implemented: false },
   { id: 'coffee', nameRu: 'Крепкий кофе', category: 'training', desc: 'Защита от сна на 2 хода', sprite: '286.gif', spriteType: 'local', price: 30000, sellPrice: 15000, isUsable: false, isBall: false, implemented: false },
   { id: 'apricornRoot', nameRu: 'Корень Априкорна', category: 'training', desc: 'Сброс EV покемона', sprite: '288.gif', spriteType: 'local', price: 0, sellPrice: 5000, isUsable: false, isBall: false, implemented: false },
 
   // ── Конфеты ──
-  { id: 'candy', nameRu: 'Сладкая Конфета', category: 'other', desc: '+1 уровень, +4 EV', sprite: '41.gif', spriteType: 'local', price: 1000, sellPrice: 500, isUsable: true, isBall: false, implemented: true },
+  { id: 'candy', nameRu: 'Сладкая Конфета', category: 'other', desc: '+1 уровень, +4 EV', sprite: '41.gif', spriteType: 'local', price: 100000, sellPrice: 50000, isUsable: true, isBall: false, implemented: true },
   { id: 'vanillaCandy', nameRu: 'Ванильная конфета', category: 'other', desc: '+1 уровень, +2 EV', sprite: '309.gif', spriteType: 'local', price: 0, sellPrice: 500, isUsable: false, isBall: false, implemented: false },
   { id: 'sweetCandy', nameRu: 'Сладкая конфета', category: 'other', desc: '+1 уровень, +4 EV', sprite: '269.gif', spriteType: 'local', price: 0, sellPrice: 700, isUsable: false, isBall: false, implemented: false },
   { id: 'typeCandy', nameRu: 'Типовая конфета', category: 'other', desc: '+1 уровень, счастье +1', sprite: '481.png', spriteType: 'local', price: 0, sellPrice: 600, isUsable: false, isBall: false, implemented: false },
   { id: 'surpriseCandy', nameRu: 'Конфета Сюрприз', category: 'other', desc: 'Случайный вкус!', sprite: '499.png', spriteType: 'local', price: 0, sellPrice: 800, isUsable: false, isBall: false, implemented: false },
 
   // ── Прочее ──
-  { id: 'skoba', nameRu: 'Скоба', category: 'other', desc: 'Эффект усиления EV на 90 дней', sprite: '27.gif', spriteType: 'local', price: 0, sellPrice: 1000, isUsable: false, isBall: false, implemented: false },
-  { id: 'tm', nameRu: 'TM-совместимость', category: 'other', desc: 'Переучивание атак', sprite: '1064.gif', spriteType: 'local', price: 3000, sellPrice: 1500, isUsable: true, isBall: false, implemented: true },
+  { id: 'skoba', nameRu: 'Скоба', category: 'other', desc: 'Эффект усиления EV на 90 дней', sprite: '27.gif', spriteType: 'local', price: 0, sellPrice: 1000, isUsable: false, isBall: false, implemented: true },
+  { id: 'tm', nameRu: 'TM-совместимость', category: 'other', desc: 'Переучивание атак', sprite: '1064.gif', spriteType: 'local', price: 100000, sellPrice: 50000, isUsable: true, isBall: false, implemented: true },
   { id: 'ppUp', nameRu: 'Увеличитель PP', category: 'other', desc: '+20% макс. PP атаки (макс. 3 раза)', sprite: '451.png', spriteType: 'local', price: 0, sellPrice: 2000, isUsable: true, isBall: false, implemented: true },
   { id: 'greenScarf', nameRu: 'Зелёный шарф', category: 'other', desc: 'Блокирует получение опыта', sprite: '161.gif', spriteType: 'local', price: 0, sellPrice: 500, isUsable: false, isBall: false, implemented: false },
   { id: 'expShare', nameRu: 'Распределитель опыта', category: 'other', desc: 'Делит опыт между командой', sprite: '93.png', spriteType: 'local', price: 0, sellPrice: 3000, isUsable: true, isBall: false, implemented: true },
@@ -113,7 +113,7 @@ export const ITEMS = [
   // ── Модификаторы (дополнительные) ──
   { id: 'plasticSkoba', nameRu: 'Пластиковая скоба', category: 'training', desc: 'Пластиковый усилитель', sprite: '30.gif', spriteType: 'local', price: 0, sellPrice: 800, isUsable: false, isBall: false, implemented: false },
   { id: 'skobaRing', nameRu: 'Скобовое кольцо', category: 'training', desc: 'Кольцо-усилитель', sprite: '42.gif', spriteType: 'local', price: 0, sellPrice: 1200, isUsable: false, isBall: false, implemented: false },
-  { id: 'iodine', nameRu: 'Йод', category: 'vitamins', desc: 'Улучшает статы', sprite: '10.gif', spriteType: 'local', price: 2000, sellPrice: 1000, isUsable: false, isBall: false, implemented: false },
+  { id: 'iodine', nameRu: 'Йод', category: 'vitamins', desc: 'Улучшает статы', sprite: '10.gif', spriteType: 'local', price: 25000, sellPrice: 12500, isUsable: false, isBall: false, implemented: false },
   { id: 'xAttack', nameRu: 'X Атака', category: 'battle', desc: '+1 атака в бою', sprite: '54.gif', spriteType: 'local', price: 500, sellPrice: 250, isUsable: true, isBall: false, implemented: true },
   { id: 'xDefense', nameRu: 'X Защита', category: 'battle', desc: '+1 защита в бою', sprite: '55.gif', spriteType: 'local', price: 500, sellPrice: 250, isUsable: true, isBall: false, implemented: true },
   { id: 'xSpDefense', nameRu: 'X Спец.Защита', category: 'battle', desc: '+1 спец.защита в бою', sprite: '56.gif', spriteType: 'local', price: 500, sellPrice: 250, isUsable: true, isBall: false, implemented: true },
@@ -148,7 +148,7 @@ export const ITEMS = [
   { id: 'coals', nameRu: 'Угольки', category: 'quest', desc: 'Горячие угольки', sprite: '276.png', spriteType: 'local', price: 0, sellPrice: 200, isUsable: false, isBall: false, implemented: true },
 
   // ── Покеболы (доп) ──
-  { id: 'superDarkBall', nameRu: 'Супердаркбол', category: 'balls', desc: '+6 ген (шайни +7)', sprite: 'P79.png', spriteType: 'local', price: 0, sellPrice: 5000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
+  { id: 'superDarkBall', nameRu: 'Супердаркбол', category: 'balls', desc: '+6 ген (шайни +7)', sprite: 'P79.png', spriteType: 'local', price: 1000000, sellPrice: 500000, isUsable: false, isBall: true, ballMult: 1, implemented: true },
 
   // ── Эвольверы (доп) ──
   { id: 'happinessEvolver', nameRu: 'Эволвер Счастья', category: 'evolutionStones', desc: 'Эволюция по счастью', sprite: '143.gif', spriteType: 'local', price: 0, sellPrice: 3000, isUsable: false, isBall: false, implemented: false },

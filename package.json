@@ -15,11 +15,13 @@
     "test:data": "node tests/data-validation.mjs",
     "test:api": "node tests/server-api-test.cjs",
     "test:save": "node tests/save-validation-test.cjs",
+    "test:vitest": "vitest run",
     "test:browser": "node tests/game-logic-test.cjs && node tests/move-system-test.cjs && node tests/stress-test.cjs",
     "test": "bash tests/run-all.sh"
   },
   "devDependencies": {
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vitest": "^4.1.7"
   },
   "dependencies": {
     "@rolldown/binding-linux-x64-gnu": "^1.0.1",

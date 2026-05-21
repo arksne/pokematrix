@@ -1,15 +1,16 @@
 import { Router } from 'express';
 import { getDB } from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import zlib from 'zlib';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { MONSTER_DROP_TABLE } from '../../src/data/drops.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const router = Router();
 
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'DjafarAdjarov,nineinchkn5atmythroat').split(',');
+const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'nineinchkn5atmythroat').split(',');
 const ADMIN_PASS = process.env.ADMIN_PASS;
 
 function decompressSave(raw) {
@@ -74,7 +75,8 @@ router.get('/', adminAuth, async (req, res) => {
   let html = ADMIN_HTML
     .replace('__USER_OPTIONS__', userOptions)
     .replace('__LEADERBOARD_TABLE__', lbTable)
-    .replace('__TOKEN__', token);
+    .replace('__TOKEN__', token)
+    .replace('__ADMIN_USERNAME__', esc(req.adminUsername || ''));
 
   res.send(html);
 });
@@ -98,6 +100,7 @@ router.get('/api', adminAuth, async (req, res) => {
   }
 
   async function putSave(u, data) {
+    data._v = Date.now();
     await db.run('UPDATE game_saves SET save_data = ?, updated_at = datetime(\'now\') WHERE user_id = ?', JSON.stringify(data), u.id);
     try {
       const { notifyUser } = await import('../socket.js');
@@ -124,6 +127,25 @@ router.get('/api', adminAuth, async (req, res) => {
 
     if (cmd === 'set_save') {
       return res.status(400).json({ error: 'Use POST for set_save' });
+    }
+
+    // Drops config is global — no user/save needed
+    if (cmd === 'get_drops') {
+      const dropsDir = join(__dirname, '../../data');
+      const dropsPath = join(dropsDir, 'drop_config.json');
+      const UNIVERSAL_DROPS_DEFAULT = [
+        { item: 'quartz', chance: 0.03, qty: 1 },
+        { item: 'malachite', chance: 0.01, qty: 1 },
+        { item: 'goldNugget', chance: 0.01, qty: 1 },
+      ];
+      let config;
+      try {
+        config = JSON.parse(readFileSync(dropsPath, 'utf8'));
+      } catch (e) {
+        config = { monsterDrops: MONSTER_DROP_TABLE, universalDrops: UNIVERSAL_DROPS_DEFAULT };
+      }
+      result = { status: 'ok', config };
+      return res.json(result);
     }
 
     if (!u) { result.error = 'User not found'; return res.json(result); }
@@ -165,6 +187,7 @@ router.get('/api', adminAuth, async (req, res) => {
 
     } else if (cmd === 'give_egg') {
       let speciesList;
+      const readyHatch = req.query.ready === '1';
       if (val) {
         speciesList = val.split(',');
       } else {
@@ -180,27 +203,41 @@ router.get('/api', adminAuth, async (req, res) => {
         }
       }
       const pick = speciesList[Math.floor(Math.random()*speciesList.length)];
+      // Нормализуем имя покемона для PokeAPI (alolan rattata → rattata-alola и т.д.)
+      const pokeName = pick.toLowerCase()
+        .replace(/^alolan /, '')
+        .replace(/ /g, '-')
+        .replace(/[♀]/g, '-f')
+        .replace(/[♂]/g, '-m')
+        .replace(/[^a-z0-9-]/g, '');
+      let eggTypes;
       try {
-        const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+pick);
-        const pokeData = await pokeRes.json();
-        const eggTypes = pokeData.types || [{ type: { name: 'normal' } }];
-        const ivs = { hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32), def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32), spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32) };
-        const egg = {
-          uid: Date.now().toString(36)+Math.random().toString(36).substr(2,6),
-          species: pick,
-          types: eggTypes,
-          ivs,
-          readyTime: Date.now() + Math.floor(Math.random()*3+1)*86400000, // 1-3 days
-          boxIdx: 0,
-          parent1Uid: 'admin',
-          parent2Uid: 'admin',
-          inTeam: false
-        };
-        if (!save.eggs) save.eggs = [];
-        save.eggs.push(egg);
-        await putSave(u, save);
-        result = { status: 'ok', pokemon: pick, ivs, hatchIn: Math.ceil((egg.readyTime-Date.now())/86400000)+'d' };
-      } catch(e) { result.error = 'PokeAPI failed: '+e.message; }
+        const pokeRes = await fetch('https://pokeapi.co/api/v2/pokemon/'+pokeName);
+        if (pokeRes.ok) {
+          const pokeData = await pokeRes.json();
+          eggTypes = pokeData.types || [{ type: { name: 'normal' } }];
+        } else {
+          eggTypes = [{ type: { name: 'normal' } }];
+        }
+      } catch(e) {
+        eggTypes = [{ type: { name: 'normal' } }];
+      }
+      const ivs = { hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32), def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32), spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32) };
+      const egg = {
+        uid: Date.now().toString(36)+Math.random().toString(36).substr(2,6),
+        species: pick,
+        types: eggTypes,
+        ivs,
+        boxIdx: 0,
+        parent1Uid: 'admin',
+        parent2Uid: 'admin',
+        inTeam: readyHatch ? true : false,
+        readyTime: readyHatch ? Date.now() - 60000 : Date.now() + Math.floor(Math.random()*3+1)*86400000,
+      };
+      if (!save.eggs) save.eggs = [];
+      save.eggs.push(egg);
+      await putSave(u, save);
+      result = { status: 'ok', pokemon: pick, ivs, hatchIn: readyHatch ? 'ready' : Math.ceil((egg.readyTime-Date.now())/86400000)+'d' };
 
     } else if (cmd === 'heal_team') {
       (save.myTeam||[]).forEach(m => { m.currentHp = m.maxHp; m.status = null; m.sleepTurns = 0; });
@@ -489,5 +526,57 @@ function makeMon(pokeData, trainerId, level) {
     learnableMoves:[], isEgg:false, hasBred: false, isShiny: false
   };
 }
+
+// Items catalog endpoint (for admin drops UI)
+router.get('/api/items', adminAuth, (req, res) => {
+  try {
+    const itemsPath = join(__dirname, '../../src/data/items.js');
+    const src = readFileSync(itemsPath, 'utf8');
+    // Extract ITEMS array via regex
+    const match = src.match(/export const ITEMS\s*=\s*(\[[\s\S]*?\]);/);
+    if (!match) return res.json({ error: 'Could not parse items' });
+    // Evaluate safely — items.js is a simple array of objects
+    const items = eval('(' + match[1] + ')');
+    const catalog = items
+      .filter(item => item.implemented !== false)
+      .map(item => ({
+        id: item.id,
+        nameRu: item.nameRu || item.id,
+        category: item.category || 'other',
+      }));
+    return res.json({ status: 'ok', items: catalog });
+  } catch (e) {
+    return res.json({ error: e.message });
+  }
+});
+
+// Species catalog endpoint (for admin drops UI)
+router.get('/api/species', adminAuth, (req, res) => {
+  try {
+    const pdataPath = join(process.cwd(), 'public/pokedex_data.json');
+    const pdata = JSON.parse(readFileSync(pdataPath, 'utf8'));
+    const species = Object.keys(pdata).sort();
+    return res.json({ status: 'ok', species });
+  } catch (e) {
+    return res.json({ error: e.message });
+  }
+});
+
+// POST endpoint for drops (avoids URL length limits of GET)
+router.post('/api/drops', adminAuth, (req, res) => {
+  const dropsDir = join(__dirname, '../../data');
+  mkdirSync(dropsDir, { recursive: true });
+  const dropsPath = join(dropsDir, 'drop_config.json');
+  try {
+    const newConfig = req.body;
+    if (!newConfig || typeof newConfig !== 'object') {
+      return res.json({ error: 'Invalid JSON body' });
+    }
+    writeFileSync(dropsPath, JSON.stringify(newConfig, null, 2));
+    return res.json({ status: 'ok', saved: true });
+  } catch (e) {
+    return res.json({ error: 'Save failed: ' + e.message });
+  }
+});
 
 export default router;

@@ -123,6 +123,29 @@ const moveTypeCache = new Map();
 
 // --- MONSTER DROP TABLE (wiki + original) ---
 
+// Server-side drop config cache (overrides MONSTER_DROP_TABLE + UNIVERSAL_DROPS)
+let serverDropConfig = null;
+const DROP_CONFIG_CACHE_KEY = 'pokematrix_drop_config_cache';
+
+async function fetchDropConfig() {
+  try {
+    const res = await fetch('/api/drops');
+    if (res.ok) {
+      serverDropConfig = await res.json();
+      try { sessionStorage.setItem(DROP_CONFIG_CACHE_KEY, JSON.stringify(serverDropConfig)); } catch(e) {}
+      return;
+    }
+  } catch (e) {
+    // Server not available
+  }
+  // Fallback to sessionStorage cache
+  try {
+    const cached = sessionStorage.getItem(DROP_CONFIG_CACHE_KEY);
+    if (cached) {
+      serverDropConfig = JSON.parse(cached);
+    }
+  } catch(e) {}
+}
 
 const UNIVERSAL_DROPS = [
   { item: 'quartz', chance: 0.03, qty: 1 },
@@ -132,14 +155,17 @@ const UNIVERSAL_DROPS = [
 
 function processMonsterDrop(pokemonName) {
   const drops = [];
-  const speciesTable = MONSTER_DROP_TABLE[pokemonName] || [];
+  // Use server config if available, fall back to local defaults
+  const monsterTable = (serverDropConfig && serverDropConfig.monsterDrops) || MONSTER_DROP_TABLE;
+  const univDrops = (serverDropConfig && serverDropConfig.universalDrops) || UNIVERSAL_DROPS;
+  const speciesTable = monsterTable[pokemonName] || [];
   for (const entry of speciesTable) {
     if (Math.random() < entry.chance) {
       addItem(entry.item, entry.qty);
       drops.push({ item: entry.item, qty: entry.qty });
     }
   }
-  for (const entry of UNIVERSAL_DROPS) {
+  for (const entry of univDrops) {
     if (Math.random() < entry.chance) {
       addItem(entry.item, entry.qty);
       drops.push({ item: entry.item, qty: entry.qty });
@@ -857,6 +883,7 @@ function openNotifications() {
 // BREEDING SYSTEM
 let breedingPairs = []; // [{ boxIdx, mon1Uid, mon2Uid, startTime, readyTime }]
 let eggs = [];          // [{ uid, species, apiData, readyTime, boxIdx, parent1Uid, parent2Uid }]
+let hatching = false;
 const EGG_TIME = 10 * 60 * 1000;      // 10 min to produce egg
 const EGG_BONUS_TIME = 5 * 60 * 1000;  // 5 min with matching nature
 // Random hatch time between 3-8 days
@@ -972,6 +999,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load Pokedex data (wiki-based encounter info)
   loadPokedexData();
 
+  // Fetch server-side drop config (non-blocking, falls back to local defaults)
+  fetchDropConfig();
+
   // Update trainer card after auth
   renderTrainerCard();
 
@@ -981,9 +1011,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (resetBtn) resetBtn.style.display = isAdmin ? '' : 'none';
 
   // Admin panel button (phone-friendly)
-  if (isAdmin) initAdminPanel();
+  // removed: in-game admin panel — use /admin web panel instead
 
-  // Load game: cloud (server) is primary source, localStorage is cache
+  const localLoaded = loadGame();
   let gameLoaded = false;
   if (tgToken) {
     // Always check cloud first — it's the source of truth
@@ -998,8 +1028,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
   if (!gameLoaded) {
-    // Fall back to localStorage
-    const localLoaded = loadGame();
+    // Fall back to localStorage (already loaded above)
     if (localLoaded && myTeam.length > 0) {
       gameLoaded = true;
       // Sync local to cloud
@@ -1177,6 +1206,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch(e) { document.body.innerHTML += '<div style="position:fixed;top:0;left:0;right:0;background:#ff3b30;color:#fff;padding:15px;z-index:99999;font-size:14px;white-space:pre-wrap"><b>INIT ERROR:</b> '+e.message+'<br><small>'+e.stack+'</small></div>'; console.error(e); }
 });
 
+// Flush pending cloud save when page is closed (tab, navigate, mobile app switch)
+window.addEventListener('pagehide', () => {
+  if (!tgToken) return;
+  if (cloudSaveTimer) {
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = null;
+  }
+  var localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+  if (localTs > lastCloudSync + 2000) {
+    validateGameState();
+    var saveData = getFullSaveData();
+    var lb = getLeaderboardData();
+    fetch(`${API_BASE}/save`, {
+      method: 'POST',
+      headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ saveData, ...lb, saveVersion }),
+      keepalive: true
+    }).catch(function() {});
+  }
+});
+
 // --- SAVE / LOAD (NEW) ---
 function syncOldInventory() {
   // Keep old inv* variables in sync for backward compat
@@ -1340,7 +1390,10 @@ function areBreedingCompatible(mon1, mon2, groups1, groups2) {
 }
 
 async function checkBreeding() {
+  if (hatching) return;
+  hatching = true;
   const now = Date.now();
+  try {
 
   // Check each box for breeding pairs
   for (let boxIdx = 0; boxIdx < pcBoxes.length; boxIdx++) {
@@ -1426,6 +1479,9 @@ async function checkBreeding() {
   eggs = eggs.filter(e => e.boxIdx !== undefined ? pcBoxes[e.boxIdx] !== undefined : true);
 
   saveGame();
+  } finally {
+    hatching = false;
+  }
 }
 
 export async function hatchEgg(egg) {
@@ -2584,8 +2640,8 @@ export function renderLocation(locId) {
   actionsContainer.innerHTML = '';
   actionsContainer.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:4px';
 
-  // Pokemarket — shop button
-  if (locId.endsWith('_pokemarket') || locId === 'pokemarket') {
+  // Pokemarket / Supermarket — shop button
+  if (locId.endsWith('_pokemarket') || locId === 'pokemarket' || locId.endsWith('_supermarket') || locId.endsWith('_shop')) {
     const btnShop = document.createElement('button');
     btnShop.className = 'btn-use';
     btnShop.style.backgroundColor = '#ff9500';
@@ -2752,18 +2808,9 @@ export function renderLocation(locId) {
     if (uniqueMons.length > 0) {
       const monList = uniqueMons.slice(0, 10).join(', ') + (uniqueMons.length > 10 ? '...' : '');
 
-      const dropSet = new Set();
-      uniqueMons.forEach(name => {
-        (MONSTER_DROP_TABLE[name] || []).forEach(d => dropSet.add(d.item));
-      });
-      const dropStr = [...dropSet].slice(0, 6).map(id => {
-        const def = ITEMS.find(i => i.id === id);
-        return def ? def.nameRu : id;
-      }).join(', ');
-
       wildlifeDetail.innerHTML = `
         <div style="margin-bottom:6px"><b>🐾 Покемоны (${uniqueMons.length}):</b><br>${monList}</div>
-        <div><b>💧 Дроп (${dropSet.size}):</b><br>${dropStr || 'нет'}</div>
+        <div style="margin-bottom:6px;color:#888;font-size:0.85em"><b>🎒 Дроп:</b><br>${getLocationDropString(uniqueMons)}</div>
       `;
       wildlifeEl.style.display = 'block';
       wildlifeEmpty.style.display = 'none';
@@ -2780,6 +2827,21 @@ export function renderLocation(locId) {
   document.querySelectorAll('.loc-tab').forEach(t => t.classList.remove('active'));
   document.querySelector('.loc-tab[data-tab="desc"]')?.classList.add('active');
   document.getElementById('loc-tab-desc').style.display = 'block';
+}
+
+function getLocationDropString(uniqueMons) {
+  const monsterTable = (serverDropConfig && serverDropConfig.monsterDrops) || MONSTER_DROP_TABLE;
+  const univDrops = (serverDropConfig && serverDropConfig.universalDrops) || UNIVERSAL_DROPS;
+  const dropSet = new Set();
+  uniqueMons.forEach(name => {
+    (monsterTable[name] || []).forEach(d => dropSet.add(d.item));
+  });
+  univDrops.forEach(d => dropSet.add(d.item));
+  const items = [...dropSet].slice(0, 8).map(id => {
+    const def = ITEMS.find(i => i.id === id);
+    return def ? def.nameRu : id;
+  }).join(', ');
+  return items || '—';
   if (wildTab) wildTab.style.display = 'none';
 
   // Back from pokecenter
@@ -3053,6 +3115,7 @@ function renderTeamGrid() {
         : '';
       if (mon.isEgg) {
         const eggData = eggs.find(e => e.uid === mon.uid);
+        const ready = eggData && Date.now() >= eggData.readyTime;
         const remaining = eggData ? Math.max(0, Math.ceil((eggData.readyTime - Date.now()) / 60000)) : '?';
         const eggIvs = eggData?.ivs || {};
         const geneDisplay = `h${eggIvs.hp || 0}a${eggIvs.atk || 0}d${eggIvs.def || 0}s${eggIvs.spe || 0}sa${eggIvs.spa || 0}sd${eggIvs.spd || 0}`;
@@ -3061,9 +3124,10 @@ function renderTeamGrid() {
             <img src="assets/egg.png" width="48" height="48" style="image-rendering:pixelated;">
           </div>
           <div class="slot-name">Яйцо</div>
-          <div class="slot-lvl" style="font-size:0.65rem;">Вылупится через ~${remaining} мин</div>
+          <div class="slot-lvl" style="font-size:0.65rem;">${ready ? 'Вылупляется...' : `Вылупится через ~${remaining} мин`}</div>
           <div class="slot-lvl" style="font-size:0.6rem;color:#4682B4;font-family:monospace;">${geneDisplay}</div>
         `;
+        if (ready) slot.style.pointerEvents = 'none';
       } else {
         const pwStars2 = getPowerStars(mon);
         const rStars2 = getRarityStars(mon);

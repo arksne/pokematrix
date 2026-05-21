@@ -6,8 +6,8 @@
     <title>PokeMatrix</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-C7EKqiI3.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DBYLr0tZ.css">
+    <script type="module" crossorigin src="/assets/index-Cev4mzZj.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-D14FelEH.css">
   </head>
   <body>
     <div class="tma-container">
@@ -489,6 +489,7 @@
             <div class="reborn-poke-header">
               <span id="player-name" class="reborn-poke-name">Groudon</span>
               <span id="player-status-icon" class="reborn-status-icon"></span>
+              <span id="player-ability" class="reborn-ability-tag"></span>
               <span id="player-held-icon" class="reborn-held-icon" style="display:none;" title="Удерживаемый предмет"></span>
               <span id="player-lvl" class="reborn-poke-lvl">Lv50</span>
             </div>
@@ -512,6 +513,7 @@
             <div class="reborn-poke-header">
               <span id="wild-name" class="reborn-poke-name">Pidgey</span>
               <span id="wild-status-icon" class="reborn-status-icon"></span>
+              <span id="wild-ability" class="reborn-ability-tag"></span>
               <span id="wild-held-icon" class="reborn-held-icon" style="display:none;" title="Удерживаемый предмет"></span>
               <span id="wild-lvl" class="reborn-poke-lvl">Lv5</span>
             </div>
@@ -864,5 +866,33 @@
       </div>
     </div>
 
+    <script>
+    // Auto error logger — sends all JS errors to server
+    (function() {
+      const seen = new Set();
+      function logError(msg, src, line, col, stack) {
+        const key = msg + src + line;
+        if (seen.has(key)) return;
+        seen.add(key);
+        try {
+          navigator.sendBeacon('/api/log-client-error', JSON.stringify({
+            msg, src, line, col, stack, url: location.href, time: Date.now()
+          }));
+        } catch(e) {}
+      }
+      window.onerror = function(msg, src, line, col, err) {
+        logError(msg, src||'', line||0, col||0, err?.stack||'');
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        logError('Unhandled Rejection: ' + (e.reason?.message||e.reason), '', 0, 0, e.reason?.stack||'');
+      });
+      // Also intercept console.error
+      const orig = console.error;
+      console.error = function(...args) {
+        orig.apply(console, args);
+        logError(args.map(a => typeof a === 'string' ? a : (a?.message||JSON.stringify(a))).join(' '), '', 0, 0, args[0]?.stack||'');
+      };
+    })();
+    </script>
   </body>
 </html>

@@ -44,72 +44,95 @@ tr:hover{background:#1a1a1a}
 <h1>PokeMatrix Admin</h1>
 
 <div class="row" style="align-items:center">
-  <select id="userSelect" style="flex:1;max-width:300px" onchange="loadUser()">
-    <option value="">— Выбери игрока —</option>
+  <input id="userSearch" placeholder="Search player by name or ID..." style="flex:1;max-width:300px" oninput="filterUsers(this.value)" autocomplete="off">
+  <select id="userSelect" style="flex:1;max-width:300px" onchange="loadUser()" size="8">
+    <option value="">--- Select player ---</option>
     __USER_OPTIONS__
   </select>
-  <input id="quickUser" placeholder="или username/ID..." style="width:150px" onkeydown="if(event.key==='Enter')loadUser()">
-  <button class="btn btn-blue" onclick="loadUser()">Загрузить</button>
+  <button class="btn btn-blue" onclick="loadUser()">Load</button>
   <span id="saveInfo" style="color:#555;font-size:0.7rem"></span>
 </div>
+<script>
+const ADMIN_USER = '__ADMIN_USERNAME__';
+function filterUsers(q) {
+  const sel = document.getElementById('userSelect');
+  q = q.toLowerCase();
+  for (const opt of sel.options) {
+    const match = !q || opt.text.toLowerCase().includes(q);
+    opt.style.display = match ? '' : 'none';
+    if (match && q) sel.selectedIndex = opt.index;
+  }
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('userSelect');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].text.includes(ADMIN_USER)) {
+      sel.options[i].style.background = '#af52de44';
+      sel.options[i].style.fontWeight = 'bold';
+      break;
+    }
+  }
+});
+</script>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('overview')">Обзор</button>
-  <button class="tab-btn" onclick="switchTab('team')">Команда</button>
+  <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
+  <button class="tab-btn" onclick="switchTab('team')">Team</button>
   <button class="tab-btn" onclick="switchTab('pc')">PC</button>
-  <button class="tab-btn" onclick="switchTab('pokedex')">Покедекс</button>
-  <button class="tab-btn" onclick="switchTab('inventory')">Инвентарь</button>
-  <button class="tab-btn" onclick="switchTab('quests')">Квесты</button>
-  <button class="tab-btn" onclick="switchTab('actions')">Действия</button>
+  <button class="tab-btn" onclick="switchTab('pokedex')">Pokedex</button>
+  <button class="tab-btn" onclick="switchTab('inventory')">Inventory</button>
+  <button class="tab-btn" onclick="switchTab('quests')">Quests</button>
+  <button class="tab-btn" onclick="switchTab('actions')">Actions</button>
+  <button class="tab-btn" onclick="switchTab('drops')">Drops</button>
   <button class="tab-btn" onclick="switchTab('json')">Raw JSON</button>
 </div>
 
 <div id="tab-overview" class="tab-content active">
-  <div class="card"><h3>Статистика</h3><div id="overview-stats">Выбери игрока...</div></div>
+  <div class="card"><h3>Statistics</h3><div id="overview-stats">Select a player...</div></div>
   <div class="card"><h3>Leaderboard (top 30)</h3>
     __LEADERBOARD_TABLE__
   </div>
 </div>
 
 <div id="tab-team" class="tab-content">
-  <div class="card"><h3>Команда <button class="btn btn-green" onclick="addMon('team')">+ Добавить</button></h3><div id="team-container">Выбери игрока...</div></div>
+  <div class="card"><h3>Team <button class="btn btn-green" onclick="addMon('team')">+ Add</button></h3><div id="team-container">Select a player...</div></div>
 </div>
 
 <div id="tab-pc" class="tab-content">
-  <div class="card"><h3>PC Хранилище</h3><div id="pc-container">Выбери игрока...</div></div>
+  <div class="card"><h3>PC Storage</h3><div id="pc-container">Select a player...</div></div>
 </div>
 
 <div id="tab-pokedex" class="tab-content">
-  <div class="card"><h3>Покедекс <button class="btn btn-green" onclick="pokedexMarkAll()">Отметить всё</button> <button class="btn btn-red" onclick="pokedexClearAll()">Очистить всё</button></h3>
+  <div class="card"><h3>Pokedex <button class="btn btn-green" onclick="pokedexMarkAll()">Mark all</button> <button class="btn btn-red" onclick="pokedexClearAll()">Clear all</button></h3>
   <div class="inline" style="margin-bottom:6px">
-    <input id="dexSearch" placeholder="Поиск покемона..." oninput="renderDex()" style="width:200px">
-    <select id="dexFilter" onchange="renderDex()"><option value="all">Все</option><option value="caught">Пойманные</option><option value="seen">Замеченные</option><option value="none">Никакие</option></select>
+    <input id="dexSearch" placeholder="Search..." oninput="renderDex()" style="width:200px">
+    <select id="dexFilter" onchange="renderDex()"><option value="all">All</option><option value="caught">Caught</option><option value="seen">Seen</option><option value="none">None</option></select>
   </div>
-  <div id="dex-container" style="max-height:500px;overflow:auto">Выбери игрока...</div></div>
+  <div id="dex-container" style="max-height:500px;overflow:auto">Select a player...</div></div>
 </div>
 
 <div id="tab-inventory" class="tab-content">
-  <div class="card"><h3>Инвентарь и деньги</h3><div id="inv-container">Выбери игрока...</div></div>
+  <div class="card"><h3>Inventory & Money</h3><div id="inv-container">Select a player...</div></div>
 </div>
 
 <div id="tab-quests" class="tab-content">
-  <div class="card"><h3>Квесты</h3><div id="quests-container">Выбери игрока...</div></div>
+  <div class="card"><h3>Quests</h3><div id="quests-container">Select a player...</div></div>
 </div>
 
 <div id="tab-actions" class="tab-content">
-  <div class="card"><h3>Быстрые действия</h3>
-    <button class="btn btn-purp" onclick="quickAction('give_items')">Все предметы x999 + 500k</button>
-    <button class="btn btn-purp" onclick="quickAction('give_money','1000000')">+1 000 000 денег</button>
-    <button class="btn btn-purp" onclick="quickAction('give_badges')">Все 8 значков</button>
-    <button class="btn btn-yellow" onclick="quickAction('give_legendary')">Случайный легендарный</button>
-    <button class="btn btn-green" onclick="quickAction('give_egg')">Случайное яйцо</button>
-    <button class="btn btn-green" onclick="quickAction('heal_team')">Вылечить команду</button>
-    <button class="btn btn-blue" onclick="quickAction('max_iv')">Макс IV команде</button>
-    <button class="btn btn-blue" onclick="quickAction('fix_levels')">Уровни до 50</button>
-    <button class="btn btn-red" onclick="if(confirm('Точно?'))quickAction('reset_save')">Сбросить сохранение</button>
+  <div class="card"><h3>Quick actions</h3>
+    <button class="btn btn-purp" onclick="quickAction('give_items')">All items x999 + 500k</button>
+    <button class="btn btn-purp" onclick="quickAction('give_money','1000000')">+1,000,000 money</button>
+    <button class="btn btn-purp" onclick="quickAction('give_badges')">All 8 badges</button>
+    <button class="btn btn-yellow" onclick="quickAction('give_legendary')">Random legendary</button>
+    <button class="btn btn-green" onclick="quickAction('give_egg')">Random egg</button>
+    <button class="btn btn-green" onclick="quickAction('heal_team')">Heal team</button>
+    <button class="btn btn-blue" onclick="quickAction('max_iv')">Max IV team</button>
+    <button class="btn btn-blue" onclick="quickAction('fix_levels')">Level to 50</button>
+    <button class="btn btn-red" onclick="if(confirm('Sure?'))quickAction('reset_save')">Reset save</button>
     <div class="result" id="actions-result"></div>
   </div>
-  <div class="card"><h3>Телепорт</h3>
+  <div class="card"><h3>Teleport</h3>
     <select id="teleportLoc">
       <option value="pallet_town">Pallet Town</option><option value="viridian_city">Viridian City</option>
       <option value="pewter_city">Pewter City</option><option value="cerulean_city">Cerulean City</option>
@@ -123,24 +146,53 @@ tr:hover{background:#1a1a1a}
       <option value="olivine_city">Olivine City</option><option value="cianwood_city">Cianwood City</option>
       <option value="mahogany_town">Mahogany Town</option><option value="blackthorn_city">Blackthorn City</option>
     </select>
-    <button class="btn btn-purp" onclick="quickAction('teleport', document.getElementById('teleportLoc').value)">Телепорт</button>
+    <button class="btn btn-purp" onclick="quickAction('teleport', document.getElementById('teleportLoc').value)">Teleport</button>
   </div>
-  <div class="card"><h3>Добавить покемона</h3>
+  <div class="card"><h3>Add Pokemon</h3>
     <div class="inline">
       <input id="addMonSpecies" placeholder="bulbasaur" style="width:150px">
-      <input id="addMonLevel" placeholder="Уровень" value="50" style="width:60px" type="number">
-      <select id="addMonShiny"><option value="0">Обычный</option><option value="1">Шайни</option></select>
-      <select id="addMonIV"><option value="random">IV: случайные</option><option value="31">IV: 31 (макс)</option></select>
-      <select id="addMonTarget"><option value="team">В команду</option><option value="pc">В PC</option></select>
-      <button class="btn btn-green" onclick="addMonCustom()">Создать</button>
+      <input id="addMonLevel" placeholder="Level" value="50" style="width:60px" type="number">
+      <select id="addMonShiny"><option value="0">Normal</option><option value="1">Shiny</option></select>
+      <select id="addMonIV"><option value="random">IV: random</option><option value="31">IV: max</option></select>
+      <select id="addMonTarget"><option value="team">To team</option><option value="pc">To PC</option></select>
+      <button class="btn btn-green" onclick="addMonCustom()">Create</button>
     </div>
     <div class="result" id="addMon-result"></div>
   </div>
 </div>
 
+<div id="tab-drops" class="tab-content">
+  <div class="card"><h3>Drop Control Panel</h3>
+    <div class="inline" style="margin-bottom:8px">
+      <button class="btn btn-green" onclick="loadDrops()">Load drops config</button>
+      <button class="btn btn-red" onclick="saveDrops()">Save changes</button>
+      <span id="drops-status" style="color:#555;font-size:0.7rem"></span>
+    </div>
+    <div class="inline" style="margin-bottom:8px">
+      <input id="dropsSearch" placeholder="Search Pokemon..." style="width:200px" oninput="renderDrops()">
+      <input id="dropsItemSearch" placeholder="Filter by item..." style="width:200px" oninput="renderDrops()">
+      <span id="dropsCount" style="color:#555;font-size:0.7rem"></span>
+    </div>
+    <div class="inline" style="margin-bottom:4px">
+      <select id="dropsAddSpecies" style="width:180px"></select>
+      <button class="btn btn-green" onclick="addDropSpecies()">+ Add Pokemon</button>
+    </div>
+  </div>
+  <div id="drops-universal" class="card"></div>
+  <div id="drops-container"></div>
+  <div id="drops-item-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;overflow:auto">
+    <div style="background:#111;border:1px solid #333;border-radius:8px;max-width:500px;margin:60px auto;padding:16px">
+      <h3 style="color:#5af;margin-bottom:8px">Choose item</h3>
+      <input id="modal-item-search" placeholder="Search items..." style="width:100%;margin-bottom:8px" oninput="renderModalItems()">
+      <div id="modal-item-list" style="max-height:400px;overflow:auto;display:flex;flex-direction:column;gap:2px"></div>
+      <div style="margin-top:8px"><button class="btn btn-gray" onclick="closeItemModal()">Cancel</button></div>
+    </div>
+  </div>
+</div>
+
 <div id="tab-json" class="tab-content">
-  <div class="card"><h3>RAW Save JSON <button class="btn btn-blue" onclick="loadRawJSON()">Обновить</button> <button class="btn btn-green" onclick="saveRawJSON()">Сохранить</button></h3>
-  <textarea id="rawJSON" style="width:100%;height:500px;font-size:0.65rem" placeholder="Выбери игрока и нажми Обновить..."></textarea>
+  <div class="card"><h3>RAW Save JSON <button class="btn btn-blue" onclick="loadRawJSON()">Refresh</button> <button class="btn btn-green" onclick="saveRawJSON()">Save</button></h3>
+  <textarea id="rawJSON" style="width:100%;height:500px;font-size:0.65rem" placeholder="Select player and click Refresh..."></textarea>
   <div class="result" id="json-result"></div></div>
 </div>
 
@@ -150,12 +202,13 @@ let currentSave = null;
 let currentUserId = null;
 let currentUsername = null;
 let POKEDEX_ALL = [];
+let dropsConfig = null;
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 async function api(cmd, user, val) {
-  const u = user || currentUsername || currentUserId || document.getElementById('quickUser').value.trim();
-  if (!u) { alert('Выбери или введи пользователя'); return null; }
+  const u = user || currentUsername || currentUserId || document.getElementById('userSelect').value;
+  if (!u) { alert('Select a user first'); return null; }
   let url = '/admin/api?token='+TOKEN+'&cmd='+cmd+'&user='+encodeURIComponent(u);
   if (val) url += '&val='+encodeURIComponent(val);
   const res = await fetch(url);
@@ -164,19 +217,18 @@ async function api(cmd, user, val) {
 
 async function loadUser() {
   const sel = document.getElementById('userSelect');
-  const quick = document.getElementById('quickUser').value.trim();
-  const userId = quick || sel.value;
+  const userId = sel.value;
   if (!userId) return;
   currentUserId = userId;
   currentUsername = null;
-  document.getElementById('saveInfo').innerText = 'Загрузка...';
+  document.getElementById('saveInfo').innerText = 'Loading...';
   const data = await api('get_save', userId);
-  if (data.error) { document.getElementById('saveInfo').innerText = 'Ошибка: '+data.error; return; }
+  if (data.error) { document.getElementById('saveInfo').innerText = 'Error: '+data.error; return; }
   currentSave = data.save;
   currentUserId = data.userId;
   currentUsername = data.username;
   POKEDEX_ALL = data.pokedexAll || [];
-  document.getElementById('saveInfo').innerHTML = '<span style="color:#34c759">Загружен: '+esc(data.username||data.userId)+'</span> — команда: '+(currentSave.myTeam?.length||0)+' пок, PC: '+((currentSave.pcBoxes||[]).reduce(function(s,b){return s+b.length},0))+' пок, ¥'+(currentSave.money||0);
+  document.getElementById('saveInfo').innerHTML = '<span style="color:#34c759">Loaded: '+esc(data.username||data.userId)+'</span> -- team: '+(currentSave.myTeam?.length||0)+' pok, PC: '+((currentSave.pcBoxes||[]).reduce(function(s,b){return s+b.length},0))+' pok, ¥'+(currentSave.money||0);
   renderOverview();
   renderTeam();
   renderPC();
@@ -191,6 +243,7 @@ function switchTab(name) {
   var tab = document.getElementById('tab-'+name);
   if (tab) tab.classList.add('active');
   event.target.classList.add('active');
+  if (name === 'drops') loadDrops();
 }
 
 function renderOverview() {
@@ -201,40 +254,40 @@ function renderOverview() {
   var pcCount = pc.reduce(function(sum,b) { return sum + (b?.length||0); }, 0);
   var badges = s.badges || [];
   document.getElementById('overview-stats').innerHTML =
-    '<div class="mon-row"><span>Деньги:</span> <b style="color:#ffcc00">¥'+(s.money||0).toLocaleString()+'</b></div>'+
-    '<div class="mon-row"><span>Команда:</span> '+team.length+'/6 покемонов</div>'+
-    '<div class="mon-row"><span>PC:</span> '+pcCount+' покемонов в '+pc.length+' боксах</div>'+
-    '<div class="mon-row"><span>Значки:</span> '+(badges.length ? badges.join(', ') : 'нет')+'</div>'+
-    '<div class="mon-row"><span>Локация:</span> '+(s.currentLocationId||'?')+' ('+(s.currentRegion||'?')+')</div>'+
-    '<div class="mon-row"><span>Покедекс:</span> поймано '+(s.pokedexCaught||[]).length+', замечено '+(s.pokedexSeen||[]).length+'</div>'+
-    '<div class="mon-row"><span>Квесты:</span> выполнено '+(s.completedQuests||[]).length+', NPC: '+(s.completedNPCQuests||[]).length+'</div>'+
-    '<div class="mon-row"><span>Туториал:</span> шаг '+(s.tutorialStep||0)+'</div>';
+    '<div class="mon-row"><span>Money:</span> <b style="color:#ffcc00">¥'+(s.money||0).toLocaleString()+'</b></div>'+
+    '<div class="mon-row"><span>Team:</span> '+team.length+'/6</div>'+
+    '<div class="mon-row"><span>PC:</span> '+pcCount+' pok in '+pc.length+' boxes</div>'+
+    '<div class="mon-row"><span>Badges:</span> '+(badges.length ? badges.join(', ') : 'none')+'</div>'+
+    '<div class="mon-row"><span>Location:</span> '+(s.currentLocationId||'?')+' ('+(s.currentRegion||'?')+')</div>'+
+    '<div class="mon-row"><span>Pokedex:</span> '+(s.pokedexCaught||[]).length+' caught, '+(s.pokedexSeen||[]).length+' seen</div>'+
+    '<div class="mon-row"><span>Quests:</span> '+(s.completedQuests||[]).length+' daily, '+(s.completedNPCQuests||[]).length+' NPC</div>'+
+    '<div class="mon-row"><span>Tutorial:</span> step '+(s.tutorialStep||0)+'</div>';
 }
 
 function renderTeam() {
   var s = currentSave;
-  if (!s) { document.getElementById('team-container').innerText = 'Выбери игрока...'; return; }
+  if (!s) { document.getElementById('team-container').innerText = 'Select a player...'; return; }
   var team = s.myTeam || [];
-  document.getElementById('team-container').innerHTML = team.length === 0 ? '<span style="color:#555">Пусто</span>' :
+  document.getElementById('team-container').innerHTML = team.length === 0 ? '<span style="color:#555">Empty</span>' :
     team.map(function(m,i) { return monCard(m, i, 'team'); }).join('');
 }
 
 function renderPC() {
   var s = currentSave;
-  if (!s) { document.getElementById('pc-container').innerText = 'Выбери игрока...'; return; }
+  if (!s) { document.getElementById('pc-container').innerText = 'Select a player...'; return; }
   var boxes = s.pcBoxes || [];
   var html = '';
   boxes.forEach(function(box, bi) {
-    html += '<div class="card"><h3>Бокс '+(bi+1)+' ('+box.length+' пок)</h3>';
+    html += '<div class="card"><h3>Box '+(bi+1)+' ('+box.length+' pok)</h3>';
     html += box.map(function(m,i) { return monCard(m, i, 'pc', bi); }).join('');
     html += '</div>';
   });
-  if (!boxes.length) html = '<span style="color:#555">Нет боксов</span>';
+  if (!boxes.length) html = '<span style="color:#555">No boxes</span>';
   document.getElementById('pc-container').innerHTML = html;
 }
 
 function monCard(m, idx, location, boxIdx) {
-  if (!m || !m.apiData) return '<div class="mon-card"><span style="color:#555">Битый покемон</span></div>';
+  if (!m || !m.apiData) return '<div class="mon-card"><span style="color:#555">Broken pokemon</span></div>';
   var name = m.apiData.name || '?';
   var lvl = (m.baseLevel||0) + (m.candiesEaten||0);
   var ivs = m.ivs || {};
@@ -242,16 +295,16 @@ function monCard(m, idx, location, boxIdx) {
   var shiny = m.shiny ? ' ✨' : '';
   var hp = m.currentHp+'/'+m.maxHp;
   var pos = boxIdx !== undefined ? 'pc:'+boxIdx+':'+idx : 'team:'+idx;
-  var hasBred = m.hasBred ? ' 🚫стерилен' : '';
+  var hasBred = m.hasBred ? ' 🚫sterile' : '';
   return '<div class="mon-card">'+
     '<div class="mon-row"><span class="uid">'+esc(m.uid||'?')+'</span></div>'+
-    '<div class="mon-row"><span class="name">'+esc(name)+shiny+'</span> <span>ур.'+lvl+'</span> <span>'+hp+'</span> <span>Пол: '+(m.gender||'?')+'</span>'+hasBred+'</div>'+
+    '<div class="mon-row"><span class="name">'+esc(name)+shiny+'</span> <span>lvl.'+lvl+'</span> <span>'+hp+'</span> <span>Gender: '+(m.gender||'?')+'</span>'+hasBred+'</div>'+
     '<div class="mon-row"><span class="iv">'+ivStr+'</span></div>'+
     '<div class="mon-row" style="margin-top:3px">'+
-      '<button class="btn btn-blue" onclick="editMonDialog(\''+pos+'\')">Ред.</button>'+
-      '<button class="btn btn-green" onclick="healMon(\''+pos+'\')">Лечить</button>'+
+      '<button class="btn btn-blue" onclick="editMonDialog(\''+pos+'\')">Edit</button>'+
+      '<button class="btn btn-green" onclick="healMon(\''+pos+'\')">Heal</button>'+
       '<button class="btn btn-yellow" onclick="maxIVmon(\''+pos+'\')">IV 31</button>'+
-      '<button class="btn btn-red" onclick="deleteMon(\''+pos+'\')">Удалить</button>'+
+      '<button class="btn btn-red" onclick="deleteMon(\''+pos+'\')">Delete</button>'+
     '</div></div>';
 }
 
@@ -264,29 +317,29 @@ async function editMonDialog(pos) {
   if (loc === 'team') mon = (currentSave.myTeam||[])[idx];
   else mon = (currentSave.pcBoxes||[])[boxIdx]?.[idx];
   if (!mon) return;
-  var newLvl = prompt('Уровень (baseLevel):', mon.baseLevel||1);
+  var newLvl = prompt('Level (baseLevel):', mon.baseLevel||1);
   if (newLvl === null) return;
-  var newSpecies = prompt('Вид (species name, пусто=не менять):', mon.apiData?.name||'');
+  var newSpecies = prompt('Species (empty = no change):', mon.apiData?.name||'');
   if (newSpecies === null) return;
-  var shiny = confirm('Шайни? (OK=да, Отмена=нет)');
+  var shiny = confirm('Shiny? (OK=yes, Cancel=no)');
   var result = await fetch('/admin/api?token='+TOKEN+'&cmd=edit_mon&user='+encodeURIComponent(currentUsername||currentUserId)+
     '&val='+encodeURIComponent(JSON.stringify({pos:pos, baseLevel: parseInt(newLvl), species: newSpecies||undefined, shiny:shiny})));
   var json = await result.json();
   if (json.status === 'ok') loadUser();
-  else alert('Ошибка: '+json.error);
+  else alert('Error: '+json.error);
 }
 
 async function healMon(pos) { await api('edit_mon', null, JSON.stringify({pos:pos, heal:true})); loadUser(); }
 async function maxIVmon(pos) { await api('edit_mon', null, JSON.stringify({pos:pos, maxIV:true})); loadUser(); }
 async function deleteMon(pos) {
-  if (!confirm('Удалить этого покемона?')) return;
+  if (!confirm('Delete this pokemon?')) return;
   await api('delete_mon', null, pos);
   loadUser();
 }
 
 function renderDex() {
   var s = currentSave;
-  if (!s) { document.getElementById('dex-container').innerText = 'Выбери игрока...'; return; }
+  if (!s) { document.getElementById('dex-container').innerText = 'Select a player...'; return; }
   var caught = new Set(s.pokedexCaught||[]);
   var seen = new Set(s.pokedexSeen||[]);
   var search = (document.getElementById('dexSearch')?.value||'').toLowerCase();
@@ -310,19 +363,19 @@ function renderDex() {
     html += '<span class="'+cls+'" style="cursor:pointer;user-select:none;'+style+'" onclick="toggleDexMon(\''+name+'\')" title="'+name+'">'+
       (isCaught?'✅ ':'')+(isSeen && !isCaught?'👁 ':'')+name+'</span>';
   }
-  html += '</div><div style="color:#555;margin-top:4px">Показано: '+count+' / '+POKEDEX_ALL.length+' | Клик — переключить статус</div>';
+  html += '</div><div style="color:#555;margin-top:4px">Showing: '+count+' / '+POKEDEX_ALL.length+' | Click to toggle status</div>';
   document.getElementById('dex-container').innerHTML = html;
 }
 
 async function toggleDexMon(name) { await api('toggle_pokedex', null, name); loadUser(); }
-async function pokedexMarkAll() { if(confirm('Отметить ВСЕХ покемонов как пойманных?')) { await api('pokedex_all', null, 'caught'); loadUser(); } }
-async function pokedexClearAll() { if(confirm('Очистить ВЕСЬ покедекс?')) { await api('pokedex_all', null, 'clear'); loadUser(); } }
+async function pokedexMarkAll() { if(confirm('Mark all as caught?')) { await api('pokedex_all', null, 'caught'); loadUser(); } }
+async function pokedexClearAll() { if(confirm('Clear all pokedex?')) { await api('pokedex_all', null, 'clear'); loadUser(); } }
 
 function renderInventory() {
   var s = currentSave;
-  if (!s) { document.getElementById('inv-container').innerText = 'Выбери игрока...'; return; }
+  if (!s) { document.getElementById('inv-container').innerText = 'Select a player...'; return; }
   var inv = s.inventory || {};
-  var html = '<div class="inline" style="margin-bottom:6px"><span>Деньги:</span> <input id="invMoney" value="'+(s.money||0)+'" style="width:100px" type="number"> <button class="btn btn-green" onclick="setMoney()">Уст.</button></div>';
+  var html = '<div class="inline" style="margin-bottom:6px"><span>Money:</span> <input id="invMoney" value="'+(s.money||0)+'" style="width:100px" type="number"> <button class="btn btn-green" onclick="setMoney()">Set</button></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:4px;max-height:400px;overflow:auto">';
   var items = Object.keys(inv).sort();
   for (var i = 0; i < items.length; i++) {
@@ -351,19 +404,19 @@ async function setMoney() {
 
 function renderQuests() {
   var s = currentSave;
-  if (!s) { document.getElementById('quests-container').innerText = 'Выбери игрока...'; return; }
+  if (!s) { document.getElementById('quests-container').innerText = 'Select a player...'; return; }
   var quests = s.quests || [];
   var progress = s.questProgress || {};
   var completed = new Set(s.completedQuests||[]);
   var npcProgress = s.npcQuestProgress || {};
   var npcCompleted = new Set(s.completedNPCQuests||[]);
-  var html = '<h4 style="color:#5af">Ежедневные квесты ('+completed.size+' выполнено, '+quests.length+' активных)</h4>';
-  html += '<button class="btn btn-blue" onclick="resetQuests(\'daily\')">Сбросить ежедневные</button> ';
-  html += '<button class="btn btn-green" onclick="completeQuests(\'daily\')">Выполнить все</button>';
+  var html = '<h4 style="color:#5af">Daily quests ('+completed.size+' done, '+quests.length+' active)</h4>';
+  html += '<button class="btn btn-blue" onclick="resetQuests(\'daily\')">Reset daily</button> ';
+  html += '<button class="btn btn-green" onclick="completeQuests(\'daily\')">Complete all</button>';
   html += '<pre>'+JSON.stringify({quests:quests, progress:progress, completedQuests:Array.from(completed)}, null, 2)+'</pre>';
-  html += '<h4 style="color:#5af;margin-top:8px">NPC квесты ('+npcCompleted.size+' выполнено)</h4>';
-  html += '<button class="btn btn-blue" onclick="resetQuests(\'npc\')">Сбросить NPC</button> ';
-  html += '<button class="btn btn-green" onclick="completeQuests(\'npc\')">Выполнить все NPC</button>';
+  html += '<h4 style="color:#5af;margin-top:8px">NPC quests ('+npcCompleted.size+' done)</h4>';
+  html += '<button class="btn btn-blue" onclick="resetQuests(\'npc\')">Reset NPC</button> ';
+  html += '<button class="btn btn-green" onclick="completeQuests(\'npc\')">Complete all NPC</button>';
   html += '<pre>'+JSON.stringify({npcQuestProgress:npcProgress, completedNPCQuests:Array.from(npcCompleted)}, null, 2)+'</pre>';
   document.getElementById('quests-container').innerHTML = html;
 }
@@ -372,7 +425,7 @@ async function resetQuests(type) { await api('reset_quests', null, type); loadUs
 async function completeQuests(type) { await api('complete_all_quests', null, type); loadUser(); }
 async function quickAction(cmd, val) {
   var u = currentUsername || currentUserId;
-  if (!u) { alert('Выбери игрока сначала'); return; }
+  if (!u) { alert('Select a player first'); return; }
   var data = await api(cmd, u, val);
   document.getElementById('actions-result').innerText = JSON.stringify(data, null, 2);
   if (data.status === 'ok') loadUser();
@@ -380,9 +433,9 @@ async function quickAction(cmd, val) {
 
 async function addMonCustom() {
   var u = currentUsername || currentUserId;
-  if (!u) { alert('Выбери игрока сначала'); return; }
+  if (!u) { alert('Select a player first'); return; }
   var species = document.getElementById('addMonSpecies').value.trim();
-  if (!species) { alert('Введи вид'); return; }
+  if (!species) { alert('Enter species'); return; }
   var level = parseInt(document.getElementById('addMonLevel').value)||50;
   var shiny = document.getElementById('addMonShiny').value === '1';
   var maxIV = document.getElementById('addMonIV').value === '31';
@@ -393,9 +446,312 @@ async function addMonCustom() {
   if (data.status === 'ok') loadUser();
 }
 
+// === Drops tab ===
+let itemsCatalog = []; // {id, nameRu, category}
+let allSpecies = [];   // pokemon names
+let modalCallback = null; // function(itemId) => void
+
+async function loadDrops() {
+  document.getElementById('drops-status').innerText = 'Loading...';
+  try {
+    const [dropsRes, itemsRes, speciesRes] = await Promise.all([
+      fetch('/admin/api?token='+TOKEN+'&cmd=get_drops&user='+encodeURIComponent(currentUsername||currentUserId||'1')),
+      fetch('/admin/api/items?token='+TOKEN),
+      fetch('/admin/api/species?token='+TOKEN),
+    ]);
+    const dropsData = await dropsRes.json();
+    const itemsData = await itemsRes.json();
+    const speciesData = await speciesRes.json();
+
+    if (itemsData.status === 'ok') itemsCatalog = itemsData.items;
+    if (speciesData.status === 'ok') allSpecies = speciesData.species;
+
+    if (dropsData.status === 'ok') {
+      dropsConfig = dropsData.config;
+      populateAddSpeciesSelect();
+      renderDrops();
+      document.getElementById('drops-status').innerText = 'Loaded ('+itemsCatalog.length+' items)';
+    } else {
+      document.getElementById('drops-status').innerText = 'Error: '+(dropsData.error||'unknown');
+    }
+  } catch(e) {
+    document.getElementById('drops-status').innerText = 'Fetch error: '+e.message;
+  }
+}
+
+function getItemInfo(id) {
+  return itemsCatalog.find(i => i.id === id) || { id, nameRu: id, category: 'unknown' };
+}
+
+// Chance is stored as float (0.0001 = 1/10000, 1.0 = 1/1)
+// "1 in N" where N = 1/chance. Slider maps N logarithmically 1-10000.
+function chanceToN(chance) { return Math.max(1, Math.min(10000, Math.round(1 / (chance || 0.0001)))); }
+function nToChance(n) { return 1 / Math.max(1, Math.min(10000, parseInt(n) || 10000)); }
+function sliderToN(sliderVal) { return Math.max(1, Math.round(Math.exp((100 - sliderVal) / 100 * Math.log(10000)))); }
+function nToSlider(n) { return Math.round(100 - (Math.log(n) / Math.log(10000)) * 100); }
+
+function chanceColor(chance) {
+  if (chance >= 0.1) return '#34c759';
+  if (chance >= 0.02) return '#ff9500';
+  if (chance >= 0.005) return '#ff3b30';
+  return '#ff2d55';
+}
+
+function getCategoryColor(cat) {
+  const colors = {
+    'balls': '#007aff',
+    'healing': '#34c759',
+    'statusCure': '#5ac8fa',
+    'ppRecovery': '#5856d6',
+    'vitamins': '#ff9500',
+    'evolutionStones': '#af52de',
+    'crafting': '#8e8e93',
+    'berries': '#ff2d55',
+    'battle': '#ff3b30',
+    'tickets': '#ffcc00',
+    'training': '#64d2ff',
+    'artifacts': '#bf5af2',
+    'awards': '#ff9500',
+    'quest': '#5ac8fa',
+    'currency': '#ffcc00',
+  };
+  return colors[cat] || '#666';
+}
+
+function populateAddSpeciesSelect() {
+  const sel = document.getElementById('dropsAddSpecies');
+  const existing = new Set(Object.keys(dropsConfig?.monsterDrops || {}));
+  sel.innerHTML = '<option value="">-- Add Pokemon --</option>' +
+    allSpecies.filter(s => !existing.has(s)).sort().map(s =>
+      '<option value="'+esc(s)+'">'+esc(s)+'</option>'
+    ).join('');
+}
+
+function renderDrops() {
+  if (!dropsConfig) { document.getElementById('drops-container').innerHTML = '<div class="card"><span style="color:#555">No data loaded</span></div>'; return; }
+  const search = (document.getElementById('dropsSearch')?.value||'').toLowerCase();
+  const itemFilter = (document.getElementById('dropsItemSearch')?.value||'').toLowerCase();
+  const species = Object.keys(dropsConfig.monsterDrops).sort();
+
+  // Universal drops
+  const univ = dropsConfig.universalDrops || [];
+  let univHtml = '<div class="card"><h3 style="display:flex;align-items:center;gap:8px">'+
+    '<span style="color:#ffcc00">✦</span> Universal drops (all wild Pokemon)' +
+    ' <span style="color:#555;font-size:0.65rem">'+univ.length+' items</span>' +
+    ' <button class="btn btn-blue" style="font-size:0.6rem;padding:2px 8px;margin-left:auto" onclick="openItemModal(function(itemId){ addUnivDrop(itemId); })">+ Add</button></h3>';
+  univHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  for (let i = 0; i < univ.length; i++) {
+    const e = univ[i];
+    const info = getItemInfo(e.item);
+    const n = chanceToN(e.chance);
+    const color = chanceColor(e.chance);
+    const catColor = getCategoryColor(info.category);
+    univHtml += '<div style="background:#1a1a1a;padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:6px;border-left:3px solid '+color+'">'+
+      '<div style="display:flex;flex-direction:column">'+
+        '<span style="color:#5af;font-size:0.75rem;font-weight:bold">'+esc(info.nameRu)+'</span>'+
+        '<span style="font-size:0.6rem;color:#555">'+esc(e.item)+'</span>'+
+      '</div>'+
+      '<span class="badge" style="background:'+catColor+'22;color:'+catColor+';border-color:'+catColor+'44">'+info.category+'</span>'+
+      '<label style="font-size:0.65rem;display:flex;align-items:center;gap:2px">1/<input class="univ-n" data-idx="'+i+'" type="number" min="1" max="10000" value="'+n+'" style="width:45px;font-size:0.6rem" onchange="updateUnivN('+i+',this.value)">'+
+      '</label>'+
+      '<input type="range" min="0" max="100" value="'+nToSlider(n)+'" style="width:60px" oninput="updateUnivSlider('+i+',this.value)">'+
+      '<span style="font-size:0.6rem;color:'+color+';min-width:32px">1/'+n+'</span>'+
+      '<label style="font-size:0.65rem"><input type="number" min="1" value="'+(e.qty||1)+'" style="width:30px;font-size:0.6rem" onchange="dropsConfig.universalDrops['+i+'].qty=Math.max(1,parseInt(this.value)||1)"></label>'+
+      ' <button class="btn btn-red" style="font-size:0.5rem;padding:1px 5px" onclick="removeUnivDrop('+i+')">✕</button></div>';
+  }
+  univHtml += '</div></div>';
+  document.getElementById('drops-universal').innerHTML = univHtml;
+
+  // Species drops
+  let html = '';
+  let count = 0;
+  for (let s = 0; s < species.length; s++) {
+    const name = species[s];
+    if (search && name.indexOf(search) === -1) continue;
+    const entries = dropsConfig.monsterDrops[name];
+    // Check item filter
+    if (itemFilter) {
+      const matchesItem = entries.some(e => {
+        const info = getItemInfo(e.item);
+        return e.item.indexOf(itemFilter) !== -1 || info.nameRu.toLowerCase().indexOf(itemFilter) !== -1;
+      });
+      if (!matchesItem) continue;
+    }
+    count++;
+    html += '<div class="card">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
+      '<span style="text-transform:capitalize;font-weight:bold;color:#5af;font-size:0.85rem">'+esc(name)+'</span>'+
+      '<span style="color:#555;font-size:0.65rem">'+entries.length+' items</span>'+
+      '<button class="btn btn-green" style="font-size:0.55rem;padding:2px 8px;margin-left:auto" onclick="openItemModal(function(itemId){ addDropItem(\''+name+'\', itemId); })">+ Add item</button>'+
+      '<button class="btn btn-red" style="font-size:0.55rem;padding:2px 6px" onclick="removeDropSpecies(\''+name+'\')">Remove</button>';
+    html += '</div><div style="display:flex;flex-direction:column;gap:3px">';
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const info = getItemInfo(e.item);
+      const n = chanceToN(e.chance);
+      const color = chanceColor(e.chance);
+      const catColor = getCategoryColor(info.category);
+      html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#1a1a1a;padding:5px 10px;border-radius:4px;border-left:3px solid '+color+'">'+
+        '<div style="display:flex;flex-direction:column;min-width:120px">'+
+          '<span style="color:#5af;font-size:0.75rem;font-weight:bold">'+esc(info.nameRu)+'</span>'+
+          '<span style="font-size:0.6rem;color:#555">'+esc(e.item)+'</span>'+
+        '</div>'+
+        '<span class="badge" style="background:'+catColor+'22;color:'+catColor+';border-color:'+catColor+'44">'+info.category+'</span>'+
+        '<label style="font-size:0.65rem;display:flex;align-items:center;gap:2px">1/<input class="drop-n" data-sp="'+name+'" data-idx="'+i+'" type="number" min="1" max="10000" value="'+n+'" style="width:45px;font-size:0.6rem" onchange="updateDropN(this,\''+name+'\','+i+')">'+
+        '</label>'+
+        '<input type="range" min="0" max="100" value="'+nToSlider(n)+'" style="width:70px" data-sp="'+name+'" data-idx="'+i+'" oninput="updateDropSlider(this,\''+name+'\','+i+')">'+
+        '<span style="font-size:0.6rem;color:'+color+';min-width:32px">1/'+n+'</span>'+
+        '<label style="font-size:0.65rem">Qty: <input class="drop-qty" data-sp="'+name+'" data-idx="'+i+'" type="number" min="1" value="'+(e.qty||1)+'" style="width:30px;font-size:0.6rem" onchange="dropsConfig.monsterDrops[\''+name+'\']['+i+'].qty=Math.max(1,parseInt(this.value)||1)"></label>'+
+        ' <button class="btn btn-red" style="font-size:0.5rem;padding:1px 5px" onclick="removeDropItem(\''+name+'\','+i+')">✕</button>'+
+      '</div>';
+    }
+    html += '</div></div>';
+  }
+  document.getElementById('drops-container').innerHTML = html || '<div class="card"><span style="color:#555">No Pokemon match your search</span></div>';
+  document.getElementById('dropsCount').innerText = 'Showing: '+count+' / '+species.length+' species';
+}
+
+function updateDropSlider(el, species, idx) {
+  const n = sliderToN(parseInt(el.value));
+  const inp = document.querySelector('.drop-n[data-sp="'+species+'"][data-idx="'+idx+'"]');
+  if (inp) inp.value = n;
+  dropsConfig.monsterDrops[species][idx].chance = nToChance(n);
+}
+
+function updateDropN(el, species, idx) {
+  const n = Math.min(10000, Math.max(1, parseInt(el.value)||1));
+  el.value = n;
+  const slider = document.querySelector('input[type="range"][data-sp="'+species+'"][data-idx="'+idx+'"]');
+  if (slider) slider.value = nToSlider(n);
+  dropsConfig.monsterDrops[species][idx].chance = nToChance(n);
+}
+
+function removeDropItem(species, idx) {
+  if (!confirm('Remove this drop?')) return;
+  dropsConfig.monsterDrops[species].splice(idx, 1);
+  renderDrops();
+}
+
+function addDropItem(species, itemId) {
+  if (!itemId) return;
+  dropsConfig.monsterDrops[species].push({ item: itemId, chance: 0.05, qty: 1 });
+  renderDrops();
+}
+
+function removeDropSpecies(name) {
+  if (!confirm('Remove '+esc(name)+' from drops entirely?')) return;
+  delete dropsConfig.monsterDrops[name];
+  populateAddSpeciesSelect();
+  renderDrops();
+}
+
+function addDropSpecies() {
+  const sel = document.getElementById('dropsAddSpecies');
+  const name = sel.value;
+  if (!name) return;
+  dropsConfig.monsterDrops[name] = [{ item: 'pokeball', chance: 0.05, qty: 1 }];
+  sel.value = '';
+  populateAddSpeciesSelect();
+  renderDrops();
+}
+
+// Item modal
+function openItemModal(callback) {
+  modalCallback = callback;
+  document.getElementById('drops-item-modal').style.display = 'block';
+  document.getElementById('modal-item-search').value = '';
+  renderModalItems();
+  setTimeout(() => document.getElementById('modal-item-search').focus(), 100);
+}
+
+function closeItemModal() {
+  document.getElementById('drops-item-modal').style.display = 'none';
+  modalCallback = null;
+}
+
+function renderModalItems() {
+  const q = (document.getElementById('modal-item-search').value||'').toLowerCase();
+  const list = document.getElementById('modal-item-list');
+  // Group by category
+  const byCat = {};
+  for (const item of itemsCatalog) {
+    if (q && item.id.indexOf(q) === -1 && item.nameRu.toLowerCase().indexOf(q) === -1) continue;
+    if (!byCat[item.category]) byCat[item.category] = [];
+    byCat[item.category].push(item);
+  }
+  let html = '';
+  for (const [cat, items] of Object.entries(byCat)) {
+    const catColor = getCategoryColor(cat);
+    html += '<div style="margin:6px 0 2px 0;font-size:0.65rem;color:'+catColor+';font-weight:bold;text-transform:uppercase">'+cat+' ('+items.length+')</div>';
+    for (const item of items) {
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;background:#1a1a1a;margin:1px 0" onmouseover="this.style.background=\'#222\'" onmouseout="this.style.background=\'#1a1a1a\'" onclick="selectModalItem(\''+esc(item.id)+'\')">'+
+        '<span style="color:#5af;font-weight:bold;font-size:0.75rem">'+esc(item.nameRu)+'</span>'+
+        '<span style="color:#555;font-size:0.6rem">'+esc(item.id)+'</span>'+
+        '<span class="badge" style="background:'+catColor+'22;color:'+catColor+';border-color:'+catColor+'44;margin-left:auto">'+cat+'</span>'+
+      '</div>';
+    }
+  }
+  list.innerHTML = html || '<div style="color:#555;padding:8px;font-size:0.7rem">No items found</div>';
+}
+
+function selectModalItem(itemId) {
+  if (modalCallback) modalCallback(itemId);
+  closeItemModal();
+}
+
+function updateUnivSlider(idx, sliderVal) {
+  const n = sliderToN(parseInt(sliderVal));
+  const inp = document.querySelector('.univ-n[data-idx="'+idx+'"]');
+  if (inp) inp.value = n;
+  dropsConfig.universalDrops[idx].chance = nToChance(n);
+}
+
+function updateUnivN(idx, val) {
+  const n = Math.min(10000, Math.max(1, parseInt(val)||1));
+  const inp = document.querySelector('.univ-n[data-idx="'+idx+'"]');
+  if (inp) inp.value = n;
+  dropsConfig.universalDrops[idx].chance = nToChance(n);
+}
+
+function updateUnivQty(idx, val) {
+  dropsConfig.universalDrops[idx].qty = Math.max(1, parseInt(val)||1);
+}
+
+function removeUnivDrop(idx) {
+  if (!confirm('Remove this universal drop?')) return;
+  dropsConfig.universalDrops.splice(idx, 1);
+  renderDrops();
+}
+
+function addUnivDrop(itemId) {
+  if (!itemId) return;
+  dropsConfig.universalDrops.push({ item: itemId, chance: 0.05, qty: 1 });
+  renderDrops();
+}
+
+async function saveDrops() {
+  if (!dropsConfig) { alert('Load drops first'); return; }
+  document.getElementById('drops-status').innerText = 'Saving...';
+  try {
+    const res = await fetch('/admin/api/drops?token='+TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dropsConfig)
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      document.getElementById('drops-status').innerHTML = '<span style="color:#34c759">Saved successfully!</span>';
+    } else {
+      document.getElementById('drops-status').innerText = 'Error: '+(data.error||'unknown');
+    }
+  } catch(e) {
+    document.getElementById('drops-status').innerText = 'Save error: '+e.message;
+  }
+}
+
 async function loadRawJSON() {
   var u = currentUsername || currentUserId;
-  if (!u) { alert('Выбери игрока сначала'); return; }
+  if (!u) { alert('Select a player first'); return; }
   var data = await api('get_save', u);
   if (data.save) {
     document.getElementById('rawJSON').value = JSON.stringify(data.save, null, 2);
@@ -405,7 +761,7 @@ async function loadRawJSON() {
 
 async function saveRawJSON() {
   var u = currentUsername || currentUserId;
-  if (!u) { alert('Выбери игрока сначала'); return; }
+  if (!u) { alert('Select a player first'); return; }
   try {
     var parsed = JSON.parse(document.getElementById('rawJSON').value);
     var res = await fetch('/admin/api?token='+TOKEN+'&cmd=set_save&user='+encodeURIComponent(u), {
@@ -415,8 +771,8 @@ async function saveRawJSON() {
     });
     var json = await res.json();
     document.getElementById('json-result').innerHTML = json.error
-      ? '<span style="color:#ff3b30">Ошибка: '+esc(json.error)+'</span>'
-      : '<span style="color:#34c759">Сохранено!</span>';
+      ? '<span style="color:#ff3b30">Error: '+esc(json.error)+'</span>'
+      : '<span style="color:#34c759">Saved!</span>';
     if (json.status === 'ok') { currentSave = parsed; loadUser(); }
   } catch(e) {
     document.getElementById('json-result').innerHTML = '<span style="color:#ff3b30">JSON parse error: '+esc(e.message)+'</span>';

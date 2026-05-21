@@ -673,6 +673,7 @@ body::before {
 .reborn-poke-lvl { color: #6a8aaa; font-size: 0.65rem; }
 
 .reborn-status-icon { font-size: 0.75rem; margin-left: auto; margin-right: 4px; }
+.reborn-ability-tag { font-size: 0.6rem; color: #80b0e0; margin-left: 4px; margin-right: auto; text-transform: capitalize; }
 
 .reborn-hp-wrap {
   width: 100%;

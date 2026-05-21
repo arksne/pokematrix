@@ -420,7 +420,7 @@ export const REGIONS = {
       },
       'goldenrod_academy_green': {
         name: 'Зелёная зона', desc: 'Парковая зона Академии. Доступ только для обучения.',
-        image: '', links: ['goldenrod_academy'], encounters: [],
+        image: '', links: ['goldenrod_academy'], encounters: ['pidgey', 'rattata', 'sentret', 'hoppip', 'caterpie', 'weedle'],
         hasHeal: false, hasWater: false, region: 'east_johto'
       },
       'goldenrod_academy_lab': {
