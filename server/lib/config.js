@@ -23,8 +23,7 @@ const envSchema = z.object({
   DATA_DIR: z.string().default(''),
   RAILWAY_VOLUME_MOUNT_PATH: z.string().default(''),
 
-  // JWT
-  JWT_SECRET: z.string().min(1, 'JWT_SECRET is required').default(''),
+  // JWT — handled by auth.js with env/file/auto-generated fallback
 
   // Админ (опционально)
   ADMIN_PASS: z.string().default(''),
@@ -63,11 +62,4 @@ function parseConfig() {
 
 export const config = parseConfig();
 
-/**
- * Валидация обязательных env vars при старте.
- * JWT_SECRET критичен в production.
- */
-if (config.NODE_ENV === 'production' && !config.JWT_SECRET) {
-  console.error('❌ JWT_SECRET must be set in production!');
-  process.exit(1);
-}
+// JWT_SECRET is handled by auth.js (env → file → auto-generated)
