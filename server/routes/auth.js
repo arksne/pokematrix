@@ -63,6 +63,11 @@ router.post('/tg', asyncHandler(async (req, res) => {
       tgUser = parseTestUser(initData);
     } else {
       tgUser = verifyTelegramInitData(initData, botToken);
+      if (!tgUser) {
+        // DEBUG: log what fields we got so we can debug the hash mismatch
+        const fields = initData.split('&').map(p => p.split('=')[0]).join(',');
+        logger.warn({ fields, len: initData?.length }, 'Telegram initData verification FAILED');
+      }
     }
 
     if (!tgUser) {

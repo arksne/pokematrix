@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { createClient } from '@libsql/client';
 import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -8,46 +8,37 @@ const __dirname = path.dirname(__filename);
 
 let db;
 
-// Wrap better-sqlite3's sync API to match sqlite's async interface so
-// all existing route code (await db.get/all/run/exec) works unchanged.
-function wrap(db) {
-  return {
-    get: (sql, ...params) => {
-      try { return Promise.resolve(db.prepare(sql).get(...params)); }
-      catch (e) { return Promise.reject(e); }
-    },
-    all: (sql, ...params) => {
-      try { return Promise.resolve(db.prepare(sql).all(...params)); }
-      catch (e) { return Promise.reject(e); }
-    },
-    run: (sql, ...params) => {
-      try {
-        const info = db.prepare(sql).run(...params);
-        return Promise.resolve({ changes: info.changes, lastID: Number(info.lastInsertRowid) });
-      } catch (e) { return Promise.reject(e); }
-    },
-    exec: (sql) => {
-      try { return Promise.resolve(db.exec(sql)); }
-      catch (e) { return Promise.reject(e); }
-    },
-    close: () => {
-      try { db.close(); return Promise.resolve(); }
-      catch (e) { return Promise.reject(e); }
-    }
-  };
-}
-
 export async function initDB(retries = 3) {
   const dataDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '../data');
   mkdirSync(dataDir, { recursive: true });
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const raw = new Database(path.join(dataDir, 'game.db'));
+      const dbPath = path.join(dataDir, 'game.db');
+      const client = createClient({ url: 'file:' + dbPath.replace(/\\/g, '/') });
       // Enable WAL mode for concurrent reads/writes
-      raw.pragma('journal_mode = WAL');
-      raw.pragma('foreign_keys = ON');
-      db = wrap(raw);
+      await client.execute('PRAGMA journal_mode = WAL');
+      await client.execute('PRAGMA foreign_keys = ON');
+
+      // Wrap @libsql/client's async API to match the existing interface
+      // so all existing route code (await db.get/all/run/exec) works unchanged.
+      db = {
+        get: (sql, ...params) =>
+          client.execute({ sql, args: params.length ? params : undefined }).then(r => r.rows[0] ?? null),
+        all: (sql, ...params) =>
+          client.execute({ sql, args: params.length ? params : undefined }).then(r => r.rows),
+        run: (sql, ...params) =>
+          client.execute({ sql, args: params.length ? params : undefined }).then(r => ({
+            changes: Number(r.rowsAffected),
+            lastID: r.lastInsertRowid ? Number(r.lastInsertRowid) : 0,
+          })),
+        exec: (sql) =>
+          client.executeMultiple(sql),
+        close: () => {
+          client.close();
+          return Promise.resolve();
+        },
+      };
       break;
     } catch (e) {
       console.error(`DB connection attempt ${attempt}/${retries} failed:`, e.message);

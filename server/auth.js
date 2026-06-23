@@ -11,19 +11,20 @@ function hmacSha256Hex(key, data) {
 }
 
 export function verifyTelegramInitData(initData, botToken) {
-  const params = new URLSearchParams(initData);
-  const hash = params.get('hash');
+  // Manual parse — preserve URL-encoding. URLSearchParams decodes values
+  // (e.g. %7B%22id%22%3A123%7D → {"id":123}), breaking the HMAC comparison
+  // because Telegram hashes the ENCODED form.
+  const pairs = initData.split('&');
+  const entries = pairs.map(p => {
+    const idx = p.indexOf('=');
+    return idx === -1 ? [p, ''] : [p.slice(0, idx), p.slice(idx + 1)]; // value stays URL-encoded
+  });
+  const hashEntry = entries.find(e => e[0] === 'hash');
+  const hash = hashEntry ? hashEntry[1] : null;
   if (!hash) return null;
 
-  params.delete('hash');
-
-  const sorted = [];
-  for (const [key, value] of params.entries()) {
-    sorted.push(`${key}=${value}`);
-  }
-  sorted.sort();
-
-  const dataCheckString = sorted.join('\n');
+  const dataPairs = entries.filter(e => e[0] !== 'hash').sort((a, b) => a[0].localeCompare(b[0]));
+  const dataCheckString = dataPairs.map(e => `${e[0]}=${e[1]}`).join('\n');
 
   // Per Telegram docs:
   // secret_key = HMAC_SHA256(key="WebAppData", data=bot_token)  → raw bytes
@@ -33,8 +34,11 @@ export function verifyTelegramInitData(initData, botToken) {
 
   if (computedHash !== hash) return null;
 
-  const userStr = params.get('user');
-  if (!userStr) return null;
+  const userEntry = entries.find(e => e[0] === 'user');
+  if (!userEntry) return null;
+
+  // URL-decode the user value before JSON.parse
+  const userStr = decodeURIComponent(userEntry[1]);
 
   try {
     return JSON.parse(userStr);

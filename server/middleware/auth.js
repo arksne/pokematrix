@@ -6,7 +6,10 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SECRET_FILE = path.join(__dirname, '../../data/jwt_secret');
+
+// Use persistent volume path if available, otherwise fall back to project-relative data dir
+const dataDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '../../data');
+const SECRET_FILE = path.join(dataDir, 'jwt_secret');
 
 let JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {

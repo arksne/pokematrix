@@ -1,14 +1,15 @@
 /**
  * Drizzle ORM instance — типизированный доступ к БД.
- * Использует тот же better-sqlite3 файл, что и legacy db.js.
+ * Использует тот же libSQL/SQLite файл, что и legacy db.js.
  * Все новые роуты пишут через drizzle, старые продолжают через db.js.
  *
  * Использование:
  *   import { drizzle, schema } from '../lib/drizzle.js';
  *   const users = await drizzle.select().from(schema.users).all();
  */
-import { drizzle as createDrizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
+import { drizzle as createDrizzle } from 'drizzle-orm/libsql';
+import { createClient } from '@libsql/client';
+import { mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as schema from './schema.js';
@@ -21,11 +22,12 @@ let _drizzle = null;
 export function initDrizzle() {
   if (_drizzle) return _drizzle;
 
-  const sqlite = new Database(path.join(DATA_DIR, 'game.db'));
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
+  // Ensure data directory exists (critical for Railway volumes on first deploy)
+  mkdirSync(DATA_DIR, { recursive: true });
 
-  _drizzle = createDrizzle(sqlite, { schema, logger: process.env.NODE_ENV === 'development' });
+  const dbPath = path.join(DATA_DIR, 'game.db');
+  const client = createClient({ url: 'file:' + dbPath.replace(/\\/g, '/') });
+  _drizzle = createDrizzle(client, { schema, logger: process.env.NODE_ENV === 'development' });
   return _drizzle;
 }
 

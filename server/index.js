@@ -42,7 +42,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(requestLogger);
 
 // Serve static files FIRST — before rate limiter to avoid 429 on assets
-app.use(express.static(path.join(__dirname, '../dist'), { maxAge: '1d', immutable: true }));
+// Assets get 1d cache, but index.html gets no-cache (forces Telegram WebView to refresh)
+app.use(express.static(path.join(__dirname, '../dist'), { maxAge: '1d', immutable: true, index: false }));
 
 // Global rate limit: 500 req/min per IP
 app.use(rateLimit({
@@ -142,10 +143,14 @@ app.get('/api/drops', (req, res) => {
 app.use('/avatars', express.static(path.join(__dirname, '../public/avatars'), { maxAge: '1d' }));
 
 // SPA fallback — must be AFTER static but BEFORE error handler
+// Forces no-cache on index.html so Telegram WebView always fetches fresh frontend
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/admin')) {
     const indexPath = path.join(__dirname, '../dist/index.html');
     if (fs.existsSync(indexPath)) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
       res.sendFile(indexPath);
     } else {
       res.status(404).send('Build not found. Run npm run build first.');
