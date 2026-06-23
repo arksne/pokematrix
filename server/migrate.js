@@ -8,6 +8,7 @@
  */
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import { mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,6 +19,7 @@ const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH |
 const dbPath = path.join(DATA_DIR, 'game.db');
 const isFresh = process.argv.includes('--fresh');
 
+mkdirSync(DATA_DIR, { recursive: true });
 console.log(`📦 Database: ${dbPath}`);
 
 const db = new Database(dbPath);
