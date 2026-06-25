@@ -37,7 +37,22 @@ export function verifyTelegramInitData(initData, botToken) {
   const secretKey = hmacSha256Buffer('WebAppData', botToken);
   const computedHash = hmacSha256Hex(secretKey, dataCheckString);
 
-  if (computedHash !== hash) return null;
+  if (computedHash !== hash) {
+    // Debug: exact HMAC mismatch details — use the Telegram Desktop debug text
+    const debugData = {
+      hdr: 'HMAC mismatch',
+      keys: dataPairs.map(e => e[0]).join(','),
+      all: entries.map(e => e[0]).join(','),
+      chk64: dataCheckString.slice(0, 120),
+      h64: hash.slice(0, 16),
+      c64: computedHash.slice(0, 16),
+      hl: hash.length,
+      cl: computedHash.length,
+      p: entries.length,
+    };
+    console.warn('HMAC mismatch:', JSON.stringify(debugData));
+    return null;
+  }
 
   const userEntry = entries.find(e => e[0] === 'user');
   if (!userEntry) return null;
