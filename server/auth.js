@@ -31,11 +31,23 @@ export function verifyTelegramInitData(initData, botToken) {
   const dataPairs = entries.filter(e => !excludeFields.has(e[0])).sort((a, b) => a[0].localeCompare(b[0]));
   const dataCheckString = dataPairs.map(e => `${e[0]}=${e[1]}`).join('\n');
 
-  // Per Telegram docs:
-  // secret_key = HMAC_SHA256(key="WebAppData", data=bot_token)  → raw bytes
-  // hash       = HMAC_SHA256(key=secret_key,   data=check_string) → hex
-  const secretKey = hmacSha256Buffer('WebAppData', botToken);
-  const computedHash = hmacSha256Hex(secretKey, dataCheckString);
+  // Try TWO HMAC methods:
+  // 1. WebAppData method (official Telegram Mini App spec):
+  //    secret_key = HMAC_SHA256("WebAppData", bot_token)  → bytes
+  //    hash       = HMAC_SHA256(secret_key, check_string)  → hex
+  // 2. Direct method (older Telegram Bot API / Desktop WebView2):
+  //    hash       = HMAC_SHA256(bot_token, check_string)   → hex
+
+  let computedHash = hmacSha256Hex(hmacSha256Buffer('WebAppData', botToken), dataCheckString);
+  if (computedHash === hash) {
+    // Method 1 (WebAppData) succeeded
+  } else {
+    // Fallback: try direct HMAC with bot_token as key
+    const oldHash = hmacSha256Hex(botToken, dataCheckString);
+    if (oldHash === hash) {
+      computedHash = hash; // Method 2 (direct) succeeded
+    }
+  }
 
   if (computedHash !== hash) {
     // Debug: exact HMAC mismatch details — use the Telegram Desktop debug text
