@@ -23,7 +23,12 @@ export function verifyTelegramInitData(initData, botToken) {
   const hash = hashEntry ? hashEntry[1] : null;
   if (!hash) return null;
 
-  const dataPairs = entries.filter(e => e[0] !== 'hash').sort((a, b) => a[0].localeCompare(b[0]));
+  // Filter out fields that aren't part of the original Telegram hash computation.
+  // 'hash' is excluded by definition. 'signature' is a client-injected field
+  // (Telegram Desktop WebView2 adds it in some contexts) that wasn't in the
+  // original payload the server-side hash was computed over.
+  const excludeFields = new Set(['hash', 'signature']);
+  const dataPairs = entries.filter(e => !excludeFields.has(e[0])).sort((a, b) => a[0].localeCompare(b[0]));
   const dataCheckString = dataPairs.map(e => `${e[0]}=${e[1]}`).join('\n');
 
   // Per Telegram docs:
