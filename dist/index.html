@@ -10,9 +10,11 @@
     <script>
     // Force cache refresh for Telegram Desktop WebView2 (ignores HTTP no-cache headers)
     try {
-      if (location.href.includes('tgWebAppData') && !sessionStorage.getItem('pm_cache_v2')) {
+      if (location.search.includes('tgWebAppData') && !sessionStorage.getItem('pm_cache_v2')) {
         sessionStorage.setItem('pm_cache_v2', '1');
-        location.replace(location.href.split('?')[0] + '?_=' + Date.now() + '&tgWebAppData=1');
+        var p = new URLSearchParams(location.search);
+        p.set('_v', Date.now());
+        location.replace(location.pathname + '?' + p.toString());
       }
     } catch(e) {}
     </script>
