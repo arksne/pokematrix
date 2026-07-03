@@ -29,3 +29,12 @@ graphify-out/
 .env.local
 .npmrc
 e2e/screenshots/
+
+# Logs
+logs/
+
+# Temp / garbage
+*.tmp
+*.data
+settings.local.json
+console.log*
