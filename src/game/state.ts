@@ -51,6 +51,7 @@ export const state: Record<string, any> = {
   // Auth & Sync
   tgUser: null,
   tgToken: null as string | null,
+  refreshToken: null as string | null,
   isAdmin: false,
   saveVersion: 0,
   lastCloudSync: 0,

@@ -3,7 +3,7 @@ CREATE TABLE `refresh_tokens` (
   `user_id` integer NOT NULL,
   `token` text NOT NULL,
   `expires_at` text NOT NULL,
-  `created_at` text DEFAULT 'datetime(''now'')',
+  `created_at` text DEFAULT (datetime('now')),
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint

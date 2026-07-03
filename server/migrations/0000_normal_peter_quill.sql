@@ -2,7 +2,7 @@ CREATE TABLE `achievements` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`achievement_id` text NOT NULL,
-	`unlocked_at` text DEFAULT 'datetime(''now'')',
+	`unlocked_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -12,7 +12,7 @@ CREATE TABLE `action_log` (
 	`user_id` integer NOT NULL,
 	`action` text NOT NULL,
 	`details` text DEFAULT '',
-	`created_at` text DEFAULT 'datetime(''now'')',
+	`created_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -22,7 +22,7 @@ CREATE TABLE `chat_messages` (
 	`username` text DEFAULT '',
 	`first_name` text DEFAULT '',
 	`text` text NOT NULL,
-	`created_at` text DEFAULT 'datetime(''now'')',
+	`created_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -30,7 +30,7 @@ CREATE TABLE `game_saves` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`save_data` text NOT NULL,
-	`updated_at` text DEFAULT 'datetime(''now'')',
+	`updated_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -43,7 +43,7 @@ CREATE TABLE `leaderboard` (
 	`money` integer DEFAULT 0,
 	`pokemon_count` integer DEFAULT 0,
 	`legendary_count` integer DEFAULT 0,
-	`updated_at` text DEFAULT 'datetime(''now'')',
+	`updated_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -55,7 +55,7 @@ CREATE TABLE `player_quests` (
 	`progress` integer DEFAULT 0,
 	`completed` integer DEFAULT 0,
 	`claimed` integer DEFAULT 0,
-	`created_at` text DEFAULT 'datetime(''now'')',
+	`created_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -63,7 +63,7 @@ CREATE UNIQUE INDEX `uq_player_quests` ON `player_quests` (`user_id`,`quest_id`)
 CREATE TABLE `pokeapi_cache` (
 	`url` text PRIMARY KEY NOT NULL,
 	`data` text NOT NULL,
-	`cached_at` text DEFAULT 'datetime(''now'')'
+	`cached_at` text DEFAULT (datetime('now'))
 );
 --> statement-breakpoint
 CREATE TABLE `pvp_ratings` (
@@ -78,7 +78,7 @@ CREATE TABLE `save_backups` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`save_data` text NOT NULL,
-	`saved_at` text DEFAULT 'datetime(''now'')',
+	`saved_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -86,7 +86,7 @@ CREATE TABLE `user_locations` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`location_id` text NOT NULL,
-	`updated_at` text DEFAULT 'datetime(''now'')',
+	`updated_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -100,7 +100,7 @@ CREATE TABLE `users` (
 	`avatar` text DEFAULT '👤',
 	`starter_pokemon` text DEFAULT '',
 	`registered` integer DEFAULT 0,
-	`created_at` text DEFAULT 'datetime(''now'')',
+	`created_at` text DEFAULT (datetime('now')),
 	`registered_at` text DEFAULT ''
 );
 --> statement-breakpoint

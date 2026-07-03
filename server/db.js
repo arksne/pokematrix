@@ -63,7 +63,7 @@ export async function initDB(retries = 3) {
       starter_pokemon TEXT DEFAULT '',
       registered INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
-      registered_at TEXT DEFAULT ''
+      registered_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS game_saves (
@@ -147,10 +147,13 @@ export async function initDB(retries = 3) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       token TEXT NOT NULL UNIQUE,
+      family_id TEXT DEFAULT '',
       expires_at TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
+    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
   `); } catch (e) { /* ignore */ }
 
   try { await db.exec(`
@@ -196,6 +199,17 @@ export async function initDB(retries = 3) {
     );
   `); } catch (e) { /* ignore */ }
 
+  try { await db.exec(`
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip TEXT NOT NULL,
+      attempts INTEGER DEFAULT 1,
+      first_attempt TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip);
+    CREATE INDEX IF NOT EXISTS idx_login_attempts_first_attempt ON login_attempts(first_attempt);
+  `); } catch (e) { /* ignore */ }
+
   // Migrations — add columns that might be missing from old DB
   const migrations = [
     `ALTER TABLE users ADD COLUMN nickname TEXT DEFAULT ''`,
@@ -205,6 +219,7 @@ export async function initDB(retries = 3) {
     `ALTER TABLE users ADD COLUMN registered_at TEXT DEFAULT ''`,
     `ALTER TABLE leaderboard ADD COLUMN pokemon_count INTEGER DEFAULT 0`,
     `ALTER TABLE leaderboard ADD COLUMN legendary_count INTEGER DEFAULT 0`,
+    `ALTER TABLE refresh_tokens ADD COLUMN family_id TEXT DEFAULT ''`,
   ];
   for (const sql of migrations) {
     try { await db.run(sql); } catch (e) {

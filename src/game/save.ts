@@ -11,14 +11,31 @@ import { initInventory } from './actions.js';
 import { showConfirmModal, showToast } from '../utils/dom.js';
 import { LEGENDARY_SET } from '../utils/state.js';
 import { API_BASE } from './config.js';
+import { apiFetch, getCloudAuthHeaders as getApiClientHeaders } from './apiClient.js';
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [5000, 15000, 30000];
 
+// ── Re-export apiClient utilities for backward compatibility ─────────────
+
+/**
+ * Get auth headers for legacy code that constructs its own fetch calls.
+ * Forwarded to the centralized apiClient implementation.
+ */
 export function getCloudAuthHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    ...(state.tgToken ? { 'Authorization': `Bearer ${state.tgToken}` } : {})
-  };
+  return getApiClientHeaders();
+}
+
+/**
+ * Enhanced fetch wrapper with automatic 401 → refresh → retry interceptor.
+ * Delegates to centralized apiFetch with queue-based refresh (race-condition safe).
+ *
+ * @param {string} url — API URL
+ * @param {object} [options] — fetch options
+ * @param {number} [retries] — ignored (apiFetch handles retry internally)
+ * @returns {Promise<Response>}
+ */
+export async function fetchWithAuth(url, options = {}, retries = 1) {
+  return apiFetch(url, options);
 }
 
 export function getLeaderboardData() {
@@ -263,9 +280,8 @@ export function resetGame() {
     // Also clear cloud save so reload gives starter
     if (state.tgToken) {
       try {
-        await fetch(`${API_BASE}/save`, {
+        await apiFetch('/save', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.tgToken },
           body: JSON.stringify({ saveData: { _v: Date.now(), myTeam: [], inventory: { credit: 500 }, money: 500, badges: [] } })
         });
       } catch(e) { console.warn('Cloud reset failed', e); }
@@ -295,9 +311,8 @@ export async function doCloudSave(attempt = 0) {
   const lb = getLeaderboardData();
 
   try {
-    const res = await fetch(`${API_BASE}/save`, {
+    const res = await apiFetch('/save', {
       method: 'POST',
-      headers: getCloudAuthHeaders(),
       body: JSON.stringify({ saveData, ...lb, saveVersion: state.saveVersion })
     });
     // 429 = rate limited — don't retry, just stop hammering the server
@@ -342,7 +357,7 @@ export async function doCloudSave(attempt = 0) {
 export async function cloudLoad() {
   if (!state.tgToken) return null;
   try {
-    const res = await fetch(`${API_BASE}/save`, { headers: getCloudAuthHeaders() });
+    const res = await apiFetch('/save');
     if (!res.ok) return null;
     const data = await res.json();
     return data.saveData;

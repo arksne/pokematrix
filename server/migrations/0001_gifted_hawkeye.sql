@@ -2,7 +2,7 @@ CREATE TABLE `player_badges` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`badge_id` text NOT NULL,
-	`unlocked_at` text DEFAULT 'datetime(''now'')',
+	`unlocked_at` text DEFAULT (datetime('now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint

@@ -1,6 +1,7 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { getDB } from '../db.js';
-import { authMiddleware, JWT_SECRET } from '../middleware/auth.js';
+import { JWT_SECRET } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
@@ -33,7 +34,7 @@ function parseCookies(req) {
   return cookies;
 }
 
-function adminAuth(req, res, next) {
+async function adminAuth(req, res, next) {
   const cookies = parseCookies(req);
   const token = req.headers['x-admin-token'] || req.query.token || cookies.admin_token;
 
@@ -51,32 +52,32 @@ function adminAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // No ADMIN_PASS — use Telegram-based auth (inline JWT to avoid Express 5 async next() bug)
+  // No ADMIN_PASS — use Telegram-based auth (JWT + DB admin check)
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No token provided' });
   }
+
   try {
     const decoded = jwt.verify(header.slice(7), JWT_SECRET);
     req.userId = decoded.userId;
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
-  (async () => {
-    try {
-      const db = getDB();
-      const user = await db.get('SELECT username FROM users WHERE id = ?', req.userId);
-      if (user && (ADMIN_IDS.includes(Number(req.userId)) || ADMIN_USERNAMES.includes(user.username))) {
-        req.adminUsername = user.username;
-        next();
-      } else {
-        return res.status(403).json({ error: 'Admin access required' });
-      }
-    } catch (err) {
-      logger.error({ err }, 'adminAuth DB error');
-      return res.status(500).json({ error: 'Database error' });
+
+  // Inline async DB lookup — Express 5 with ESM supports async middleware natively
+  try {
+    const db = getDB();
+    const user = await db.get('SELECT username FROM users WHERE id = ?', req.userId);
+    if (user && (ADMIN_IDS.includes(Number(req.userId)) || ADMIN_USERNAMES.includes(user.username))) {
+      req.adminUsername = user.username;
+      return next();
     }
-  })();
+    return res.status(403).json({ error: 'Admin access required' });
+  } catch (err) {
+    logger.error({ err }, 'adminAuth DB error');
+    return res.status(500).json({ error: 'Database error' });
+  }
 }
 
 function loginPage() {
@@ -108,8 +109,17 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// Rate limiter for admin login attempts
+const adminLoginLimiter = rateLimit({
+  windowMs: 60 * 1000,         // 1 minute window
+  max: 10,                      // 10 login attempts per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Слишком много попыток входа. Попробуйте через минуту.', code: 'RATE_LIMITED' },
+});
+
 // POST login endpoint — accepts token in body, sets httpOnly cookie
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', adminLoginLimiter, asyncHandler(async (req, res) => {
   try {
     logger.info('Login attempt from IP:', req.ip || req.socket.remoteAddress);
     const { token } = req.body || {};

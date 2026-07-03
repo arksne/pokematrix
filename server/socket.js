@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { initBattleSocket, removePlayerFromQueue, handlePvpDisconnect } from './routes/battle.js';
 import { initTradeSocket, cleanupTradeOnDisconnect } from './routes/trade.js';
-import { verifyToken } from './middleware/auth.js';
+import { safeVerifyToken } from './middleware/auth.js';
 import { logger } from './lib/logger.js';
 
 let io;
@@ -34,37 +34,31 @@ export function initSocket(server, allowedOrigin) {
     pingInterval: 10000,
   });
 
+  // JWT auth middleware for ALL socket connections — uses safeVerifyToken (never throws)
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!token) {
+      return next(new Error('Authentication required'));
+    }
+    const decoded = safeVerifyToken(token);
+    if (!decoded || !decoded.userId) {
+      logger.warn({ tokenPre: token ? token.substring(0, 10) : 'none' }, 'Socket JWT auth failed');
+      // Emit auth_expired so client knows to refresh the token
+      socket.emit('auth_expired', { reason: 'token_expired' });
+      return next(new Error('Authentication failed: invalid or expired token'));
+    }
+    socket.userId = String(decoded.userId);
+    socket.username = decoded.telegramId || 'User';
+    next();
+  });
+
   io.on('connection', (socket) => {
-    logger.info('User connected: %s', socket.id);
+    logger.info({ userId: socket.userId }, 'User connected: %s', socket.id);
 
     // Handle socket errors gracefully
     socket.on('error', (err) => {
       logger.error('Socket error (%s): %s', socket.id, err.message || err);
     });
-
-    // JWT auth for socket connections
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-    if (!token) {
-      socket.emit('error', { message: 'Authentication required' });
-      socket.disconnect();
-      return;
-    }
-
-    try {
-      const decoded = verifyToken(token);
-      if (!decoded || !decoded.userId) {
-        socket.emit('error', { message: 'Invalid token' });
-        socket.disconnect();
-        return;
-      }
-      socket.userId = String(decoded.userId);
-      socket.username = decoded.telegramId || 'User';
-    } catch (err) {
-      logger.warn('Socket auth failed:', err.message);
-      socket.emit('error', { message: 'Authentication failed' });
-      socket.disconnect();
-      return;
-    }
 
     // Player joins the global lobby
     socket.on('join_lobby', (data) => {
