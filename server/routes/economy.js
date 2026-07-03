@@ -19,7 +19,7 @@ function decompressSave(raw) {
   return JSON.parse(raw);
 }
 
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '../../data');
 let ITEMS = [];
 let CRAFTING_RECIPES = [];
 try {

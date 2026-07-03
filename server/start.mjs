@@ -39,14 +39,16 @@ async function main() {
     // Step 1: Apply database migrations
     await run('server/migrate.js', 'migrate');
   } catch (e) {
-    console.error('Migration step failed, continuing anyway:', e.message);
+    console.error('FATAL: Migration failed — aborting startup:', e.message);
+    process.exit(1);
   }
 
   try {
     // Step 2: Export game data from TS to JSON
     await run('server/scripts/export-game-data.mjs', 'export-data');
   } catch (e) {
-    console.error('Data export failed, continuing anyway:', e.message);
+    console.error('FATAL: Data export failed — aborting startup:', e.message);
+    process.exit(1);
   }
 
   try {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDB } from '../db.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, JWT_SECRET } from '../middleware/auth.js';
+import jwt from 'jsonwebtoken';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -50,16 +51,32 @@ function adminAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // No ADMIN_PASS — use Telegram-based auth
-  return authMiddleware(req, res, async () => {
-    const db = getDB();
-    const user = await db.get('SELECT username FROM users WHERE id = ?', req.userId);
-    if (user && (ADMIN_IDS.includes(Number(req.userId)) || ADMIN_USERNAMES.includes(user.username))) {
-      req.adminUsername = user.username;
-      return next();
+  // No ADMIN_PASS — use Telegram-based auth (inline JWT to avoid Express 5 async next() bug)
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  try {
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET);
+    req.userId = decoded.userId;
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+  (async () => {
+    try {
+      const db = getDB();
+      const user = await db.get('SELECT username FROM users WHERE id = ?', req.userId);
+      if (user && (ADMIN_IDS.includes(Number(req.userId)) || ADMIN_USERNAMES.includes(user.username))) {
+        req.adminUsername = user.username;
+        next();
+      } else {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+    } catch (err) {
+      logger.error({ err }, 'adminAuth DB error');
+      return res.status(500).json({ error: 'Database error' });
     }
-    return res.status(403).json({ error: 'Admin access required' });
-  });
+  })();
 }
 
 function loginPage() {
@@ -172,7 +189,7 @@ router.get('/api', adminAuth, asyncHandler(async (req, res) => {
       if (!save) { result.error = 'No save data for this user'; return res.json(result); }
       let POKEDEX_ALL = [];
       try {
-        const pdata = JSON.parse(readFileSync(join(process.cwd(), 'public/pokedex_data.json'), 'utf8'));
+        const pdata = JSON.parse(readFileSync(join(__dirname, '../../public/pokedex_data.json'), 'utf8'));
         POKEDEX_ALL = Object.keys(pdata);
       } catch(e) {}
       result = { status: 'ok', userId: u.id, username: user, save, pokedexAll: POKEDEX_ALL };
@@ -209,9 +226,10 @@ router.get('/api', adminAuth, asyncHandler(async (req, res) => {
 
     if (cmd === 'give_items') {
       if (!save.inventory) save.inventory = {};
-      const ALL_ITEMS = ['pokeball','greatBall','ultraBall','masterBall','quickBall','friendBall','loveBall','duskBall','timerBall','darkBall','potion','superPotion','fullRestore','candy','vitamin','train','weaken','evolutionStone','fireStone','waterStone','leafStone','thunderStone','moonStone','sunStone','shinyStone','duskStone','iceStone','dawnStone','tm','ppUp','sitrusBerry','oranBerry','lumBerry','chestoBerry','rawstBerry','antidote','antiparalyze','energyDrink','fireExtinguisher','healingHerb','weakElixir','elixir','strongElixir','xAttack','xDefense','xSpDefense','xSpAttack','xSpeed','protein','iron','calcium','zinc','carbos','luckyEgg','expShare','oldRod','goodRod','superRod'];
+      const ALL_ITEMS = ['pokeBall','greatBall','ultraBall','masterBall','quickBall','friendBall','loveBall','duskBall','timerBall','darkBall','potion','superPotion','fullRestore','candy','vitamin','train','weaken','evolutionStone','fireStone','waterStone','leafStone','thunderStone','moonStone','sunStone','shinyStone','duskStone','iceStone','dawnStone','tm','ppUp','sitrusBerry','oranBerry','lumBerry','chestoBerry','rawstBerry','antidote','antiparalyze','energyDrink','fireExtinguisher','healingHerb','weakElixir','elixir','strongElixir','xAttack','xDefense','xSpDefense','xSpAttack','xSpeed','protein','iron','calcium','zinc','carbos','luckyEgg','expShare','oldRod','goodRod','superRod'];
       ALL_ITEMS.forEach(id => { save.inventory[id] = 999; });
       save.money = (save.money || 0) + 500000;
+      save.inventory.credit = save.money; // keep credit in sync with money
       await putSave(u, save);
       result = { status: 'ok', items: ALL_ITEMS.length, money: save.money };
 
@@ -246,7 +264,7 @@ router.get('/api', adminAuth, asyncHandler(async (req, res) => {
         speciesList = val.split(',');
       } else {
         try {
-          const pdata = JSON.parse(readFileSync(join(process.cwd(), 'public/pokedex_data.json'), 'utf8'));
+          const pdata = JSON.parse(readFileSync(join(__dirname, '../../public/pokedex_data.json'), 'utf8'));
           // Только первая эволюция: исключаем тех, у кого method === 'Эволюция'
           speciesList = Object.entries(pdata)
             .filter(([_, v]) => v.method !== 'Эволюция')
@@ -441,7 +459,7 @@ router.get('/api', adminAuth, asyncHandler(async (req, res) => {
       save.pokedexSeen = []; save.pokedexCaught = [];
       if (val === 'caught') {
         try {
-          save.pokedexCaught = Object.keys(JSON.parse(readFileSync(join(process.cwd(), 'public/pokedex_data.json'), 'utf8')));
+          save.pokedexCaught = Object.keys(JSON.parse(readFileSync(join(__dirname, '../../public/pokedex_data.json'), 'utf8')));
         } catch(e) {}
       }
       await putSave(u, save);
@@ -595,7 +613,7 @@ router.get('/api/items', adminAuth, (req, res) => {
 
 // Species catalog endpoint (for admin drops UI)
 router.get('/api/species', adminAuth, (req, res) => {
-  const pdataPath = join(process.cwd(), 'public/pokedex_data.json');
+  const pdataPath = join(__dirname, '../../public/pokedex_data.json');
   const pdata = JSON.parse(readFileSync(pdataPath, 'utf8'));
   const species = Object.keys(pdata).sort();
   return res.json({ status: 'ok', species });

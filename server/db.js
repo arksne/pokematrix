@@ -12,6 +12,11 @@ export async function initDB(retries = 3) {
   const dataDir = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '../data');
   mkdirSync(dataDir, { recursive: true });
 
+  // Warn if no persistent volume path is set in production — DB will be lost on every deploy
+  if (process.env.NODE_ENV === 'production' && !process.env.RAILWAY_VOLUME_MOUNT_PATH && !process.env.DATA_DIR) {
+    console.warn('*** WARNING: RAILWAY_VOLUME_MOUNT_PATH is not set. Database will be lost on every deploy! ***');
+  }
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const dbPath = path.join(dataDir, 'game.db');
@@ -165,6 +170,28 @@ export async function initDB(retries = 3) {
       user_id INTEGER NOT NULL,
       save_data TEXT NOT NULL,
       saved_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `); } catch (e) { /* ignore */ }
+
+  try { await db.exec(`
+    CREATE TABLE IF NOT EXISTS player_inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      item_id TEXT NOT NULL,
+      quantity INTEGER DEFAULT 0,
+      UNIQUE(user_id, item_id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  `); } catch (e) { /* ignore */ }
+
+  try { await db.exec(`
+    CREATE TABLE IF NOT EXISTS player_badges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      badge_id TEXT NOT NULL,
+      unlocked_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, badge_id),
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `); } catch (e) { /* ignore */ }

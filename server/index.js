@@ -46,10 +46,10 @@ app.use(requestLogger);
 // Assets get 1d cache, but index.html gets no-cache (forces Telegram WebView to refresh)
 app.use(express.static(path.join(__dirname, '../dist'), { maxAge: '1d', immutable: true, index: false }));
 
-// Global rate limit: 500 req/min per IP
+// Global rate limit: 500 req/min per IP (config-driven)
 app.use(rateLimit({
-  windowMs: 60 * 1000,
-  max: 500,
+  windowMs: (config.RATE_LIMIT_WINDOW || 60) * 1000,
+  max: config.RATE_LIMIT_MAX || 500,
   standardHeaders: true,
   legacyHeaders: false,
 }));
@@ -57,7 +57,7 @@ app.use(rateLimit({
 // Routes
 app.use('/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/save', rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }), saveRoutes);
+app.use('/api/save', rateLimit({ windowMs: (config.RATE_LIMIT_WINDOW || 60) * 1000, max: config.SAVE_RATE_LIMIT_MAX || 30, standardHeaders: true, legacyHeaders: false }), saveRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/profile', profileRoutes);
@@ -102,7 +102,7 @@ app.use('/api/pokeapi', async (req, res, next) => {
     if (cached) return res.json(JSON.parse(cached.data));
 
     // Fetch from PokeAPI
-    const url = `https://pokeapi.co${cacheKey}`;
+    const url = `${config.POKEAPI_BASE_URL}${cacheKey}`;
     const pokeRes = await fetch(url);
 
     if (!pokeRes.ok) {

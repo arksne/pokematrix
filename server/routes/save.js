@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDB } from '../db.js';
 import fs from 'fs';
@@ -12,7 +11,8 @@ import { logger } from '../lib/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const BACKUP_DIR = path.join(__dirname, '../../data/backups');
+const SAVE_DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '../../data');
+const BACKUP_DIR = path.join(SAVE_DATA_DIR, 'backups');
 const MAX_BACKUPS = 5;
 const COMPRESS_THRESHOLD = 50000; // 50KB
 let saveCounter = 0;
@@ -21,14 +21,7 @@ const DB_BACKUP_INTERVAL = 100; // full DB backup every 100 saves
 // Per-user save mutex: prevents parallel save overwrites (audit 3.1)
 const saveLocks = new Map();
 
-// Dedicated rate limiter for save/load endpoints
-const saveRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute window
-  max: 30, // max 30 requests/min per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many save/load requests. Please wait.' }
-});
+// Rate limiting for save endpoints handled at app level in server/index.js
 
 export async function acquireSaveLock(userId) {
   const oldPromise = saveLocks.get(userId);
@@ -44,7 +37,6 @@ export async function acquireSaveLock(userId) {
 
 const router = Router();
 router.use(authMiddleware);
-router.use(saveRateLimit); // apply rate limiter to all save endpoints
 
 router.get('/', asyncHandler(async (req, res) => {
     const db = getDB();
@@ -364,7 +356,7 @@ router.post('/', asyncHandler(async (req, res) => {
     saveCounter++;
     if (saveCounter % DB_BACKUP_INTERVAL === 0) {
       try {
-        const dbPath = path.join(__dirname, '../../data/game.db');
+        const dbPath = path.join(SAVE_DATA_DIR, 'game.db');
         const dbBackup = path.join(BACKUP_DIR, `db_${new Date().toISOString().slice(0,10)}.db`);
         fs.copyFileSync(dbPath, dbBackup);
         // Keep last 3 DB backups

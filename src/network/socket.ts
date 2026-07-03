@@ -21,7 +21,9 @@ import { autoSave } from '../game/save.js';
 export function initTradeSocket() {
   if (state.socket) return;
   const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : API_BASE.replace('/api', '');
-  state.socket = io(serverUrl);
+  state.socket = io(serverUrl, {
+    auth: { token: state.tgToken }
+  });
 
   state.socket.on('connect', () => {
     state.socket.emit('join_lobby', { username: state.tgUser?.first_name || state.tgUser?.username || 'Тренер', userId: state.tgUser?.id });

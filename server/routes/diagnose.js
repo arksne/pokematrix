@@ -3,6 +3,7 @@ import { runAll, summaryString } from '../lib/diagnostics.js';
 import { getDB } from '../db.js';
 import { asyncHandler } from '../lib/errors.js';
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
   if (authHeader?.startsWith('Bearer ')) {
     try {
-      jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+      jwt.verify(authHeader.slice(7), JWT_SECRET);
       isAdmin = true;
     } catch (_) { /* не админ */ }
   }

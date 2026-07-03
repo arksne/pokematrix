@@ -298,7 +298,9 @@ router.post('/send', authMiddleware, asyncHandler(async (req, res) => {
   // Claude AI auto-reply (admin commands only)
   const isAdmin = user && (ADMIN_IDS.includes(Number(req.userId)) || ADMIN_USERNAMES.has(user.username));
   if (isAdmin) {
-    claudeAutoReply(text.trim(), io, db, user.username);
+    claudeAutoReply(text.trim(), io, db, user.username).catch(err =>
+      logger.error({ err }, 'claudeAutoReply failed')
+    );
   }
 
   res.json({ success: true });

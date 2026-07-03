@@ -10,7 +10,7 @@
         "dev": "vite",
         "build": "vite build",
         "preview": "vite preview",
-        "start": "node server/index.js",
+        "start": "node server/start.mjs",
         "server": "node server/index.js",
         "test:data": "node tests/data-validation.mjs",
         "test:api": "node tests/server-api-test.cjs",
