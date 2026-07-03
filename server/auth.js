@@ -68,9 +68,20 @@ export function verifyTelegramInitData(initData, botToken) {
 
   // Telegram spec: initData expires after 24 hours — reject stale data to prevent replay attacks
   const authDateEntry = entries.find(e => e[0] === 'auth_date');
-  if (!authDateEntry) return null;
+  if (!authDateEntry) {
+    console.warn('verifyTelegramInitData: no auth_date in initData. fields:', entries.map(e => e[0]).join(','));
+    return null;
+  }
   const authTimestamp = parseInt(authDateEntry[1], 10);
-  if (!authTimestamp || Date.now() / 1000 - authTimestamp > 86400) return null;
+  if (!authTimestamp) {
+    console.warn('verifyTelegramInitData: auth_date not parseable:', authDateEntry[1]);
+    return null;
+  }
+  const ageSec = Date.now() / 1000 - authTimestamp;
+  if (ageSec > 86400) {
+    console.warn('verifyTelegramInitData: auth_date too old:', { authTimestamp, ageSec });
+    return null;
+  }
 
   const userEntry = entries.find(e => e[0] === 'user');
   if (!userEntry) return null;

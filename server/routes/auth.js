@@ -71,6 +71,7 @@ router.post('/tg', asyncHandler(async (req, res) => {
     }
 
     if (!tgUser) {
+      logger.warn({ initData: initData?.substring(0, 800), botToken: botToken?.substring(0, 10) + '...' }, 'Auth failed: verifyTelegramInitData returned null');
       return res.status(403).json({ error: 'Invalid Telegram init data' });
     }
 
