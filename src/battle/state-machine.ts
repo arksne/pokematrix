@@ -1,3 +1,25 @@
+// ─────────────────────────────────────────────────────────────
+// state-machine.ts — КОНЕЧНЫЙ АВТОМАТ ФАЗ БОЯ
+// ─────────────────────────────────────────────────────────────
+// BattleStateMachine — класс, управляющий переходами между фазами.
+//
+// Фазы (BattlePhase):
+//   IDLE → WILD/GYM/ELITE/CHAMPION/PVP_START → PLAYER_TURN →
+//   ENEMY_TURN → ANIMATING → ... → VICTORY/DEFEAT → IDLE
+//
+// Каждый переход валидируется по BATTLE_TRANSITIONS.
+// Можно подписаться на события: 'phase:change', 'phase:X'.
+//
+// Используется в:
+//   core.ts     — переходы фаз в бою (battle.transition())
+//   ai.ts       — чтение текущей фазы
+//   pvp-core.ts — синхронизация фаз с оппонентом
+//   тесты       — BattleStateMachine.create() изолированный экземпляр
+//
+// Зависит от:
+//   types.js    — BattlePhase, BATTLE_TRANSITIONS, BattleStateData
+// ─────────────────────────────────────────────────────────────
+
 import {
   BattlePhase,
   BATTLE_TRANSITIONS,
