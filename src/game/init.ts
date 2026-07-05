@@ -1,3 +1,32 @@
+/**
+ * ============================================================
+ * init.ts — ГЛАВНЫЙ ИНИЦИАЛИЗАТОР ИГРЫ
+ * ============================================================
+ *
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   DOMContentLoaded → полная инициализация игры:
+ *   1. Настраивает store (query handlers, event listeners)
+ *   2. authTelegram() — логин через Telegram
+ *   3. Загружает данные (Pokedex, DropConfig, карточка тренера)
+ *   4. Настраивает колбэки (travel, explored locations)
+ *   5. Загружает сохранение (localStorage → сравнение с cloud)
+ *   6. Если сохранения нет → giveStarter()
+ *   7. Рендерит локацию, команду, инвентарь, деньги
+ *   8. Инициализирует события (encounter, battle, inventory, shop...)
+ *   9. Запускает циклы (timeOfDay, autoSave, breeding)
+ *   10. Загружает админ-панель (лениво)
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - ./state.js, ./store.js, ./save.js, ./auth.js
+ *   - ../battle/core.js         → вся боевая система
+ *   - ../data/regions.js        → регионы/локации
+ *   - Все UI модули (30+ файлов) → рендеринг
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   main.ts (первый import, запускает DOMContentLoaded)
+ * ============================================================
+ */
+
 import { state, lsKey } from './state.js';
 import { store } from './store.js';
 import { REGIONS } from '../data/regions.js';
@@ -29,8 +58,13 @@ import { logItemHistory } from '../game/actions.js';
 import { showGymRewardSelection } from '../ui/gym-reward.js';
 import { API_BASE } from './config.js';
 
+// ── ТОЧКА ВХОДА ────────────────────────────────────────────
+// Всё начинается здесь. DOMContentLoaded → init.
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    // ── 1. Настройка store (query handlers + event listeners) ──
+    // Query handlers: функции, которые возвращают значение (не event-based).
+    // Event listeners: UI обновления при мутациях state.
     store.setQuery('lsKey', (name) => lsKey(name));
     store.setQuery('getLocation', (locId) => getLocation(locId));
     store.setQuery('processMonsterDrop', (name) => processMonsterDrop(name));
@@ -98,11 +132,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }, 3000);
 
+    // ── 2. Авторизация ───────────────────────────────────────
+    // Ждём пока пользователь залогинится через Telegram.
+    // После этого: state.tgToken, state.tgUser, state.isAdmin.
     await authTelegram();
-    loadPokedexData();
-    fetchDropConfig();
-    renderTrainerCard();
 
+    // ── 3. Загрузка данных ────────────────────────────────────
+    loadPokedexData();       // Все виды покемонов
+    fetchDropConfig();       // Дроп-таблицы с сервера
+    renderTrainerCard();     // Карточка тренера
+
+    // ── 4. Настройка колбэков ────────────────────────────────
+    // travel callback: при клике на локацию на карте
     setTravelCallback((locId) => {
       const locs = REGIONS[state.currentRegion]?.locations;
       if (locs && locs[locId] && state.currentLocationId !== locId) {
@@ -116,26 +157,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     });
+    // Исследованные локации (для карты)
     setExploredLocs(getExploredLocations());
-
     setBeforeRenderLocation((locId) => {
       if (locId) markLocationExplored(locId);
     });
     if (state.currentLocationId) markLocationExplored(state.currentLocationId);
 
-    // Admin panel — visible only after server confirms via /api/auth/is-admin
+    // ── 5. Админ-панель (лениво, только для админов) ────────
     const resetBtn = document.getElementById('btn-reset-game');
     if (resetBtn) resetBtn.style.display = 'none';
-
     import('../ui/admin.js').then(m => m.initAdminPanel()).catch(e => console.warn('Admin panel init failed', e));
 
+    // ── 6. Загрузка сохранения (localStorage → cloud) ──────
+    // Приоритет: cloud (сервер) > local storage.
+    // Если нигде нет — giveStarter() (новая игра).
     const localLoaded = await loadGame();
     let gameLoaded = false;
     if (state.tgToken) {
       const cloudData = await cloudLoad();
       if (cloudData && cloudData.myTeam) {
-        applyCloudSave(cloudData);
-        saveGame();
+        applyCloudSave(cloudData);   // применяем серверные данные
+        saveGame();                   // сохраняем локально
         if (state.myTeam.length > 0) { gameLoaded = true; }
       }
     }
@@ -146,9 +189,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     if (!gameLoaded) {
-      await giveStarter();
+      await giveStarter();   // новая игра — даём стартового покемона
       showToast('Добро пожаловать в Лигу Покемонов!', false);
     } else if (state.tgToken) {
+      // Синхронизация: если local новее cloud на 5+ сек → cloudSave
       const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
       const cloudTs = state.lastCloudSync || 0;
       if (localTs > cloudTs + 5000) { cloudSave(); }
