@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { mkdirSync } from 'fs';
+import { mkdirSync, existsSync, rmSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -21,11 +21,10 @@ export async function initDB(retries = 3) {
   if (process.env.RESET_DB_ON_STARTUP === '1') {
     const dbPath = path.join(dataDir, 'game.db');
     try {
-      if (fs.existsSync(dbPath)) {
-        fs.rmSync(dbPath, { force: true });
-        // Also remove WAL and SHM files
-        try { fs.rmSync(dbPath + '-wal', { force: true }); } catch(_) {}
-        try { fs.rmSync(dbPath + '-shm', { force: true }); } catch(_) {}
+      if (existsSync(dbPath)) {
+        rmSync(dbPath, { force: true });
+        try { rmSync(dbPath + '-wal', { force: true }); } catch(_) {}
+        try { rmSync(dbPath + '-shm', { force: true }); } catch(_) {}
         console.log('*** RESET_DB: deleted existing game.db ***');
       }
     } catch(e) {
