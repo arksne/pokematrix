@@ -1,19 +1,43 @@
-/**
- * ============================================================
- * items.ts — ВСЕ ПРЕДМЕТЫ ИГРЫ (1318 entries)
- * ============================================================
- * 🔹 Структура: ItemDef[] = [{ id, name, category, price, description, ... }]
- * 🔹 Категории: balls, healing, statusCure, ppRecovery, vitamins, evolutionStones,
- *              berries, training, battle, crafting, tickets, keyItems
- * 🔹 Используется: actions.ts, store.ts, inventory.ts, shop.ts, core.ts и др.
- * 🔹 Зависит: ../types/index.js (ItemDef интерфейс)
- * ============================================================
- */
+// ─────────────────────────────────────────────────────────────
+// items.ts — ВСЕ ПРЕДМЕТЫ ИГРЫ (1318 штук)
+// ─────────────────────────────────────────────────────────────
+// Структура ItemDef (каждый предмет):
+//   id         — уникальный ID (он же ключ в state.inventory['itemId'])
+//   nameRu     — русское название (отображается в UI)
+//   category   — категория: balls / healing / statusCure / ppRecovery /
+//                vitamins / evolutionStones / berries / training / battle /
+//                crafting / tickets / eventItems / keyItems / tms
+//   desc       — описание (показывается при наведении)
+//   sprite     — URL или имя файла картинки (PokeAPI или local)
+//   price      — цена покупки в магазине (0 = не продаётся)
+//   sellPrice  — цена продажи в магазине
+//   isUsable   — true = можно применить на покемоне
+//   isBall     — true = покебол (используется в core.ts для поимки)
+//   ballMult   — множитель вероятности поимки (только balls)
+//   maxStack   — максимум в слоте (опционально)
+//   reqBadge   — какой значок нужен для покупки
+//
+// Откуда используется:
+//   actions.ts  → initInventory() — заполняет state.inventory нулями
+//   store.ts    → getMaxStack(), addItem() — лимиты и добавление
+//   inventory.ts → список в UI, фильтр по категориям
+//   shop.ts     → цены, ассортимент
+//   core.ts     → ballMult при поимке, useItem в бою
+//   logic.ts    → обработка ягод/предметов в бою
+//   state.ts    → getItemQty (количество предмета)
+//
+// Зависит от: ItemDef интерфейс из types/index.js
+// ─────────────────────────────────────────────────────────────
+
 import { ItemDef } from '../types/index.js';
 
 export const ITEMS: ItemDef[] = [
 
-  // ── balls ──
+  // ── ПОКЕБОЛЫ (balls) ──────────────────────────────────────
+  // ballMult — множитель вероятности поимки (1 = стандартный).
+  // isBall: true — используется в core.ts для определения покебола.
+  // Специальные болы (duskBall, quickBall, loveBall и др.) имеют
+  // особые условия — обрабатываются в core.ts.getBallMultiplier().
   { id: 'beastBall', nameRu: 'Бист-Болл', category: 'balls', desc: 'Tries to catch a wild Pokémon.  Success rate is 5× for Ultra Beasts and 0.1× for all other Pokémon.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/beast-ball.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: true, implemented: true, ballMult: 1 },
   { id: 'cherishBall', nameRu: 'Чериш-Болл', category: 'balls', desc: 'Tries to catch a wild Pokémon.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/cherish-ball.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: true, implemented: true, ballMult: 1 },
   { id: 'darkBall', nameRu: 'Дарк-Болл', category: 'balls', desc: 'Кастомный покебол', sprite: '72.png', spriteType: 'local', price: 15000, sellPrice: 50000, isUsable: false, isBall: true, implemented: true, ballMult: 1 },
@@ -55,7 +79,11 @@ export const ITEMS: ItemDef[] = [
   { id: 'timerBall', nameRu: 'Таймер-Болл', category: 'balls', desc: 'Tries to catch a wild Pokémon. Success rate increases by 0.1× (Gen V: 0.3×) every turn, to a max of 4×.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/timer-ball.png', spriteType: 'pokeapi', price: 1000, sellPrice: 500, isUsable: false, isBall: true, implemented: true, ballMult: 1 },
   { id: 'ultraBall', nameRu: 'Ультра-Болл', category: 'balls', desc: 'Tries to catch a wild Pokémon.  Success rate is 2×.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/ultra-ball.png', spriteType: 'pokeapi', price: 800, sellPrice: 400, isUsable: false, isBall: true, implemented: true, ballMult: 2 },
 
-  // ── healing ──
+  // ── ЛЕЧЕНИЕ HP (healing) ──────────────────────────────────
+  // Восстанавливают HP покемона. Используются в core.ts.useItem()
+  // и inventory.ts (применить из инвентаря).
+  // isUsable: true — можно применить на покемоне.
+  // Цена зависит от восстанавливаемого HP.
   { id: 'berryJuice', nameRu: 'Ягодный Сок', category: 'healing', desc: 'Restores 20 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/berry-juice.png', spriteType: 'pokeapi', price: 200, sellPrice: 100, isUsable: true, isBall: false, implemented: true },
   { id: 'energyPowder', nameRu: 'Энергетический Порошок', category: 'healing', desc: 'Restores 50 HP, but lowers happiness.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/energy-powder.png', spriteType: 'pokeapi', price: 500, sellPrice: 250, isUsable: true, isBall: false, implemented: true },
   { id: 'energyRoot', nameRu: 'Энергетический Корень', category: 'healing', desc: 'Restores 200 HP, but lowers happiness.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/energy-root.png', spriteType: 'pokeapi', price: 1200, sellPrice: 600, isUsable: true, isBall: false, implemented: true },
@@ -70,7 +98,11 @@ export const ITEMS: ItemDef[] = [
   { id: 'superPotion', nameRu: 'Супер-Зелье', category: 'healing', desc: 'Restores 50 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/super-potion.png', spriteType: 'pokeapi', price: 700, sellPrice: 350, isUsable: true, isBall: false, implemented: true },
   { id: 'sweetHeart', nameRu: 'Сладкое Сердце', category: 'healing', desc: 'Restores 20 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/sweet-heart.png', spriteType: 'pokeapi', price: 3000, sellPrice: 1500, isUsable: true, isBall: false, implemented: true },
 
-  // ── statusCure ──
+  // ── ЛЕЧЕНИЕ СТАТУСОВ (statusCure) ─────────────────────────
+  // Снимают конкретные статусы: отравление (antidote), ожог (burnHeal),
+  // заморозка (iceHeal), сон (awakening), паралич (paralyzeHeal).
+  // fullHeal — снимает любой статус + спутанность.
+  // Используются в core.ts.useItem().
   { id: 'antidote', nameRu: 'Антидот', category: 'statusCure', desc: 'Cures poison.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/antidote.png', spriteType: 'pokeapi', price: 200, sellPrice: 100, isUsable: true, isBall: false, implemented: true },
   { id: 'antiSputin', nameRu: 'Антиспутин', category: 'statusCure', desc: 'Снимает спутанность', sprite: '13.gif', spriteType: 'local', price: 0, sellPrice: 100, isUsable: true, isBall: false, implemented: true },
   { id: 'awakening', nameRu: 'Пробуждение', category: 'statusCure', desc: 'Cures sleep.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/awakening.png', spriteType: 'pokeapi', price: 200, sellPrice: 100, isUsable: true, isBall: false, implemented: true },
@@ -88,20 +120,30 @@ export const ITEMS: ItemDef[] = [
   { id: 'pewterCrunchies', nameRu: 'Пьютерские Хрустики', category: 'statusCure', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/pewter-crunchies.png', spriteType: 'pokeapi', price: 250, sellPrice: 125, isUsable: true, isBall: false, implemented: true },
   { id: 'shalourSable', nameRu: 'Шалорское Печенье', category: 'statusCure', desc: 'Cures any major status ailment and confusion.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/shalour-sable.png', spriteType: 'pokeapi', price: 350, sellPrice: 175, isUsable: true, isBall: false, implemented: true },
 
-  // ── ppRecovery ──
+  // ── ВОССТАНОВЛЕНИЕ PP (ppRecovery) ────────────────────────
+  // Восстанавливают PP (очки сил/атак) покемона.
+  // ether — 10 PP одной атаке, maxEther — все PP атаки,
+  // elixir — 10 PP всем атакам, maxElixir — все PP всем атакам.
+  // Используются в core.ts.useItem().
   { id: 'elixir', nameRu: 'Эликсир', category: 'ppRecovery', desc: 'Restores 10 PP for each move.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/elixir.png', spriteType: 'pokeapi', price: 3000, sellPrice: 1500, isUsable: true, isBall: false, implemented: true },
   { id: 'ether', nameRu: 'Эфир', category: 'ppRecovery', desc: 'Restores 10 PP for one move.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/ether.png', spriteType: 'pokeapi', price: 1200, sellPrice: 600, isUsable: true, isBall: false, implemented: true },
   { id: 'maxElixir', nameRu: 'Макс-Эликсир', category: 'ppRecovery', desc: 'Restores PP to full for each move.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/max-elixir.png', spriteType: 'pokeapi', price: 4500, sellPrice: 2250, isUsable: true, isBall: false, implemented: true },
   { id: 'maxEther', nameRu: 'Макс-Эфир', category: 'ppRecovery', desc: 'Restores PP to full for one move.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/max-ether.png', spriteType: 'pokeapi', price: 2000, sellPrice: 1000, isUsable: true, isBall: false, implemented: true },
 
-  // ── revival ──
+  // ── ВОСКРЕШЕНИЕ (revival) ────────────────────────────────
+  // Воскрешают покемона из обморока (0 HP → 50% HP).
+  // revive → 50% HP, maxRevive → 100% HP.
   { id: 'maxHoney', nameRu: 'Макс-Мёд', category: 'revival', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/max-honey.png', spriteType: 'pokeapi', price: 4000, sellPrice: 2000, isUsable: true, isBall: false, implemented: true },
   { id: 'maxRevive', nameRu: 'Макс-Оживление', category: 'revival', desc: 'Revives with full HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/max-revive.png', spriteType: 'pokeapi', price: 4000, sellPrice: 2000, isUsable: true, isBall: false, implemented: true },
   { id: 'revivalHerb', nameRu: 'Трава Возрождения', category: 'revival', desc: 'Revives with full HP, but lowers happiness.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/revival-herb.png', spriteType: 'pokeapi', price: 2800, sellPrice: 1400, isUsable: true, isBall: false, implemented: true },
   { id: 'revive', nameRu: 'Оживление', category: 'revival', desc: 'Revives with half HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/revive.png', spriteType: 'pokeapi', price: 2000, sellPrice: 1000, isUsable: true, isBall: false, implemented: true },
   { id: 'sacredAsh', nameRu: 'Священная Зола', category: 'revival', desc: 'Revives all fainted Pokémon with full HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/sacred-ash.png', spriteType: 'pokeapi', price: 50000, sellPrice: 25000, isUsable: true, isBall: false, implemented: true },
 
-  // ── vitamins ──
+  // ── ВИТАМИНЫ (vitamins) ───────────────────────────────────
+  // Навсегда повышают базовые статы покемона (EV).
+  // HP Up → HP, Protein → Attack, Iron → Defense, Calcium → Sp.Atk,
+  // Zinc → Sp.Def, Carbos → Speed.
+  // Используются в core.ts и profile.ts (тренировка).
   { id: 'abilityCapsule', nameRu: 'Капсула Способности', category: 'vitamins', desc: 'Switches a Pokémon between its two possible (non-Hidden) Abilities.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/ability-capsule.png', spriteType: 'pokeapi', price: 10000, sellPrice: 5000, isUsable: true, isBall: false, implemented: true },
   { id: 'abilityPatch', nameRu: 'Патч Способности', category: 'vitamins', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/ability-patch.png', spriteType: 'pokeapi', price: 20, sellPrice: 10, isUsable: true, isBall: false, implemented: true },
   { id: 'calcium', nameRu: 'Кальций', category: 'vitamins', desc: 'Raises Special Attack effort and happiness.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/calcium.png', spriteType: 'pokeapi', price: 10000, sellPrice: 5000, isUsable: true, isBall: false, implemented: true },
@@ -158,7 +200,10 @@ export const ITEMS: ItemDef[] = [
   { id: 'toughCandyXl', nameRu: 'Конфета Выносливости XL', category: 'vitamins', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/tough-candy-xl.png', spriteType: 'pokeapi', price: 20, sellPrice: 10, isUsable: true, isBall: false, implemented: true },
   { id: 'zinc', nameRu: 'Цинк', category: 'vitamins', desc: 'Raises Special Defense and happiness.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/zinc.png', spriteType: 'pokeapi', price: 10000, sellPrice: 5000, isUsable: true, isBall: false, implemented: true },
 
-  // ── berries ──
+  // ── ЯГОДЫ (berries) ───────────────────────────────────────
+  // Съедаются покемоном в бою при определённых условиях (≤50% HP,
+  // статус, и т.д.). Обрабатываются в core.ts (sitrusBerry, oranBerry,
+  // lumBerry, chestoBerry, rawstBerry, и др.).
   { id: 'aguavBerry', nameRu: 'Ягода Aguav', category: 'berries', desc: 'Held: Consumed at 1/2 max HP to restore 1/8 max HP. Confuses Pokémon that dislike bitter flavor.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/aguav-berry.png', spriteType: 'pokeapi', price: 80, sellPrice: 40, isUsable: true, isBall: false, implemented: true },
   { id: 'apicotBerry', nameRu: 'Ягода Apicot', category: 'berries', desc: 'Held: Consumed at 1/4 max HP to boost Special Defense.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/apicot-berry.png', spriteType: 'pokeapi', price: 80, sellPrice: 40, isUsable: true, isBall: false, implemented: true },
   { id: 'aspearBerry', nameRu: 'Ягода Аспир', category: 'berries', desc: 'Held: Consumed when frozen to cure frozen.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/aspear-berry.png', spriteType: 'pokeapi', price: 80, sellPrice: 40, isUsable: true, isBall: false, implemented: true },
@@ -208,7 +253,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'wikiBerry', nameRu: 'Ягода Вики', category: 'berries', desc: 'Held: Consumed at 1/2 max HP to restore 1/8 max HP. Confuses Pokémon that dislike dry flavor.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/wiki-berry.png', spriteType: 'pokeapi', price: 80, sellPrice: 40, isUsable: true, isBall: false, implemented: true },
   { id: 'yacheBerry', nameRu: 'Ягода Yache', category: 'berries', desc: 'Held: Consumed when struck by a super-effective Ice-type attack to halve the damage.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/yache-berry.png', spriteType: 'pokeapi', price: 80, sellPrice: 40, isUsable: true, isBall: false, implemented: true },
 
-  // ── evolutionStones ──
+  // ── КАМНИ ЭВОЛЮЦИИ (evolutionStones) ─────────────────────
+  // Используются в evolution.ts для эволюции покемонов.
+  // Каждый камень соответствует определённым видам.
   { id: 'berrySweet', nameRu: 'Ягодная Сладость', category: 'evolutionStones', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/berry-sweet.png', spriteType: 'pokeapi', price: 500, sellPrice: 250, isUsable: false, isBall: false, implemented: true },
   { id: 'blackAugurite', nameRu: 'Чёрный Авгурит', category: 'evolutionStones', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/black-augurite.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
   { id: 'chippedPot', nameRu: 'Битый Горшок', category: 'evolutionStones', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/chipped-pot.png', spriteType: 'pokeapi', price: 38000, sellPrice: 19000, isUsable: false, isBall: false, implemented: true },
@@ -250,7 +297,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'waterStone', nameRu: 'Водный Камень', category: 'evolutionStones', desc: 'Evolves an Eevee into Vaporeon, a Lombre into Ludicolo, a Panpour into Simipour, a Poliwhirl into Poliwrath, a Shelld...', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/water-stone.png', spriteType: 'pokeapi', price: 3000, sellPrice: 1500, isUsable: false, isBall: false, implemented: true },
   { id: 'whippedDream', nameRu: 'Взбитая Мечта', category: 'evolutionStones', desc: 'Traded on a Swirlix: Holder evolves into Slurpuff.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/whipped-dream.png', spriteType: 'pokeapi', price: 2000, sellPrice: 1000, isUsable: false, isBall: false, implemented: true },
 
-  // ── training ──
+  // ── ТРЕНИРОВКИ (training) ─────────────────────────────────
+  // Используются в battle/core.ts для системы тренировок (EV).
+  // Включают: candy, vitamin, train, weaken.
   { id: 'amuletCoin', nameRu: 'Монета-Амулет', category: 'training', desc: 'Held: Doubles the money earned from a battle. Does not stack with Luck Incense.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/amulet-coin.png', spriteType: 'pokeapi', price: 10000, sellPrice: 5000, isUsable: true, isBall: false, implemented: true },
   { id: 'cleanseTag', nameRu: 'Метка Очищения', category: 'training', desc: 'Prevents wild encounters of level lower than your party’s lead Pokémon.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/cleanse-tag.png', spriteType: 'pokeapi', price: 5000, sellPrice: 2500, isUsable: true, isBall: false, implemented: true },
   { id: 'everstone', nameRu: 'Вечный Камень', category: 'training', desc: 'Held: Prevents level-based evolution from occuring.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/everstone.png', spriteType: 'pokeapi', price: 3000, sellPrice: 1500, isUsable: true, isBall: false, implemented: true },
@@ -261,7 +310,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'sootheBell', nameRu: 'Колокол Успокоения', category: 'training', desc: 'Held: Doubles the happiness earned by the holder.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/soothe-bell.png', spriteType: 'pokeapi', price: 4000, sellPrice: 2000, isUsable: true, isBall: false, implemented: true },
   { id: 'train', nameRu: 'Набор Тренировки', category: 'training', desc: 'Улучшает случайный стат', sprite: 'train.gif', spriteType: 'local', price: 200000, sellPrice: 250000, isUsable: true, isBall: false, implemented: true },
 
-  // ── battle ──
+  // ── БОЕВЫЕ ПРЕДМЕТЫ (battle) ──────────────────────────────
+  // Повышают статы на время боя (xAttack, xDefense, xSpeed и т.д.).
+  // Обрабатываются в core.ts.useItem().
   { id: 'abilityShield', nameRu: 'Щит Способности', category: 'battle', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/ability-shield.png', spriteType: 'pokeapi', price: 20000, sellPrice: 10000, isUsable: true, isBall: false, implemented: true },
   { id: 'abomasite', nameRu: 'Abomasite', category: 'battle', desc: 'Held: Allows Abomasnow to Mega Evolve into Mega Abomasnow.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/abomasite.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: true, isBall: false, implemented: false },
   { id: 'absolite', nameRu: 'Absolite', category: 'battle', desc: 'Held: Allows Absol to Mega Evolve into Mega Absol.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/absolite.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: true, isBall: false, implemented: false },
@@ -516,7 +567,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'zapPlate', nameRu: 'Ударная Пластина', category: 'battle', desc: 'Held: Electric-Type moves from holder do 20% more damage. Changes Arceus’s and Judgment’s type to Electric.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/zap-plate.png', spriteType: 'pokeapi', price: 1000, sellPrice: 500, isUsable: true, isBall: false, implemented: true },
   { id: 'zoomLens', nameRu: 'Зум-Линза', category: 'battle', desc: 'Held: Provides a 1/5 (20%) boost in accuracy if the holder moves after the target.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/zoom-lens.png', spriteType: 'pokeapi', price: 4000, sellPrice: 2000, isUsable: true, isBall: false, implemented: true },
 
-  // ── tm ──
+  // ── ТЕХНИЧЕСКИЕ МАШИНЫ (tm) ─────────────────────────────
+  // Обучают покемона новой атаке. TM machine в Канто.
+  // Не реализованы (implemented: false) — заготовка.
   { id: 'hm01', nameRu: 'Hm01', category: 'tm', desc: 'Teaches Cut to a compatible Pokémon.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/hm01.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: false },
   { id: 'hm02', nameRu: 'Hm02', category: 'tm', desc: 'Teaches Fly to a compatible Pokémon.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/hm02.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: false },
   { id: 'hm03', nameRu: 'Hm03', category: 'tm', desc: 'Teaches Surf to a compatible Pokémon.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/hm03.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: false },
@@ -856,7 +909,8 @@ export const ITEMS: ItemDef[] = [
   { id: 'tr98', nameRu: 'Tr98', category: 'tm', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/tr98.png', spriteType: 'pokeapi', price: 6000, sellPrice: 3000, isUsable: false, isBall: false, implemented: true },
   { id: 'tr99', nameRu: 'Tr99', category: 'tm', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/tr99.png', spriteType: 'pokeapi', price: 6000, sellPrice: 3000, isUsable: false, isBall: false, implemented: true },
 
-  // ── other ──
+  // ── ПРОЧЕЕ (other) ───────────────────────────────────────
+  // Разные предметы: репелленты, флейты, инкубаторы и т.д.
   { id: 'abraCandy', nameRu: 'Конфета Абра', category: 'other', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/abra-candy.png', spriteType: 'pokeapi', price: 20, sellPrice: 10, isUsable: false, isBall: false, implemented: true },
   { id: 'adamantMint', nameRu: 'Adamant Mint', category: 'other', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/adamant-mint.png', spriteType: 'pokeapi', price: 20, sellPrice: 10, isUsable: false, isBall: false, implemented: true },
   { id: 'aerodactylCandy', nameRu: 'Конфета Аэродактиль', category: 'other', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/aerodactyl-candy.png', spriteType: 'pokeapi', price: 20, sellPrice: 10, isUsable: false, isBall: false, implemented: true },
@@ -1277,7 +1331,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'zapdosCandy', nameRu: 'Конфета Запдос', category: 'other', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/zapdos-candy.png', spriteType: 'pokeapi', price: 20, sellPrice: 10, isUsable: false, isBall: false, implemented: true },
   { id: 'zubatCandy', nameRu: 'Конфета Зубат', category: 'other', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/zubat-candy.png', spriteType: 'pokeapi', price: 20, sellPrice: 10, isUsable: false, isBall: false, implemented: true },
 
-  // ── valuable ──
+  // ── ЦЕННОСТИ (valuable) ───────────────────────────────────
+  // Предметы, которые можно продать: жемчуг, звёздная пыль,
+  // сокровища. Не имеют другого применения.
   { id: 'balmMushroom', nameRu: 'Бальзамовый Гриб', category: 'valuable', desc: 'Sell to Hungry Maid for 25000 Pokédollars.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/balm-mushroom.png', spriteType: 'pokeapi', price: 15000, sellPrice: 7500, isUsable: false, isBall: false, implemented: true },
   { id: 'beachGlass', nameRu: 'Beach Glass', category: 'valuable', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/beach-glass.png', spriteType: 'pokeapi', price: 800, sellPrice: 400, isUsable: false, isBall: false, implemented: true },
   { id: 'bigBambooShoot', nameRu: 'Big Bamboo Shoot', category: 'valuable', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/big-bamboo-shoot.png', spriteType: 'pokeapi', price: 1500, sellPrice: 750, isUsable: false, isBall: false, implemented: true },
@@ -1323,7 +1379,8 @@ export const ITEMS: ItemDef[] = [
   { id: 'redShard', nameRu: 'Красный Осколок', category: 'valuable', desc: 'Valuable shard. Sell for 200 Pokédollars.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/red-shard.png', spriteType: 'pokeapi', price: 200, sellPrice: 100, isUsable: false, isBall: false, implemented: true },
   { id: 'yellowShard', nameRu: 'Жёлтый Осколок', category: 'valuable', desc: 'Valuable shard. Sell for 200 Pokédollars.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/yellow-shard.png', spriteType: 'pokeapi', price: 200, sellPrice: 100, isUsable: false, isBall: false, implemented: true },
 
-  // ── crafting ──
+  // ── КРАФТ (crafting) ──────────────────────────────────────
+  // Материалы для крафта предметов. Используются в crafting.ts.
   { id: 'bachsFoodTin', nameRu: 'Банка Корма Баха', category: 'crafting', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/bachs-food-tin.png', spriteType: 'pokeapi', price: 950, sellPrice: 475, isUsable: false, isBall: false, implemented: true },
   { id: 'bobsFoodTin', nameRu: 'Bobs Food Tin', category: 'crafting', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/bobs-food-tin.png', spriteType: 'pokeapi', price: 950, sellPrice: 475, isUsable: false, isBall: false, implemented: true },
   { id: 'boiledEgg', nameRu: 'Boiled Egg', category: 'crafting', desc: '', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/boiled-egg.png', spriteType: 'pokeapi', price: 2200, sellPrice: 1100, isUsable: false, isBall: false, implemented: true },

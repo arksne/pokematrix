@@ -1,13 +1,20 @@
-/**
- * ============================================================
- * weather.ts — ПОГОДА И ЕЁ ЭФФЕКТЫ
- * ============================================================
- * 🔹 WEATHERS: список типов погоды
- * 🔹 weatherEffects[weather] = { boosts, hinders, ... }
- * 🔹 Используется: battle/logic.ts (множители погоды), location.ts
- * 🔹 Зависит: ничего
- * ============================================================
- */
+// ─────────────────────────────────────────────────────────────
+// weather.ts — ПОГОДА И ЕЁ ВЛИЯНИЕ НА БОЙ
+// ─────────────────────────────────────────────────────────────
+// WEATHERS — все типы погоды: clear, rain, sun, sandstorm, hail
+//
+// weatherEffects — словарь: тип погоды → её эффекты:
+//   boosts: [type]    — типы атак, которые получают ×1.5 урона
+//   hinders: [type]   — типы атак, которые получают ×0.5 урона
+//   moveChanges: {...} — изменения атак (напр. Thunder → 100% accuracy в rain)
+//   statusChance: n   — шанс наложения статуса (sandstorm → none?)
+//   damagePerTurn: n  — урон каждый ход (hail → 1/16 HP)
+//
+// Используется:
+//   battle/logic.ts — getWeatherDamageMultiplier(), applyWeatherEffects()
+//   location.ts     — updateTimeOfDay(), генерация погоды
+//   battle/core.ts  — применение эффектов погоды каждый ход
+// ─────────────────────────────────────────────────────────────
 
 export const WEATHERS = ['clear', 'rain', 'sun', 'sandstorm', 'hail'] as const;
 export type WeatherType = (typeof WEATHERS)[number];
