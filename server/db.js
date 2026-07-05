@@ -17,6 +17,22 @@ export async function initDB(retries = 3) {
     console.warn('*** WARNING: RAILWAY_VOLUME_MOUNT_PATH is not set. Database will be lost on every deploy! ***');
   }
 
+  // RESET_DB_ON_STARTUP=1 — удаляет существующую БД и создаёт чистую
+  if (process.env.RESET_DB_ON_STARTUP === '1') {
+    const dbPath = path.join(dataDir, 'game.db');
+    try {
+      if (fs.existsSync(dbPath)) {
+        fs.rmSync(dbPath, { force: true });
+        // Also remove WAL and SHM files
+        try { fs.rmSync(dbPath + '-wal', { force: true }); } catch(_) {}
+        try { fs.rmSync(dbPath + '-shm', { force: true }); } catch(_) {}
+        console.log('*** RESET_DB: deleted existing game.db ***');
+      }
+    } catch(e) {
+      console.error('RESET_DB: could not delete DB:', e.message);
+    }
+  }
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const dbPath = path.join(dataDir, 'game.db');
