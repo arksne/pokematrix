@@ -366,7 +366,9 @@ router.post('/', asyncHandler(async (req, res) => {
     }
 
     // Wrap in transaction to prevent data corruption on crash
-    await db.exec('BEGIN');
+    // Note: use db.begin() not db.exec('BEGIN') — @libsql/client's
+    // executeMultiple() doesn't maintain transaction state properly.
+    await db.begin();
     try {
       await db.run(
         `INSERT INTO game_saves (user_id, save_data, updated_at)
@@ -426,9 +428,9 @@ router.post('/', asyncHandler(async (req, res) => {
         }
       }
 
-      await db.exec('COMMIT');
+      await db.commit();
     } catch (e) {
-      try { await db.exec('ROLLBACK'); } catch(_) {}
+      try { await db.rollback(); } catch(_) {}
       throw e;
     }
 

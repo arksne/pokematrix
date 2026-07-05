@@ -39,6 +39,11 @@ export async function initDB(retries = 3) {
           })),
         exec: (sql) =>
           client.executeMultiple(sql),
+        // Transaction control — must use execute() not executeMultiple()
+        // because executeMultiple() doesn't maintain transaction state.
+        begin: () => client.execute({ sql: 'BEGIN' }),
+        commit: () => client.execute({ sql: 'COMMIT' }),
+        rollback: () => client.execute({ sql: 'ROLLBACK' }),
         close: () => {
           client.close();
           return Promise.resolve();
