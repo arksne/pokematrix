@@ -1,3 +1,36 @@
+/**
+ * ============================================================
+ * socket.ts — Socket.IO КЛИЕНТ (ТРЕЙДЫ, PVP, ЧАТ)
+ * ============================================================
+ *
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   Подключается к серверу через Socket.IO.
+ *   initTradeSocket() — создаёт соединение с JWT-токеном.
+ *   Обрабатывает события:
+ *     - connect → join_lobby, initChatSocket, PvP
+ *     - online_players → обновление списка игроков
+ *     - save_updated → облачное сохранение
+ *     - trade_* → обмен покемонами/предметами
+ *     - pvp_* → PvP-баттлы
+ *   JWT-токен передаётся в auth.handshake (фикс H1).
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - socket.io-client     → io() (клиент)
+ *   - ../game/state.js     → state, generateUID, getTrainerId
+ *   - ../game/config.js    → API_BASE
+ *   - ../game/save.js      → cloudLoad, applyCloudSave
+ *   - ../game/actions.js   → addItem, removeItem
+ *   - UI модули (чат, трейды, PvP, уведомления)
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   - init.ts → initTradeSocket() после авторизации
+ *   - Все UI модули (chat, trade-center, trade-request, pvp.js)
+ *
+ * 🔹 ЭКСПОРТИРУЕТ:
+ *   - initTradeSocket() — создание socket-соединения
+ * ============================================================
+ */
+
 import { io } from 'socket.io-client';
 import { state, generateUID, getTrainerId } from '../game/state.js';
 import { API_BASE } from '../game/config.js';

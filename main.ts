@@ -1,4 +1,27 @@
-// Global type augmentations for legacy code
+/**
+ * ============================================================
+ * main.ts — ГЛОБАЛЬНЫЙ ВХОД В ИГРУ
+ * ============================================================
+ *
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   1. Global type augmentations для legacy JS кода (HTMLElement, Window).
+ *   2. Определяет dev-команды в window (help, money, items, heal, maxIV...).
+ *   3. Импортирует init.ts → DOMContentLoaded → initGame().
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - ./src/game/init.ts — запускает DOMContentLoaded
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   index.html <script type="module" src="/main.ts">
+ *
+ * 🔹 ЭКСПОРТИРУЕТ:
+ *   ничего (точка входа, не экспортирует)
+ * ============================================================
+ */
+
+// ── Legacy type augmentations ──────────────────────────────
+// HTMLElement: свойства, которые добавляются из HTML атрибутов.
+// Window: dev-команды (см. ниже).
 declare global {
   interface HTMLElement {
     value: string;
@@ -28,60 +51,96 @@ declare global {
     lvlup: (n?: number) => void;
     legendary: () => Promise<void>;
     mew: () => Promise<void>;
-    goto: (locId: string) => void;
-    __devSetGameState: (data: any) => void;
-    locations: () => any[];
-    myId: () => number | undefined;
-    adminAdd: (id: any) => void;
-    adminList: () => any[];
-    getItemQty: (itemId: string) => number;
-    addItem: (itemId: string, qty: number) => void;
-    removeItem: (itemId: string, qty: number) => void;
-    itemDef: (itemId: string) => any;
-    toggleExpShare: () => void;
-    showGymRewardSelection: (locId: any) => void;
   }
 }
-console.log("MAIN.JS START");
 
-// Bootstrap the app
-import './src/game/init.js';
+// ── Dev-команды (консоль браузера) ────────────────────────
+// Эти функции доступны в window для быстрой отладки из консоли F12.
+// Используют store/state для мутаций.
 
-// Pre-existing re-export for legacy modules (pvp.js, trade.js)
-import { state as _state } from './src/game/state.js';
-export const socket = _state.socket;
-export const state = _state;
+import('./src/game/init.js').then((m) => {
+  // После загрузки init.ts, прокидываем функции для dev-консоли.
+  // Каждая команда делает toast с результатом.
+  const init = m as any;
 
-// --- Re-exports for modules importing from main.js ---
+  window.help = () => {
+    init.showToast('Доступные команды: money(N), items, allBadges, heal, lvlup(N), legendary', false);
+  };
 
-export { ITEMS } from './src/data/items.js';
-export { checkEvolution, triggerEvolution, getEvolutions, fetchEvolutionChain } from './src/ui/evolution.js';
-export { checkNewMovesOnLevelUp, offerLearnMove } from './src/ui/levelup_moves.js';
-export { openMoveRelearner, showSlotPicker } from './src/ui/tm.js';
-export { editNickname } from './src/ui/nickname.js';
-export { loadChatMessages, startChatPolling, initChatSocket, stopChatPolling, sendChatMessage } from './src/ui/chat.js';
-export { loadAllTrainers, initTrainersTab, showAccountPanel } from './src/ui/trainers.js';
-export { initInventoryEvents, updateDynamicEVs, applyEVs, updateInventoryDisplay, renderBattleItemSelect, updateQADisplays, renderInventory, useItem, getHeldItemName, openHeldItemPicker } from './src/ui/inventory.js';
-export { evolutionCache, evolvesFromMap, saveBattleState, clearBattleState, restoreBattleState, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars, POKEDEX_ALL, pokedexData, pokedexTotal } from './src/battle/core.js';
-export { getDailyWeather, getWeatherMultiplier, WEATHER_ICONS, WEATHER_NAMES } from './src/data/weather.js';
-export { escHtml, showToast, showConfirmModal, showSelectionModal, showTextInputModal } from './src/utils/dom.js';
-export { getTypeColor, getTypeGradient, getSpriteUrl, getItemSpriteImg, setTypeBg, updateBattleSpriteBgs, updateBattleHeldIcons } from './src/utils/sprite.js';
-export { addItem, removeItem } from './src/game/actions.js';
-export { getItemQty, itemDef, lsKey } from './src/game/state.js';
-export { hatchEgg } from './src/ui/daycare.js';
-export { giveStarterMon } from './src/ui/starter.js';
-export { openCrafting } from './src/ui/crafting.js';
-export { addNotification, openNotifications } from './src/ui/notifications.js';
-export { openPC } from './src/ui/pc.js';
-export { checkTutorialProgress } from './src/ui/npcs.js';
-export { getLocation, getRegionOfLocation, travelToRegion, healTeam, renderLocation, getLocationDropString, updateMoneyDisplay, updateBadgeDisplay, fetchDropConfig, processMonsterDrop } from './src/ui/location.js';
-export { renderTeamGrid, refreshProfileUI, saveActiveMonData, updateStats, initProfileEvents, initProfileUXEvents } from './src/ui/profile.js';
-export { saveGame, autoSave, cloudSave, getCloudAuthHeaders } from './src/game/save.js';
+  window.cmds = window.help;
 
-// New re-exports from extracted modules
-export { API_BASE } from './src/game/config.js';
-export { getTgUser, getSocket, getIsAdmin, getPokedexState, getShopState, modifyMoney, getTeamState, getSocialState, setTrainerNickname, getMapState, setCurrentLocationId, setCurrentRegion, setLastLocation, getGameState, setGameState, getInvState, toggleExpShare } from './src/game/getters.js';
-export { openTrainerProfile } from './src/social/trainer-profile.js';
-export { renderTrainerCard } from './src/ui/trainer-card.js';
-export { showGymRewardSelection, createAndGivePokemon } from './src/ui/gym-reward.js';
-export { showItemInfoModal } from './src/ui/item-info.js';
+  window.money = (n = 100000) => {
+    init.store.modifyMoney(n);
+    init.showToast(`+${n} кредитов!`, false);
+  };
+
+  window.items = () => {
+    const inv = init.state.inventory;
+    if (!inv) { init.showToast('Инвентарь пуст', true); return; }
+    const items = Object.keys(inv).filter(k => k !== 'credit' && inv[k] > 0);
+    init.showToast(`Предметов: ${items.length}`, false);
+    console.table(items.map(k => ({ id: k, qty: inv[k] })));
+  };
+
+  window.items10 = () => {
+    const inv = init.state.inventory;
+    if (!inv) return;
+    Object.keys(inv).filter(k => k !== 'credit').forEach(k => inv[k] = 999);
+    init.updateInventoryDisplay();
+    init.showToast('Все предметы x999!', false);
+  };
+
+  window.allBadges = () => {
+    init.state.badges = ['boulder', 'cascade', 'thunder', 'rainbow', 'soul', 'marsh', 'volcano', 'earth'];
+    init.updateBadgeDisplay();
+    init.showToast('Все значки получены!', false);
+  };
+
+  window.heal = () => {
+    init.state.myTeam.forEach((m: any) => m.currentHp = m.maxHp);
+    init.showToast('Команда исцелена!', false);
+  };
+
+  window.maxIV = () => {
+    init.state.myTeam.forEach((m: any) => {
+      if (!m.ivs) m.ivs = {};
+      ['hp','attack','defense','spAtk','spDef','speed'].forEach(s => m.ivs[s] = 31);
+    });
+    init.showToast('Максимальные IV!', false);
+  };
+
+  window.lvlup = (n = 10) => {
+    init.state.myTeam.forEach((m: any) => {
+      m.baseLevel = Math.min(100, (m.baseLevel || 1) + n);
+      if (m.currentHp < m.maxHp) m.currentHp = m.maxHp;
+    });
+    init.renderTeamGrid();
+    init.showToast(`+${n} уровней!`, false);
+  };
+
+  window.legendary = async () => {
+    const legendaries = ['mewtwo','mew','lugia','ho-oh','rayquaza','groudon','kyogre','dialga','palkia','giratina','zekrom','reshiram'];
+    const pick = legendaries[Math.floor(Math.random() * legendaries.length)];
+    try {
+      const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pick}`);
+      const data = await res.json();
+      const newMon = init.makeMon(data, init.getTrainerId(), 70);
+      if (init.state.myTeam.length >= 6) init.state.myTeam[0] = newMon;
+      else init.state.myTeam.push(newMon);
+      init.renderTeamGrid();
+      init.showToast(`✨ Пойман ${pick}!`, false);
+    } catch { init.showToast('Ошибка API :(', true); }
+  };
+
+  window.mew = async () => {
+    try {
+      const res = await fetch('https://pokeapi.co/api/v2/pokemon/mew');
+      const data = await res.json();
+      const newMon = init.makeMon(data, init.getTrainerId(), 70);
+      if (init.state.myTeam.length >= 6) init.state.myTeam[0] = newMon;
+      else init.state.myTeam.push(newMon);
+      init.renderTeamGrid();
+      init.showToast('✨ Mew получен!', false);
+    } catch { init.showToast('Ошибка получения Mew', true); }
+  };
+});
