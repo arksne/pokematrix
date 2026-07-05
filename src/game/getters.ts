@@ -1,3 +1,30 @@
+/**
+ * ============================================================
+ * getters.ts — GETTERS/SETTERS ДЛЯ state (FAÇADE)
+ * ============================================================
+ *
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   Прослойка между state.ts и UI/Battle модулями.
+ *   Предоставляет getter'ы для чтения state с дополнительной
+ *   логикой (POKEDEX_ALL, SHOP_STOCK, gymLeaders и т.д.).
+ *   setGameState(patch) — массовое обновление state из save.
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - ./state.js              → state (глобальное состояние)
+ *   - ../battle/core.js       → POKEDEX_ALL, pokedexData, pokedexTotal
+ *   - ../data/shops.js        → SHOP_STOCK
+ *   - ../data/items.js        → ITEMS
+ *   - ../data/training.js     → trainingStages
+ *   - ../utils/state.js       → eliteFour, champion
+ *   - ../data/gyms.js         → gymLeaders
+ *   - ../data/quests.js       → QUEST_CONFIGS
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   - UI модули (profile, inventory, map, shop, pokedex)
+ *   - battle/core.ts
+ * ============================================================
+ */
+
 import { state } from './state.js';
 import { POKEDEX_ALL, pokedexData, pokedexTotal } from '../battle/core.js';
 import { SHOP_STOCK } from '../data/shops.js';
@@ -7,26 +34,36 @@ import { eliteFour, champion } from '../utils/state.js';
 import { gymLeaders } from '../data/gyms.js';
 import { QUEST_CONFIGS } from '../data/quests.js';
 
+// ── Простые getter'ы ───────────────────────────────────────
+// Возвращают поля из state (без дополнительной обработки)
 export function getTgUser() { return state.tgUser; }
 export function getSocket() { return state.socket; }
 export function getIsAdmin() { return state.isAdmin; }
 
+// ── Покедекс ───────────────────────────────────────────────
+// Возвращает всё состояние покедекса + глобальные данные
 export function getPokedexState() {
   return { pokedexSeen: state.pokedexSeen, pokedexCaught: state.pokedexCaught, POKEDEX_ALL: POKEDEX_ALL, pokedexData: pokedexData, pokedexTotal: pokedexTotal };
 }
 
+// ── Магазин ────────────────────────────────────────────────
+// Деньги + инвентарь + ассортимент магазина в текущей локации
 export function getShopState() {
   return { money: state.inventory['credit'] || 0, inventory: state.inventory, locationShopStock: SHOP_STOCK };
 }
 
+// ── Деньги ─────────────────────────────────────────────────
+// Прямая мутация state (без событий стора)
 export function modifyMoney(delta) {
   state.inventory['credit'] = (state.inventory['credit'] || 0) + delta;
 }
 
+// ── Команда ────────────────────────────────────────────────
 export function getTeamState() {
   return { myTeam: state.myTeam, currentPokemonIndex: state.currentPokemonIndex };
 }
 
+// ── Социал ─────────────────────────────────────────────────
 export function getSocialState() {
   return { onlinePlayersList: state.onlinePlayersList, trainerNickname: state.trainerNickname, tgUser: state.tgUser };
 }
@@ -35,11 +72,15 @@ export function setTrainerNickname(name) {
   state.trainerNickname = name;
 }
 
+// ── Локация ────────────────────────────────────────────────
 export function getMapState() { return { currentLocationId: state.currentLocationId, currentRegion: state.currentRegion, lastLocation: state.lastLocation }; }
 export function setCurrentLocationId(id) { state.currentLocationId = id; }
 export function setCurrentRegion(reg) { state.currentRegion = reg; }
 export function setLastLocation(loc) { state.lastLocation = loc; }
 
+// ── Полное состояние игры (для battle/core.ts) ─────────────
+// Использует getter'ы (свойства) для lazy-доступа к state
+// Важно: все поля начинаются с get — это не snapshot, а live ссылки
 export function getGameState() {
   return {
     get myTeam() { return state.myTeam; },
@@ -65,6 +106,10 @@ export function getGameState() {
   };
 }
 
+// ── Массовое обновление state из save/cloud ────────────────
+// Используется applyCloudSave() в save.ts для восстановления
+// ВСЕХ полей state из загруженных данных.
+// Важно: Set для pokedexSeen/Caught и pcBoxes.deep copy
 export function setGameState(patch: any) {
   if (patch === null || patch === undefined || typeof patch !== 'object') return;
   for (const [k, v] of Object.entries(patch as Record<string, any>)) {
@@ -91,5 +136,6 @@ export function setGameState(patch: any) {
   }
 }
 
+// ── Инвентарь (для UI) ─────────────────────────────────────
 export function getInvState() { return { money: state.inventory['credit'] || 0, eggs: state.eggs, ITEMS, trainingStages: trainingStages, expShareActive: state.expShareActive }; }
 export function toggleExpShare() { state.expShareActive = !state.expShareActive; }

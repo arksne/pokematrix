@@ -1,3 +1,28 @@
+/**
+ * ============================================================
+ * store.ts — РЕАКТИВНЫЙ СТОР (EVENT-DRIVEN)
+ * ============================================================
+ *
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   Дублирует состояние из state.ts для реактивных UI-обновлений.
+ *   Event-система: мутации → emit('toast', 'inventory:changed', ...)
+ *   UI подписывается через store.on() и обновляется при событиях.
+ *   Лимиты предметов, деньги, dirty-флаги для инкрементального сохранения.
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - ../data/items.js  → ITEMS (для getMaxStack, валидации предметов)
+ *   - ./config.js       → API_BASE (lazy import в giveReward)
+ *   - ./save.js         → getCloudAuthHeaders (lazy import в giveReward)
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   - init.ts       → создание стора, подписка на события
+ *   - inventory.ts  → store.addItem, store.removeItem, store.getItemQty
+ *   - shop.ts       → store.addItem, store.modifyMoney
+ *   - craft.ts      → store.addItem, store.removeItem
+ *   - core.ts       → store.addItem, store.removeItem (лут), store.autoSave()
+ * ============================================================
+ */
+
 import { ITEMS } from '../data/items.js';
 
 /**
@@ -23,22 +48,24 @@ class GameStore {
     this._queries = {};
   }
 
-  /** Get full mutable state object (same ref as main.js uses) */
+  /** Получить ссылку на state (тот же объект, что в state.ts) */
   getState() { return this._state; }
 
-  /** Replace entire state (e.g. after loading a save) */
+  /** Полностью заменить state (после загрузки сохранения) */
   setState(s) { this._state = s; this._dirty.clear(); }
 
   // ── Event system ───────────────────────────────
+  // Позволяет UI подписаться на изменения инвентаря, денег, и т.д.
+  // Вместо прямого вызова UI из бизнес-логики.
 
-  /** Subscribe to an event. Returns unsubscribe function. */
+  /** Подписаться на событие. Возвращает функцию отписки. */
   on(event: string, fn: Function): () => void {
     if (!this._listeners.has(event)) this._listeners.set(event, new Set());
     this._listeners.get(event)!.add(fn);
     return () => { this._listeners.get(event)?.delete(fn); };
   }
 
-  /** Emit an event to all subscribers. */
+  /** Вызвать событие (все подписчики получают уведомление) */
   emit(event: string, ...args: any[]) {
     this._listeners.get(event)?.forEach(fn => fn(...args));
   }

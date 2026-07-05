@@ -1,13 +1,33 @@
 /**
- * Centralized API client with automatic token refresh and request queuing.
+ * ============================================================
+ * apiClient.ts — ЦЕНТРАЛИЗОВАННЫЙ API КЛИЕНТ С AUTO-REFRESH
+ * ============================================================
  *
- * Features:
- * - Auto-injects Authorization header from state.tgToken
- * - On 401: queues ALL concurrent requests, refreshes token once, retries all
- * - Prevents race conditions where multiple 401s trigger parallel refreshes
- * - Falls back to original 401 if refresh fails (caller handles re-login)
- * - Pino-compatible logging via console (browser environment)
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   Единая точка для всех fetch-запросов к серверу.
+ *   Автоматически добавляет Authorization header (Bearer JWT).
+ *   При 401: ставит ВСЕ запросы в очередь, делает один refresh,
+ *   обновляет токен, ретраит все запросы с новым токеном.
+ *   Защита от race condition (несколько параллельных 401 → 1 refresh).
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - ./state       → state.tgToken, state.tgUser
+ *   - ./config      → API_BASE
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   - auth.ts       → apiFetch('/auth/tg'), apiFetch('/auth/register')
+ *   - save.ts       → apiFetch('/save') — cloudLoad, cloudSave
+ *   (заменяет прямой fetch() во всех модулях)
+ *
+ * 🔹 ЭКСПОРТИРУЕТ:
+ *   - apiFetch()       — основной fetch с auto-refresh
+ *   - getCloudAuthHeaders() — для legacy кода
+ *   - onAuthExpired()  — подписка на событие истечения сессии
+ *   - offAuthExpired() — отписка
+ *   - getRefreshToken / setRefreshToken — для auth.ts
+ * ============================================================
  */
+
 import { state } from './state';
 import { API_BASE } from './config';
 

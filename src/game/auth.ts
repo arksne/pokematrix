@@ -1,14 +1,38 @@
 /**
- * Frontend authentication module.
+ * ============================================================
+ * auth.ts — ФРОНТЕНД АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ
+ * ============================================================
  *
- * Handles:
- * - Telegram Mini App initData extraction
- * - Login screen overlay management
- * - Registration flow (nickname, pixel-art avatar, starter Pokemon)
- * - Token storage: access token in memory (state.tgToken),
- *   refresh token in localStorage
- * - Socket auth event handling
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   1. Извлекает initData из Telegram.WebApp
+ *   2. POST /auth/tg → получает JWT + refreshToken + user
+ *   3. Показывает экран логина/загрузки
+ *   4. Если пользователь не зарегистрирован → showRegistrationScreen()
+ *   5. Регистрация: выбор пиксель-арт аватара + стартового покемона
+ *   6. Хранит refreshToken в localStorage, accessToken в state.tgToken
+ *   7. Обрабатывает auth_expired события от Socket.IO
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - ./state.js           → state (tgToken, tgUser)
+ *   - ./apiClient.js       → apiFetch, setRefreshToken, getRefreshToken
+ *   - ../utils/dom.js      → showToast
+ *   - ./config.js          → API_BASE
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   - init.ts (await authTelegram() — первая функция при загрузке)
+ *
+ * 🔹 ЭКСПОРТИРУЕТ:
+ *   - authTelegram()       — главная функция входа
+ *   - showLoginScreen()    — показать оверлей логина
+ *   - hideLoginScreen()    — скрыть оверлей
+ *   - showRegistrationScreen() — экран регистрации
+ *   - initTelegram()       — Telegram.WebApp.ready()
+ *   - setupSocketAuthEvents() — обработчик auth_expired
+ *   - TRAINER_AVATARS      — массив ID спрайтов
+ *   - STARTER_POKEMON      — массив стартовых покемонов
+ * ============================================================
  */
+
 import { state } from './state.js';
 import { apiFetch, setRefreshToken, getRefreshToken, onAuthExpired } from './apiClient.js';
 import { showToast } from '../utils/dom.js';

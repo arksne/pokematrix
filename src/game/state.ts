@@ -1,108 +1,144 @@
-// Central game state singleton.
-// All module-level mutable state from main.js lives as properties of `state`.
-// Import `state` from this module whenever you need to read or write game state.
-// Pure utility functions (no UI/side-effect deps) also live here.
+/**
+ * ============================================================
+ * state.ts — ГЛОБАЛЬНОЕ СОСТОЯНИЕ ИГРЫ (SINGLETON)
+ * ============================================================
+ *
+ * 🔹 ЧТО ДЕЛАЕТ:
+ *   Хранит ВСЁ состояние игры в одном объекте `state`.
+ *   Любой модуль импортирует `state` и читает/пишет его поля.
+ *   Это единственный источник истины (single source of truth).
+ *   Содержит Поля + Утилиты (generateUID, getItemQty, toggleBagItem).
+ *
+ * 🔹 ЗАВИСИМОСТИ (импорты):
+ *   - ../utils/state.js  → generateUID, getTrainerId, lsKey
+ *   - ../utils/items.js  → itemDef, itemCategory
+ *   - ../data/items.js   → ITEMS (для getItemQty)
+ *
+ * 🔹 ИСПОЛЬЗУЕТСЯ В:
+ *   Почти ВСЕ файлы проекта (init, save, auth, actions, battle, UI)
+ *   Через `import { state } from './state.js'`
+ * ============================================================
+ */
 
+// ── Центральный объект состояния игры ───────────────────────
+// Все свойства доступны через state.xxx.
+// Тип any используется для гибкости (legacy code).
 export const state: Record<string, any> = {
-  // Location / Navigation
-  currentLocationId: 'goldenrod',
-  currentRegion: 'johto',
-  lastLocation: null,
-  visitedLocations: new Set<string>(),
-  isDaytime: true,
-  moveTypeCache: new Map<string, string>(),
 
-  // Player
-  inventory: { credit: 500 } as Record<string, number>,
-  itemHistory: [] as Array<any>,
-  badges: [] as Array<string>,
-  trainerNickname: '',
-  expShareActive: false,
-  serverDropConfig: null,
+  // ── Локация / Навигация ──────────────────────────────────
+  currentLocationId: 'goldenrod',  // ID текущей локации (где игрок сейчас)
+  currentRegion: 'johto',          // Регион (kanto, johto)
+  lastLocation: null,              // Последняя посещённая локация (для возврата)
+  visitedLocations: new Set<string>(), // Set посещённых локаций (для карты/путешествий)
+  isDaytime: true,                 // bool: день или ночь (влияет на покемонов)
+  moveTypeCache: new Map<string, string>(), // Кеш: название атаки → её тип
 
-  // Pokemon
-  myTeam: [] as Array<any>,
-  currentPokemonIndex: null as number | null,
-  pcBoxes: [[]] as Array<Array<any>>,
-  pokedexSeen: new Set<string>(),
-  pokedexCaught: new Set<string>(),
+  // ── Игрок ────────────────────────────────────────────────
+  inventory: { credit: 500 } as Record<string, number>, // Инвентарь: { itemId: quantity }
+  itemHistory: [] as Array<any>,  // История использования предметов
+  badges: [] as Array<string>,    // Массив ID полученных значков
+  trainerNickname: '',            // Прозвище тренера (не Telegram username)
+  expShareGlobal: false,          // Глобальный Exp. Share (если включён)
+  serverDropConfig: null,         // Дроп-конфиг с сервера (кэшируется)
 
-  // Battle
-  itemsUsedInBattle: 0,
+  // ── Покемоны ─────────────────────────────────────────────
+  myTeam: [] as Array<any>,       // Команда покемонов (макс 6)
+  currentPokemonIndex: null as number | null, // Индекс активного покемона в myTeam
+  pcBoxes: [[]] as Array<Array<any>>, // PC Boxes: массив массивов покемонов
+  pokedexSeen: new Set<string>(), // Set: ID покемонов, которых видел
+  pokedexCaught: new Set<string>(), // Set: ID покемонов, которых поймал
 
-  // Notifications
-  notifications: [] as Array<any>,
+  // ── Бой ──────────────────────────────────────────────────
+  itemsUsedInBattle: 0,           // Счётчик использованных предметов в бою
 
-  // Daycare & Breeding
-  daycareMons: [] as Array<any>,
-  daycareEgg: null,
-  breedingPairs: [] as Array<any>,
-  eggs: [] as Array<any>,
-  hatching: false,
+  // ── Уведомления ──────────────────────────────────────────
+  notifications: [] as Array<any>, // Массив уведомлений (показываются в UI)
 
-  // Quests & Tutorial
-  quests: [] as Array<any>,
-  questProgress: {} as Record<string, any>,
-  completedQuests: [] as Array<string>,
-  npcQuestProgress: {} as Record<string, number>,
-  completedNPCQuests: [] as Array<string>,
-  tutorialStep: 0,
+  // ── Daycare / Breeding ───────────────────────────────────
+  daycareMons: [] as Array<any>,  // Покемоны в питомнике
+  daycareEgg: null,               // Яйцо в питомнике (если есть)
+  breedingPairs: [] as Array<any>, // Пары для разведения
+  eggs: [] as Array<any>,         // Яйца у игрока
+  hatching: false,                // Флаг: идёт вылупление
 
-  // Auth & Sync
-  tgUser: null,
-  tgToken: null as string | null,
-  refreshToken: null as string | null,
-  isAdmin: false,
-  saveVersion: 0,
-  lastCloudSync: 0,
-  saveRetryCount: 0,
-  saveInProgress: false,
-  saveTriggerPending: false,
-  cloudSaveTimer: null as any,
+  // ── Квесты и туториал ────────────────────────────────────
+  quests: [] as Array<any>,            // Активные квесты
+  questProgress: {} as Record<string, any>, // Прогресс по квестам
+  completedQuests: [] as Array<string>, // Выполненные квесты
+  npcQuestProgress: {} as Record<string, number>, // Прогресс NPC-квестов
+  completedNPCQuests: [] as Array<string>, // Выполненные NPC-квесты
+  tutorialStep: 0,                 // Шаг туториала (0 = не начат)
 
-  // Socket / PvP / Trade
-  socket: null as any,
-  onlinePlayersList: [] as Array<any>,
-  activeTradeId: null as string | null,
-  myTradeOffers: [] as Array<any>,
-  partnerTradeOffers: [] as Array<any>,
-  iAmP1: false,
-  pvpBattleId: null as string | null,
-  pvpOpponentName: '',
-  pvpMyMon: null as any,
-  pvpOppMon: null as any,
-  pvpMyTurn: false,
-  pvpMovesDetailed: [] as Array<any>,
-  lastProfileOpen: 0,
-  lastSocketAction: 0,
-  activeCraftCategory: null as string | null,
+  // ── Авторизация / Синхронизация ──────────────────────────
+  tgUser: null,                    // Объект пользователя из Telegram { id, username, ... }
+  tgToken: null as string | null,  // JWT access token (15 мин)
+  refreshToken: null as string | null, // Refresh token (30 дней, localStorage)
+  isAdmin: false,                  // Флаг админа (проверяется на сервере)
+  saveVersion: 0,                  // Версия сохранения (для deadlock detection)
+  lastCloudSync: 0,                // Timestamp последней облачной синхронизации
+  saveRetryCount: 0,               // Счётчик повторных попыток сохранения
+  saveInProgress: false,           // Флаг: идёт сохранение
+  saveTriggerPending: false,       // Флаг: ещё одно сохранение в очереди
+  cloudSaveTimer: null as any,     // Таймер debounced cloudSave
 
-  // Lazy-loaded module refs
-  _mapModule: null as any,
-  _pvpModule: null as any,
+  // ── Socket / PvP / Trade ─────────────────────────────────
+  socket: null as any,             // Socket.IO соединение
+  onlinePlayersList: [] as Array<any>, // Список онлайн игроков
+  activeTradeId: null as string | null, // ID активного трейда
+  myTradeOffers: [] as Array<any>,      // Мои предложения в трейде
+  partnerTradeOffers: [] as Array<any>, // Предложения партнёра
+  iAmP1: false,                    // Флаг: я инициатор трейда
+  pvpBattleId: null as string | null,  // ID PvP битвы
+  pvpOpponentName: '',             // Имя оппонента в PvP
+  pvpMyMon: null as any,           // Мой покемон в PvP
+  pvpOppMon: null as any,          // Покемон оппонента
+  pvpMyTurn: false,                // Флаг: мой ход
+  pvpMovesDetailed: [] as Array<any>, // Детали атак в PvP
+  lastProfileOpen: 0,              // Timestamp последнего открытия профиля
+  lastSocketAction: 0,             // Timestamp последнего socket-действия
+  activeCraftCategory: null as string | null, // Активная категория крафта
+
+  // ── Lazy-loaded модули (чтобы избежать циклических импортов)
+  _mapModule: null as any,         // Ленивый импорт map.ts
+  _pvpModule: null as any,         // Ленивый импорт pvp модуля
 };
 
-// Re-export pure utility functions from single source of truth
-export { generateUID } from '../utils/state.js';
-export { itemDef, itemCategory } from '../utils/items.js';
+// ── Re-export утилит для удобства ──────────────────────────
+// Эти функции дублируются здесь, чтобы их можно было импортировать
+// из state.js вместо нескольких разных файлов.
+export { generateUID } from '../utils/state.js';     // Генерация уникального ID
+export { itemDef, itemCategory } from '../utils/items.js'; // Типы предметов
 
-// Wrappers that use state.tgUser rather than requiring a parameter
+// ── Wrappers, использующие state.tgUser ────────────────────
+// Эти функции берут tgUser из state, не требуя параметра.
 import { getTrainerId as _getTrainerId, lsKey as _lsKey } from '../utils/state.js';
+
+// Получить ID тренера из state.tgUser (без параметра)
 export function getTrainerId(): string { return _getTrainerId(state.tgUser); }
+
+// Сгенерировать localStorage key с учётом ID тренера (чтобы разные тренеры
+// не пересекались в localStorage)
 export function lsKey(name: string): string { return _lsKey(name, state.tgUser); }
 
+// ── Инвентарь: утилиты ─────────────────────────────────────
 import { ITEMS } from '../data/items.js';
 
+// Получить количество предмета в инвентаре
 export function getItemQty(itemId: string): number {
   return state.inventory[itemId] ?? 0;
 }
 
+// Проверить, есть ли предмет (хотя бы 1)
 export function hasItem(itemId: string): boolean {
   return getItemQty(itemId) > 0;
 }
 
+// Изменить количество предмета (положить/убрать)
+// delta: +1 = добавить, -1 = убрать
+// credit (деньги) нельзя менять через эту функцию
+// Максимум 9999 единиц
 export function toggleBagItem(itemId: string, delta: number): void {
-  if (itemId === 'credit') return;
+  if (itemId === 'credit') return; // credit управляется отдельно
   const qty = getItemQty(itemId) + delta;
   if (qty <= 0) { delete state.inventory[itemId]; return; }
   if (qty > 9999) { state.inventory[itemId] = 9999; return; }
