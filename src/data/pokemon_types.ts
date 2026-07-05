@@ -1,3 +1,13 @@
+/**
+ * ============================================================
+ * pokemon_types.ts — ТИПЫ ПОКЕМОНОВ (по видам)
+ * ============================================================
+ * 🔹 Формат: POKEMON_TYPES[pokemonName] = [type1, type2?]
+ * 🔹 Auto-generated from PokeAPI
+ * 🔹 Используется: battle/logic.ts (множители урона)
+ * 🔹 Зависит: ничего
+ * ============================================================
+ */
 // Auto-generated from PokeAPI
 export const POKEMON_TYPES = {
   "bulbasaur": [

@@ -1,4 +1,13 @@
-// Weather data and utilities — pure functions, no side effects
+/**
+ * ============================================================
+ * weather.ts — ПОГОДА И ЕЁ ЭФФЕКТЫ
+ * ============================================================
+ * 🔹 WEATHERS: список типов погоды
+ * 🔹 weatherEffects[weather] = { boosts, hinders, ... }
+ * 🔹 Используется: battle/logic.ts (множители погоды), location.ts
+ * 🔹 Зависит: ничего
+ * ============================================================
+ */
 
 export const WEATHERS = ['clear', 'rain', 'sun', 'sandstorm', 'hail'] as const;
 export type WeatherType = (typeof WEATHERS)[number];

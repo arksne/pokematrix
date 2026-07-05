@@ -1,3 +1,14 @@
+/**
+ * ============================================================
+ * regions.ts — РЕГИОНЫ И ЛОКАЦИИ (Kanto, Johto)
+ * ============================================================
+ * 🔹 Формат: REGIONS[kanto] = { name, image, locations: { ... } }
+ * 🔹 Локация: name, image, desc, weather, links[] (связи)
+ * 🔹 Используется: location.ts, map.ts, init.ts
+ * 🔹 Зависит: ../types/index.js (RegionDef)
+ * ============================================================
+ */
+
 import { RegionDef } from '../types/index.js';
 
 export const REGIONS: Record<string, RegionDef> = {

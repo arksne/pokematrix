@@ -1,4 +1,13 @@
-// Quest definitions — static data
+/**
+ * ============================================================
+ * quests.ts — ОПРЕДЕЛЕНИЯ КВЕСТОВ
+ * ============================================================
+ * 🔹 QUEST_TYPES: типы квестов (catch_x, defeat_x, earn_money...)
+ * 🔹 QUEST_CONFIGS: настройки квестов по локациям
+ * 🔹 Используется: quests.ts (UI), core.ts (проверка прогресса)
+ * 🔹 Зависит: ничего
+ * ============================================================
+ */
 
 export const QUEST_TYPES = ['catch_x', 'defeat_x', 'earn_money', 'explore', 'use_item', 'collect_items'];
 

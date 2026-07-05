@@ -1,3 +1,14 @@
+/**
+ * ============================================================
+ * items.ts — ВСЕ ПРЕДМЕТЫ ИГРЫ (1318 entries)
+ * ============================================================
+ * 🔹 Структура: ItemDef[] = [{ id, name, category, price, description, ... }]
+ * 🔹 Категории: balls, healing, statusCure, ppRecovery, vitamins, evolutionStones,
+ *              berries, training, battle, crafting, tickets, keyItems
+ * 🔹 Используется: actions.ts, store.ts, inventory.ts, shop.ts, core.ts и др.
+ * 🔹 Зависит: ../types/index.js (ItemDef интерфейс)
+ * ============================================================
+ */
 import { ItemDef } from '../types/index.js';
 
 export const ITEMS: ItemDef[] = [

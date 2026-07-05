@@ -1,6 +1,17 @@
 /**
- * Per-location shop inventories.
- * If a location ID is not listed, it sells all items with price > 0 (current behavior).
+ * ============================================================
+ * shops.ts — АССОРТИМЕНТ МАГАЗИНОВ ПО ЛОКАЦИЯМ
+ * ============================================================
+ *
+ * 🔹 SHOP_STOCK: per-location shop inventories.
+ *   Если локация не указана — продаются все предметы с price > 0.
+ *   Если указана — только эти предметы.
+ *   Также: pokemonMarts (список всех маркетов), buyPrices/sellPrices.
+ *
+ * 🔹 Используется: shop.ts (UI), getters.ts (getShopState)
+ * 🔹 Зависит: items.ts (для мисок предметов)
+ * ============================================================
+ */
  * Add only locations that should have RESTRICTED stock.
  */
 

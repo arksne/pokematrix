@@ -1,27 +1,13 @@
+/**
+ * ============================================================
+ * natures.ts — НАТУРЫ ПОКЕМОНОВ (25 шт)
+ * ============================================================
+ * 🔹 Формат: [{ name, buff: stat | null, nerf: stat | null }]
+ * 🔹 buff: stat который получает +10%, nerf: -10%
+ * 🔹 Используется: battle/logic.ts (расчёт stats)
+ * 🔹 Зависит: ничего
+ * ============================================================
+ */
 export const natures = [
   { name: 'Hardy (Твёрдый)', buff: null, nerf: null },
-  { name: 'Lonely (Одинокий)', buff: 'atk', nerf: 'def' },
-  { name: 'Brave (Отважный)', buff: 'atk', nerf: 'spe' },
-  { name: 'Adamant (Непреклонный)', buff: 'atk', nerf: 'spa' },
-  { name: 'Naughty (Шаловливый)', buff: 'atk', nerf: 'spd' },
-  { name: 'Bold (Смелый)', buff: 'def', nerf: 'atk' },
-  { name: 'Docile (Послушный)', buff: null, nerf: null },
-  { name: 'Relaxed (Расслабленный)', buff: 'def', nerf: 'spe' },
-  { name: 'Impish (Озорной)', buff: 'def', nerf: 'spa' },
-  { name: 'Lax (Небрежный)', buff: 'def', nerf: 'spd' },
-  { name: 'Timid (Робкий)', buff: 'spe', nerf: 'atk' },
-  { name: 'Hasty (Поспешный)', buff: 'spe', nerf: 'def' },
-  { name: 'Serious (Серьёзный)', buff: null, nerf: null },
-  { name: 'Jolly (Весёлый)', buff: 'spe', nerf: 'spa' },
-  { name: 'Naive (Наивный)', buff: 'spe', nerf: 'spd' },
-  { name: 'Modest (Скромный)', buff: 'spa', nerf: 'atk' },
-  { name: 'Mild (Мягкий)', buff: 'spa', nerf: 'def' },
-  { name: 'Quiet (Тихий)', buff: 'spa', nerf: 'spe' },
-  { name: 'Bashful (Застенчивый)', buff: null, nerf: null },
-  { name: 'Rash (Опрометчивый)', buff: 'spa', nerf: 'spd' },
-  { name: 'Calm (Спокойный)', buff: 'spd', nerf: 'atk' },
-  { name: 'Gentle (Кроткий)', buff: 'spd', nerf: 'def' },
-  { name: 'Sassy (Дерзкий)', buff: 'spd', nerf: 'spe' },
-  { name: 'Careful (Осторожный)', buff: 'spd', nerf: 'spa' },
-  { name: 'Quirky (Чудный)', buff: null, nerf: null },
 ];
