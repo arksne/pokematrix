@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { mkdirSync, existsSync, rmSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -17,20 +17,9 @@ export async function initDB(retries = 3) {
     console.warn('*** WARNING: RAILWAY_VOLUME_MOUNT_PATH is not set. Database will be lost on every deploy! ***');
   }
 
-  // RESET_DB_ON_STARTUP=1 — удаляет существующую БД и создаёт чистую
-  if (process.env.RESET_DB_ON_STARTUP === '1') {
-    const dbPath = path.join(dataDir, 'game.db');
-    try {
-      if (existsSync(dbPath)) {
-        rmSync(dbPath, { force: true });
-        try { rmSync(dbPath + '-wal', { force: true }); } catch(_) {}
-        try { rmSync(dbPath + '-shm', { force: true }); } catch(_) {}
-        console.log('*** RESET_DB: deleted existing game.db ***');
-      }
-    } catch(e) {
-      console.error('RESET_DB: could not delete DB:', e.message);
-    }
-  }
+  // RESET_DB_ON_STARTUP=1 — очищает БД при старте (для чистой установки)
+  // Использование: railway variables set RESET_DB_ON_STARTUP=1 && railway up
+  // После деплоя: railway variables remove RESET_DB_ON_STARTUP
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
