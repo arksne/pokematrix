@@ -19,7 +19,7 @@
 // ─────────────────────────────────────────────────────────────
 export const NPC_DATA = {
   'oak_lab': {
-    id: 'oak_lab', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'cerulean_city',
+    id: 'oak_lab', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'ceruleanCity',
     dialog: {
       greet: 'Привет! Я профессор Оук. Рад видеть тебя в мире покемонов!',
       default: 'Продолжай тренироваться и заполнять Покедекс!',
@@ -55,17 +55,17 @@ export const NPC_DATA = {
   // Tutorial NPC at starting location
   // === EAST JOHTO NPCs ===
   'goldenrod_officer': {
-    id: 'goldenrod_officer', name: 'Офицер Джес', sprite: '👮', location: 'goldenrod',
+    id: 'goldenrod_officer', name: 'Офицер Джес', sprite: '👮', location: 'goldenrodCity',
     dialog: { greet: 'Добро пожаловать в Голденрод — столицу Восточного Джото!', default: 'Если заметите нарушения правил Лиги-17, обращайтесь ко мне.', quest_offer: 'Новичкам нужно снаряжение. Принеси мне {target} {item}.', quest_complete: 'Отлично! Теперь ты экипирован.', quest_incomplete: 'Приходи когда соберёшь всё.' },
     quests: [{ id: 'gold_1', type: 'collect_items', targetItem: 'potion', targetQty: 3, desc: 'Принесите 3 Зелья', rewardMoney: 300, rewardItem: 'pokeBall', rewardQty: 5, prereqQuest: null }],
   },
   'goldenrod_michael': {
-    id: 'goldenrod_michael', name: 'Майкл', sprite: '🕵️', location: 'goldenrod',
+    id: 'goldenrod_michael', name: 'Майкл', sprite: '🕵️', location: 'goldenrodCity',
     dialog: { greet: 'Помогите! Похитили Батискафиш!', default: 'Квест "Похищение Батискафиш" ждёт тебя.', quest_offer: 'Найди похитителей! Принеси мне {target} {item} как улику.', quest_complete: 'Ты нашёл их! Спасибо!', quest_incomplete: 'Ищи улики в городе...' },
     quests: [{ id: 'gold_2', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 диких покемонов в поисках улик', rewardMoney: 800, rewardItem: 'greatBall', rewardQty: 3, prereqQuest: 'gold_1' }],
   },
   'goldenrod_phill': {
-    id: 'goldenrod_phill', name: 'Филл', sprite: '🔬', location: 'goldenrod',
+    id: 'goldenrod_phill', name: 'Филл', sprite: '🔬', location: 'goldenrodCity',
     dialog: { greet: 'Покемоны исчезают из Института Голденрода!', default: 'Это загадка, которую нужно разгадать.', quest_offer: 'Для расследования мне нужны {target} {item}.', quest_complete: 'Превосходная работа, тренер!', quest_incomplete: 'Нужно больше данных...' },
     quests: [{ id: 'gold_3', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 покемонов для исследования института', rewardMoney: 600, rewardItem: 'candy', rewardQty: 3, prereqQuest: 'gold_2' }, { id: 'gold_4', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 исследовательских центра', rewardMoney: 1000, rewardItem: 'tm', rewardQty: 2, prereqQuest: 'gold_3' }],
   },
@@ -170,7 +170,7 @@ export const NPC_DATA = {
   },
   // === EAST JOHTO QUEST NPCs (from wiki quests) ===
   'ej_storn': {
-    id: 'ej_storn', name: 'Сторн', sprite: '🦸', location: 'goldenrod',
+    id: 'ej_storn', name: 'Сторн', sprite: '🦸', location: 'goldenrodCity',
     dialog: { greet: 'Я Сторн! Собери Великолепную Пятёрку!', default: 'Великолепная Пятёрка ждёт тебя.', quest_offer: 'Принеси мне {target} {item} для команды.', quest_complete: 'Теперь мы непобедимы!', quest_incomplete: 'Пятёрка ещё не в сборе...' },
     quests: [{ id: 'ej_storn_1', type: 'catch_x', targetItem: null, targetQty: 5, desc: 'Поймайте 5 разных покемонов', rewardMoney: 1000, rewardItem: 'greatBall', rewardQty: 5, prereqQuest: null }],
   },
@@ -190,12 +190,12 @@ export const NPC_DATA = {
     quests: [{ id: 'ej_granny_1', type: 'collect_items', targetItem: 'crystalShard', targetQty: 5, desc: 'Принесите 5 Осколков кристалла', rewardMoney: 300, rewardItem: 'shinyStone', rewardQty: 1, prereqQuest: null }],
   },
   'ej_richie': {
-    id: 'ej_richie', name: 'Богатенький Ричи', sprite: '💰', location: 'goldenrod',
+    id: 'ej_richie', name: 'Богатенький Ричи', sprite: '💰', location: 'goldenrodCity',
     dialog: { greet: 'Ха! Ещё один бедняк. Я Ричи — самый богатый в Джото!', default: 'Деньги решают всё.', quest_offer: 'Мне нужна редкая вещь: {target} {item}. Заплачу щедро!', quest_complete: 'Великолепно! Вот твоя награда, бедняк.', quest_incomplete: 'Где мой заказ?!' },
     quests: [{ id: 'ej_richie_1', type: 'collect_items', targetItem: 'lavaCore', targetQty: 2, desc: 'Принесите Ричи 2 Ядра магмы', rewardMoney: 3000, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null }],
   },
   'vermilion_richie': {
-    id: 'vermilion_richie', name: 'Богатенький Ричи', sprite: '💰', location: 'vermilion',
+    id: 'vermilion_richie', name: 'Богатенький Ричи', sprite: '💰', location: 'vermilionCity',
     dialog: { greet: 'Ха! Ещё один бедняк. Я Ричи — самый богатый коллекционер!', default: 'Деньги решают всё.', quest_offer: 'Мне нужна редкая вещь: {target} {item}. Заплачу щедро!', quest_complete: 'Великолепно! Вот твоя награда, бедняк.', quest_incomplete: 'Где мой заказ?!' },
     quests: [{ id: 'vermilion_richie_1', type: 'collect_items', targetItem: 'lavaCore', targetQty: 2, desc: 'Принесите Ричи 2 Ядра магмы', rewardMoney: 3000, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null }],
   },
@@ -205,7 +205,7 @@ export const NPC_DATA = {
     quests: [{ id: 'ostaron_richie_1', type: 'collect_items', targetItem: 'lavaCore', targetQty: 2, desc: 'Принесите Ричи 2 Ядра магмы', rewardMoney: 3000, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null }],
   },
   'saffron_officer': {
-    id: 'saffron_officer', name: 'Офицер Джес', sprite: '👮', location: 'saffron',
+    id: 'saffron_officer', name: 'Офицер Джес', sprite: '👮', location: 'saffronCity',
     dialog: { greet: 'Офицер Джес из Канто. Слежу за порядком.', default: 'Если заметите нарушения правил Лиги-17, обращайтесь ко мне.', quest_offer: 'Новичкам нужно снаряжение. Принеси мне {target} {item}.', quest_complete: 'Отлично! Теперь ты экипирован.', quest_incomplete: 'Приходи когда соберёшь всё.' },
     quests: [{ id: 'saffron_1', type: 'collect_items', targetItem: 'potion', targetQty: 3, desc: 'Принесите 3 Зелья', rewardMoney: 300, rewardItem: 'pokeBall', rewardQty: 5, prereqQuest: null }, { id: 'saffron_terror', type: 'explore', targetItem: null, targetQty: 3, desc: 'Разберитесь в причине нападений диких покемонов в Лавандии — посетите 3 локации', rewardMoney: 0, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }],
   },
@@ -237,7 +237,7 @@ export const NPC_DATA = {
     quests: [{ id: 'k_swot_1', type: 'catch_x', targetItem: null, targetQty: 4, desc: 'Поймайте 4 покемонов для Академии', rewardMoney: 900, rewardItem: 'tm', rewardQty: 2, prereqQuest: null }],
   },
   'vermilion_mayor': {
-    id: 'vermilion_mayor', name: 'Стивен Мейли', sprite: '👔', location: 'vermilion',
+    id: 'vermilion_mayor', name: 'Стивен Мейли', sprite: '👔', location: 'vermilionCity',
     dialog: { greet: 'Я Стивен Мейли, мэр Вермилиона. Нужна помощь!', default: 'Городские дела не ждут.', quest_offer: 'Передай {target} {item} — это срочно!', quest_complete: 'Работа сделана! Город благодарит тебя.', quest_incomplete: 'Документы ещё не доставлены...' },
     quests: [{ id: 'k_verm_1', type: 'explore', targetItem: null, targetQty: 2, desc: 'Посетите 2 локации Канто', rewardMoney: 600, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: null }],
   },
@@ -263,13 +263,13 @@ export const NPC_DATA = {
     dialog: { greet: 'Эта ледяная пещера... здесь скрыта тайна!', default: 'Холод не остановит науку!', quest_offer: 'Для экспедиции нужен {target} {item}.', quest_complete: 'Тайна раскрыта! Невероятно!', quest_incomplete: 'Пещера хранит свои секреты...' },
     quests: [{ id: 'sa_ice_1', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймайте 3 ледяных покемонов', rewardMoney: 800, rewardItem: 'iceStone', rewardQty: 1, prereqQuest: null }],
   },
-  'cerulean_settler': { id: 'cerulean_settler', name: 'Местный поселенец', sprite: '👤', location: 'cerulean_city', dialog: { greet: 'Приветствую в Церулине! Наш город славится водой.', default: 'Церулин прекрасен в любое время года.' }, quests: [] },
+  'cerulean_settler': { id: 'cerulean_settler', name: 'Местный поселенец', sprite: '👤', location: 'ceruleanCity', dialog: { greet: 'Приветствую в Церулине! Наш город славится водой.', default: 'Церулин прекрасен в любое время года.' }, quests: [] },
   'cerulean_barman_al': { id: 'cerulean_barman_al', name: 'Бармен Аль', sprite: '🍺', location: 'cerulean_cafe_rain', dialog: { greet: 'Лучший бар в Церулине! Заходи.', default: 'Вечером у нас музыка.' }, quests: [] },
   'cerulean_jack': { id: 'cerulean_jack', name: 'Джек', sprite: '🧢', location: 'cerulean_cafe_rain', dialog: { greet: 'Я Джек, местный завсегдатай.', default: 'Всех тут знаю.' }, quests: [] },
   'cerulean_auctioneer': { id: 'cerulean_auctioneer', name: 'Аукционист', sprite: '🔨', location: 'cerulean_tavern', dialog: { greet: 'Аукцион начинается! Кто даст больше?', default: 'Редкие лоты ждут.' }, quests: [] },
   'cerulean_agent_james': { id: 'cerulean_agent_james', name: 'Агент Джеймс', sprite: '🕶️', location: 'cerulean_tavern', dialog: { greet: 'Агент Джеймс. Веду расследование.', default: 'Не видели ничего подозрительного?' }, quests: [] },
   'cerulean_agent_stace': { id: 'cerulean_agent_stace', name: 'Агент Стейс', sprite: '🕶️', location: 'cerulean_tavern', dialog: { greet: 'Агент Стейс, напарница Джеймса.', default: 'Мы работаем под прикрытием.' }, quests: [] },
-  'cerulean_surfer': { id: 'cerulean_surfer', name: 'Сёрфингист', sprite: '🏄', location: 'cerulean_city', dialog: { greet: 'Волны Церулина — лучшие в Канто!', default: 'Сёрфинг — это свобода.' }, quests: [] },
+  'cerulean_surfer': { id: 'cerulean_surfer', name: 'Сёрфингист', sprite: '🏄', location: 'ceruleanCity', dialog: { greet: 'Волны Церулина — лучшие в Канто!', default: 'Сёрфинг — это свобода.' }, quests: [] },
 
   'vermilion_judith': { id: 'vermilion_judith', name: 'Джудит', sprite: '👩', location: 'vermilion_fanclub', dialog: { greet: 'Моя кукла Люси пропала...', default: 'Спасибо что помогаете искать!' }, quests: [{ id: 'k_lucy_doll', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Найдите 3 образца растений для поисков куклы Люси', rewardMoney: 600, rewardItem: 'lumBerry', rewardQty: 3, prereqQuest: null }] },
   'vermilion_secretary': { id: 'vermilion_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'vermilion_stadium', dialog: { greet: 'Я секретарь стадиона. Лидер ждёт.', default: 'Запись на битву открыта.' }, quests: [] },
@@ -279,24 +279,24 @@ export const NPC_DATA = {
   'vermilion_seller1': { id: 'vermilion_seller1', name: 'Продавец', sprite: '🛒', location: 'vermilion_pokemarket', dialog: { greet: 'Покупайте товары!', default: 'Свежий завоз!' }, quests: [] },
   'vermilion_cashier': { id: 'vermilion_cashier', name: 'Кассир', sprite: '🎫', location: 'vermilion_port', dialog: { greet: 'Билеты на паром!', default: 'Отправление каждый час.' }, quests: [] },
 
-  'lavender_miss_trevis': { id: 'lavender_miss_trevis', name: 'Мисс Тревис', sprite: '👩‍🏫', location: 'lavender_town', dialog: { greet: 'Лавандия — город упокоения.', default: 'В окрестностях неспокойно... Дикие покемоны атакуют!', quest_offer: 'Офицер Джес из Западного Шаффрана просила помощи. Принеси {target} {item}.', quest_complete: 'Спасибо! Лавандия снова в безопасности!', quest_incomplete: 'Покемоны всё ещё атакуют...' }, quests: [{ id: 'lavender_terror', type: 'explore', targetItem: null, targetQty: 3, desc: 'Разберитесь в причине нападений диких покемонов в Лавандии — посетите 3 локации', rewardMoney: 0, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
-  'lavender_medium': { id: 'lavender_medium', name: 'Медиум', sprite: '🔮', location: 'lavender_town', dialog: { greet: 'Лавандия — место упокоения покемонов.', default: 'Башня Призраков хранит множество тайн...' }, quests: [] },
+  'lavender_miss_trevis': { id: 'lavender_miss_trevis', name: 'Мисс Тревис', sprite: '👩‍🏫', location: 'lavenderTown', dialog: { greet: 'Лавандия — город упокоения.', default: 'В окрестностях неспокойно... Дикие покемоны атакуют!', quest_offer: 'Офицер Джес из Западного Шаффрана просила помощи. Принеси {target} {item}.', quest_complete: 'Спасибо! Лавандия снова в безопасности!', quest_incomplete: 'Покемоны всё ещё атакуют...' }, quests: [{ id: 'lavender_terror', type: 'explore', targetItem: null, targetQty: 3, desc: 'Разберитесь в причине нападений диких покемонов в Лавандии — посетите 3 локации', rewardMoney: 0, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
+  'lavender_medium': { id: 'lavender_medium', name: 'Медиум', sprite: '🔮', location: 'lavenderTown', dialog: { greet: 'Лавандия — место упокоения покемонов.', default: 'Башня Призраков хранит множество тайн...' }, quests: [] },
   'lavender_guard': { id: 'lavender_guard', name: 'Охранник', sprite: '💂', location: 'lavender_radio_tower', dialog: { greet: 'Порядок под контролем.', default: 'Не шалите.' }, quests: [] },
   'lavender_seller': { id: 'lavender_seller', name: 'Продавец', sprite: '🛒', location: 'lavender_pokemarket', dialog: { greet: 'Товары для тренеров!', default: 'Заходите!' }, quests: [] },
 
-  'celadon_arthur_wilford': { id: 'celadon_arthur_wilford', name: 'Артур Вилфорд', sprite: '🎩', location: 'celadon_city', dialog: { greet: 'Я Артур Вилфорд, старейшина Целадона.', default: 'Целадон — город изобилия.' }, quests: [] },
+  'celadon_arthur_wilford': { id: 'celadon_arthur_wilford', name: 'Артур Вилфорд', sprite: '🎩', location: 'celadonCity', dialog: { greet: 'Я Артур Вилфорд, старейшина Целадона.', default: 'Целадон — город изобилия.' }, quests: [] },
   'celadon_secretary': { id: 'celadon_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'celadon_stadium', dialog: { greet: 'Стадион Эрики открыт.', default: 'Лидер ждёт.' }, quests: [] },
-  'celadon_little_girl': { id: 'celadon_little_girl', name: 'Маленькая девочка', sprite: '👧', location: 'celadon_city', dialog: { greet: 'Я люблю гулять по Целадону!', default: 'У меня есть покемон-друг!' }, quests: [] },
-  'celadon_meteorologist': { id: 'celadon_meteorologist', name: 'Ведущий метеоролог', sprite: '🌤️', location: 'celadon_city', dialog: { greet: 'Прогноз погоды — наша работа.', default: 'Погода влияет на покемонов.' }, quests: [{ id: 'cel_weather', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации для сбора метеоданных', rewardMoney: 700, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
-  'celadon_pharmacist': { id: 'celadon_pharmacist', name: 'Аптекарь', sprite: '💊', location: 'celadon_city', dialog: { greet: 'Аптека Целадона.', default: 'Здоровье команды — наш приоритет.' }, quests: [] },
-  'celadon_tm_seller': { id: 'celadon_tm_seller', name: 'Продавец ТМ', sprite: '📀', location: 'celadon_city', dialog: { greet: 'Технические Машины!', default: 'Новинки каждую неделю!' }, quests: [] },
-  'celadon_stone_seller': { id: 'celadon_stone_seller', name: 'Продавец камней', sprite: '💎', location: 'celadon_city', dialog: { greet: 'Камни эволюции!', default: 'Редкие камни со всего мира.' }, quests: [] },
-  'celadon_barber': { id: 'celadon_barber', name: 'Парикмахер', sprite: '💇', location: 'celadon_city', dialog: { greet: 'Стильная стрижка для вас!', default: 'Новый образ — новые победы!' }, quests: [] },
-  'celadon_tattoo': { id: 'celadon_tattoo', name: 'Татуировщик', sprite: '🎨', location: 'celadon_city', dialog: { greet: 'Лучшие тату в Канто!', default: 'Татуировка — это навсегда.' }, quests: [] },
-  'celadon_electronics': { id: 'celadon_electronics', name: 'Продавец электроники', sprite: '📱', location: 'celadon_city', dialog: { greet: 'Техника для тренеров!', default: 'Новинки из Силф Ко!' }, quests: [] },
-  'celadon_balls': { id: 'celadon_balls', name: 'Продавец покеболов', sprite: '⚽', location: 'celadon_city', dialog: { greet: 'Покеболы всех видов!', default: 'Ловите с комфортом!' }, quests: [] },
-  'celadon_appliances': { id: 'celadon_appliances', name: 'Продавец техники', sprite: '🔌', location: 'celadon_city', dialog: { greet: 'Бытовая техника для дома.', default: 'Качество гарантирую.' }, quests: [] },
-  'celadon_craftsman': { id: 'celadon_craftsman', name: 'Продавец-ремесленник', sprite: '🔧', location: 'celadon_city', dialog: { greet: 'Ручная работа!', default: 'Каждая вещь с душой.' }, quests: [] },
+  'celadon_little_girl': { id: 'celadon_little_girl', name: 'Маленькая девочка', sprite: '👧', location: 'celadonCity', dialog: { greet: 'Я люблю гулять по Целадону!', default: 'У меня есть покемон-друг!' }, quests: [] },
+  'celadon_meteorologist': { id: 'celadon_meteorologist', name: 'Ведущий метеоролог', sprite: '🌤️', location: 'celadonCity', dialog: { greet: 'Прогноз погоды — наша работа.', default: 'Погода влияет на покемонов.' }, quests: [{ id: 'cel_weather', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации для сбора метеоданных', rewardMoney: 700, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
+  'celadon_pharmacist': { id: 'celadon_pharmacist', name: 'Аптекарь', sprite: '💊', location: 'celadonCity', dialog: { greet: 'Аптека Целадона.', default: 'Здоровье команды — наш приоритет.' }, quests: [] },
+  'celadon_tm_seller': { id: 'celadon_tm_seller', name: 'Продавец ТМ', sprite: '📀', location: 'celadonCity', dialog: { greet: 'Технические Машины!', default: 'Новинки каждую неделю!' }, quests: [] },
+  'celadon_stone_seller': { id: 'celadon_stone_seller', name: 'Продавец камней', sprite: '💎', location: 'celadonCity', dialog: { greet: 'Камни эволюции!', default: 'Редкие камни со всего мира.' }, quests: [] },
+  'celadon_barber': { id: 'celadon_barber', name: 'Парикмахер', sprite: '💇', location: 'celadonCity', dialog: { greet: 'Стильная стрижка для вас!', default: 'Новый образ — новые победы!' }, quests: [] },
+  'celadon_tattoo': { id: 'celadon_tattoo', name: 'Татуировщик', sprite: '🎨', location: 'celadonCity', dialog: { greet: 'Лучшие тату в Канто!', default: 'Татуировка — это навсегда.' }, quests: [] },
+  'celadon_electronics': { id: 'celadon_electronics', name: 'Продавец электроники', sprite: '📱', location: 'celadonCity', dialog: { greet: 'Техника для тренеров!', default: 'Новинки из Силф Ко!' }, quests: [] },
+  'celadon_balls': { id: 'celadon_balls', name: 'Продавец покеболов', sprite: '⚽', location: 'celadonCity', dialog: { greet: 'Покеболы всех видов!', default: 'Ловите с комфортом!' }, quests: [] },
+  'celadon_appliances': { id: 'celadon_appliances', name: 'Продавец техники', sprite: '🔌', location: 'celadonCity', dialog: { greet: 'Бытовая техника для дома.', default: 'Качество гарантирую.' }, quests: [] },
+  'celadon_craftsman': { id: 'celadon_craftsman', name: 'Продавец-ремесленник', sprite: '🔧', location: 'celadonCity', dialog: { greet: 'Ручная работа!', default: 'Каждая вещь с душой.' }, quests: [] },
 
   'saffron_tailor': { id: 'saffron_tailor', name: 'Портниха', sprite: '🧵', location: 'saffron_needle_house', dialog: { greet: 'Шью лучшие костюмы!', default: 'Стиль важен даже в битве.' }, quests: [] },
   'saffron_secretary': { id: 'saffron_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'saffron_psychic_stadium', dialog: { greet: 'Стадион Сабрины — для сильных духом.', default: 'Психические покемоны чувствуют ауру.' }, quests: [] },
@@ -332,12 +332,12 @@ export const NPC_DATA = {
   'new_district_kristen': { id: 'new_district_kristen', name: 'Кристен', sprite: '🏃', location: 'new_district', dialog: { greet: 'Я Кристен. Ветер зовёт вперёд!', default: 'Бег — это жизнь!' }, quests: [{ id: 'ej_wind', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации в поисках ветра', rewardMoney: 600, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
   'new_district_train': { id: 'new_district_train', name: 'Поезд', sprite: '🚂', location: 'new_district', dialog: { greet: 'Поезд до Шаффрана.', default: 'Занимайте места!' }, quests: [] },
 
-  'olivine_glen': { id: 'olivine_glen', name: 'Глен', sprite: '👨', location: 'olivine', dialog: { greet: 'Я Глен, портовый рабочий.', default: 'Оливинский порт — лучший в Джото.' }, quests: [] },
+  'olivine_glen': { id: 'olivine_glen', name: 'Глен', sprite: '👨', location: 'olivineCity', dialog: { greet: 'Я Глен, портовый рабочий.', default: 'Оливинский порт — лучший в Джото.' }, quests: [] },
   'olivine_evan': { id: 'olivine_evan', name: 'Эван', sprite: '👨', location: 'olivine_beach', dialog: { greet: 'Эван. Рыбачу 20 лет.', default: 'Рыбалка учит терпению.' }, quests: [] },
-  'olivine_arina': { id: 'olivine_arina', name: 'Арина', sprite: '👩', location: 'olivine', dialog: { greet: 'Арина. Люблю наблюдать за кораблями.', default: 'Море бесконечно.' }, quests: [] },
+  'olivine_arina': { id: 'olivine_arina', name: 'Арина', sprite: '👩', location: 'olivineCity', dialog: { greet: 'Арина. Люблю наблюдать за кораблями.', default: 'Море бесконечно.' }, quests: [] },
   'olivine_barman_elvin': { id: 'olivine_barman_elvin', name: 'Бармен Элвин', sprite: '🍺', location: 'olivine_bar_pirate', dialog: { greet: 'Пиратское убежище открыто!', default: 'Лучший ром на побережье!' }, quests: [] },
   'olivine_lighthouse_keeper': { id: 'olivine_lighthouse_keeper', name: 'Смотритель маяка', sprite: '🔦', location: 'olivine_beach_lighthouse', dialog: { greet: 'Я смотритель маяка.', default: 'Браконьеры? Да, видел их...' }, quests: [{ id: 'oli_brakonier', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 браконьеров у маяка', rewardMoney: 1000, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null }] },
-  'olivine_marta': { id: 'olivine_marta', name: 'Марта', sprite: '👩', location: 'olivine', dialog: { greet: 'Я Марта. У меня старая фотография.', default: 'На этой фотографии — моя молодость.' }, quests: [{ id: 'oli_photo', type: 'collect_items', targetItem: 'crystalShard', targetQty: 2, desc: 'Принесите 2 осколка кристалла для восстановления фотографии', rewardMoney: 400, rewardItem: 'oranBerry', rewardQty: 3, prereqQuest: null }] },
+  'olivine_marta': { id: 'olivine_marta', name: 'Марта', sprite: '👩', location: 'olivineCity', dialog: { greet: 'Я Марта. У меня старая фотография.', default: 'На этой фотографии — моя молодость.' }, quests: [{ id: 'oli_photo', type: 'collect_items', targetItem: 'crystalShard', targetQty: 2, desc: 'Принесите 2 осколка кристалла для восстановления фотографии', rewardMoney: 400, rewardItem: 'oranBerry', rewardQty: 3, prereqQuest: null }] },
   'olivine_janet': { id: 'olivine_janet', name: 'Жанет', sprite: '👩', location: 'olivine_house_221', dialog: { greet: 'Жанет. Ищу рецепт зелья памяти.', default: 'Говорят оно помогает вспомнить прошлое.' }, quests: [{ id: 'oli_memory', type: 'collect_items', targetItem: 'plantSample', targetQty: 4, desc: 'Принесите 4 образца растений для зелья памяти', rewardMoney: 500, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: null }] },
 
   'flourence_pretty_girl': { id: 'flourence_pretty_girl', name: 'Симпатичная девушка', sprite: '👩', location: 'flourence', dialog: { greet: 'Флауренция — город цветов!', default: 'Люблю этот город.' }, quests: [] },
@@ -460,7 +460,7 @@ export const NPC_DATA = {
   'sa_richie': { id: 'sa_richie', name: 'Богатенький Ричи', sprite: '💰', location: 'il_de_far', dialog: { greet: 'Ха! И на Архипелаге есть бедняки!', default: 'Деньги решают всё.', quest_offer: 'Мне нужна редкая вещь: {target} {item}. Заплачу щедро!', quest_complete: 'Великолепно! Вот твоя награда, бедняк.', quest_incomplete: 'Где мой заказ?!' }, quests: [{ id: 'sa_richie_1', type: 'collect_items', targetItem: 'crystalShard', targetQty: 2, desc: 'Принесите Ричи 2 Осколка кристалла', rewardMoney: 3000, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: null }] },
 
   'cross_alfred': { id: 'cross_alfred', name: 'Альфред', sprite: '💌', location: 'rocks_wj', dialog: { greet: 'Каждый день я смотрю на багровый закат...', default: 'Любовь не знает границ. Передай письмо моей возлюбленной в другом регионе.', quest_offer: 'Найди прекрасную незнакомку и передай ей {target} {item}.', quest_complete: 'Письмо доставлено! Спасибо, тренер!', quest_incomplete: 'Письмо ещё не доставлено...' }, quests: [{ id: 'wj_lovers', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 города разных регионов чтобы передать письмо Альфреда', rewardMoney: 5000, rewardItem: 'dawnStone', rewardQty: 1, prereqQuest: null }] },
-  'cross_clown_freddy': { id: 'cross_clown_freddy', name: 'Клоун Фредди', sprite: '🤡', location: 'celadon_city', dialog: { greet: 'Цирк уехал, а клоуны остались!', default: 'Грустить нельзя!', quest_offer: 'Цирк переезжает! Посети {target} города, чтобы найти нас!', quest_complete: 'Ты нашёл цирк! Фредди счастлив!', quest_incomplete: 'Осталось ещё {target} городов...' }, quests: [{ id: 'cross_clown', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 города в поисках цирка', rewardMoney: 600, rewardItem: 'candy', rewardQty: 3, prereqQuest: null }] },
+  'cross_clown_freddy': { id: 'cross_clown_freddy', name: 'Клоун Фредди', sprite: '🤡', location: 'celadonCity', dialog: { greet: 'Цирк уехал, а клоуны остались!', default: 'Грустить нельзя!', quest_offer: 'Цирк переезжает! Посети {target} города, чтобы найти нас!', quest_complete: 'Ты нашёл цирк! Фредди счастлив!', quest_incomplete: 'Осталось ещё {target} городов...' }, quests: [{ id: 'cross_clown', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 города в поисках цирка', rewardMoney: 600, rewardItem: 'candy', rewardQty: 3, prereqQuest: null }] },
   'cross_lenart': { id: 'cross_lenart', name: 'Человек в тёмной накидке', sprite: '🥷', location: 'empty_city', dialog: { greet: 'Залечь на дно — мой план.', default: 'Не привлекайте внимания.' }, quests: [{ id: 'cross_hide', type: 'defeat_x', targetItem: null, targetQty: 3, desc: 'Победите 3 преследователей', rewardMoney: 700, rewardItem: 'fullRestore', rewardQty: 2, prereqQuest: null }] },
   'cross_dr_fins': { id: 'cross_dr_fins', name: 'Доктор Финс', sprite: '🧬', location: 'goldenrod_institute', dialog: { greet: 'Доктор Финс.', default: 'Генетика изменит мир покемонов.' }, quests: [{ id: 'cross_selection', type: 'catch_x', targetItem: null, targetQty: 4, desc: 'Поймайте 4 покемонов для исследований', rewardMoney: 1000, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
   'cross_journalist_erika': { id: 'cross_journalist_erika', name: 'Журналист Эрика', sprite: '🎤', location: 'new_district', dialog: { greet: 'Журналист Эрика.', default: 'Правда должна быть раскрыта.' }, quests: [{ id: 'cross_selection2', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Принесите 3 образца для расследования', rewardMoney: 700, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: 'cross_selection' }] },

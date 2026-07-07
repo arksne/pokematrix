@@ -20,7 +20,7 @@ export const users = pgTable('users', {
   pokemon_count: integer('pokemon_count').default(0),
   created_at: text('created_at'),
   last_seen: text('last_seen'),
-  location_id: text('location_id').default('goldenrod'),
+  location_id: text('location_id').default('goldenrodCity'),
   region: text('region').default('johto'),
 });
 

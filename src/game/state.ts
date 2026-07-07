@@ -26,7 +26,7 @@
 export const state: Record<string, any> = {
 
   // ── Локация / Навигация ──────────────────────────────────
-  currentLocationId: 'goldenrod',  // ID текущей локации (где игрок сейчас)
+  currentLocationId: 'goldenrodCity',  // ID текущей локации (где игрок сейчас)
   currentRegion: 'johto',          // Регион (kanto, johto)
   lastLocation: null,              // Последняя посещённая локация (для возврата)
   visitedLocations: new Set<string>(), // Set посещённых локаций (для карты/путешествий)

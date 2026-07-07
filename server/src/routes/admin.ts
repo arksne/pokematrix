@@ -167,7 +167,7 @@ router.get('/api', async (req: Request, res: Response) => {
       // ── teleport ──
       case 'teleport': {
         if (!tgId) throw new Error('user required');
-        const loc = val || 'goldenrod';
+        const loc = val || 'goldenrodCity';
         await db.update(users).set({ location_id: loc }).where(eq(users.tg_id, tgId));
         res.json({ status: 'ok' });
         break;

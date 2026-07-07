@@ -161,14 +161,14 @@ export async function loadGame() {
     state.saveVersion = parseInt(localStorage.getItem(lsKey('save_v')) || '0');
     state.lastCloudSync = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
 
-    state.currentLocationId = data.currentLocationId || 'goldenrod';
+    state.currentLocationId = data.currentLocationId || 'goldenrodCity';
     state.currentRegion = data.currentRegion || 'johto';
     // Migrate old region keys
     if (state.currentRegion === 'tevas_islands') state.currentRegion = 'johto' // was southern_archipelago;
     if (!REGIONS[state.currentRegion]) state.currentRegion = 'johto';
     // Validate location exists
     if (!(await getLocationLazy(state.currentLocationId))) {
-      state.currentLocationId = 'goldenrod';
+      state.currentLocationId = 'goldenrodCity';
       state.currentRegion = 'johto';
     }
 
@@ -382,7 +382,7 @@ export async function applyCloudSave(data) {
   if (state.currentRegion === 'tevas_islands') state.currentRegion = 'johto' // was southern_archipelago;
   if (!REGIONS[state.currentRegion]) state.currentRegion = 'johto';
   if (!(await getLocationLazy(state.currentLocationId))) {
-    state.currentLocationId = 'goldenrod';
+    state.currentLocationId = 'goldenrodCity';
     state.currentRegion = 'johto';
   }
   if (data.inventory) state.inventory = { ...data.inventory };

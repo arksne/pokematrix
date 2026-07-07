@@ -20,6 +20,6 @@ services:
       - key: ADMIN_PASS
         value: league17admin2026
       - key: ALLOW_DEV_LOGIN
-        value: false
+        value: true
       - key: ADMIN_IDS
         value: ""

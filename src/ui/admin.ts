@@ -204,7 +204,7 @@ export function initAdminPanel() {
       await giveStarterMon(pick); renderTeamGrid(); autoSave(); showToast(pick + '!', false);
     }],
     ['🦄 Мью', async () => { await giveStarterMon('mew'); renderTeamGrid(); autoSave(); showToast('Мью!', false); }],
-    ['🗺️ Голденрод', () => { setCurrentLocationId('goldenrod'); setCurrentRegion('johto'); renderLocation('goldenrod'); autoSave(); showToast('Goldenrod', false); }],
+    ['🗺️ Голденрод', () => { setCurrentLocationId('goldenrodCity'); setCurrentRegion('johto'); renderLocation('goldenrodCity'); autoSave(); showToast('Goldenrod', false); }],
     ['🗺️ Оливин', () => { setCurrentLocationId('olivine'); setCurrentRegion('johto'); renderLocation('olivine'); autoSave(); showToast('Olivine', false); }],
     ['🎣 Дать удочки', () => {
       ['oldRod','goodRod','superRod'].forEach(id => { getGameState().inventory[id] = 1; });
@@ -304,7 +304,7 @@ export function initAdminPanel() {
         legend: 'give_legendary', reset: 'reset_save', teleport_goldenrod: 'teleport'
       };
       const cmd = cmdMap[act!] || act!;
-      const val = act === 'teleport_goldenrod' ? 'goldenrod' : null;
+      const val = act === 'teleport_goldenrod' ? 'goldenrodCity' : null;
       try {
         const url = `/admin/api?token=league17admin2026&cmd=${cmd}&user=${found}${val ? '&val=' + encodeURIComponent(val) : ''}`;
         const res = await fetch(url); const data = await res.json();
