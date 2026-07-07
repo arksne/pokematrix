@@ -7,11 +7,12 @@ services:
     env: node
     region: frankfurt
     plan: free
-    buildCommand: |
-      npm install --include=dev && cd server && npm install --include=dev && npm run build && cd .. && npx vite build
+    buildCommand: npm run render-build
     startCommand: node server/dist/index.js
     healthCheckPath: /api/health
     envVars:
+      - key: NODE_VERSION
+        value: 22
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
