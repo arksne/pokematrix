@@ -1,15 +1,41 @@
-// Tutorial system — onboarding, interactive lessons, help (Неделя 12)
+// ─────────────────────────────────────────────────────────────
+// tutorial.ts — ОБУЧЕНИЕ (Tutorial) И СПРАВКА (Help)
+// ─────────────────────────────────────────────────────────────
+// Управляет системой обучения новых игроков: пошаговые уроки
+// с подсветкой элементов интерфейса, справка по всем аспектам
+// игры, отслеживание прогресса исследования локаций.
+//
+// ЗАВИСИМОСТИ:
+//   data/regions — REGIONS (для подсчёта исследованных локаций)
+//
+// ИСПОЛЬЗУЕТСЯ В: init.ts (запуск обучения, справка)
+//
+// ЭКСПОРТЫ:
+//   isTutorialComplete()                — проверка, завершён ли туториал
+//   markTutorialComplete()              — отметить туториал как завершённый
+//   startLesson(lessonId, callback?)    — запустить урок
+//   startOnboarding(callback?)          — запустить вводный тур
+//   openHelp()                          — открыть справку
+//   isHelpSeen()                        — проверка, открывал ли справку
+//   getExplorationProgress()            — прогресс исследования
+//   markLocationExplored(locId)         — отметить локацию как исследованную
+//   getExploredLocations()              — список исследованных локаций
+// ─────────────────────────────────────────────────────────────
 
-// Tutorial steps definition
+// ── ИМПОРТЫ ───────────────────────────────────────────────
+
+import { REGIONS } from '../data/regions.js';  // Все регионы (для статистики исследования)
+
+// ── ИНТЕРФЕЙСЫ ───────────────────────────────────────────
 export interface TutorialStep {
-  id: string;
-  title: string;
-  text: string;
-  icon: string;
-  targetSelector?: string;   // CSS selector to highlight
-  action?: string;           // 'click_nav', 'click_button', 'wait'
-  actionTarget?: string;     // selector or nav target
-  lesson?: string;           // lesson id if part of a lesson
+  id: string;                 // Уникальный ID шага
+  title: string;              // Заголовок (например, "Ваша команда")
+  text: string;               // Текст объяснения
+  icon: string;               // Эмодзи-иконка
+  targetSelector?: string;    // CSS-селектор элемента для подсветки
+  action?: string;            // 'click_nav' | 'click_button' | 'wait'
+  actionTarget?: string;      // Цель действия (например, 'view-team')
+  lesson?: string;            // ID урока (для группировки)
 }
 
 interface TutorialLesson {
@@ -20,6 +46,8 @@ interface TutorialLesson {
   steps: TutorialStep[];
 }
 
+// ── УРОКИ ОБУЧЕНИЯ ───────────────────────────────────────
+// 6 уроков: основы, бои, разведение, предметы, гимы, PvP
 const TUTORIAL_LESSONS: TutorialLesson[] = [
   {
     id: 'basics',
@@ -89,47 +117,53 @@ const TUTORIAL_LESSONS: TutorialLesson[] = [
       { id: 'pvp_rules', title: 'Правила', text: 'В PvP каждый выбирает атаку одновременно. Побеждает тот, кто лучше читает ходы соперника!', icon: '🧠', action: 'wait' },
     ]
   }
-];
+];  // 6 уроков, всего ~20 шагов
 
-const TUTORIAL_KEY = 'league17_tutorial';
-const HELP_SEEN_KEY = 'league17_help_seen';
+// ── КОНСТАНТЫ ────────────────────────────────────────────
+const TUTORIAL_KEY = 'league17_tutorial';      // Ключ localStorage для статуса туториала
+const HELP_SEEN_KEY = 'league17_help_seen';    // Ключ для флага "справка просмотрена"
 
-let currentSteps: TutorialStep[] = [];
-let currentStepIndex = 0;
-let onComplete: (() => void) | null = null;
-let highlightEl: HTMLElement | null = null;
+// ── СОСТОЯНИЕ МОДУЛЯ ─────────────────────────────────────
+let currentSteps: TutorialStep[] = [];          // Текущий список шагов
+let currentStepIndex = 0;                       // Индекс текущего шага
+let onComplete: (() => void) | null = null;     // Callback при завершении
+let highlightEl: HTMLElement | null = null;     // Элемент подсветки (рамка)
 
-// Check if tutorial has been completed
+// ── isTutorialComplete: проверка завершения туториала ──
 export function isTutorialComplete(): boolean {
   return localStorage.getItem(TUTORIAL_KEY) === 'complete';
 }
 
+// ── markTutorialComplete: отметить туториал как завершённый ──
 export function markTutorialComplete() {
   localStorage.setItem(TUTORIAL_KEY, 'complete');
 }
 
-// Start a tutorial lesson
+// ── startLesson: запуск урока по ID ─────────────────────
+// Загружает шаги урока, сбрасывает индекс, показывает первый шаг
 export function startLesson(lessonId: string, callback?: () => void) {
   const lesson = TUTORIAL_LESSONS.find(l => l.id === lessonId);
   if (!lesson) return;
-  currentSteps = [...lesson.steps];
+  currentSteps = [...lesson.steps];  // Копируем шаги
   currentStepIndex = 0;
   onComplete = callback || null;
-  showCurrentStep();
+  showCurrentStep();  // Показываем первый шаг
 }
 
-// Start onboarding (first 3 lessons automatically)
+// ── startOnboarding: запуск вводного обучения ────────────
+// Показывает первые 2 шага из урока "Основы", затем цепочку:
+// → "Бои" → "Предметы" → markTutorialComplete()
 export function startOnboarding(callback?: () => void) {
   if (isTutorialComplete()) {
     if (callback) callback();
     return;
   }
 
-  // Show welcome
-  currentSteps = TUTORIAL_LESSONS[0].steps.slice(0, 2); // Welcome + nav team
+  // Показываем Welcome + nav_team (первые 2 шага из basics)
+  currentSteps = TUTORIAL_LESSONS[0].steps.slice(0, 2);
   currentStepIndex = 0;
   onComplete = () => {
-    // After basics, start battles lesson
+    // После основ → урок битв → урок предметов → готово
     startLesson('battles', () => {
       startLesson('items', () => {
         markTutorialComplete();
@@ -140,39 +174,45 @@ export function startOnboarding(callback?: () => void) {
   showCurrentStep();
 }
 
+// ── showCurrentStep: отображение текущего шага ──────────
+// Создаёт оверлей с карточкой обучения, подсветкой элемента
+// и кнопками "Далее" / "Пропустить"
 function showCurrentStep() {
   if (currentStepIndex >= currentSteps.length) {
-    finishTutorial();
+    finishTutorial();  // Все шаги пройдены
     return;
   }
 
   const step = currentSteps[currentStepIndex];
 
-  // Remove any existing overlay
+  // Удаляем старый оверлей (если есть)
   removeOverlay();
 
+  // ── Создание оверлея ──
   const overlay = document.createElement('div');
   overlay.className = 'tutorial-overlay';
   overlay.id = 'tutorial-overlay';
   overlay.innerHTML = `
     <div class="tutorial-card">
       <div class="tutorial-icon">${step.icon}</div>
-      <h3>${step.title}</h3>
-      <p>${step.text}</p>
+      <h3>${step.title}</h3>                    <!-- Заголовок шага -->
+      <p>${step.text}</p>                        <!-- Текст объяснения -->
       <div class="tutorial-progress">
         ${currentSteps.map((s, i) =>
           `<span class="tutorial-dot ${i === currentStepIndex ? 'active' : ''} ${i < currentStepIndex ? 'completed' : ''}"></span>`
         ).join('')}
       </div>
       <div class="tutorial-buttons">
-        <button class="tutorial-btn tutorial-btn-primary" id="tutorial-next">${currentStepIndex < currentSteps.length - 1 ? 'Далее →' : 'Готово!'}</button>
+        <button class="tutorial-btn tutorial-btn-primary" id="tutorial-next">
+          ${currentStepIndex < currentSteps.length - 1 ? 'Далее →' : 'Готово!'}
+        </button>
         <button class="tutorial-btn tutorial-btn-skip" id="tutorial-skip">Пропустить</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  // Highlight target element
+  // ── Подсветка целевого элемента ──
   if (step.targetSelector) {
     const target = document.querySelector(step.targetSelector) as HTMLElement;
     if (target) {
@@ -195,30 +235,33 @@ function showCurrentStep() {
     }
   }
 
-  // Event handlers
+  // ── Обработчик: кнопка "Далее" ──
   document.getElementById('tutorial-next')?.addEventListener('click', () => {
     const s = currentSteps[currentStepIndex];
+    // Если шаг требует навигации — переключаем вкладку
     if (s.action === 'click_nav' && s.actionTarget) {
       removeOverlay();
       navigateTo(s.actionTarget);
     }
     currentStepIndex++;
-    // Clean up highlight
     if (highlightEl) { highlightEl.remove(); highlightEl = null; }
-    showCurrentStep();
+    showCurrentStep();  // Следующий шаг
   });
 
+  // ── Обработчик: кнопка "Пропустить" ──
   document.getElementById('tutorial-skip')?.addEventListener('click', () => {
     finishTutorial();
   });
 }
 
+// ── navigateTo: переключение на вкладку ─────────────────
+// Программно кликает по nav-item с указанным data-target
 function navigateTo(viewId: string) {
-  // Trigger navigation by clicking the nav item
   const navItem = document.querySelector(`.nav-item[data-target="${viewId}"]`) as HTMLElement;
   if (navItem) navItem.click();
 }
 
+// ── finishTutorial: завершение текущего урока ───────────
 function finishTutorial() {
   removeOverlay();
   if (highlightEl) { highlightEl.remove(); highlightEl = null; }
@@ -227,23 +270,22 @@ function finishTutorial() {
   if (onComplete) {
     const cb = onComplete;
     onComplete = null;
-    cb();
+    cb();  // Вызываем callback (может запустить следующий урок)
   }
 }
 
+// ── removeOverlay: удаление оверлея обучения ────────────
 function removeOverlay() {
   const existing = document.getElementById('tutorial-overlay');
   if (existing) existing.remove();
-  // Clean up any highlight from other lessons
+  // Очищаем старые подсветки
   document.querySelectorAll('[style*="z-index: 999"]').forEach(el => {
     if (el !== highlightEl) el.remove();
   });
 }
 
-// ================================================================
-// HELP SYSTEM
-// ================================================================
-
+// ── СПРАВКА (Help) ──────────────────────────────────────
+// Разделы справки с HTML содержимым
 const HELP_SECTIONS = [
   {
     title: '⚔️ Битвы',
@@ -296,8 +338,11 @@ const HELP_SECTIONS = [
   },
 ];
 
+// ── openHelp: открытие справки ──────────────────────────
+// Создаёт модальное окно со списком разделов справки
+// При клике на раздел — раскрывает полное содержимое
 export function openHelp() {
-  // Remove existing help modal
+  // Удаляем старую справку (если открыта)
   document.querySelectorAll('.help-modal').forEach(el => el.remove());
 
   const modal = document.createElement('div');
@@ -308,7 +353,7 @@ export function openHelp() {
       ${HELP_SECTIONS.map(s =>
         `<div class="help-section" data-help="${s.title}">
           <h4>${s.title}</h4>
-          ${s.content.slice(0, 60)}…
+          ${s.content.slice(0, 60)}…  <!-- Обрезаем до 60 символов (превью) -->
         </div>`
       ).join('')}
       <div style="text-align:center;margin-top:14px;">
@@ -318,32 +363,35 @@ export function openHelp() {
   `;
   document.body.appendChild(modal);
 
-  // Click section to expand
+  // ── Клик по разделу → раскрыть содержимое ──
   modal.querySelectorAll('.help-section').forEach(el => {
     el.addEventListener('click', () => {
       const title = (el as HTMLElement).dataset.help;
       const section = HELP_SECTIONS.find(s => s.title === title);
       if (!section) return;
       el.innerHTML = `<h4>${section.title}</h4>${section.content}`;
-      (el as HTMLElement).style.cursor = 'default';
+      (el as HTMLElement).style.cursor = 'default';  // Убираем курсор-руку
     });
   });
 
+  // ── Кнопка закрытия ──
   document.getElementById('help-close')?.addEventListener('click', () => modal.remove());
 
-  // Mark help as seen
+  // Отмечаем, что справка была открыта
   localStorage.setItem(HELP_SEEN_KEY, 'true');
 }
 
+// ── isHelpSeen: проверка, открывал ли игрок справку ────
 export function isHelpSeen(): boolean {
   return localStorage.getItem(HELP_SEEN_KEY) === 'true';
 }
 
-// ================================================================
-// EXPLORATION PROGRESS (Неделя 11.4)
-// ================================================================
-import { REGIONS } from '../data/regions.js';
+// ── ПРОГРЕСС ИССЛЕДОВАНИЯ ───────────────────────────────
 
+// getExplorationProgress — возвращает статистику исследования:
+//   total — всего локаций во всех регионах
+//   visited — сколько посещено
+//   pct — процент
 export function getExplorationProgress(): { total: number; visited: number; pct: number } {
   const visitedStr = localStorage.getItem('league17_explored_locs') || '[]';
   let visited: string[];
@@ -361,6 +409,7 @@ export function getExplorationProgress(): { total: number; visited: number; pct:
   };
 }
 
+// ── markLocationExplored: отметить локацию как исследованную ──
 export function markLocationExplored(locId: string) {
   const visitedStr = localStorage.getItem('league17_explored_locs') || '[]';
   let visited: string[];
@@ -371,6 +420,7 @@ export function markLocationExplored(locId: string) {
   }
 }
 
+// ── getExploredLocations: список исследованных локаций ──
 export function getExploredLocations(): string[] {
   const visitedStr = localStorage.getItem('league17_explored_locs') || '[]';
   try { return JSON.parse(visitedStr); } catch { return []; }

@@ -1,5 +1,21 @@
-// Achievements UI (Неделя 9.4)
+// ─────────────────────────────────────────────────────────────
+// achievements.ts — ДОСТИЖЕНИЯ
+// ─────────────────────────────────────────────────────────────
+// Модальное окно со списком всех достижений и их статусом
+// (разблокировано/заблокировано) для текущего игрока.
+//
+// ЗАВИСИМОСТИ: нет (только глобальный DOM)
+//
+// ИСПОЛЬЗУЕТСЯ В: init.ts (кнопка "Достижения")
+//
+// ЭКСПОРТЫ:
+//   openAchievements()        — открыть модалку достижений
+//   setUnlockedAchievements() — загрузить список разблокированных
+//   isAchievementUnlocked()   — проверить статус достижения
+// ─────────────────────────────────────────────────────────────
 
+// ── СПИСОК ВСЕХ ДОСТИЖЕНИЙ ──────────────────────────────
+// Каждое: { id, icon, name, desc }
 const ACHIEVEMENTS = [
   { id: 'first_catch', icon: '🔴', name: 'Первая поимка', desc: 'Поймайте первого дикого покемона' },
   { id: 'team_6', icon: '🐾', name: 'Полная команда', desc: 'Соберите команду из 6 покемонов' },
@@ -15,30 +31,41 @@ const ACHIEVEMENTS = [
   { id: 'trainer_100', icon: '⚔️', name: 'Ветеран', desc: '100 побед в битвах' },
   { id: 'pvp_win', icon: '⚡', name: 'PvP Победитель', desc: 'Первая победа в PvP' },
   { id: 'shiny_catch', icon: '✨', name: 'Охотник за Шайни', desc: 'Поймайте шайни покемона' },
-];
+];  // 14 достижений
 
+// ── СОСТОЯНИЕ: разблокированные достижения (кэш в памяти) ──
 let unlockedAchievements: string[] = [];
 
+// ── setUnlockedAchievements: установить список разблокированных ──
+// Принимает массив ID достижений (загружается с сервера)
 export function setUnlockedAchievements(ids: string[]) {
   unlockedAchievements = ids;
 }
 
+// ── isAchievementUnlocked: проверить, разблокировано ли ──
 export function isAchievementUnlocked(id: string): boolean {
   return unlockedAchievements.includes(id);
 }
 
+// ── openAchievements: открыть модальное окно достижений ──
+// Показывает все 14 достижений с иконками, названиями и описанием
+// Разблокированные — цветные, заблокированные — серые
+// Вверху счётчик: "Получено: 5/14"
 export function openAchievements() {
-  // Remove existing achievement modals
+  // Удаляем старую модалку (если есть)
   document.querySelectorAll('.achievement-modal').forEach(el => el.remove());
 
   const modal = document.createElement('div');
-  modal.className = 'help-modal achievement-modal'; // reuse help-modal styles
+  modal.className = 'help-modal achievement-modal';  // Используем стили help-modal
+
   modal.innerHTML = `
     <div class="help-card" style="max-width:380px;">
       <h2>🏆 Достижения</h2>
+      <!-- Счётчик -->
       <div style="margin-bottom:12px;font-size:0.82rem;color:#999;">
         Получено: ${unlockedAchievements.length}/${ACHIEVEMENTS.length}
       </div>
+      <!-- Сетка достижений -->
       <div class="achievement-grid">
         ${ACHIEVEMENTS.map(a => {
           const unlocked = unlockedAchievements.includes(a.id);
@@ -51,6 +78,7 @@ export function openAchievements() {
           `;
         }).join('')}
       </div>
+      <!-- Кнопка закрытия -->
       <div style="text-align:center;margin-top:14px;">
         <button class="tutorial-btn tutorial-btn-secondary" id="ach-close">Закрыть</button>
       </div>
@@ -58,5 +86,6 @@ export function openAchievements() {
   `;
   document.body.appendChild(modal);
 
+  // Обработчик закрытия
   document.getElementById('ach-close')?.addEventListener('click', () => modal.remove());
 }

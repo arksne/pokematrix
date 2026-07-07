@@ -1,9 +1,54 @@
+// ─────────────────────────────────────────────────────────────
+// pvp-core.ts — PVP БОЙ (КЛИЕНТСКАЯ ЧАСТЬ)
+// ─────────────────────────────────────────────────────────────
+// Отвечает за UI и логику PvP-боя на стороне клиента.
+// Взаимодействует с сервером через Socket.IO (state.socket).
+//
+// ОСНОВНЫЕ ФУНКЦИИ:
+//   openPvPArena — открыть арену PvP-боя
+//   updatePvPUI — обновить интерфейс боя (HP, ходы, кнопки)
+//   doPvPAttack — выполнить атаку игрока
+//   endPvP — завершить PvP-бой (победа/поражение)
+//
+// ОТЛИЧИЯ ОТ WILD/GYM БОЯ:
+//   - Данные оппонента приходят через Socket.IO (не PokeAPI)
+//   - Упрощённый расчёт урона (не использует calculateDamage из logic.ts)
+//   - Ходы переключаются: мой ход → ход оппонента → мой ход
+//   - Нет авто-охоты, предметов в бою, смены покемона
+//   - Простая формула: lvl * power * atk / 15 * рандом
+//
+// ЗАВИСИМОСТИ:
+//   state — глобальное состояние игры
+//   socket — Socket.IO клиент (state.socket)
+//   showToast — уведомления
+//   autoSave — автосохранение
+//   updateMoneyDisplay — обновление денег в UI
+// ─────────────────────────────────────────────────────────────
+
 import { state } from '../game/state.js';
 import { showToast } from '../utils/dom.js';
 import { getSpriteUrl } from '../utils/sprite.js';
 import { autoSave } from '../game/save.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 
+/**
+ * openPvPArena — открыть арену PvP-боя с оппонентом.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Создаёт модалку pvp-modal (если её нет) с полным UI боя
+ *   2. Устанавливает state.pvpBattleId, pvpOpponentName, pvpMyTurn
+ *   3. Находит первого живого покемона → state.pvpMyMon
+ *   4. Загружает атаки покемона (только level-up, топ-4 по уровню)
+ *   5. Отправляет данные о своём покемоне оппоненту через socket
+ *   6. Обработчик "Сдаться" — отправляет pvp_end с surrender
+ *
+ * ЧТО ПРИНИМАЕТ:
+ *   battleId — ID боя от сервера
+ *   opponent — имя оппонента
+ *   myFirst — true если я хожу первый
+ *
+ * ОТКУДА ВЫЗЫВАЕТСЯ: из обработчика socket → 'pvp_start'
+ */
 export function openPvPArena(battleId, opponent, myFirst) {
   state.pvpBattleId = battleId;
   state.pvpOpponentName = opponent;
@@ -12,6 +57,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
   if (!alive) { showToast('Нет живых покемонов!', true); return; }
   state.pvpMyMon = alive;
 
+  // ── Создание модалки (если ещё не создана) ──
   let modal = document.getElementById('pvp-modal');
   if (!modal) {
     modal = document.createElement('div');
@@ -44,6 +90,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
       </div>
     `;
     document.body.appendChild(modal);
+    // Обработчик кнопки "Сдаться"
     document.getElementById('btn-pvp-leave').addEventListener('click', () => {
       modal.style.display = 'none';
       state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: 'surrender' } });
@@ -53,17 +100,19 @@ export function openPvPArena(battleId, opponent, myFirst) {
     });
   }
 
+  // ── Заполнение UI ──
   document.getElementById('pvp-opponent-name').textContent = `⚔ Бой с ${opponent}`;
-  document.getElementById('pvp-opp-name').textContent = opponent;
-  document.getElementById('pvp-opp-lvl').textContent = '';
-  document.getElementById('pvp-opp-hp').textContent = '?/?';
-  document.getElementById('pvp-opp-hp-fill').style.width = '100%';
-  document.getElementById('pvp-opp-sprite').src = '';
+  document.getElementById('pvp-opp-name').textContent = opponent;       // Имя оппонента
+  document.getElementById('pvp-opp-lvl').textContent = '';              // Уровень — пока неизвестен
+  document.getElementById('pvp-opp-hp').textContent = '?/?';            // HP — пока неизвестно
+  document.getElementById('pvp-opp-hp-fill').style.width = '100%';     // HP бар — полный
+  document.getElementById('pvp-opp-sprite').src = '';                  // Спрайт — пока пусто
   document.getElementById('pvp-log').innerHTML = '';
-  updatePvPUI();
+  updatePvPUI();                                                        // UI своего покемона
   modal.style.display = 'flex';
 
-  // Send my pokemon data to opponent
+  // ── Отправка данных о своём покемоне оппоненту ──
+  // Сервер пересылает это второму игроку
   const mon = state.pvpMyMon;
   state.socket.emit('pvp_action', { battleId, action: {
     type: 'mon_data',
@@ -75,10 +124,24 @@ export function openPvPArena(battleId, opponent, myFirst) {
   }});
 }
 
+/**
+ * updatePvPUI — обновить интерфейс PvP-боя.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Обновляет HP бар, имя, уровень, спрайт своего покемона
+ *   2. Показывает индикатор хода (🎯 мой ход / ⏳ ожидание)
+ *   3. Загружает кнопки атак (только level-up, топ-4 по уровню)
+ *   4. Блокирует кнопки если не мой ход (opacity: 0.5)
+ *
+ * АТАКИ: берутся из apiData.moves, фильтруются по level-up,
+ * сортируются по уровню изучения (от высокого к низкому),
+ * выбираются топ-4.
+ */
 export function updatePvPUI() {
   if (!state.pvpMyMon) return;
   const mon = state.pvpMyMon;
   const curLvl = mon.baseLevel + (mon.candiesEaten || 0);
+  // ── Свой покемон ──
   document.getElementById('pvp-my-name').textContent = mon.nickname || mon.apiData?.name;
   document.getElementById('pvp-my-lvl').textContent = `Lv${curLvl}`;
   document.getElementById('pvp-my-hp').textContent = `${mon.currentHp}/${mon.maxHp}`;
@@ -86,13 +149,16 @@ export function updatePvPUI() {
   const sprite = getSpriteUrl(mon);
   document.getElementById('pvp-my-sprite').src = sprite;
 
+  // ── Индикатор хода ──
   document.getElementById('pvp-turn-indicator').textContent = state.pvpMyTurn ? '🎯 Ваш ход!' : '⏳ Ожидание хода соперника...';
   document.getElementById('pvp-turn-indicator').style.color = state.pvpMyTurn ? '#34c759' : '#ff9500';
 
+  // ── Загрузка атак ──
   const movesDiv = document.getElementById('pvp-moves');
   movesDiv.innerHTML = '';
   state.pvpMovesDetailed = [];
 
+  // Фильтруем атаки: только level-up, до текущего уровня
   const seen = new Set();
   const lm = [];
   if (mon.apiData?.moves) {
@@ -114,11 +180,14 @@ export function updatePvPUI() {
       }
     }
   }
+  // Сортируем: последние выученные атаки — первыми
   lm.sort((a, b) => b.level - a.level);
-  const topMoves = lm.slice(0, 4);
+  const topMoves = lm.slice(0, 4); // Топ-4 атаки
   state.pvpMovesDetailed = topMoves.map(() => null);
 
+  // Создаём кнопки для каждой атаки
   topMoves.forEach((m, i) => {
+    // Асинхронная загрузка деталей атаки (для определения типа)
     fetch(m.url).then(r => r.json()).then(d => {
       state.pvpMovesDetailed[i] = d;
       const btns = movesDiv.querySelectorAll('.reborn-move-link');
@@ -131,7 +200,7 @@ export function updatePvPUI() {
     const btn = document.createElement('span');
     btn.className = 'reborn-move-link';
     btn.textContent = m.name;
-    btn.style.opacity = state.pvpMyTurn ? '1' : '0.5';
+    btn.style.opacity = state.pvpMyTurn ? '1' : '0.5'; // Затемняем если не мой ход
     btn.onclick = () => {
       if (!state.pvpMyTurn) { showToast('Сейчас ход соперника!', true); return; }
       doPvPAttack(i);
@@ -140,25 +209,54 @@ export function updatePvPUI() {
   });
 }
 
+/**
+ * doPvPAttack — выполнить PvP-атаку.
+ *
+ * УПРОЩЁННАЯ ФОРМУЛА (не использует calculateDamage):
+ *   rawDmg = ((lvl * power * (atk / 100)) / 15) * random(0.85-1.15)
+ *   crit = 6.25% × 1.5
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Вычисляет урон по упрощённой формуле
+ *   2. Добавляет запись в лог
+ *   3. Переключает state.pvpMyTurn = false
+ *   4. Отправляет данные атаки на сервер через socket
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: из кнопок атак в updatePvPUI()
+ */
 export function doPvPAttack(moveIdx) {
   if (!state.pvpMyMon || !state.pvpBattleId) return;
   const detailed = state.pvpMovesDetailed[moveIdx];
   const moveName = detailed?.name || 'Атака';
   const lvl = state.pvpMyMon.baseLevel + (state.pvpMyMon.candiesEaten || 0);
-  const atk = (state.pvpMyMon.apiData?.stats?.[1]?.base_stat || 60);
+  const atk = (state.pvpMyMon.apiData?.stats?.[1]?.base_stat || 60); // Base Attack
   const power = detailed?.power || 60;
+  // Упрощённая формула урона (без учёта STAB, типов, защит и т.д.)
   const rawDmg = Math.floor(((lvl * power * (atk / 100)) / 15) * (0.85 + Math.random() * 0.3));
-  const crit = Math.random() < 0.0625;
+  const crit = Math.random() < 0.0625; // 1/16 шанс крита
   const dmg = crit ? Math.floor(rawDmg * 1.5) : rawDmg;
 
   const logEl = document.getElementById('pvp-log');
   logEl.innerHTML = `Вы: ${moveName}! ${crit ? '💥Крит! ' : ''}(-${dmg})\n${logEl.innerHTML}`;
 
-  state.pvpMyTurn = false;
+  state.pvpMyTurn = false; // Передаём ход оппоненту
   state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: { type: 'attack', moveName, dmg, crit } });
   updatePvPUI();
 }
 
+/**
+ * endPvP — завершить PvP-бой.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Показывает toast с результатом (победа/поражение)
+ *   2. При победе: +500 кредитов
+ *   3. Закрывает модалку
+ *   4. Отправляет результат на сервер
+ *   5. Сбрасывает state.pvpBattleId
+ *   6. Автосохраняет
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: из обработчика socket → 'pvp_result'
+ */
 export function endPvP(won) {
   showToast(won ? '🏆 Победа в PvP! +500¥' : '💀 Поражение в PvP...', !won);
   if (won) { state.inventory['credit'] = (state.inventory['credit'] || 0) + 500; updateMoneyDisplay(); }

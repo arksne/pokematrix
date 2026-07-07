@@ -1,4 +1,0 @@
-[phases.setup]
-nixPkgs = ["nodejs_22"]
-nixpkgsArchive = "50165c4f7eb48ce82bd063e1fb8047a0f515f8ce"
-aptPkgs = ["python3"]

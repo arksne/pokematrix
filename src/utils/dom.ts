@@ -1,5 +1,68 @@
+/**
+ * =============================================================================
+ * dom.ts — Утилиты для работы с DOM (всплывающие уведомления, модальные окна,
+ *          HTML-эскейпинг, отрисовка звёзд редкости/мощи)
+ * =============================================================================
+ *
+ * ## Что делает этот файл
+ * Предоставляет набор чистых функций для создания и управления элементами
+ * пользовательского интерфейса: тост-уведомления, модальные окна
+ * подтверждения/выбора/ввода текста, эскейпинг HTML-строк, генерация
+ * звёздных рейтингов (мощь и редкость покемонов).
+ *
+ * ## Зависимости
+ * - Глобальные объекты браузера: `document`, `setTimeout`, `clearTimeout`
+ * - Никаких импортов из других модулей проекта (файл самодостаточен)
+ *
+ * ## Где используется (все файлы проекта, импортирующие из dom.ts)
+ * - src/ui/admin.ts          — showToast, showConfirmModal
+ * - src/ui/crafting.ts       — showToast
+ * - src/ui/daycare.ts        — showToast, showSelectionModal
+ * - src/ui/gym-reward.ts     — showSelectionModal, showToast
+ * - src/ui/inventory.ts      — showToast, showConfirmModal, showSelectionModal
+ * - src/ui/location.ts       — showToast
+ * - src/ui/nickname.ts       — showToast, showTextInputModal
+ * - src/ui/npcs.ts           — showToast
+ * - src/ui/pc.ts             — showToast, showConfirmModal
+ * - src/ui/profile.ts        — escHtml, renderStars, showSelectionModal, showToast
+ * - src/ui/shop.ts           — showToast, showConfirmModal
+ * - src/ui/starter.ts        — showToast
+ * - src/ui/tm.ts             — showToast
+ * - src/ui/trainer-card.ts   — showTextInputModal
+ * - src/ui/trainers.ts       — showToast, escHtml
+ * - src/ui/trade-center.ts   — showToast
+ * - src/ui/trade-window.ts   — showToast, escHtml
+ * - src/social/trainer-profile.ts — escHtml, showToast
+ * - src/network/socket.ts         — showToast, showConfirmModal
+ * - src/battle/core.ts             — showToast, showSelectionModal
+ * - src/battle/pvp-core.ts         — showToast
+ * - src/battle/pvp.js              — showToast
+ * - src/game/auth.ts               — showToast
+ * - src/game/init.ts               — showToast
+ * - src/game/save.ts               — showConfirmModal, showToast
+ *
+ * ## Ключевые экспорты
+ * | Функция              | Описание                                    |
+ * |----------------------|---------------------------------------------|
+ * | escHtml              | Эскейпинг HTML-спецсимволов (&, <, >, ", ') |
+ * | showToast            | Всплывающее уведомление (успех/ошибка)      |
+ * | showConfirmModal     | Модальное окно подтверждения (Да/Отмена)    |
+ * | showSelectionModal   | Модальное окно выбора из списка             |
+ * | showTextInputModal   | Модальное окно ввода текста                 |
+ * | renderStars          | Генерация HTML звёзд мощи и редкости        |
+ * =============================================================================
+ */
+
 // DOM utilities — no dependencies on main.js or core.js
 
+/**
+ * Эскейпинг HTML-спецсимволов в строке.
+ * Заменяет &, <, >, ", ' на соответствующие HTML-сущности.
+ * Используется для безопасной вставки пользовательского контента через innerHTML.
+ *
+ * @param s - Входная строка (из пользовательского ввода, данных покемонов и т.д.)
+ * @returns Строка с экранированными HTML-символами, безопасная для вставки через innerHTML
+ */
 export function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }

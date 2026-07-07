@@ -1,39 +1,91 @@
-import { showToast, showSelectionModal } from '../utils/dom.js';
-import { itemDef } from '../utils/items.js';
-import { getSpriteUrl, updateBattleSpriteBgs } from '../utils/sprite.js';
-import { fetchPokeAPI } from '../utils/api.js';
-import { checkEvolution, triggerEvolution } from '../ui/evolution.js';
-import { natures } from '../data/natures.js';
-import { ITEMS } from '../data/items.js';
-import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';
-import { calculateStat as calcStat, calculateDamage, getTypeMultiplier, applyStatusEffect as applyStatusEffectLogic, cureStatus as cureStatusLogic, checkStatusTurn as checkStatusTurnLogic, applyStatusEndOfTurn as applyStatusEndOfTurnLogic, statStageModify as statStageModifyLogic, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy, getMoveCategory } from './logic.js';
-import { selectEnemyMove } from './ai.js';
-import { store } from '../game/store.js';
-import { state } from '../game/state.js';
-import { generateUID, getTrainerId } from '../utils/state.js';
-import { itemCategory } from '../utils/items.js';
-import { getHeldItemName } from '../ui/inventory.js';
-import { WEATHERS, WEATHER_ICONS, WEATHER_NAMES, getDailyWeather, getWeatherMultiplier } from '../data/weather.js';
-import { QUEST_CONFIGS } from '../data/quests.js';
+// ─────────────────────────────────────────────────────────────
+// core.ts — ДВИЖОК БОЯ (2927 строк)
+// ─────────────────────────────────────────────────────────────
+// Это самый большой файл проекта. Он содержит ВСЮ логику боя:
+//   - Поиск/встреча диких покемонов (startHunt, autoHunt)
+//   - Атаки игрока (useMove) и противника (enemyTurn)
+//   - Система статусов (яд/ожог/паралич/сон/заморозка)
+//   - Ягоды (berry auto-use)
+//   - Баффы/барьеры (Reflect, Light Screen, Protect, Substitute)
+//   - Смена покемона (switchPokemon)
+//   - Поимка (catch formula)
+//   - EXP и эволюция после победы
+//   - Сражения с лидерами залов (gym)
+//   - Элитная Четвёрка (elite four)
+//   - Чемпион (champion)
+//   - Квесты (quest tracking, проверка прогресса)
+//   - Сохранение/восстановление состояния боя (save/restore)
+//
+// Использует:
+//   logic.ts     — чистые функции: calculateDamage, getTypeMultiplier, checkAccuracy и т.д.
+//   ai.ts        — selectEnemyMove — AI выбор атаки противника
+//   state.ts     — глобальное состояние игры (GS — Proxy к нему)
+//   store.ts     — игровая логика: giveReward, updateInventoryDisplay
+//   state-machine.ts — BattleStateMachine, управление фазами боя
+//   utils/*.ts   — DOM, спрайты, API, UID
+//   data/*.ts    — погода, квесты, натуры, предметы
+//   ui/*.ts      — эволюция, новые атаки, инвентарь
+//
+// Экспортирует:
+//   battle, saveBattleState, restoreBattleState, useMove, enemyTurn,
+//   startHunt, startAutoHunt, switchPokemon, openGymModal,
+//   startGymBattle, startEliteBattle, championBattle, и много утилит
+// ─────────────────────────────────────────────────────────────
 
-// Cross-module references (provided by main.ts at runtime)
-declare const pcBoxes: any[];
-declare function addNotification(title: string, text: string): void;
-declare function updateBadgeDisplay(): void;
+// ── ИМПОРТЫ ─────────────────────────────────────────────────
+// Каждый импорт — это внешний модуль, от которого зависит core.ts.
+// Все ui/* импорты — это DOM-манипуляции (кнопки, модалки).
+// Все data/* импорты — статические конфиги (погода, предметы).
+import { showToast, showSelectionModal } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
+import { itemDef } from '../utils/items.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
+import { getSpriteUrl, updateBattleSpriteBgs } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
+import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
+import { checkEvolution, triggerEvolution } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
+import { natures } from '../data/natures.js';                            // Массив характеров (nature) с buff/nerf модификаторами
+import { ITEMS } from '../data/items.js';                                // Массив всех предметов игры (ItemDef[])
+import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
+// Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
+import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy } from './logic.js';
+import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
+import { store } from '../game/store.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
+import { state } from '../game/state.js';                                 // state — глобальное состояние игры (инвентарь, команда, локация)
+import { generateUID, getTrainerId } from '../utils/state.js';           // generateUID — уникальный ID для пойманного покемона; getTrainerId — ID тренера
+import { itemCategory } from '../utils/items.js';                        // itemCategory(id) → категория предмета (healing, ball, statusCure...)
+import { getHeldItemName } from '../ui/inventory.js';                    // getHeldItemName — русское название предмета для сообщений
+import { WEATHER_ICONS, WEATHER_NAMES, getDailyWeather } from '../data/weather.js'; // Погода: конфиги, иконки, имена, дневная погода по локации, множитель урона
+import { QUEST_CONFIGS } from '../data/quests.js';                       // Все конфиги квестов (заданий)
 
+// ── ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (из main.ts) ─────────────────────
+// Эти переменные объявлены в main.ts через var/let и доступны во всех модулях.
+// TypeScript не знает о них — используем declare чтобы TS не ругался.
+declare const pcBoxes: any[];        // PC Boxes — хранилище покемонов (массив массивов), используется когда команда полна (6 покемонов)
+declare function addNotification(title: string, text: string): void;  // Добавить уведомление в UI (из main.ts)
+declare function updateBadgeDisplay(): void;                          // Обновить отображение значков залов в UI
+
+// ── СОЗДАНИЕ КОНЕЧНОГО АВТОМАТА ────────────────────────────
+// BattleStateMachine — класс из state-machine.ts, управляющий фазами боя.
+// Это singleton — один инстанс на весь бой.
+// Экспортируется для тестов (могут создать свой через BattleStateMachine.create())
 import { BattleStateMachine, BattlePhase } from './state-machine.js';
 
-/** Singleton state machine — импортируется тестами и main.ts */
+/** Singleton state machine — единый автомат фаз для всего боя */
 export const battle = new BattleStateMachine();
 
-/** Shortcut to battle.state */
+/**
+ * S = battle.state — сокращение для быстрого доступа к состоянию боя.
+ * Все прямые мутации S.xxx = yyy видны везде, т.к. это ссылка на объект.
+ */
 const S = battle.state;
 
-// Reference types - mutations visible across modules (lazy Proxy — populated on first access via state)
+// ── GS — PROXY К ГЛОБАЛЬНОМУ СОСТОЯНИЮ ────────────────────
+// GS.get('currentLocationId') → state.currentLocationId
+// GS.set('itemsUsedInBattle', 5) → state.itemsUsedInBattle = 5
+// Это lazy Proxy: при первом доступе инициализирует _gsCache из центрального state.
+// Нужен чтобы core.ts не требовал реимпорта state при каждом изменении.
 let _gsCache = null;
 const GS = new Proxy({} as Record<string, any>, {
   get(_, prop) {
-    if (!_gsCache) _gsCache = state; // Use the central state singleton
+    if (!_gsCache) _gsCache = state; // Первый доступ — кешируем ссылку на глобальное состояние
     return _gsCache[prop];
   },
   set(_, prop, value) {
@@ -42,53 +94,118 @@ const GS = new Proxy({} as Record<string, any>, {
     return true;
   }
 });
+/** Инициализировать кеш GS — вызывается при старте боя */
 function initBattleRefs() { _gsCache = state; }
 
-// --- BATTLE STATE PERSISTENCE (survives page refresh) ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 1: СОХРАНЕНИЕ/ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ БОЯ
+// ═══════════════════════════════════════════════════════════════
+// Сохраняет и восстанавливает бой через localStorage, чтобы при обновлении
+// страницы (F5) бой не пропадал. Ключ: store.lsKey('battle_state').
+//
+// Куда сохраняет: localStorage браузера (сериализованный JSON).
+// Когда вызывается: после каждого действия в бою (атака, смена, предмет).
+// Когда очищается: после победы/поражения/выхода.
+// Как восстанавливается: в init.ts при старте игры проверяет restoreBattleState().
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * saveBattleState — сохранить текущее состояние боя в localStorage.
+ * Запоминает: тип боя, текущего покемона игрока (HP, PP, статы),
+ * дикого покемона (имя, HP, уровень, статус), погоду, барьеры,
+ * прогресс гима/элиты/чемпиона.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Собирает плоский объект state из battle.state + GS
+ *   2. Сериализует в JSON
+ *   3. Пишет в localStorage по ключу store.lsKey('battle_state')
+ *
+ * КОГДА ВЫЗЫВАЕТСЯ:
+ *   - После каждого хода в useMove() (строка ~1539)
+ *   - После каждого хода врага в enemyTurn() (строка ~1850)
+ *   - После смены покемона
+ *   - После использования предмета в бою
+ *
+ * ЗАВИСИМОСТИ:
+ *   store.lsKey() — генерация ключа с префиксом (чтобы не пересекаться с другими сохранениями)
+ *   GS.currentLocationId — ID текущей локации (проверяется при restore)
+ *   GS.myTeam — команда игрока (индекс activeMonIndex)
+ */
 function saveBattleState() {
   const s = battle.state;
-  if (!s.battleType || s.battleType === 'none') return;
+  if (!s.battleType || s.battleType === 'none') return;     // Не сохраняем если бой не начат
   const state: Record<string, any> = {};
-  state.battleType = s.battleType;
-  state.locationId = GS.currentLocationId;
-  state.activeMonIndex = GS.myTeam.indexOf(s.activePlayerMon);
-  state.activeMonCurHP = s.activePlayerMon?.currentHp;
-  state.activeMonMovesPP = s.activePlayerMon?.movesPP;
-  state.activeMonStatStages = s.activePlayerMon?.statStages;
-  state.activeMonChoiceLocked = s.activePlayerMon?.choiceLockedMove;
-  state.currentWeather = s.currentWeather;
-  state.escapeAttempts = s.escapeAttempts;
-  state.battleRound = s.battleRound;
-  state.itemsUsedInBattle = GS.itemsUsedInBattle;
-  state.playerReflectTurns = s.playerReflectTurns;
-  state.playerLightScreenTurns = s.playerLightScreenTurns;
-  state.enemyReflectTurns = s.enemyReflectTurns;
-  state.enemyLightScreenTurns = s.enemyLightScreenTurns;
+  state.battleType = s.battleType;                           // Тип боя: 'wild' | 'gym' | 'elite' | 'champion' | 'pvp'
+  state.locationId = GS.currentLocationId;                   // Локация (без неё restore не сработает — защита от загрузки сохранения на другой локации)
+  state.activeMonIndex = GS.myTeam.indexOf(s.activePlayerMon); // Индекс активного покемона в команде
+  state.activeMonCurHP = s.activePlayerMon?.currentHp;       // Текущее HP (восстанавливается в restore)
+  state.activeMonMovesPP = s.activePlayerMon?.movesPP;       // PP атак (восстанавливается)
+  state.activeMonStatStages = s.activePlayerMon?.statStages; // Стат-стадии (баффы/дебпфы)
+  state.activeMonChoiceLocked = s.activePlayerMon?.choiceLockedMove; // Заблокированная атака (Choice-предметы)
+  state.currentWeather = s.currentWeather;                    // Текущая погода
+  state.escapeAttempts = s.escapeAttempts;                    // Попытки побега счётчик
+  state.battleRound = s.battleRound;                          // Номер раунда (для Timer Ball, Quick Ball и т.д.)
+  state.itemsUsedInBattle = GS.itemsUsedInBattle;             // Сколько предметов уже использовано
+  state.playerReflectTurns = s.playerReflectTurns;            // Осталось ходов Reflect у игрока
+  state.playerLightScreenTurns = s.playerLightScreenTurns;    // Осталось ходов Light Screen у игрока
+  state.enemyReflectTurns = s.enemyReflectTurns;              // Осталось ходов Reflect у противника
+  state.enemyLightScreenTurns = s.enemyLightScreenTurns;      // Осталось ходов Light Screen у противника
   if (s.activeWild) {
-    state.wildPkmName = s.activeWild.name;
-    state.wildCurHP = s.wildCurHP;
-    state.wildMaxHP = s.wildMaxHP;
-    state.wildLvl = s.wildLvl;
-    state.wildStatus = s.wildStatus;
-    state.wildSleepTurns = s.wildSleepTurns;
-    state.wildMovesPP = s.wildMovesPP;
-    state.wildMovesDetailed = s.wildMovesDetailed;
-    state.wildIsShiny = s.activeWild.isShiny;
+    state.wildPkmName = s.activeWild.name;       // Имя дикого покемона (для повторной загрузки из PokeAPI)
+    state.wildCurHP = s.wildCurHP;               // Текущее HP дикого
+    state.wildMaxHP = s.wildMaxHP;               // Макс HP дикого
+    state.wildLvl = s.wildLvl;                   // Уровень дикого
+    state.wildStatus = s.wildStatus;             // Статус дикого (psn/brn/par/slp/frz)
+    state.wildSleepTurns = s.wildSleepTurns;     // Осталось ходов сна
+    state.wildMovesPP = s.wildMovesPP;           // PP атак дикого
+    state.wildMovesDetailed = s.wildMovesDetailed; // Детальные данные атак дикого
+    state.wildIsShiny = s.activeWild.isShiny;    // Шайни флаг (для корректного спрайта при restore)
   }
   if ((s.battleType === 'gym' || s.battleType === 'elite' || s.battleType === 'GS.champion') && s.gymTeamData) {
-    state.gymLeaderKey = s.gymLeaderKey;
-    state.gymTeamIndex = s.gymTeamIndex;
-    state.gymTeamIndexInMember = s.gymTeamIndexInMember;
-    state.gymTeamData = s.gymTeamData;
+    state.gymLeaderKey = s.gymLeaderKey;           // ID лидера зала (из gyms.ts)
+    state.gymTeamIndex = s.gymTeamIndex;           // Какой по счёту гимец
+    state.gymTeamIndexInMember = s.gymTeamIndexInMember; // Индекс внутри Элитного члена
+    state.gymTeamData = s.gymTeamData;             // Клонированная команда лидера
   }
-  try { localStorage.setItem(store.lsKey('battle_state'), JSON.stringify(state)); } catch(e) {}
+  try { localStorage.setItem(store.lsKey('battle_state'), JSON.stringify(state)); } catch(e) {} // JSON.stringify может выбросить при циклических ссылках — игнорируем
 }
 
+/**
+ * clearBattleState — удалить сохранённое состояние боя из localStorage.
+ * Вызывается после победы, поражения или выхода из боя.
+ * Также очищает барьеры/экраны через clearScreens().
+ */
 function clearBattleState() {
   try { localStorage.removeItem(store.lsKey('battle_state')); } catch(e) {}
-  clearScreens();
+  clearScreens(); // Сбросить все барьеры (Reflect, Light Screen, Protect, Substitute)
 }
 
+/**
+ * restoreBattleState — восстановить бой после обновления страницы (F5).
+ *
+ * ЧТО ДЕЛАЕТ (пошагово):
+ *   1. Читает JSON из localStorage
+ *   2. Проверяет что сохранение валидно (локация совпадает, покемон жив)
+ *   3. Восстанавливает игрока: HP, PP, стат-стадии, Choice-лок
+ *   4. Если wild — загружает дикого покемона из PokeAPI, восстанавливает всё его состояние
+ *   5. Если gym/elite — загружает дикого + инфу лидера
+ *   6. Рендерит UI, загружает кнопки атак, переводит фазу в PLAYER_TURN
+ *   7. Возвращает true если восстановление успешно, false если нет
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ:
+ *   init.ts → store.ready → проверяет сохранённый бой и вызывает restoreBattleState
+ *   Если вернёт true — игрок продолжает бой (не нужно начинать заново)
+ *
+ * ВАЖНО: локация проверяется на совпадение, чтобы после телепорта не загрузить
+ * чужого покемона. Если локация не совпадает — сохранение удаляется.
+ *
+ * ЗАВИСИМОСТИ:
+ *   fetchPokeAPI — загрузка данных покемона из PokeAPI
+ *   GS.myTeam — команда игрока (проверка индекса)
+ *   GS.currentLocationId — текущая локация (проверка совпадения)
+ *   renderBattleUI, loadMoveButtons — рендер UI
+ *   battle.forcePhase — принудительная установка фазы (без валидации)
+ */
 async function restoreBattleState() {
   let state;
   try {
@@ -97,34 +214,40 @@ async function restoreBattleState() {
     state = JSON.parse(raw);
   } catch(e) { return false; }
 
+  // ── Валидация сохранения ──
+  // Проверяем что сохранение соответствует текущей локации.
+  // Если игрок переместился — сохранение невалидно (очищаем).
   if (!state.battleType || !state.locationId || state.locationId !== GS.currentLocationId) {
     clearBattleState();
     return false;
   }
 
+  // ── Восстановление активного покемона игрока ──
+  // Находим покемона в команде по индексу, проверяем что он жив
   const activeIdx = state.activeMonIndex;
   if (activeIdx === undefined || activeIdx < 0 || activeIdx >= GS.myTeam.length) return false;
   const mon = GS.myTeam[activeIdx];
   if (!mon || mon.currentHp <= 0) return false;
 
-  // Restore player mon state
+  // Restore player mon state — восстанавливаем поля из сохранения
   S.activePlayerMon = mon;
   mon.currentHp = state.activeMonCurHP;
   if (state.activeMonMovesPP) mon.movesPP = state.activeMonMovesPP;
   if (state.activeMonStatStages) mon.statStages = state.activeMonStatStages;
   if (state.activeMonChoiceLocked !== undefined) mon.choiceLockedMove = state.activeMonChoiceLocked;
 
-  S.battleType = state.battleType;
-  S.currentWeather = state.currentWeather || getDailyWeather(GS.currentLocationId);
-  S.escapeAttempts = state.escapeAttempts || 0;
-  S.battleRound = state.battleRound || 0;
-  GS.itemsUsedInBattle = state.itemsUsedInBattle || 0;
-  S.playerReflectTurns = state.playerReflectTurns || 0;
-  S.playerLightScreenTurns = state.playerLightScreenTurns || 0;
-  S.enemyReflectTurns = state.enemyReflectTurns || 0;
-  S.enemyLightScreenTurns = state.enemyLightScreenTurns || 0;
+  S.battleType = state.battleType;                            // Восстанавливаем тип боя
+  S.currentWeather = state.currentWeather || getDailyWeather(GS.currentLocationId); // Погода или дневная по умолчанию
+  S.escapeAttempts = state.escapeAttempts || 0;              // Попытки побега
+  S.battleRound = state.battleRound || 0;                    // Номер раунда
+  GS.itemsUsedInBattle = state.itemsUsedInBattle || 0;       // Сколько предметов использовано
+  S.playerReflectTurns = state.playerReflectTurns || 0;      // Ходов Reflect
+  S.playerLightScreenTurns = state.playerLightScreenTurns || 0; // Ходов Light Screen
+  S.enemyReflectTurns = state.enemyReflectTurns || 0;        // Ходов Reflect врага
+  S.enemyLightScreenTurns = state.enemyLightScreenTurns || 0; // Ходов Light Screen врага
 
-  // Restore gym/elite/champion data if present
+  // ── Восстановление gym/elite/champion данных ──
+  // Если бой с лидером зала — восстанавливаем индекс, ключ, данные команды
   if ((S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'GS.champion') && state.gymTeamData) {
     S.gymLeaderKey = state.gymLeaderKey || null;
     S.gymTeamIndex = state.gymTeamIndex || 0;
@@ -132,31 +255,36 @@ async function restoreBattleState() {
     S.gymTeamData = state.gymTeamData;
   }
 
+  // ── Восстановление дикого покемона (wild) ──
+  // Загружаем из PokeAPI по имени, восстанавливаем HP/статус/PP/IVs
   if (S.battleType === 'wild' && state.wildPkmName) {
     try {
       S.activeWild = await fetchPokeAPI(`pokemon/${state.wildPkmName.toLowerCase()}`);
-      GS.pokedexSeen.add(S.activeWild.name);
-      S.activeWild.isShiny = state.wildIsShiny || false;
+      GS.pokedexSeen.add(S.activeWild.name);                // Добавляем в покедекс (заметили)
+      S.activeWild.isShiny = state.wildIsShiny || false;     // Восстанавливаем шайни-флаг
 
-      // Fetch species for catch rate
+      // ── Загрузка species (вид) для catch rate ──
+      // Нужно чтобы при поимке использовался правильный capture_rate
       try {
         const speciesRes = await fetch(S.activeWild.species.url);
         const speciesData = await speciesRes.json();
         S.activeWild.captureRate = speciesData.capture_rate;
         S.activeWild.speciesData = speciesData;
-      } catch(e) {}
+      } catch(e) {} // Если species не загрузился — используем дефолтный capture_rate = 100
 
-      S.wildLvl = state.wildLvl;
-      S.wildMaxHP = state.wildMaxHP;
-      S.wildCurHP = state.wildCurHP;
-      S.wildStatus = state.wildStatus;
-      S.wildSleepTurns = state.wildSleepTurns || 0;
-      S.wildMovesPP = state.wildMovesPP || [];
-      S.activeWild.status = S.wildStatus;
-      S.activeWild.heldItem = null;
-      S.activeWild.berries = { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 };
+      S.wildLvl = state.wildLvl;                              // Уровень
+      S.wildMaxHP = state.wildMaxHP;                          // Макс HP
+      S.wildCurHP = state.wildCurHP;                          // Текущее HP
+      S.wildStatus = state.wildStatus;                        // Статус
+      S.wildSleepTurns = state.wildSleepTurns || 0;           // Ходов сна
+      S.wildMovesPP = state.wildMovesPP || [];                // PP атак
+      S.activeWild.status = S.wildStatus;                     // Синхронизируем статус в объект
+      S.activeWild.heldItem = null;                           // У дикого нет предмета (сбрасываем)
+      S.activeWild.berries = { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 }; // Ягоды пусты
 
-      // Fetch wild moves (or restore from saved state)
+      // ── Загрузка атак дикого ──
+      // Если в сохранении есть детальные данные атак — используем их.
+      // Иначе загружаем из PokeAPI (до 20 атак).
       if (state.wildMovesDetailed && state.wildMovesDetailed.length > 0) {
         S.wildMovesDetailed = state.wildMovesDetailed;
       } else {
@@ -171,6 +299,7 @@ async function restoreBattleState() {
         S.wildMovesDetailed = moveResults.filter(Boolean);
       }
 
+      // ── IVs дикого (если нет — генерируем случайные) ──
       if (!S.activeWild.wildIVs) {
         S.activeWild.wildIVs = {
           hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
@@ -179,18 +308,20 @@ async function restoreBattleState() {
         };
       }
 
-      renderBattleUI();
-      loadMoveButtons(S.activePlayerMon, useMove);
+      renderBattleUI();                                       // Отрисовываем интерфейс боя
+      loadMoveButtons(S.activePlayerMon, useMove);            // Загружаем кнопки атак
 
+      // ── Показываем интерфейс ──
       document.getElementById('encounter-modal').style.display = 'flex';
       document.getElementById('battle-main-menu').style.display = 'flex';
       document.getElementById('battle-end-menu').style.display = 'none';
       document.getElementById('battle-gym-info').style.display = 'none';
 
-      appendToLog('⚡ Битва восстановлена!', true);
+      appendToLog('⚡ Битва восстановлена!', true);            // Очищаем лог и пишем сообщение
       appendToLog(`Дикий ${S.activeWild.name.toUpperCase()} всё ещё здесь!`, false, 'battle');
 
-      // Restore battle phase so attacks work
+      // ── Принудительно ставим фазу PLAYER_TURN ──
+      // Нужно чтобы атаки игрока работали (useMove проверяет canTransition)
       battle.forcePhase(BattlePhase.PLAYER_TURN);
       return true;
     } catch(e) {
@@ -200,7 +331,7 @@ async function restoreBattleState() {
     }
   }
 
-  // Restore gym/elite/champion battle
+  // ── Восстановление GYM/ELITE/CHAMPION боя ──
   if ((S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'GS.champion') && S.gymTeamData && state.wildPkmName) {
     try {
       S.activeWild = await fetchPokeAPI(`pokemon/${state.wildPkmName.toLowerCase()}`);
@@ -212,7 +343,7 @@ async function restoreBattleState() {
       S.wildMovesPP = state.wildMovesPP || [];
       S.activeWild.status = S.wildStatus;
 
-      // Fetch wild moves (or restore from saved state)
+      // ── Загрузка атак (из сохранения или PokeAPI) ──
       if (state.wildMovesDetailed && state.wildMovesDetailed.length > 0) {
         S.wildMovesDetailed = state.wildMovesDetailed;
       } else {
@@ -227,13 +358,14 @@ async function restoreBattleState() {
         S.wildMovesDetailed = moveResults.filter(Boolean);
       }
 
-      // Fetch gym leader info
+      // ── Данные лидера зала ──
       const leader = S.gymLeaderKey ? GS.gymLeaders[S.gymLeaderKey] : null;
       const leaderName = leader?.name || 'Лидер';
 
       renderBattleUI();
       loadMoveButtons(S.activePlayerMon, useMove);
 
+      // ── Показываем UI с инфой о лидере ──
       document.getElementById('encounter-modal').style.display = 'flex';
       document.getElementById('battle-main-menu').style.display = 'flex';
       document.getElementById('battle-end-menu').style.display = 'none';
@@ -245,7 +377,6 @@ async function restoreBattleState() {
       appendToLog('⚡ Битва восстановлена!', true);
       appendToLog(`${leaderName} всё ещё ждёт вас!`, false, 'battle');
 
-      // Restore battle phase so attacks work
       battle.forcePhase(BattlePhase.PLAYER_TURN);
       return true;
     } catch(e) {
@@ -255,49 +386,111 @@ async function restoreBattleState() {
     }
   }
 
-  return false;
+  return false; // Если ни одно условие не подошло — восстановление не удалось
 }
 
-function renderBattleUI() {
-  document.getElementById('wild-name').innerText = S.activeWild.name;
-  document.getElementById('wild-lvl').innerText = `Lv${S.wildLvl}`;
-  const wildSpriteUrl = getSpriteUrl({ isShiny: S.activeWild.isShiny, apiData: S.activeWild });
-  (document.getElementById('wild-sprite') as HTMLImageElement).src = wildSpriteUrl;
-  document.getElementById('wild-status-icon').innerText = getStatusIcon(S.wildStatus);
-  updateWildHpUI();
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 2: UI БОЯ И СТАТИСТИКИ
+// ═══════════════════════════════════════════════════════════════
+// renderBattleUI — обновляет весь DOM боя (имена, спрайты, HP, абилки).
+// calculateStat — вычисляет реальную характеристику покемона с учётом:
+//   Базовых статов → IV → EV → Натура → Стат-стадии → Предметы
+// ─────────────────────────────────────────────────────────────
 
+/** renderBattleUI — полный рендер интерфейса боя */
+function renderBattleUI() {
+  // ── Дикий покемон ──
+  document.getElementById('wild-name').innerText = S.activeWild.name;                         // Имя дикого
+  document.getElementById('wild-lvl').innerText = `Lv${S.wildLvl}`;                            // Уровень
+  const wildSpriteUrl = getSpriteUrl({ isShiny: S.activeWild.isShiny, apiData: S.activeWild }); // Спрайт (с учётом шайни)
+  (document.getElementById('wild-sprite') as HTMLImageElement).src = wildSpriteUrl;            // Вставляем в DOM
+  document.getElementById('wild-status-icon').innerText = getStatusIcon(S.wildStatus);         // Иконка статуса (☠️🔥⚡💤❄️)
+  updateWildHpUI();                                                                            // HP бар
+
+  // ── Покемон игрока ──
   document.getElementById('player-name').innerText = S.activePlayerMon.nickname || S.activePlayerMon.apiData.name;
   document.getElementById('player-lvl').innerText = `Lv${S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten}`;
   const playerSpriteUrl = getSpriteUrl(S.activePlayerMon);
   (document.getElementById('player-sprite') as HTMLImageElement).src = playerSpriteUrl;
   document.getElementById('player-status-icon').innerText = getStatusIcon(S.activePlayerMon.status);
-  updateBattleSpriteBgs(S.activePlayerMon, S.activeWild);
-  updatePlayerHpUI();
-  updateAbilityDisplay();
+  updateBattleSpriteBgs(S.activePlayerMon, S.activeWild);  // Фон битвы (зависит от типов покемонов)
+  updatePlayerHpUI();                                        // HP бар + EXP бар игрока
+  updateAbilityDisplay();                                    // Способности (Ability)
 }
+
+/**
+ * Максимальное значение IV — 31 в основной игре, здесь 70 для разнообразия.
+ * IV (Individual Values) — индивидуальные значения, влияют на статы.
+ */
 const MAX_IV = 70;
 
+/**
+ * calculateStat — вычислить реальное значение характеристики покемона.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Берёт базовый стат из PokeAPI
+ *   2. Применяет IV (0-31 для игрока, 0-31 для дикого)
+ *   3. Применяет EV (только для покемонов игрока)
+ *   4. Применяет натуру (buff/nerf, только не-HP)
+ *   5. Применяет стат-стадии (-6 до +6, множитель 2/2..8/2)
+ *   6. Применяет предметы (Choice Band, Eviolite, Assault Vest, Thick Club)
+ *
+ * ОТКУДА ВХОДНЫЕ ДАННЫЕ:
+ *   pokemon.stats (дикий) или pokemon.apiData.stats (игрок) — из PokeAPI
+ *   pokemon.wildIVs / pokemon.ivs — сгенерированы или из сохранения
+ *   pokemon.evs — только для игрока (изначально 0)
+ *   pokemon.natureIdx — только для игрока (индекс в массиве natures)
+ *   pokemon.statStages — устанавливаются через statStageModify()
+ *   pokemon.heldItem — предмет в руке
+ *
+ * ГДЕ ИСПОЛЬЗУЕТСЯ:
+ *   calculateDamage (через calcStat из logic.ts) — расчёт урона
+ *   startHunt — расчёт HP дикого
+ *   switchPokemon — расчёт скорости для побега
+ *   handleWildFaintRewards — расчёт HP при левелапе
+ *   useMove / enemyTurn — везде где нужно сравнить скорость
+ *
+ * ВОЗВРАЩАЕТ: число — вычисленное значение характеристики.
+ */
 function calculateStat(pokemon, statName, isWild) {
+  // ── Базовый стат ──
+  // У дикого pokemon.stats — массив с PokeAPI
+  // У игрока pokemon.apiData.stats — то же самое
   const baseStats = isWild ? pokemon.stats : pokemon.apiData.stats;
   const statObj = baseStats.find(s => s.stat.name === statName);
-  const base = statObj ? statObj.base_stat : 50;
+  const base = statObj ? statObj.base_stat : 50; // Fallback 50 если стат не найден
 
+  // ── Уровень ──
+  // Для дикого — S.wildLvl, для игрока — baseLevel + candiesEaten
   const level = isWild ? S.wildLvl : (pokemon.baseLevel + pokemon.candiesEaten);
+
+  // Маппинг названий статов PokeAPI (attack → atk)
   const mapName = { 'hp': 'hp', 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' }[statName] || 'hp';
 
+  // ── IV (Individual Values) ──
+  // У дикого: wildIVs (0-31), случайные при встрече
+  // У игрока: ivs (0-31), изначально случайные
   const iv = isWild ? (pokemon.wildIVs ? pokemon.wildIVs[mapName] : 15) : (pokemon.ivs?.[mapName] ?? 15);
+
+  // ── EV (Effort Values) ──
+  // Только для игрока, изначально все 0. Растут при тренировках/боях.
   const ev = isWild ? 0 : pokemon.evs[mapName];
 
-  // Nature modifier (non-HP stats only, player mons only)
+  // ── Натура (Nature) ──
+  // Каждая натура buff-ит один стат (×1.1) и nerf-ит другой (×0.9).
+  // Только для игрока, только не-HP статы.
   let natureMod = 1.0;
   if (statName !== 'hp' && !isWild && pokemon.natureIdx !== undefined) {
     const nature = natures[pokemon.natureIdx];
     if (nature) {
-      if (nature.buff === mapName) natureMod = 1.1;
-      else if (nature.nerf === mapName) natureMod = 0.9;
+      if (nature.buff === mapName) natureMod = 1.1;   // Повышенный стат
+      else if (nature.nerf === mapName) natureMod = 0.9; // Пониженный стат
     }
   }
 
+  // ── Формула расчёта стата ──
+  // Специальная формула для HP (добавляется level + 10)
+  // Для остальных — стандартная формула с natureMod
   let result;
   if (statName === 'hp') {
     result = Math.floor(0.01 * (2 * base + iv + Math.floor(0.25 * ev)) * level) + level + 10;
@@ -305,36 +498,45 @@ function calculateStat(pokemon, statName, isWild) {
     result = Math.floor((Math.floor((2 * base + iv + Math.floor(0.25 * ev)) * level / 100) + 5) * natureMod);
   }
 
-  // Apply stat stages
+  // ── Стат-стадии (баффы/дебаффы) ──
+  // Swords Dance (+2 Atk) → stage = 2 → множитель (2+2)/2 = 2.0 (×2)
+  // Growl (-1 Atk) → stage = -1 → множитель 2/(2-(-1)) = 2/3 (×0.66)
+  // Диапазон: -6 до +6
   if (pokemon.statStages) {
     const stageMapName = { 'hp': 'hp', 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' }[statName];
     if (stageMapName && pokemon.statStages[stageMapName] !== undefined) {
       const stage = pokemon.statStages[stageMapName];
       if (stage !== 0) {
         const stageMult = stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
-        if (statName !== 'hp') {
+        if (statName !== 'hp') { // HP не меняется от стадий
           result = Math.floor(result * stageMult);
         }
       }
     }
   }
 
-  // Choice item stat multipliers
+  // ── Множители от предметов ──
+  // Choice Band: ×1.5 к Attack
+  // Choice Scarf: ×1.5 к Speed
+  // Choice Specs: ×1.5 к Sp.Atk
+  // Thick Club (Cubone/Marowak): ×2 к Attack
+  // Eviolite (если может эволюционировать): ×1.5 к Def/SpDef
+  // Assault Vest: ×1.5 к SpDef
   if (!isWild && pokemon.heldItem) {
     const choiceMap = { 'choiceBand': 'attack', 'choiceScarf': 'speed', 'choiceSpecs': 'special-attack' };
     if (choiceMap[pokemon.heldItem] === statName) {
       result = Math.floor(result * 1.5);
     }
-    // thickClub: x2 Atk for Cubone/Marowak
+    // thickClub: x2 Atk для Cubone/Marowak
     if (pokemon.heldItem === 'thickClub' && statName === 'attack') {
       const species = pokemon.apiData?.species?.name || pokemon.apiData?.name || '';
       if (species === 'cubone' || species === 'marowak') result = Math.floor(result * 2);
     }
-    // eviolite: x1.5 Def/SpDef if can evolve
+    // eviolite: x1.5 Def/SpDef если покемон может эволюционировать
     if (pokemon.heldItem === 'eviolite' && (statName === 'defense' || statName === 'special-defense')) {
-      if (pokemon.apiData?.species?.url) result = Math.floor(result * 1.5);
+      if (pokemon.apiData?.species?.url) result = Math.floor(result * 1.5); // Если есть species.url — значит может эволюционировать
     }
-    // assaultVest: x1.5 SpDef (status move restriction handled elsewhere)
+    // assaultVest: x1.5 SpDef (статус-атаки блокируются отдельно)
     if (pokemon.heldItem === 'assaultVest' && statName === 'special-defense') {
       result = Math.floor(result * 1.5);
     }
@@ -343,19 +545,52 @@ function calculateStat(pokemon, statName, isWild) {
   return result;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 3: ЛОГ БОЯ И БАРЬЕРЫ
+// ═══════════════════════════════════════════════════════════════
+// appendToLog — добавление сообщения в лог битвы (DOM).
+// modifyScreenTurns — управление ходами Reflect/Light Screen.
+// applyBarrierMod — множитель урона от барьеров (×0.5 если барьер активен).
+// clearScreens — сброс всех барьеров при завершении боя.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * appendToLog — добавить сообщение в лог битвы (div#battle-log).
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Создаёт <p> с текстом
+ *   2. Если clear=true — очищает лог перед добавлением
+ *   3. Если type указан — добавляет CSS класс chat-{type} (для стилизации: 'battle', 'dmg', 'heal', 'system', 'status', 'catch', 'faint')
+ *   4. Скроллит лог вниз (scrollTop = scrollHeight)
+ *
+ * ГДЕ ИСПОЛЬЗУЕТСЯ: ВЕЗДЕ в core.ts, это основной способ вывода сообщений игроку.
+ */
 function appendToLog(text, clear = false, type?) {
-  const logEl = document.getElementById('battle-log');
+  const logEl = document.getElementById('battle-log'); // DOM элемент лога
   if (clear) {
-    logEl.innerHTML = '';
+    logEl.innerHTML = ''; // Очищаем лог если нужно (начало боя)
   }
-  const p = document.createElement('p');
-  p.innerText = text;
-  if (type) p.className = 'chat-' + type;
+  const p = document.createElement('p');   // Новый параграф
+  p.innerText = text;                      // Текст сообщения (русский, через appendToLog в коде)
+  if (type) p.className = 'chat-' + type;  // CSS класс для стилей (разные цвета для разных типов сообщений)
   logEl.appendChild(p);
-  logEl.scrollTop = logEl.scrollHeight;
+  logEl.scrollTop = logEl.scrollHeight;    // Автоскролл вниз (чтобы последнее сообщение было видно)
 }
 
-// --- SCREEN / BARRIER HELPERS ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 3.1: SCREEN/BARRIER HELPERS
+// ═══════════════════════════════════════════════════════════════
+// Reflect (Защита) — снижает физ. урон вдвое на 5 ходов.
+// Light Screen (Световой Экран) — снижает спец. урон вдвое на 5 ходов.
+// Protect — полная защита на 1 ход.
+// Substitute (Заменитель) — поглощает урон вместо покемона.
+
+/**
+ * modifyScreenTurns — изменить количество оставшихся ходов экрана.
+ * delta = +5 при установке, -1 в конце каждого хода.
+ * isPlayer = true → для игрока, false → для противника.
+ * screen = 'reflect' | 'light-screen'
+ */
 function modifyScreenTurns(screen, delta, isPlayer) {
   if (screen === 'reflect') {
     if (isPlayer) S.playerReflectTurns = Math.max(0, S.playerReflectTurns + delta);
@@ -366,33 +601,79 @@ function modifyScreenTurns(screen, delta, isPlayer) {
   }
 }
 
+/**
+ * applyBarrierMod — применить множитель урона от барьеров.
+ * Возвращает 0.5 если барьер активен и подходит под тип атаки,
+ * иначе 1.0 (без изменений).
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   Physical атака → Reflect (если активен)
+ *   Special атака → Light Screen (если активен)
+ *
+ * ГДЕ ИСПОЛЬЗУЕТСЯ:
+ *   useMove() — строка 1672
+ *   enemyTurn() — строка 1927-1928
+ */
 function applyBarrierMod(damage, move, defenderIsPlayer) {
-  const isPhysical = move.damage_class?.name === 'physical';
+  const isPhysical = move.damage_class?.name === 'physical'; // physical или special?
   if (defenderIsPlayer) {
-    if (S.playerReflectTurns > 0 && isPhysical) return 0.5;
-    if (S.playerLightScreenTurns > 0 && !isPhysical) return 0.5;
+    if (S.playerReflectTurns > 0 && isPhysical) return 0.5;       // Reflect игрока от физ. атак
+    if (S.playerLightScreenTurns > 0 && !isPhysical) return 0.5;  // Light Screen игрока от спец. атак
   } else {
-    if (S.enemyReflectTurns > 0 && isPhysical) return 0.5;
-    if (S.enemyLightScreenTurns > 0 && !isPhysical) return 0.5;
+    if (S.enemyReflectTurns > 0 && isPhysical) return 0.5;        // Reflect врага от физ. атак
+    if (S.enemyLightScreenTurns > 0 && !isPhysical) return 0.5;   // Light Screen врага от спец. атак
   }
-  return 1;
+  return 1; // Нет барьера — урон без изменений
 }
 
+/**
+ * clearScreens — сбросить ВСЕ барьеры у обоих сторон.
+ * Вызывается при: начале боя, завершении боя, выходе из боя.
+ */
 function clearScreens() {
   S.playerReflectTurns = 0;
   S.playerLightScreenTurns = 0;
   S.enemyReflectTurns = 0;
   S.enemyLightScreenTurns = 0;
-  S.protectActive = false;
-  S.substituteHP = 0;
-  S.enemyProtectActive = false;
-  S.enemySubstituteHP = 0;
+  S.protectActive = false;         // Protect игрока
+  S.substituteHP = 0;             // Substitute игрока
+  S.enemyProtectActive = false;    // Protect врага
+  S.enemySubstituteHP = 0;        // Substitute врага
 }
 
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 4: СТАТУС-ЭФФЕКТЫ ИГРОКА (STATUS MOVES)
+// ═══════════════════════════════════════════════════════════════
+// Эти функции обрабатывают атаки без power (статус-атаки):
+//   - Лечение (Recover, Roost, Synthesis)
+//   - Барьеры (Reflect, Light Screen)
+//   - Защита (Protect)
+//   - Заменитель (Substitute)
+//   - Статусные эффекты на врага (через useMove)
+//   - Изменение статов (Swords Dance, Growl, и т.д.)
+//
+// ВСЕ возвращают boolean: true = что-то произошло, false = ничего.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * handlePlayerStatusEffects — обработка статус-атак игрока (без урона).
+ *
+ * ЧТО ДЕЛАЕТ (по порядку):
+ *   1. Лечение — healing% от move.meta, восстанавливает HP
+ *   2. Reflect — устанавливает S.playerReflectTurns = 5
+ *   3. Light Screen — устанавливает S.playerLightScreenTurns = 5
+ *   4. Protect — устанавливает S.protectActive = true (защита на 1 ход)
+ *   5. Substitute — тратит 25% HP, создаёт заменителя (поглощает урон)
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: useMove() строка ~1631, когда move.power === null/undefined
+ *
+ * ВОЗВРАЩАЕТ: true если атака была обработана (лечение/барьер/защита/заменитель)
+ */
 function handlePlayerStatusEffects(move) {
   // Returns true if anything meaningful happened
 
   // 1. Healing moves (Recover, Roost, Moonlight, Synthesis, etc.)
+  // move.meta.healing — процент от макс HP (например 50 для Recover)
   const healPct = move.meta?.healing;
   if (healPct) {
     const healAmount = Math.floor(S.activePlayerMon.maxHp * healPct / 100);
@@ -425,12 +706,13 @@ function handlePlayerStatusEffects(move) {
     return true;
   }
 
-  // 4. Substitute
+  // 4. Substitute — создаёт заменителя, который поглощает урон
+  // Стоимость: 25% от макс HP (минимум 1)
   if (move.name === 'substitute') {
     const cost = Math.max(1, Math.floor(S.activePlayerMon.maxHp * 0.25));
     if (S.activePlayerMon.currentHp > cost) {
       S.activePlayerMon.currentHp -= cost;
-      S.substituteHP = Math.floor(S.activePlayerMon.maxHp * 0.25);
+      S.substituteHP = Math.floor(S.activePlayerMon.maxHp * 0.25); // Заменитель имеет 25% HP
       updatePlayerHpUI();
       appendToLog(`${S.activePlayerMon.apiData.name} создал Заменителя! (-${cost} HP)`, false, 'system');
     } else {
@@ -439,9 +721,26 @@ function handlePlayerStatusEffects(move) {
     return true;
   }
 
-  return false;
+  return false; // Ничего не произошло — атака не была статус-атакой из списка
 }
 
+/**
+ * handleEnemyStatusEffects — обработка статус-атак ПРОТИВНИКА (без урона).
+ * Зеркальная версия handlePlayerStatusEffects, но для врага.
+ * Дополнительно: изменение статов противника (Swords Dance) и наложение статусов на игрока.
+ *
+ * ЧТО ДЕЛАЕТ (по порядку):
+ *   1. Лечение врага
+ *   2. Reflect / Light Screen для врага
+ *   3. Protect для врага
+ *   4. Substitute для врага
+ *   5. Stat changes (повышение/понижение статов врага)
+ *   6. Наложение статус-эффекта на игрока (яд/ожог/паралич/сон/заморозка)
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: enemyTurn() строка ~1888, когда у атаки врага нет power
+ *
+ * ВОЗВРАЩАЕТ: true если атака была обработана
+ */
 function handleEnemyStatusEffects(move) {
   // Handle status moves used by gym enemy
   // Returns true if anything meaningful happened
@@ -479,7 +778,7 @@ function handleEnemyStatusEffects(move) {
     return true;
   }
 
-  // 4. Substitute
+  // 4. Substitute — создаёт заменителя для врага
   if (move.name === 'substitute') {
     const cost = Math.max(1, Math.floor(S.wildMaxHP * 0.25));
     if (S.wildCurHP > cost) {
@@ -493,15 +792,16 @@ function handleEnemyStatusEffects(move) {
     return true;
   }
 
-  // 5. Enemy stat changes (Swords Dance, etc.)
+  // 5. Enemy stat changes (Swords Dance, Growl, etc.)
+  // move.stat_changes — массив изменений статов (из PokeAPI)
   if (move.stat_changes && move.stat_changes.length > 0) {
     const monName = S.activeWild.name;
     const statNameMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
     move.stat_changes.forEach(sc => {
       const statKey = statNameMap[sc.stat.name];
       if (statKey) {
-        statStageModify(S.activeWild, statKey, sc.change);
-        const newStage = S.activeWild.statStages[statKey];
+        statStageModify(S.activeWild, statKey, sc.change); // Применяем изменение стата
+        const newStage = S.activeWild.statStages[statKey]; // Текущее значение после изменения
         const sign = newStage >= 0 ? '+' : '';
         const dir = sc.change > 0 ? 'повышена' : 'понижена';
         const labels = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
@@ -511,7 +811,7 @@ function handleEnemyStatusEffects(move) {
     return true;
   }
 
-  // 6. Enemy status ailment on player
+  // 6. Enemy status ailment on player — наложение статуса на игрока
   const ailment = move.meta?.ailment?.name;
   if (ailment && ailment !== 'none' && ailment !== 'unknown') {
     const statusMap = {
@@ -520,7 +820,7 @@ function handleEnemyStatusEffects(move) {
       'sleep': 'slp', 'freeze': 'frz'
     };
     const targetStatus = statusMap[ailment];
-    if (targetStatus && !S.activePlayerMon.status) {
+    if (targetStatus && !S.activePlayerMon.status) { // Если у игрока ещё нет статуса
       if (applyStatusEffect(S.activePlayerMon, targetStatus)) {
         document.getElementById('player-status-icon').innerText = getStatusIcon(targetStatus);
         appendToLog(`${S.activePlayerMon.apiData.name} получил ${STATUS_NAMES[targetStatus] || targetStatus}!`);
@@ -532,34 +832,70 @@ function handleEnemyStatusEffects(move) {
     }
   }
 
-  return false;
+  return false; // Не статус-атака (должно быть power)
 }
 
-// --- ABILITY EFFECTS (Feature 2e) ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 5: СПОСОБНОСТИ (ABILITIES), СТАТЫ, ЯГОДЫ
+// ═══════════════════════════════════════════════════════════════
+// getAbilityName — получить имя способности покемона.
+// statStageModify — изменить стат-стадию (бафф/дебафф) с капом ±6.
+// updateStatBadges — обновить UI плашек стат-стадий (+1 Atk, -2 Spd...).
+// checkBerryAutoUse — авто-использование ягод при определённых условиях.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * getAbilityName — получить имя способности покемона.
+ * У дикого: из PokeAPI (pokemon.abilities[0].ability.name)
+ * У игрока: из pokemon.abilityName (сохраняется при поимке)
+ *
+ * ГДЕ ИСПОЛЬЗУЕТСЯ:
+ *   enemyTurn() — проверка Rough Skin / Iron Barbs у игрока
+ *   updateAbilityDisplay() — отображение способности в UI
+ *   useMove() — проверка способностей (Sturdy, Static и т.д.)
+ */
 function getAbilityName(pokemon, isWild) {
-  if (isWild) return pokemon.abilities?.[0]?.ability?.name || null;
-  return pokemon.abilityName || null;
+  if (isWild) return pokemon.abilities?.[0]?.ability?.name || null; // Первая способность дикого
+  return pokemon.abilityName || null;                                 // Сохранённая способность игрока
 }
 
+/**
+ * statStageModify — изменить стат-стадию покемона.
+ *
+ * Стат-стадии работают так:
+ *   +1 → ×1.5, +2 → ×2, +3 → ×2.5 ... +6 → ×4
+ *   -1 → ×2/3, -2 → ×2/4, -3 → ×2/5 ... -6 → ×2/8
+ *
+ * Максимум: +6 (кап), минимум: -6.
+ * Вызывается при: Swords Dance (+2 Atk), Growl (-1 Atk), Intimidate (-1 Atk) и т.д.
+ * После изменения ОБЯЗАН обновить UI через updateStatBadges().
+ */
 function statStageModify(pokemon, stat, delta) {
+  // Если стат-стадии ещё нет — инициализируем нулями
   if (!pokemon.statStages) pokemon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+  // Клиппинг: не даём выйти за пределы [-6, +6]
   pokemon.statStages[stat] = Math.max(-6, Math.min(6, (pokemon.statStages[stat] || 0) + delta));
-  updateStatBadges();
+  updateStatBadges(); // Обновляем плашки в UI
 }
 
+/**
+ * updateStatBadges — обновить отображение стат-стадий в UI.
+ * Показывает плашки с цветом: зелёные (+), красные (-).
+ * Пример: "+2 Атк" (зелёный), "-1 Защ" (красный)
+ */
 function updateStatBadges() {
   const labels = { atk: 'Атк', def: 'Защ', spa: 'САт', spd: 'СЗа', spe: 'Скр' };
-  // Player badges
+  // Player badges — плашки для игрока
   const playerEl = document.getElementById('player-stat-badges');
   if (playerEl && S.activePlayerMon?.statStages) {
     playerEl.innerHTML = Object.entries(S.activePlayerMon.statStages as Record<string, number>)
-      .filter(([_, v]) => v !== 0)
+      .filter(([_, v]) => v !== 0) // Только изменённые статы
       .map(([k, v]) => {
         const sign = v > 0 ? '+' : '';
         return `<span class="stat-badge ${v > 0 ? 'positive' : 'negative'}">${labels[k] || k} ${sign}${v}</span>`;
       }).join('');
   }
-  // Wild badges
+  // Wild badges — плашки для дикого покемона
   const wildEl = document.getElementById('wild-stat-badges');
   if (wildEl && S.activeWild?.statStages) {
     wildEl.innerHTML = Object.entries((S.activeWild?.statStages || {}) as Record<string, number>)
@@ -571,7 +907,11 @@ function updateStatBadges() {
   }
 }
 
-// --- BERRIES (Feature 3) ---
+/**
+ * clearUsedItem — очистить предмет, который был "в руке" у покемона.
+ * Устанавливает heldItem = null (ягода была съедена/предмет использован).
+ * backward compat: также обнуляет berries[itemId] для старых сохранений.
+ */
 function clearUsedItem(mon) {
   if (mon.berries && mon.heldItem) {
     mon.berries[mon.heldItem] = 0; // backward compat
@@ -579,6 +919,23 @@ function clearUsedItem(mon) {
   mon.heldItem = null;
 }
 
+/**
+ * checkBerryAutoUse — проверить и автоматически использовать ягоду покемона.
+ *
+ * Какие ягоды обрабатываются:
+ *   Sitrus Berry  — HP < 50% → +25% HP
+ *   Oran Berry    — HP < 50% → +10 HP
+ *   Lum Berry     — любой статус → вылечить
+ *   Chesto Berry  — сон → разбудить
+ *   Rawst Berry   — ожог → вылечить
+ *   (Leftovers — НЕ ягода, обрабатывается в enemyTurn отдельно)
+ *
+ * ПОРЯДОК ВЫЗОВА:
+ *   useMove() — после атаки игрока (строка ~1768)
+ *   enemyTurn() — после хода врага (строка ~1996)
+ *
+ * ВОЗВРАЩАЕТ: true если ягода была использована, false если нет
+ */
 function checkBerryAutoUse(mon, isPlayer) {
   if (!mon || !mon.heldItem) return false;
 
@@ -586,7 +943,7 @@ function checkBerryAutoUse(mon, isPlayer) {
   if (mon.heldItem === 'sitrusBerry' && mon.currentHp < mon.maxHp * 0.5) {
     const heal = Math.floor(mon.maxHp * 0.25);
     mon.currentHp = Math.min(mon.maxHp, mon.currentHp + heal);
-    clearUsedItem(mon);
+    clearUsedItem(mon); // Ягода съедена — удаляем
     if (isPlayer) updatePlayerHpUI();
     else updateWildHpUI();
     const monName = mon.name || mon.apiData?.name;
@@ -604,7 +961,7 @@ function checkBerryAutoUse(mon, isPlayer) {
     return true;
   }
 
-  // Lum: any status -> cure
+  // Lum: any status -> cure — снимает ЛЮБОЙ статус
   if (mon.heldItem === 'lumBerry' && mon.status) {
     cureStatus(mon);
     clearUsedItem(mon);
@@ -614,7 +971,7 @@ function checkBerryAutoUse(mon, isPlayer) {
     return true;
   }
 
-  // Chesto: sleep -> cure
+  // Chesto: sleep -> cure — только от сна
   if (mon.heldItem === 'chestoBerry' && mon.status === 'slp') {
     cureStatus(mon);
     clearUsedItem(mon);
@@ -624,7 +981,7 @@ function checkBerryAutoUse(mon, isPlayer) {
     return true;
   }
 
-  // Rawst: burn -> cure
+  // Rawst: burn -> cure — только от ожога
   if (mon.heldItem === 'rawstBerry' && mon.status === 'brn') {
     cureStatus(mon);
     clearUsedItem(mon);
@@ -635,45 +992,89 @@ function checkBerryAutoUse(mon, isPlayer) {
   }
 
   // Leftovers: +1/16 maxHP every turn
-  // Note: this should be handled at the end of the turn, but for now we'll put it here if we want auto-use
-  // Leftovers is not a berry, so it shouldn't be consumed. Wait, this function is for berries!
-  // I will leave leftovers out for now until the battle engine has an end-of-turn event.
+  // Примечание: Leftovers обрабатывается в enemyTurn в конце хода (не здесь),
+  // т.к. это пассивный предмет, а не ягода.
 
   return false;
 }
 
+/**
+ * giveBerryToMon — попытка выдать ягоду покемону через UI боя.
+ * Сейчас не используется — ягоды выдаются через профиль покемона (экипировка).
+ * Показывает toast-уведомление о правильном способе.
+ */
 function giveBerryToMon(berryType) {
   showToast('Пожалуйста, используйте экипировку (Держит) в профиле покемона для выдачи ягод и предметов!', true);
 }
 
-// --- QUESTS (Feature 5) ---
-function generateDailyQuests() {
-  const today = new Date().toISOString().slice(0, 10);
-  const lastGen = localStorage.getItem(store.lsKey('quest_date'));
-  if (lastGen === today && GS.quests.length > 0) return;
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 6: КВЕСТЫ (ЗАДАНИЯ)
+// ═══════════════════════════════════════════════════════════════
+// generateDailyQuests — генерация 3 ежедневных заданий (случайные из QUEST_CONFIGS).
+// checkQuestProgress — обновление прогресса задания при совершении действия.
+// claimQuestReward — получение награды за выполненное задание.
+// openQuests / renderQuests — отображение заданий в UI.
+// ВСЕ задания сбрасываются каждый новый день (по дате).
+// ─────────────────────────────────────────────────────────────
 
+/**
+ * generateDailyQuests — сгенерировать ежедневные задания.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Проверяет дату последней генерации (localStorage)
+ *   2. Если сегодня ещё не генерировали — выбирает 3 случайных из QUEST_CONFIGS
+ *   3. Очищает старые задания, устанавливает progress = 0, completed = false
+ *   4. Сохраняет дату, автосохраняет игру
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: при старте игры или при смене дня
+ * ХРАНИТ ДАННЫЕ В: GS.quests (массив активных заданий), GS.questProgress (прогресс по ID)
+ */
+function generateDailyQuests() {
+  const today = new Date().toISOString().slice(0, 10);           // Сегодняшняя дата YYYY-MM-DD
+  const lastGen = localStorage.getItem(store.lsKey('quest_date')); // Дата последней генерации
+  if (lastGen === today && GS.quests.length > 0) return;          // Уже сгенерированы сегодня
+
+  // Перемешиваем и берём 3 случайных конфига
   const shuffled = [...QUEST_CONFIGS].sort(() => Math.random() - 0.5);
   const newQuests = shuffled.slice(0, 3).map(q => ({
     ...q,
-    progress: 0,
-    completed: false,
-    claimed: false
+    progress: 0,        // Прогресс: 0 из target
+    completed: false,   // Выполнено?
+    claimed: false      // Награда получена?
   }));
+  // Заменяем старые квесты новыми
   GS.quests.length = 0;
   GS.quests.push(...newQuests);
+  // Очищаем прогресс по старым квестам
   Object.keys(GS.questProgress).forEach(k => delete GS.questProgress[k]);
   GS.quests.forEach(q => { GS.questProgress[q.id] = 0; });
-  localStorage.setItem(store.lsKey('quest_date'), today);
+  localStorage.setItem(store.lsKey('quest_date'), today); // Запоминаем сегодняшнюю дату
   store.autoSave();
 }
 
+/**
+ * checkQuestProgress — проверить и обновить прогресс задания.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Проходит по всем активным заданиям
+ *   2. Если тип совпадает с совершённым действием — увеличивает progress
+ *   3. Если progress >= target — отмечает задание как completed
+ *   4. Также проверяет tutorial прогресс через store.checkTutorialProgress()
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ:
+ *   useMove() — "defeat_x" (победа над диким)
+ *   startHunt — "catch_x" (поимка)
+ *   Enemy turn — "earn_money" (деньги)
+ *   handleWildFaintRewards — "earn_money", "defeat_x"
+ *   initEncounterEvents — "use_item" (использование предмета)
+ */
 function checkQuestProgress(type, amount?, itemId?) {
   if (amount === undefined) amount = 1;
   GS.quests.forEach(q => {
-    if (q.completed || q.claimed) return;
-    if (q.type === type) {
-      if (type === 'collect_items' && q.targetItem !== itemId) return;
-      q.progress = Math.min(q.target, (q.progress || 0) + amount);
+    if (q.completed || q.claimed) return;                    // Уже выполнено или награда получена
+    if (q.type === type) {                                    // Тип совпадает?
+      if (type === 'collect_items' && q.targetItem !== itemId) return; // Для "собрать предметы" — проверяем ID
+      q.progress = Math.min(q.target, (q.progress || 0) + amount);     // Увеличиваем прогресс (но не больше target)
       GS.questProgress[q.id] = q.progress;
       if (q.progress >= q.target) {
         q.completed = true;
@@ -682,23 +1083,39 @@ function checkQuestProgress(type, amount?, itemId?) {
     }
   });
   // Also track tutorial GS.quests
-  store.checkTutorialProgress(type, amount, itemId);
+  store.checkTutorialProgress(type, amount, itemId); // Проверяем туториал-прогресс
 }
 
+/**
+ * claimQuestReward — получить награду за выполненное задание.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Находит задание по ID в GS.quests
+ *   2. Проверяет что оно completed и не claimed
+ *   3. Выдаёт деньги и предметы через store.giveReward
+ *   4. Добавляет в GS.completedQuests (история выполненных)
+ *   5. Обновляет UI и автосохраняет
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: из DOM, по клику на кнопку "Получить награду" в renderQuests()
+ */
 function claimQuestReward(questId) {
   const q = GS.quests.find(x => x.id === questId);
   if (!q || !q.completed || q.claimed) return showToast('Задание уже выполнено или недоступно!', true);
   q.claimed = true;
   const rItems = q.rewardItem ? [{ id: q.rewardItem, qty: q.rewardQty || 1 }] : [];
-  store.giveReward(q.rewardMoney, rItems);
-  GS.completedQuests.push({ id: questId, date: new Date().toISOString() });
+  store.giveReward(q.rewardMoney, rItems);  // Выдача награды через store
+  GS.completedQuests.push({ id: questId, date: new Date().toISOString() }); // История
   store.updateMoneyDisplay();
   store.updateInventoryDisplay();
   store.autoSave();
   showToast(`Награда получена: ¥${q.rewardMoney}${q.rewardItem ? ` + ${q.rewardQty}x ${q.rewardItem}` : ''}!`, false);
-  renderQuests();
+  renderQuests(); // Перерендерить список квестов
 }
 
+/**
+ * openQuests — открыть модалку заданий и отрендерить список.
+ * Просто показывает quest-modal и вызывает renderQuests().
+ */
 function openQuests() {
   const modal = document.getElementById('quest-modal');
   if (!modal) return;
@@ -706,6 +1123,11 @@ function openQuests() {
   renderQuests();
 }
 
+/**
+ * renderQuests — отрендерить список заданий в quest-modal.
+ * Для каждого задания показывает: описание + прогресс-бар + награду + статус.
+ * Если задание выполнено — показывает кнопку "Получить награду".
+ */
 function renderQuests() {
   const list = document.getElementById('quest-list');
   if (!list) return;
@@ -729,12 +1151,21 @@ function renderQuests() {
     list.appendChild(div);
   });
 
+  // Навешиваем обработчики на кнопки "Получить награду"
   list.querySelectorAll('.quest-claim-btn').forEach(btn => {
     btn.addEventListener('click', () => claimQuestReward(btn.getAttribute('data-quest')));
   });
 }
 
-// --- STATUS EFFECTS (NEW) ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 7: СТАТУС-ЭФФЕКТЫ (Боевые статусы)
+// ═══════════════════════════════════════════════════════════════
+// Каждый покемон может иметь один статус-эффект.
+// Статусы влияют на бой: паралич снижает скорость, ожог снижает атаку и т.д.
+//
+// STATUS_ICONS — иконки для отображения в UI
+// STATUS_NAMES — русские названия для сообщений в логе
+// ─────────────────────────────────────────────────────────────
 const STATUS_ICONS = {
   psn: '☠️', brn: '🔥', par: '⚡', slp: '💤', frz: '❄️'
 };
@@ -742,6 +1173,12 @@ const STATUS_NAMES = {
   psn: 'Отравление', brn: 'Ожог', par: 'Паралич', slp: 'Сон', frz: 'Заморозка'
 };
 
+// ── Покедекс ──
+// evolutionCache — кэш эволюционных цепочек (вид → { evolves_to, ... })
+// evolvesFromMap — обратная карта: вид → [предыдущие эволюции]
+// POKEDEX_ALL — массив всех видов покемонов (по именам)
+// pokedexData — данные покедекса из JSON файла
+// pokedexTotal — количество видов
 export const evolutionCache = {};
 export const evolvesFromMap = {}; // reverse: species → [prevo names]
 
@@ -749,43 +1186,89 @@ export let POKEDEX_ALL = [];
 export let pokedexData = {};
 export let pokedexTotal = 0;
 
+/**
+ * loadPokedexData — загрузить данные покедекса из JSON файла.
+ * Если загрузка не удалась — использует список Канто (151 покемон) как запасной.
+ * pokedexData — объект { имя: данные } для поиска.
+ * POKEDEX_ALL — массив имён всех видов.
+ */
 async function loadPokedexData() {
   try {
     const res = await fetch(import.meta.env.BASE_URL + 'pokedex_data.json');
     pokedexData = await res.json();
-    POKEDEX_ALL = Object.keys(pokedexData);
+    POKEDEX_ALL = Object.keys(pokedexData);                // Имена всех покемонов
     pokedexTotal = POKEDEX_ALL.length;
   } catch (e) {
     console.warn('Pokedex data load failed, using Kanto only', e);
+    // Fallback: все 151 покемон Канто
     POKEDEX_ALL = ['bulbasaur','ivysaur','venusaur','charmander','charmeleon','charizard','squirtle','wartortle','blastoise','caterpie','metapod','butterfree','weedle','kakuna','beedrill','pidgey','pidgeotto','pidgeot','rattata','raticate','spearow','fearow','ekans','arbok','pikachu','raichu','sandshrew','sandslash','nidoran-f','nidorina','nidoqueen','nidoran-m','nidorino','nidoking','clefairy','clefable','vulpix','ninetales','jigglypuff','wigglytuff','zubat','golbat','oddish','gloom','vileplume','paras','parasect','venonat','venomoth','diglett','dugtrio','meowth','persian','psyduck','golduck','mankey','primeape','growlithe','arcanine','poliwag','poliwhirl','poliwrath','abra','kadabra','alakazam','machop','machoke','machamp','bellsprout','weepinbell','victreebel','tentacool','tentacruel','geodude','graveler','golem','ponyta','rapidash','slowpoke','slowbro','magnemite','magneton','farfetchd','doduo','dodrio','seel','dewgong','grimer','muk','shellder','cloyster','gastly','haunter','gengar','onix','drowzee','hypno','krabby','kingler','voltorb','electrode','exeggcute','exeggutor','cubone','marowak','hitmonlee','hitmonchan','lickitung','koffing','weezing','rhyhorn','rhydon','chansey','tangela','kangaskhan','horsea','seadra','goldeen','seaking','staryu','starmie','mr-mime','scyther','jynx','electabuzz','magmar','pinsir','tauros','magikarp','gyarados','lapras','ditto','eevee','vaporeon','jolteon','flareon','porygon','omanyte','omastar','kabuto','kabutops','aerodactyl','snorlax','articuno','zapdos','moltres','dratini','dragonair','dragonite','mewtwo','mew'];
     pokedexData = {};
     pokedexTotal = POKEDEX_ALL.length;
   }
 }
 
-// GS.pokedexSeen, GS.pokedexCaught, isDaytime are accessed via GS getter
+// GS.pokedexSeen, GS.pokedexCaught, isDaytime — доступны через GS Proxy к state
 
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 7.1: ФУНКЦИИ ДЛЯ РАБОТЫ СО СТАТУСАМИ
+// ═══════════════════════════════════════════════════════════════
+// getStatusIcon  — иконка для отображения в UI
+// applyStatusEffect — наложить статус на цель (с проверкой на уже существующий)
+// cureStatus — снять статус
+// checkStatusTurn — проверить может ли покемон действовать в этом ходу
+// applyStatusEndOfTurn — нанести урон от яда/ожога в конце хода
+
+/**
+ * getStatusIcon — иконка статуса для UI.
+ * psn → ☠️, brn → 🔥, par → ⚡, slp → 💤, frz → ❄️
+ */
 function getStatusIcon(status) {
-  return STATUS_ICONS[status] || '';
+  return STATUS_ICONS[status] || ''; // Пустая строка если нет статуса
 }
 
+/**
+ * applyStatusEffect — наложить статус-эффект на покемона.
+ * Если у цели уже есть статус — возвращает false (не накладывает).
+ * Для сна (slp) устанавливает случайное количество ходов (1-3).
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: useMove (атаки игрока), enemyTurn (атаки врага),
+ * handleEnemyStatusEffects, handlePlayerStatusEffects
+ *
+ * ВОЗВРАЩАЕТ: true если статус наложен, false если нет.
+ */
 function applyStatusEffect(target, statusType) {
-  if (target.status) return false; // already has a status
+  if (target.status) return false; // Уже есть статус — не накладываем повторно
   target.status = statusType;
   if (statusType === 'slp') {
-    target.sleepTurns = Math.floor(Math.random() * 3) + 1; // 1-3 turns
+    target.sleepTurns = Math.floor(Math.random() * 3) + 1; // Случайно 1-3 хода сна
   }
   return true;
 }
 
+/**
+ * cureStatus — вылечить покемона от любого статуса.
+ * Сбрасывает status = null и sleepTurns = 0.
+ */
 function cureStatus(target) {
   target.status = null;
   target.sleepTurns = 0;
 }
 
+/**
+ * checkStatusTurn — проверить, может ли покемон действовать в этом ходу.
+ * Эффекты:
+ *   Сон (slp) — каждый ход уменьшает sleepTurns, когда доходит до 0 — просыпается
+ *   Заморозка (frz) — 20% шанс оттаять каждый ход
+ *   Паралич (par) — 25% шанс пропустить ход
+ *
+ * ВОЗВРАЩАЕТ: true если может действовать, false если пропускает ход.
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: useMove() строка 1530, enemyTurn() строка 1847
+ */
 function checkStatusTurn(target, isPlayer) {
-  if (!target.status) return true; // can act normally
+  if (!target.status) return true; // Нет статуса — может действовать
 
+  // Сон: спит sleepTurns ходов, потом просыпается
   if (target.status === 'slp') {
     target.sleepTurns--;
     if (target.sleepTurns <= 0) {
@@ -794,10 +1277,11 @@ function checkStatusTurn(target, isPlayer) {
       return true;
     } else {
       appendToLog(`${isPlayer ? S.activePlayerMon.apiData.name : S.activeWild.name} спит... (осталось ${target.sleepTurns} ходов)`, false, 'status');
-      return false;
+      return false; // Пропускает ход
     }
   }
 
+  // Заморозка: 20% шанс оттаять каждый ход
   if (target.status === 'frz') {
     if (Math.random() < 0.2) {
       cureStatus(target);
@@ -809,17 +1293,27 @@ function checkStatusTurn(target, isPlayer) {
     }
   }
 
+  // Паралич: 25% шанс пропустить ход
   if (target.status === 'par') {
     if (Math.random() < 0.25) {
       appendToLog(`${isPlayer ? S.activePlayerMon.apiData.name : S.activeWild.name} парализован и не может двигаться!`, false, 'status');
       return false;
     }
-    return true;
+    return true; // 75% может действовать
   }
 
-  return true;
+  return true; // Яд и ожог не мешают действовать
 }
 
+/**
+ * applyStatusEndOfTurn — нанести урон от статуса в конце хода.
+ * Яд (psn): 1/8 от макс HP каждый ход
+ * Ожог (brn): 1/16 от макс HP каждый ход
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ:
+ *   useMove() — перед ходом врага (если игрок пропустил ход из-за статуса)
+ *   enemyTurn() — в начале хода врага (урон дикому), в конце (урон игроку)
+ */
 function applyStatusEndOfTurn(target, isPlayer) {
   if (!target.status) return;
 
@@ -852,8 +1346,32 @@ function applyStatusEndOfTurn(target, isPlayer) {
   }
 }
 
-// --- SWITCH POKEMON ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 8: СМЕНА ПОКЕМОНА (SWITCH)
+// ═══════════════════════════════════════════════════════════════
+// switchPokemon — открывает модалку выбора покемона из команды.
+// После смены — ход передаётся противнику.
+// Нельзя сменить покемона в бою с лидером зала (кроме случая fainted).
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * switchPokemon — показать модалку выбора покемона для смены.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Фильтрует живых покемонов (кроме текущего активного)
+ *   2. Показывает showSelectionModal с именами и HP
+ *   3. После выбора: меняет S.activePlayerMon, обнуляет choiceLockedMove
+ *   4. Перезагружает кнопки атак и UI
+ *   5. Передаёт ход противнику (enemyTurn)
+ *
+ * ОГРАНИЧЕНИЯ:
+ *   Нельзя сменить в gyn/elite/champion бою (кнопка блокируется отдельно)
+ *   Нельзя сменить на мёртвого покемона
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: по кнопке "btn-switch" в initEncounterEvents()
+ */
 function switchPokemon() {
+  // Ищем живых покемонов, исключая текущего активного
   const aliveMons = GS.myTeam.filter((mon, i) => mon.currentHp > 0 && mon !== S.activePlayerMon);
   if (aliveMons.length === 0) { showToast('Нет других покемонов для смены!', true); return; }
 
@@ -866,20 +1384,20 @@ function switchPokemon() {
     const newActive = aliveMons[idx];
     const oldActive = S.activePlayerMon;
 
-    // Don't mutate team order — just set active mon
+    // Меняем активного покемона (порядок в команде не меняется)
     S.activePlayerMon = newActive;
 
-    // Clear choice lock
+    // Сбрасываем блокировку Choice-предмета
     delete S.activePlayerMon.choiceLockedMove;
 
     appendToLog(`${oldActive.name || oldActive.apiData?.name}, возвращайся! Вперёд, ${newActive.name || newActive.apiData?.name}!`, false, 'switch');
 
-    // Reload move buttons for the new active pokemon
+    // Перезагружаем кнопки атак для нового покемона
     S.playerMovesDetailed = [];
     const handler = useMove;
     loadMoveButtons(S.activePlayerMon, handler);
 
-    // Update UI
+    // Обновляем весь UI игрока
     document.getElementById('player-name').innerText = S.activePlayerMon.nickname || S.activePlayerMon.apiData.name;
     document.getElementById('player-lvl').innerText = `Lv${S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten}`;
     const playerSpriteUrl = getSpriteUrl(S.activePlayerMon);
@@ -888,13 +1406,34 @@ function switchPokemon() {
     updatePlayerHpUI();
     updateAbilityDisplay();
 
-    // Enemy gets a turn after switch
+    // Противник получает ход после смены
     document.getElementById('battle-main-menu').style.display = 'none';
     setTimeout(() => { enemyTurn(); }, 1500);
   }, true);
 }
 
-// --- BATTLE SYSTEM ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 9: СИСТЕМА ВСТРЕЧ (ENCOUNTERS)
+// ═══════════════════════════════════════════════════════════════
+// ENCOUNTER_WEIGHTS — веса для выбора покемона на локации.
+//   Чем выше вес — тем чаще встречается покемон.
+//   Legendaries: 0.01 (крайне редко)
+//   Common (Pidgey, Rattata): 2.0 (очень часто)
+//   Graphite Bell (предмет): ×3 к весу редких (вес ≤ 0.3)
+//
+// pickWeightedEncounter — выбирает покемона из списка с учётом весов.
+// getWildLevel — определяет уровень дикого покемона по локации.
+// getLocationEncounters — получает список покемонов на текущей локации.
+// startAutoHunt / stopAutoHunt — автоматический поиск с таймером.
+// FISHING_TABLES — таблицы рыбалки для разных удочек.
+// startHunt — запуск битвы с диким покемоном.
+//
+// ИСПОЛЬЗУЕТ:
+//   data/locations.ts — список покемонов на каждой локации
+//   PokeAPI — загрузка данных покемона
+//   store.getLocation() — получение данных локации по ID
+// ─────────────────────────────────────────────────────────────
+
 // Encounter weight multiplier (higher = more common). Default 1.0
 const ENCOUNTER_WEIGHTS = {
   'pidgey': 2.0, 'rattata': 2.0, 'spearow': 1.8, 'zubat': 2.5,
@@ -971,8 +1510,22 @@ const ENCOUNTER_WEIGHTS = {
   'garchomp': 0.03, 'hydreigon': 0.03,
 };
 
+/**
+ * pickWeightedEncounter — выбрать покемона из списка с учётом весов.
+ *
+ * Алгоритм "weighted random":
+ *   1. Суммируем все веса → totalWeight
+ *   2. Берём случайное число от 0 до totalWeight
+ *   3. Проходим по массиву, вычитая вес каждого элемента
+ *   4. Когда roll <= 0 — выбираем этот элемент
+ *
+ * Graphite Bell: утраивает вес редких покемонов (weight <= 0.3).
+ * Это делает легендарок в 3 раза вероятнее, но всё равно очень редко.
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: startAutoHunt (при авто-поиске)
+ */
 function pickWeightedEncounter(encountersArray) {
-  const hasBell = (GS.inventory || {})['graphiteBell'] > 0;
+  const hasBell = (GS.inventory || {})['graphiteBell'] > 0; // Колокол = больше редких
   const weights = encountersArray.map(name => {
     const base = ENCOUNTER_WEIGHTS[name] || 1.0;
     // Graphite Bell: x3 weight for rare pokemon (weight <= 0.3)
@@ -984,54 +1537,83 @@ function pickWeightedEncounter(encountersArray) {
     roll -= weights[i];
     if (roll <= 0) return encountersArray[i];
   }
-  return encountersArray[encountersArray.length - 1];
+  return encountersArray[encountersArray.length - 1]; // Fallback (последний)
 }
 
+/**
+ * getWildLevel — определить уровень дикого покемона по текущей локации.
+ *
+ * Уровни растут с прогрессией по регионам:
+ *   Pallet Town:      Lv 3-8
+ *   Route 1-2:        Lv 5-12
+ *   Early Johto:      Lv 5-15
+ *   Mid-game Kanto:   Lv 12-22
+ *   Late Johto:       Lv 25-35
+ *   Victory Road:     Lv 40-50
+ *   Default:          Lv 10-20
+ *
+ * ОТКУДА БЕРЁТ ЛОКАЦИЮ: GS.currentLocationId (глобальное состояние игры)
+ */
 function getWildLevel() {
-  // Scale by region and location progression
   const loc = store.getLocation(GS.currentLocationId);
   const name = (loc?.name || '').toLowerCase();
   const id = GS.currentLocationId || '';
-  // Johto routes: 5-15 for early, scaling up
+  // Johto routes early
   if (id.includes('route29') || id.includes('route30') || id.includes('route31') || id.includes('newBark') || id.includes('cherrygrove')) return Math.floor(Math.random() * 11) + 5;
+  // Goldenrod
   if (id.includes('goldenrod') && !id.includes('stadium')) return Math.floor(Math.random() * 6) + 5;
-  // Johto mid routes: 15-25
+  // Johto mid routes
   if (id.includes('route34') || id.includes('route35') || id.includes('route36') || id.includes('route37') || id.includes('route38') || id.includes('route39') || id.includes('ilex') || id.includes('nationalPark')) return Math.floor(Math.random() * 11) + 15;
+  // Ecruteak + Olivine
   if (id.includes('ecruteak') || id.includes('olivine') || id.includes('route42') || id.includes('lakeOfRage')) return Math.floor(Math.random() * 11) + 25;
+  // Blackthorn + Mt Silver
   if (id.includes('blackthorn') || id.includes('mtSilver') || id.includes('route45') || id.includes('icePath')) return Math.floor(Math.random() * 11) + 35;
-  // Victory Road / Indigo Plateau: 40-50
+  // Victory Road
   if (id.includes('victory') || id.includes('indigo')) return Math.floor(Math.random() * 11) + 40;
-  // Late-game Kanto routes: 30-40
+  // Late-game Kanto routes
   if (/route_(1[6-9]|2[0-1])/.test(id) || id.includes('cerulean')) return Math.floor(Math.random() * 11) + 30;
-  // Mid-game: 20-30
+  // Mid-game Kanto
   if (/route_(1[1-6])/.test(id) || id.includes('safari') || id.includes('fuchsia') || id.includes('lavender')) return Math.floor(Math.random() * 11) + 20;
-  // Early-mid: 12-22
+  // Early-mid
   if (/route_[6-9]|10/.test(id) || id.includes('saffron') || id.includes('celadon')) return Math.floor(Math.random() * 11) + 12;
-  // Early: 8-16
+  // Early
   if (/route_[4-6]/.test(id) || id.includes('route_9') || id.includes('cerulean')) return Math.floor(Math.random() * 9) + 8;
-  // Very early: 5-12
+  // Very early
   if (/route_[1-2]|22/.test(id) || id.includes('viridian') || id.includes('forest')) return Math.floor(Math.random() * 8) + 5;
-  // Starter area: 3-8
+  // Starter area
   if (id.includes('pallet')) return Math.floor(Math.random() * 6) + 3;
   // Default for other regions
   return Math.floor(Math.random() * 11) + 10;
 }
 
+/**
+ * getLocationEncounters — получить список покемонов на текущей локации.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Берёт encounters из данных локации
+ *   2. Если есть dayEncounters/nightEncounters — использует их в зависимости от времени суток
+ *   3. Если локация hasWater и есть удочка — добавляет рыбных покемонов
+ *
+ * ГДЕ ИСПОЛЬЗУЕТСЯ:
+ *   startAutoHunt — проверка есть ли кого искать
+ *   startHunt — получение списка для ручной охоты
+ */
 function getLocationEncounters() {
   const loc = store.getLocation(GS.currentLocationId);
   if (!loc) return [];
   let enc = loc.encounters || [];
+  // Дневные/ночные энкаунтеры (разные покемоны в разное время суток)
   if (loc.dayEncounters && GS.isDaytime) enc = loc.dayEncounters;
   else if (loc.nightEncounters && !GS.isDaytime) enc = loc.nightEncounters;
 
-  // Passive fishing: if on water and has a rod, merge fishing encounters
+  // Пассивная рыбалка: если локация с водой и есть удочка — добавляем рыб
   if (loc.hasWater) {
-    const rod = getBestRod();
+    const rod = getBestRod(); // superRod > goodRod > oldRod
     if (rod) {
       const fishTable = FISHING_TABLES[rod];
       if (fishTable) {
         const fishNames = fishTable.map(f => ({ name: f.name, level: f.minLvl + Math.floor(Math.random() * (f.maxLvl - f.minLvl + 1)) }));
-        enc = [...new Set([...enc, ...fishNames.map(f => f.name)])];
+        enc = [...new Set([...enc, ...fishNames.map(f => f.name)])]; // Merge без дубликатов
       }
     }
   }
@@ -1039,8 +1621,28 @@ function getLocationEncounters() {
   return enc;
 }
 
+/**
+ * startAutoHunt — запустить автоматический поиск диких покемонов.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Устанавливает S.huntActive = true, сохраняет в localStorage
+ *   2. Запускает таймер (doTick) с задержкой 2-5 секунд
+ *   3. Каждый тик:
+ *      - Проверяет что бой не активен (encounter-modal скрыт)
+ *      - 20% шанс найти покемона (pickWeightedEncounter)
+ *      - Если найден — вызывает startHunt
+ *   4. Кнопка hunt-toggle меняет цвет: 🔴 = активно, 🟢 = нет энкаунтеров
+ *   5. Продолжает работать пока не вызван stopAutoHunt()
+ *
+ * ОГРАНИЧЕНИЯ:
+ *   Только на локациях с энкаунтерами
+ *   Не работает во время активного боя
+ *
+ * ОТКУДА БЕРЁТ СПИСОК: getLocationEncounters()
+ * ГДЕ ВЫЗЫВАЕТСЯ: по кнопке "Искать покемонов" (btn-hunt-toggle)
+ */
 function startAutoHunt() {
-  if (S.huntActive) return; // prevent duplicate timer loops
+  if (S.huntActive) return; // Предотвращаем дублирование таймеров
   const encounters = getLocationEncounters();
   if (encounters.length === 0) return;
 
@@ -1056,62 +1658,73 @@ function startAutoHunt() {
     if (!btn || !S.huntActive) return;
     const enc = getLocationEncounters();
     if (enc.length > 0) {
-      btn.innerHTML = '🔴';
+      btn.innerHTML = '🔴';                              // Красный = поиск активен
       btn.style.background = '#ff3b30';
       btn.title = 'Прекратить поиск';
     } else {
-      btn.innerHTML = '🟢';
+      btn.innerHTML = '🟢';                              // Зелёный = нет покемонов
       btn.style.background = '#34c759';
       btn.title = 'Поиск... (нет диких покемонов на этой локации)';
     }
   };
   updateHuntBtn();
 
+  // Основной цикл охоты (рекурсивный setTimeout)
   const doTick = () => {
-    if (!S.huntActive) return;
-    if (huntPending) {
+    if (!S.huntActive) return;                            // Остановлен
+    if (huntPending) {                                    // Уже идёт битва
       S.huntTimer = setTimeout(doTick, 2000);
       return;
     }
     if (document.getElementById('encounter-modal')?.style.display === 'flex') {
-      S.huntTimer = setTimeout(doTick, 2000);
+      S.huntTimer = setTimeout(doTick, 2000);            // Активный бой — пропускаем тик
       return;
     }
     if (document.getElementById('elite-modal')?.style.display === 'flex') {
-      S.huntTimer = setTimeout(doTick, 2000);
+      S.huntTimer = setTimeout(doTick, 2000);            // Модалка элиты — пропускаем
       return;
     }
     const enc = getLocationEncounters();
     if (enc.length === 0) { updateHuntBtn(); S.huntTimer = setTimeout(doTick, 5000); return; }
     updateHuntBtn();
-    // 20% base chance every tick
+    // 20% base chance every tick — базовый шанс найти покемона
     if (Math.random() < 0.20) {
       const pkmName = pickWeightedEncounter(enc);
-      startHunt([pkmName]);
+      startHunt([pkmName]);                                // Начинаем битву
       S.huntTimer = setTimeout(doTick, 3000);
     } else {
-      const delay = 3000 + Math.random() * 5000;
+      const delay = 3000 + Math.random() * 5000;          // Случайная задержка 3-8 секунд
       S.huntTimer = setTimeout(doTick, delay);
     }
   };
 
-  S.huntTimer = setTimeout(doTick, 2000 + Math.random() * 3000);
+  S.huntTimer = setTimeout(doTick, 2000 + Math.random() * 3000); // Первый тик через 2-5 секунд
 }
 
+/**
+ * stopAutoHunt — остановить автоматический поиск покемонов.
+ * Сбрасывает флаг, очищает таймер, обновляет кнопку.
+ */
 function stopAutoHunt() {
   S.huntActive = false;
   try { localStorage.removeItem(store.lsKey('hunt_active')); } catch(_) {}
-  if (S.huntTimer) { clearTimeout(S.huntTimer); S.huntTimer = null; }
+  if (S.huntTimer) { clearTimeout(S.huntTimer); S.huntTimer = null; } // Остановка таймера
   const btn = document.getElementById('btn-hunt-toggle');
   if (btn) {
-    btn.innerHTML = '⚪';
+    btn.innerHTML = '⚪';                                 // Белый = не активно
     btn.classList.remove('active');
     btn.style.background = '';
     btn.title = 'Искать покемонов';
   }
 }
 
-// --- FISHING SYSTEM ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 9.1: РЫБАЛКА (FISHING SYSTEM)
+// ═══════════════════════════════════════════════════════════════
+// 3 уровня удочек: Old Rod → Good Rod → Super Rod
+// Чем лучше удочка — тем больше и разнообразнее рыба.
+// Рыбные покемоны добавляются к наземным энкаунтерам на локациях hasWater.
+// ─────────────────────────────────────────────────────────────
 const FISHING_TABLES = {
   oldRod: [
     { name: 'magikarp', minLvl: 5, maxLvl: 10, weight: 70 },
@@ -1147,6 +1760,13 @@ const FISHING_TABLES = {
   ]
 };
 
+/**
+ * getBestRod — определить лучшую доступную удочку.
+ * Приоритет: Super Rod > Good Rod > Old Rod > null
+ *
+ * ОТКУДА БЕРЁТ ДАННЫЕ: store.getItemQty() из глобального инвентаря
+ * ГДЕ ИСПОЛЬЗУЕТСЯ: getLocationEncounters() — для добавления рыбных покемонов
+ */
 function getBestRod() {
   if (store.getItemQty('superRod') > 0) return 'superRod';
   if (store.getItemQty('goodRod') > 0) return 'goodRod';
@@ -1154,8 +1774,41 @@ function getBestRod() {
   return null;
 }
 
+/** huntPending — флаг блокировки повторного запуска startHunt */
 let huntPending = false;
 
+/**
+ * startHunt — начать стычку с диким покемоном (ядро встречи).
+ *
+ * ЭТО ГЛАВНАЯ ФУНКЦИЯ НАЧАЛА БОЯ С ДИКИМ ПОКЕМОНОМ.
+ *
+ * ЧТО ДЕЛАЕТ (полный порядок):
+ *   1. Находит первого живого покемона в команде игрока
+ *   2. Выбирает случайного покемона из encountersArray
+ *   3. Загружает данные из PokeAPI (fetchPokeAPI)
+ *   4. Генерирует: уровень, IVs, шайни (1/4096), статус, предмет (5%)
+ *   5. Загружает species для catch rate
+ *   6. Определяет пол (gender_rate из species)
+ *   7. Загружает атаки (до 20, фильтруя неудачные)
+ *   8. Рендерит UI: спрайты, HP, имена, способности
+ *   9. Проверяет Intimidate у дикого
+ *   10. Переводит фазы: WILD_START → PLAYER_TURN
+ *
+ * ВХОДНЫЕ ДАННЫЕ:
+ *   encountersArray — массив имён покемонов или [{ name, level }]
+ *   GS.currentLocationId — текущая локация (для уровня)
+ *   GS.myTeam — команда игрока (первый живой = активный)
+ *
+ * ПОБОЧНЫЕ ЭФФЕКТЫ:
+ *   Изменяет S.activeWild, S.battleType, S.activePlayerMon
+ *   Рендерит encounter-modal, устанавливает киллер-ивенты
+ *   Записывает в Pokedex (GS.pokedexSeen)
+ *   Сохраняет погоду (getDailyWeather)
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ:
+ *   startAutoHunt — автоматический поиск
+ *   Обработчик кнопки "Искать" в UI
+ */
 async function startHunt(encountersArray) {
   if (huntPending) return;
   huntPending = true;
@@ -1282,10 +1935,45 @@ async function startHunt(encountersArray) {
   }
 }
 
-function loadMoveButtons(activeMon, clickHandler) {
-  S.playerMovesDetailed = [];
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 10: КНОПКИ АТАК И UI
+// ═══════════════════════════════════════════════════════════════
+// loadMoveButtons — загружает 4 атаки покемона в кнопки move-btn-0..3.
+//   Асинхронно: сначала показывает "...", потом загружает из PokeAPI
+// updateMoveButtonUI — обновляет отображение одной кнопки (PP, тип атаки)
+// updateMoveButtonUIs — обновить все 4 кнопки сразу
+// updateAbilityDisplay — показать способности покемонов в UI
+// updateWildHpUI / updatePlayerHpUI — обновить HP бары + EXP бар
+// ─────────────────────────────────────────────────────────────
 
-  // Use the 4-slot moveset directly from apiData.moves (matches team page display)
+/**
+ * loadMoveButtons — загрузить названия атак в кнопки боя.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Берёт до 4 атак из activeMon.apiData.moves (те же что на странице команды)
+ *   2. Для каждой атаки: асинхронно загружает данные из PokeAPI
+ *   3. После загрузки: устанавливает название, PP, класс атаки (physical/special/status)
+ *   4. Назначает клик-обработчик (обычно useMove)
+ *
+ * ИНИЦИАЛИЗАЦИЯ PP:
+ *   Если у покемона нет movesPP — создаёт с current = max = pp из PokeAPI
+ *
+ * ОШИБКИ:
+ *   Если PokeAPI не отвечает — показывает имя атаки из moves (без деталей)
+ *   Если атаки нет (слот пуст) — показывает "-"
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ:
+ *   startHunt — начало боя
+ *   switchPokemon — смена покемона
+ *   restoreBattleState — восстановление боя
+ *   startGymNextPokemon — gym бой
+ *   startEliteNextPokemon — элитный бой
+ *   startChampionNextPokemon — чемпионский бой
+ */
+function loadMoveButtons(activeMon, clickHandler) {
+  S.playerMovesDetailed = []; // Сбрасываем детальные данные атак
+
+  // Берём атаки из стандартных 4 слотов (apiData.moves[0..3])
   const knownMoves = [];
   if (activeMon.apiData?.moves) {
     for (let i = 0; i < 4; i++) {
@@ -1296,38 +1984,45 @@ function loadMoveButtons(activeMon, clickHandler) {
     }
   }
 
+  // Загружаем каждую атаку
   for (let i = 0; i < 4; i++) {
     const mBtn = document.getElementById(`move-btn-${i}`);
     const moveEntry = knownMoves[i];
     if (moveEntry) {
-      mBtn.innerText = '...';
-      mBtn.classList.add('disabled');
+      mBtn.innerText = '...';                              // Плейсхолдер во время загрузки
+      mBtn.classList.add('disabled');                       // Блокируем пока не загрузится
       mBtn.onclick = null;
-      fetchPokeAPI(moveEntry.move.url)
+      fetchPokeAPI(moveEntry.move.url)                     // Асинхронная загрузка из PokeAPI
         .then(d => {
-          S.playerMovesDetailed[i] = d;
+          S.playerMovesDetailed[i] = d;                    // Сохраняем детальные данные
           if (!activeMon.movesPP) activeMon.movesPP = [];
           if (!activeMon.movesPP[i]) {
-            activeMon.movesPP[i] = { current: d.pp || 30, max: d.pp || 30 };
+            activeMon.movesPP[i] = { current: d.pp || 30, max: d.pp || 30 }; // Инициализируем PP
           }
-          mBtn.innerText = d.name || moveEntry.move.name;
-          mBtn.classList.remove('disabled');
-          mBtn.onclick = () => clickHandler(i);
-          updateMoveButtonUI(i, d);
+          mBtn.innerText = d.name || moveEntry.move.name;  // Имя атаки (англ.)
+          mBtn.classList.remove('disabled');                // Активируем кнопку
+          mBtn.onclick = () => clickHandler(i);             // Назначаем обработчик
+          updateMoveButtonUI(i, d);                          // Обновляем UI (цвет, PP)
         })
         .catch(() => {
+          // Если PokeAPI не отвечает — показываем имя без деталей
           mBtn.innerText = moveEntry.move.name;
           mBtn.classList.remove('disabled');
           mBtn.onclick = () => clickHandler(i);
         });
     } else {
-      mBtn.innerText = '-';
+      mBtn.innerText = '-';                                 // Пустой слот
       mBtn.classList.add('disabled');
       mBtn.onclick = null;
     }
   }
 }
 
+/**
+ * updateMoveButtonUI — обновить стиль и текст одной кнопки атаки.
+ * Добавляет CSS класс: move-type-physical, move-type-special, move-type-status
+ * Показывает текущее PP если > 0, или "PP: 0/N" + disabled если PP закончились.
+ */
 function updateMoveButtonUI(index, moveData) {
   if (!S.activePlayerMon.movesPP || !S.activePlayerMon.movesPP[index]) return;
   const pp = S.activePlayerMon.movesPP[index];
@@ -1335,16 +2030,20 @@ function updateMoveButtonUI(index, moveData) {
   if (!mBtn) return;
   mBtn.classList.remove('move-type-physical', 'move-type-special', 'move-type-status');
   if (moveData.damage_class?.name) {
-    mBtn.classList.add(`move-type-${moveData.damage_class.name}`);
+    mBtn.classList.add(`move-type-${moveData.damage_class.name}`); // Цвет кнопки по типу атаки
   }
   if (pp.current <= 0) {
-    mBtn.innerText = `${moveData.name} (PP: 0/${pp.max})`;
+    mBtn.innerText = `${moveData.name} (PP: 0/${pp.max})`; // Если PP кончились — показываем 0
     mBtn.classList.add('disabled');
   } else {
-    mBtn.innerText = `${moveData.name} (PP: ${pp.current}/${pp.max})`;
+    mBtn.innerText = `${moveData.name} (PP: ${pp.current}/${pp.max})`; // Нормальное отображение
   }
 }
 
+/**
+ * updateMoveButtonUIs — обновить UI всех 4 кнопок атак.
+ * Используется после восстановления PP (например, Elixir).
+ */
 function updateMoveButtonUIs() {
   for (let i = 0; i < 4; i++) {
     if (S.playerMovesDetailed[i]) {
@@ -1353,6 +2052,12 @@ function updateMoveButtonUIs() {
   }
 }
 
+/**
+ * updateAbilityDisplay — отобразить способности покемонов над спрайтами.
+ * Показывает название способности в 【скобках】.
+ * Для игрока: из S.activePlayerMon.abilityName
+ * Для дикого: из S.activeWild.abilities[0].ability.name
+ */
 function updateAbilityDisplay() {
   if (S.activePlayerMon) {
     const abilityName = getAbilityName(S.activePlayerMon, false);
@@ -1364,16 +2069,26 @@ function updateAbilityDisplay() {
   }
 }
 
+/**
+ * updateWildHpUI — обновить HP бар дикого покемона в UI.
+ * Цвет: зелёный (>50%), жёлтый (20-50%), красный (<20%)
+ */
 function updateWildHpUI() {
   document.getElementById('wild-hp-text').innerText = `${S.wildCurHP}/${S.wildMaxHP}`;
   const pct = Math.max(0, (S.wildCurHP / S.wildMaxHP) * 100);
   const bar = document.getElementById('wild-hp-fill');
   bar.style.width = `${pct}%`;
   bar.className = 'reborn-hp-fill';
-  if (pct <= 20) bar.classList.add('hp-low');
-  else if (pct <= 50) bar.classList.add('hp-medium');
+  if (pct <= 20) bar.classList.add('hp-low');       // Красный
+  else if (pct <= 50) bar.classList.add('hp-medium'); // Жёлтый
 }
 
+/**
+ * updatePlayerHpUI — обновить HP бар + EXP бар игрока.
+ * HP бар: зелёный/жёлтый/красный (как у дикого).
+ * EXP бар: показ прогресса до следующего уровня.
+ * EXP считается по формуле: baseLevel^3 — expToNext
+ */
 function updatePlayerHpUI() {
   if (!S.activePlayerMon) return;
   document.getElementById('player-hp-text').innerText = `${S.activePlayerMon.currentHp}/${S.activePlayerMon.maxHp}`;
@@ -1384,8 +2099,9 @@ function updatePlayerHpUI() {
   if (pct <= 20) bar.classList.add('hp-low');
   else if (pct <= 50) bar.classList.add('hp-medium');
 
-  const expToCurrent = Math.pow(S.activePlayerMon.baseLevel, 3);
-  const expToNext = S.activePlayerMon.expToNext || Math.pow(S.activePlayerMon.baseLevel + 1, 3);
+  // EXP bar — формула опыта (кубическая)
+  const expToCurrent = Math.pow(S.activePlayerMon.baseLevel, 3);   // EXP на текущем уровне
+  const expToNext = S.activePlayerMon.expToNext || Math.pow(S.activePlayerMon.baseLevel + 1, 3); // EXP на след. уровне
   let expPct = ((S.activePlayerMon.exp - expToCurrent) / (expToNext - expToCurrent)) * 100;
   if (expPct < 0) expPct = 0;
   if (expPct > 100) expPct = 100;
@@ -1394,47 +2110,96 @@ function updatePlayerHpUI() {
   if (expFill) expFill.style.width = `${expPct}%`;
 }
 
-// ── Shared wild pokemon reward logic ──
-// Collects drop items for a defeated wild mon. Used by both useMove and enemyTurn paths.
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 11: НАГРАДЫ ЗА ПОБЕДУ
+// ═══════════════════════════════════════════════════════════════
+// getWildDropItems — собирает дроп с побеждённого дикого покемона.
+//   Использует store.processMonsterDrop (из data/drops.js).
+//
+// handleWildFaintRewards — раздача наград после победы:
+//   - Деньги: wildLvl * 20 + 50 (для диких)
+//   - Дроп: предметы из таблицы дропа
+//   - EXP: (baseExp * wildLvl) / 7 (+50% с Lucky Egg)
+//   - EXP Share: половина EXP остальной команде
+//   - Level up: проверка повышения уровня (baseLevel ++)
+//   - Новые атаки: checkNewMovesOnLevelUp
+//   - Эволюция: checkEvolution + triggerEvolution
+//   - Прогресс квестов: checkQuestProgress
+//   - Для gym: переход к следующему покемону лидера
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * getWildDropItems — получить дроп с побеждённого дикого покемона.
+ * Вызывает store.processMonsterDrop(name) для расчёта выпавших предметов.
+ * Возвращает массив { id, qty } для передачи в store.giveReward.
+ *
+ * ГДЕ ИСПОЛЬЗУЕТСЯ: handleWildFaintRewards (только для wild боя)
+ */
 function getWildDropItems() {
   const rItems = [];
   const dropResults = store.processMonsterDrop(S.activeWild.name);
   if (dropResults.length > 0) {
     dropResults.forEach(d => rItems.push({id: d.item, qty: d.qty}));
     const dropText = dropResults.map(d => `${d.qty}x ${itemDef(d.item).nameRu}`).join(', ');
-    appendToLog(`Добыча: ${dropText}`, false, 'quest');
+    appendToLog(`Добыча: ${dropText}`, false, 'quest'); // Показываем в логе
   }
   return rItems;
 }
 
-// ── Shared wild faint reward logic (used by useMove and enemyTurn) ──
+/**
+ * handleWildFaintRewards — раздать награды после победы над покемоном.
+ *
+ * ВАЖНАЯ ФУНКЦИЯ — вызывается и при победе игрока (useMove) и при победе врага (enemyTurn).
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   Для WILD:
+ *     - Деньги: wildLvl * 20 + 50
+ *     - Дроп: getWildDropItems()
+ *     - EXP: активному покемону + EXP Share остальным
+ *     - Level-up + новые атаки + эволюция
+ *     - Показывает экран победы (battle-end-menu)
+ *   Для GYM/ELITE:
+ *     - Переход к следующему покемону (gymTeamIndex++)
+ *     - EXP НЕ даётся (гим — для проверки навыков, не для фарма)
+ *   Для CHAMPION:
+ *     - EXP даётся как за дикого
+ *
+ * isWild = true → wild бой, деньги + дроп + EXP
+ * isWild = false → gym/elite/champion, без денег и дропа
+ */
 async function handleWildFaintRewards(isWild: boolean) {
   if (isWild) {
     appendToLog(`Дикий ${S.activeWild.name} побежден!`);
-    checkQuestProgress('defeat_x');
+    checkQuestProgress('defeat_x');                          // Квест "победить N покемонов"
     const rItems = getWildDropItems();
-    store.giveReward(S.wildLvl * 20 + 50, rItems);
-    checkQuestProgress('earn_money', S.wildLvl * 20 + 50);
+    store.giveReward(S.wildLvl * 20 + 50, rItems);          // Деньги + предметы
+    checkQuestProgress('earn_money', S.wildLvl * 20 + 50);  // Квест "заработать деньги"
   } else {
     appendToLog(`${S.activeWild.name} побежден!`);
-    if (S.battleType === 'gym') S.gymTeamIndex++;
-    else S.gymTeamIndexInMember++;
+    if (S.battleType === 'gym') S.gymTeamIndex++;           // Следующий покемон лидера
+    else S.gymTeamIndexInMember++;                           // Следующий в элите
   }
 
-  // EXP: not given for gym battles, given for wild and elite/champion
+  // ═══ EXP (опыт) ═══
+  // Gym — EXP не даётся (чтобы нельзя было фармить на лидерах)
   if (S.battleType !== 'gym') {
     const baseExp = S.activeWild.base_experience || 50;
-    let expGain = Math.floor((baseExp * S.wildLvl) / 7);
-    if (S.activePlayerMon.heldItem === 'luckyEgg') expGain = Math.floor(expGain * 1.5);
+    let expGain = Math.floor((baseExp * S.wildLvl) / 7);    // Базовая формула опыта
+    if (S.activePlayerMon.heldItem === 'luckyEgg') expGain = Math.floor(expGain * 1.5); // Lucky Egg ×1.5
+
+    // Инициализация EXP если ещё не был установлен
     if (S.activePlayerMon.exp === undefined) {
       S.activePlayerMon.exp = Math.pow(S.activePlayerMon.baseLevel, 3);
       S.activePlayerMon.expToNext = Math.pow(S.activePlayerMon.baseLevel + 1, 3);
     }
+
     const lvl = S.activePlayerMon.baseLevel + (S.activePlayerMon.candiesEaten || 0);
     if (lvl < 100) {
       S.activePlayerMon.exp += expGain;
       appendToLog(`${S.activePlayerMon.apiData.name} получил ${expGain} EXP!`);
     }
+
+    // EXP Share: половина EXP остальным членам команды
     if (GS.expShareActive) {
       const shareExp = Math.floor(expGain / 2);
       GS.myTeam.forEach(mon => {
@@ -1444,18 +2209,21 @@ async function handleWildFaintRewards(isWild: boolean) {
             mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
           }
           mon.exp += shareExp;
+          // Проверка level-up для каждого члена команды
           while (mon.exp >= mon.expToNext && (mon.baseLevel + (mon.candiesEaten || 0)) < 100) {
             mon.baseLevel++;
             mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
             const oldMax = mon.maxHp;
             const newMax = calculateStat(mon, 'hp', false);
             mon.maxHp = newMax;
-            mon.currentHp += (newMax - oldMax);
+            mon.currentHp += (newMax - oldMax); // Восстанавливаем HP пропорционально новому макс
           }
         }
       });
       if (shareExp > 0) appendToLog(`Остальная команда получила по ${shareExp} EXP!`);
     }
+
+    // ═══ Level up активного покемона ═══
     while (S.activePlayerMon.exp >= S.activePlayerMon.expToNext && S.activePlayerMon.baseLevel < 100) {
       S.activePlayerMon.baseLevel++;
       S.activePlayerMon.expToNext = Math.pow(S.activePlayerMon.baseLevel + 1, 3);
@@ -1464,8 +2232,10 @@ async function handleWildFaintRewards(isWild: boolean) {
       S.activePlayerMon.maxHp = newMax;
       S.activePlayerMon.currentHp += (newMax - oldMax);
       appendToLog(`${S.activePlayerMon.apiData.name} достиг ${S.activePlayerMon.baseLevel} уровня!`);
-      await checkNewMovesOnLevelUp(S.activePlayerMon, S.activePlayerMon.baseLevel);
+      await checkNewMovesOnLevelUp(S.activePlayerMon, S.activePlayerMon.baseLevel); // Новые атаки
     }
+
+    // ═══ Эволюция ═══
     const evoTarget = await checkEvolution(S.activePlayerMon);
     if (evoTarget) {
       await triggerEvolution(S.activePlayerMon, evoTarget.name);
@@ -1473,14 +2243,17 @@ async function handleWildFaintRewards(isWild: boolean) {
     }
   }
 
+  // ═══ Финальный UI ═══
   if (isWild) {
+    // Победа над диким — показываем меню завершения боя
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
-    clearBattleState();
+    clearBattleState();                               // Удаляем сохранение боя
     store.updateInventoryDisplay();
     store.updateMoneyDisplay();
     store.autoSave();
   } else {
+    // Победа над покемоном лидера — переход к следующему
     setTimeout(() => {
       if (S.battleType === 'gym') startGymNextPokemon();
       else if (S.battleType === 'elite') startEliteNextPokemon();
@@ -1489,11 +2262,67 @@ async function handleWildFaintRewards(isWild: boolean) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 12: АТАКА ИГРОКА (useMove)
+// ═══════════════════════════════════════════════════════════════
+// useMove — ГЛАВНАЯ ФУНКЦИЯ АТАКИ ИГРОКА (~300 строк).
+//
+// ПОЛНЫЙ ПОТОК:
+//   1. Проверка PP (если 0 — нельзя атаковать)
+//   2. Choice item блокировка (можно только одну атаку)
+//   3. Assault Vest (нельзя статус-атаки)
+//   4. Фазовая валидация → ENEMY_TURN
+//   5. Проверка статуса игрока (сон/паралич/заморозка)
+//   6. Расход PP (decrement)
+//   7. Choice item → блокировка атаки
+//   8. Accuracy check (hit/miss)
+//   9. Sucker Punch fail check
+//  10. Статус атаки (без power):
+//       - Наложение статуса на врага
+//       - Изменение статов (stat_changes)
+//       - Специальные: healing, Reflect, Light Screen, Protect, Substitute
+//  11. Атака с уроном (с power):
+//       - Protect check (враг защищается?)
+//       - Substitute поглощение
+//       - calculateDamage (чистая функция из logic.ts)
+//       - Barrier модификатор (Reflect/Light Screen)
+//       - Focus Sash (выживание с 1 HP)
+//       - Drain healing (Absorb, Giga Drain)
+//       - Life Orb recoil
+//       - Sturdy check
+//       - Secondary эффекты (ожог/паралич)
+//       - Контактные способности (Static, Flame Body, Rough Skin)
+//       - Berry auto-use (Sitrus, Oran, Lum)
+//  12. Проверка на fainted игрока или врага
+//  13. Победа → handleWildFaintRewards, иначе → enemyTurn
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * useMove — выполнить атаку игрока по индексу (0-3).
+ *
+ * ЭТО САМАЯ ВАЖНАЯ ФУНКЦИЯ БОЯ. Обрабатывает ВСЁ что связано с атакой игрока.
+ *
+ * ЧТО ПРИНИМАЕТ:
+ *   moveIndex — номер атаки (0-3) из S.playerMovesDetailed
+ *
+ * ЧТО ВОЗВРАЩАЕТ: ничего (void), но меняет состояние боя.
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: по клику на move-btn-{0..3} из loadMoveButtons
+ *
+ * ПОБОЧНЫЕ ЭФФЕКТЫ:
+ *   - Меняет HP, статусы, стат-стадии, PP
+ *   - Меняет фазу боя (через battle.transition)
+ *   - Показывает сообщения в логе
+ *   - Сохраняет состояние боя (saveBattleState)
+ *   - Запускает enemyTurn если враг жив
+ *   - Запускает handleWildFaintRewards если враг побеждён
+ */
 async function useMove(moveIndex) {
   const move = S.playerMovesDetailed[moveIndex];
   if (!move) return;
 
-  // Check PP
+  // ═══ 1. PP CHECK ═══
+  // Если PP закончились — атака недоступна
   if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[moveIndex]) {
     if (S.activePlayerMon.movesPP[moveIndex].current <= 0) {
       appendToLog('Нет PP для этой атаки!');
@@ -1501,32 +2330,36 @@ async function useMove(moveIndex) {
     }
   }
 
-  // Choice item move lock
+  // ═══ 2. CHOICE ITEM LOCK ═══
+  // Choice Band/Scarf/Specs: можно использовать только первую выбранную атаку
   const choiceItems = ['choiceBand', 'choiceScarf', 'choiceSpecs'];
   if (choiceItems.includes(S.activePlayerMon.heldItem) && S.activePlayerMon.choiceLockedMove !== undefined && S.activePlayerMon.choiceLockedMove !== moveIndex) {
     appendToLog('Можно использовать только выбранную атаку!');
     return;
   }
 
-  // Get power for early checks before phase transition
+  // ═══ 3. ASSAULT VEST ═══
+  // Не позволяет использовать статус-атаки (без power)
   const power = move.power;
-  // Assault Vest: can't use status moves (check before phase transition to avoid deadlock)
   if (!power && S.activePlayerMon.heldItem === 'assaultVest') {
     appendToLog('Штурмовой жилет не позволяет использовать статус-атаки!');
     return;
   }
 
-  // Phase validation (after all early-return checks to avoid freezing state machine)
+  // ═══ 4. PHASE TRANSITION ═══
+  // Валидация: проверяем что можно перейти в ENEMY_TURN
+  // Если нет — бой ещё не готов (анимация и т.д.)
   if (!battle.canTransition(BattlePhase.ENEMY_TURN)) {
     appendToLog('Подождите... битва ещё не готова.');
     return;
   }
-  battle.transition(BattlePhase.ENEMY_TURN);
+  battle.transition(BattlePhase.ENEMY_TURN); // Переход фазы
 
-  // Check player status before attacking (and before consuming PP)
+  // ═══ 5. STATUS CHECK ═══
+  // Проверяем может ли игрок действовать (сон/паралич/заморозка)
   if (!checkStatusTurn(S.activePlayerMon, true)) {
     document.getElementById('battle-main-menu').style.display = 'none';
-    // Apply end-of-turn status damage before enemy
+    // Урон от яда/ожога в конце хода (даже если пропустил ход)
     applyStatusEndOfTurn(S.activePlayerMon, true);
     if (S.activePlayerMon.currentHp <= 0) {
       appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
@@ -1534,31 +2367,34 @@ async function useMove(moveIndex) {
       return;
     }
     saveBattleState();
-    setTimeout(() => { enemyTurn(); }, 1000);
+    setTimeout(() => { enemyTurn(); }, 1000); // Ход врага
     return;
   }
 
-  // Decrement PP
+  // ═══ 6. DECREMENT PP ═══
   if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[moveIndex]) {
     S.activePlayerMon.movesPP[moveIndex].current--;
   }
 
-  // Choice item move lock
+  // ═══ 7. CHOICE ITEM LOCK (after successful use) ═══
+  // Если первый раз используем атаку с Choice-предметом — блокируем её
   if (choiceItems.includes(S.activePlayerMon.heldItem)) {
     S.activePlayerMon.choiceLockedMove = moveIndex;
   }
 
-  // Accuracy check
+  // ═══ 8. ACCURACY CHECK ═══
+  // Проверяем попала ли атака (учитывает accuracy атаки и evasion цели)
   const accResult = checkAccuracy(move);
   if (!accResult.hit) {
-    appendToLog(accResult.message);
+    appendToLog(accResult.message); // "Атака промахнулась!"
     document.getElementById('battle-main-menu').style.display = 'none';
     saveBattleState();
     setTimeout(() => { enemyTurn(); }, 1000);
     return;
   }
 
-  // Sucker Punch: fail if opponent uses status move
+  // ═══ 9. SUCKER PUNCH FAIL ═══
+  // Sucker Punch проваливается если противник использует статус-атаку
   if (checkSuckerPunchFail(move, S.enemyChosenMove)) {
     appendToLog(`${S.activePlayerMon.apiData.name} использовал Sucker Punch, но провалился!`);
     document.getElementById('battle-main-menu').style.display = 'none';
@@ -1567,10 +2403,12 @@ async function useMove(moveIndex) {
     return;
   }
 
+  // ═══ 10. ОСНОВНАЯ ЛОГИКА АТАКИ ═══
   appendToLog(`${S.activePlayerMon.apiData.name} использует ${move.name}!`);
 
+  // ─── 10a. STATUS MOVES (без power) ───
   if (!power) {
-    // Status move - try apply status effect or stat change
+    // 10a-i: Наложение статуса (Toxic, Thunder Wave, Will-O-Wisp, Spore...)
     const ailment = move.meta?.ailment?.name;
     if (ailment && ailment !== 'none' && ailment !== 'unknown') {
       const statusMap = {
@@ -1580,7 +2418,7 @@ async function useMove(moveIndex) {
       };
       const targetStatus = statusMap[ailment];
       if (targetStatus && !S.wildStatus) {
-        // Check type/ability immunity before applying
+        // Проверка иммунитета (по типу или способности)
         if (isStatusImmune(ailment, S.activeWild)) {
           appendToLog(`У дикого ${S.activeWild.name} иммунитет к ${STATUS_NAMES[targetStatus] || targetStatus}!`);
         } else if (applyStatusEffect(S.activeWild, targetStatus)) {
@@ -1591,6 +2429,7 @@ async function useMove(moveIndex) {
       }
     }
 
+    // 10a-ii: Изменение статов (Swords Dance, Growl, Charm...)
     let appliedStat = false;
     if (move.stat_changes && move.stat_changes.length > 0) {
       const targetMap = { 'user': S.activePlayerMon, 'selected-pokemon': S.activeWild, 'all-opponents': S.activeWild };
@@ -1598,7 +2437,7 @@ async function useMove(moveIndex) {
       const affectedMon = targetMap[moveTarget] || S.activeWild;
       const monName = affectedMon === S.activePlayerMon ? S.activePlayerMon.apiData.name : S.activeWild.name;
       const statNameMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
-      
+
       move.stat_changes.forEach(sc => {
         const statKey = statNameMap[sc.stat.name];
         if (statKey) {
@@ -1613,7 +2452,7 @@ async function useMove(moveIndex) {
       });
     }
 
-    // Role Play: copy target ability
+    // 10a-iii: Role Play — копировать способность цели
     if (move.name === 'role-play') {
       const targetAbility = S.activeWild.abilities?.[0]?.ability?.name;
       if (targetAbility) {
@@ -1626,14 +2465,17 @@ async function useMove(moveIndex) {
       appliedStat = true;
     }
 
-    // Check special status effects (healing, Reflect, Light Screen, Protect, Substitute)
+    // 10a-iv: Специальные статус-эффекты (лечение, барьеры)
     const appliedSpecial = handlePlayerStatusEffects(move);
 
+    // Если ничего не произошло — сообщаем
     if (!appliedSpecial && !appliedStat && (!ailment || ailment === 'none' || ailment === 'unknown')) {
       appendToLog('Но ничего не произошло...');
     }
   } else {
-    // Check enemy Protect
+    // ─── 10b. DAMAGE DEALING MOVES (с power) ───
+
+    // Проверка Protect у врага
     if (S.enemyProtectActive) {
       appendToLog(`${S.activeWild.name} защитился от атаки!`);
       S.enemyProtectActive = false;
@@ -1642,13 +2484,14 @@ async function useMove(moveIndex) {
       setTimeout(() => { enemyTurn(); }, 1000);
       return;
     }
-    // Substitute absorbs damage
+    // Если есть Substitute — уведомляем
     if (S.enemySubstituteHP > 0) {
       appendToLog(`${S.activeWild.name} защищается Заменителем!`);
     }
 
-    // Calculate damage via pure function
+    // ═══ РАСЧЁТ УРОНА ═══
     const curLvl = S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten;
+    // Stick (Farfetch'd): 50% шанс критического удара
     const leekCrit = S.activePlayerMon.heldItem === 'stick' && ['farfetchd', 'sirfetchd'].includes(S.activePlayerMon.apiData?.species?.name || '');
     const dmgResult = calculateDamage({
       move,
@@ -1667,14 +2510,15 @@ async function useMove(moveIndex) {
       alwaysCrit: leekCrit ? Math.random() < 0.5 : false,
     });
     let dmg = dmgResult.damage;
+    // Модификатор от барьеров (Reflect/Light Screen)
     const bMod = applyBarrierMod(1, move, false);
     if (bMod !== 1) dmg = Math.floor(dmg * bMod);
     for (const msg of dmgResult.messages) {
-      appendToLog(msg, false, 'dmg');
+      appendToLog(msg, false, 'dmg'); // Сообщения о типе, критичности и т.д.
     }
     const isPhysical = move.damage_class.name === 'physical';
 
-    // Focus Sash: survive at 1 HP (consumed on use)
+    // Focus Sash: выживание с 1 HP (предмет расходуется)
     if (S.activeWild.heldItem === 'focusSash' && S.wildCurHP === S.wildMaxHP && dmg >= S.wildCurHP) {
       dmg = S.wildCurHP - 1;
       appendToLog(`${S.activeWild.name} держится благодаря Фокусному поясу!`);
@@ -1682,7 +2526,7 @@ async function useMove(moveIndex) {
     }
 
     const preWildHP = S.wildCurHP;
-    // Substitute absorbs damage
+    // Substitute поглощает урон вместо покемона
     if (S.enemySubstituteHP > 0) {
       const subDmg = Math.min(S.enemySubstituteHP, dmg);
       S.enemySubstituteHP -= subDmg;
@@ -1696,7 +2540,7 @@ async function useMove(moveIndex) {
     S.wildCurHP -= dmg;
     if (S.wildCurHP < 0) S.wildCurHP = 0;
 
-    // Drain healing (Absorb, Giga Drain, etc.)
+    // Drain healing (Absorb, Mega Drain, Giga Drain, Leech Life...)
     if (move.meta?.drain > 0) {
       const drainPct = move.meta.drain / 100;
       let heal = Math.floor(dmg * drainPct);
@@ -1710,7 +2554,7 @@ async function useMove(moveIndex) {
       }
     }
 
-    // Life Orb recoil: -10% max HP
+    // Life Orb recoil: -10% от макс HP каждый раз при атаке
     if (S.activePlayerMon.heldItem === 'lifeOrb' && power) {
       const recoil = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 10));
       S.activePlayerMon.currentHp -= recoil;
@@ -1718,7 +2562,7 @@ async function useMove(moveIndex) {
       updatePlayerHpUI();
     }
 
-    // Sturdy check: survive OHKO only if at full HP before the hit
+    // Sturdy check: выживает с 1 HP если был на полном HP до удара
     const wildAbil = S.activeWild.abilities?.[0]?.ability?.name;
     if (checkSturdy(wildAbil, preWildHP, S.wildMaxHP, S.wildCurHP)) {
       S.wildCurHP = 1;
@@ -1726,13 +2570,13 @@ async function useMove(moveIndex) {
     }
 
     updateWildHpUI();
-
     appendToLog(`Нанесено ${dmg} урона!`, false, 'dmg');
 
-
-    // Apply secondary status effect from move (only if wild still alive)
+    // ═══ ВТОРИЧНЫЕ ЭФФЕКТЫ ═══
+    // Secondary status effect (шанс из move.meta.ailment_chance)
+    // Например: Flamethrower имеет 10% шанс поджечь
     if (S.wildCurHP > 0 && move.meta && move.meta.ailment && move.meta.ailment.name !== 'none' && move.meta.ailment.name !== 'unknown') {
-      const chance = move.meta.ailment_chance || 10;
+      const chance = move.meta.ailment_chance || 10; // Шанс в процентах
       if (Math.random() * 100 < chance) {
         const statusMap = {
           'poison': 'psn', 'badly-poison': 'psn',
@@ -1750,7 +2594,7 @@ async function useMove(moveIndex) {
       }
     }
 
-    // Static / Flame Body / Poison Point: 30% on physical contact (check type immunity)
+    // Static / Flame Body / Poison Point: 30% на физический контакт (проверка иммунитета по типу)
     const wildAbilityContact = S.activeWild.abilities?.[0]?.ability?.name;
     if (power && isPhysical && ['static', 'flame-body', 'poison-point'].includes(wildAbilityContact)) {
       const statusMapAbility = { 'static': 'par', 'flame-body': 'brn', 'poison-point': 'psn' };
@@ -1792,13 +2636,40 @@ async function useMove(moveIndex) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 13: ОБРАБОТКА FAINT (ПОТЕРЯ СОЗНАНИЯ)
+// ═══════════════════════════════════════════════════════════════
+// handlePlayerFaint — когда покемон игрока теряет сознание.
+//   Если есть живой запасной — автоматически заменяет.
+//   Если нет — поражение.
+// showPlayerMenu — показать меню боя и перевести фазу.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * handlePlayerFaint — обработка потери сознания покемоном игрока.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Ищет живого покемона в команде (кроме текущего)
+ *   2. Если нашёл — автоматически заменяет активного, обновляет UI, загружает атаки
+ *   3. Если не нашёл — ПОРАЖЕНИЕ:
+ *       - Для gym: сбрасывает прогресс гима
+ *       - Показывает battle-end-menu с сообщением о поражении
+ *       - Очищает сохранение боя
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ:
+ *   useMove() — если игрок получил урон и HP ≤ 0
+ *   enemyTurn() — если враг нанёс урон и HP ≤ 0
+ *   checkStatusTurn — если урон от статуса добил игрока
+ */
 function handlePlayerFaint() {
-  const isGym = S.battleType !== 'wild';
+  const isGym = S.battleType !== 'wild'; // Gym/elite/champion не позволяют убежать
   const nextMon = GS.myTeam.find(m => m.currentHp > 0 && m !== S.activePlayerMon);
   if (nextMon) {
+    // ── Есть живой запасной ──
     S.activePlayerMon = nextMon;
-    S.activePlayerMon.choiceLockedMove = undefined;
+    S.activePlayerMon.choiceLockedMove = undefined; // Сбрасываем Choice-блокировку
     appendToLog(`${S.activePlayerMon.apiData.name}, вперёд!`);
+    // Обновляем UI
     document.getElementById('player-name').innerText = S.activePlayerMon.nickname || S.activePlayerMon.apiData.name;
     document.getElementById('player-lvl').innerText = `Lv${S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten}`;
     const playerSpriteUrl = getSpriteUrl(S.activePlayerMon);
@@ -1807,69 +2678,117 @@ function handlePlayerFaint() {
     document.getElementById('player-status-icon').innerText = getStatusIcon(S.activePlayerMon.status);
     updatePlayerHpUI();
     updateAbilityDisplay();
-    loadMoveButtons(S.activePlayerMon, useMove);
+    loadMoveButtons(S.activePlayerMon, useMove);              // Загружаем атаки нового покемона
     saveBattleState();
-    setTimeout(() => { document.getElementById('battle-main-menu').style.display = 'flex'; }, 1000);
+    setTimeout(() => { document.getElementById('battle-main-menu').style.display = 'flex'; }, 1000); // Показываем меню
     store.autoSave();
   } else {
+    // ── ВСЯ КОМАНДА В НОКАУТЕ — ПОРАЖЕНИЕ ──
     appendToLog(isGym ? 'Вся команда потеряла сознание... Вы проиграли лидеру.' : 'Вся команда потеряла сознание... Вы проиграли.');
     if (isGym) {
+      // Сбрасываем прогресс гима
       S.gymTeamIndex = 0;
       S.gymTeamIndexInMember = 0;
       S.gymTeamData = null;
       S.battleType = 'wild';
     }
     document.getElementById('battle-main-menu').style.display = 'none';
-    document.getElementById('battle-end-menu').style.display = 'flex';
-    clearBattleState();
+    document.getElementById('battle-end-menu').style.display = 'flex'; // Экран "Поражение"
+    clearBattleState();                                             // Удаляем сохранение
     store.autoSave();
   }
 }
 
-/** Показать меню боя и перевести фазу в PLAYER_TURN */
+/**
+ * showPlayerMenu — показать меню действий игрока (атаки/предмет/смена/бегство).
+ * Переводит фазу боя в PLAYER_TURN через battle.transition().
+ * Вызывается когда наступает ход игрока.
+ */
 function showPlayerMenu() {
   document.getElementById('battle-main-menu').style.display = 'flex';
   battle.transition(BattlePhase.PLAYER_TURN);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 14: ХОД ПРОТИВНИКА (enemyTurn)
+// ═══════════════════════════════════════════════════════════════
+// enemyTurn — полный ход AI противника. Зеркально useMove().
+//
+// ПОТОК:
+//   1. Урон от статуса в конце хода (яд/ожог дикого)
+//   2. Проверка статуса (сон/паралич/заморозка)
+//   3. AI выбор атаки (selectEnemyMove из ai.ts)
+//   4. Accuracy check
+//   5. Статус-атака → handleEnemyStatusEffects
+//   6. Protect check у игрока
+//   7. Расчёт урона через calculateDamage
+//   8. Focus Sash, Substitute, Rocky Helmet, Life Orb, Rough Skin
+//   9. Уменьшение ходов барьеров (Reflect, Light Screen)
+//  10. Berry auto-use (Sitrus/Oran/Lum)
+//  11. Leftovers healing
+//  12. Проверка fainted → handlePlayerFaint / handleWildFaintRewards
+//  13. Переход к ходу игрока (showPlayerMenu)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * enemyTurn — выполнить ход противника (AI).
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   Сначала применяет урон от статуса к дикому (яд/ожог).
+ *   Затем проверяет может ли враг действовать (сон/паралич/заморозка).
+ *   Использует selectEnemyMove для выбора атаки.
+ *   Наносит урон игроку с учётом всех модификаторов.
+ *   После хода: уменьшает барьеры, проверяет ягоды, Leftovers.
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ:
+ *   useMove() — после атаки игрока (если враг жив)
+ *   switchPokemon() — после смены покемона
+ *   initEncounterEvents() — при попытке побега (неудачно)
+ *   capture (пойман) — враг вырвался
+ */
 async function enemyTurn() {
   battle.transition(BattlePhase.ENEMY_TURN);
-  // Wild end-of-turn damage (poison/burn) — applies once per round at start of enemy turn
+
+  // ═══ 1. УРОН ОТ СТАТУСА (начало хода) ═══
+  // Применяется раз в раунд в начале хода врага
   applyStatusEndOfTurn(S.activeWild, false);
   if (S.wildCurHP <= 0) {
-    await handleWildFaintRewards(S.battleType === 'wild');
+    await handleWildFaintRewards(S.battleType === 'wild'); // Статус добил врага
     return;
   }
 
-  // Check wild status (sleep/freeze/paralysis) after EoT damage
+  // ═══ 2. ПРОВЕРКА СТАТУСА ═══
   const wildCanAct = checkStatusTurn(S.activeWild, false);
   if (!wildCanAct) {
     S.battleRound++;
     saveBattleState();
     setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex';
+      document.getElementById('battle-main-menu').style.display = 'flex'; // Ход игрока
     }, 1000);
     return;
   }
 
+  // ═══ 3. AI ВЫБОР АТАКИ ═══
+  // selectEnemyMove анализирует: тип атаки, STAB, эффективность, PP
   const aiResult = selectEnemyMove({
     moves: S.wildMovesDetailed,
     movesPP: S.wildMovesPP,
     attacker: S.activeWild,
     defender: S.activePlayerMon,
-    isTrainer: S.battleType !== 'wild',
+    isTrainer: S.battleType !== 'wild', // Gym/elite AI умнее (выбирает эффективные атаки)
     getTypeMultiplier,
   });
+  // Fallback если AI не вернул атаку (Struggle)
   const chosenMove = aiResult?.move || { power: 30, damage_class: { name: 'physical' }, type: { name: 'normal' }, name: 'Атака' };
   const chosenIdx = aiResult?.index ?? -1;
   const isT = S.battleType !== 'wild';
-  S.enemyChosenMove = chosenMove;
+  S.enemyChosenMove = chosenMove; // Сохраняем для Sucker Punch проверки
   const enemyMoveName = chosenMove.name || 'Атака';
   if (chosenIdx >= 0 && S.wildMovesPP && S.wildMovesPP[chosenIdx]) {
     S.wildMovesPP[chosenIdx].current--;
   }
 
-  // Accuracy check for enemy move
+  // ═══ 4. ACCURACY CHECK ═══
   const enemyAcc = checkAccuracy(chosenMove);
   if (!enemyAcc.hit) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}, но промахнулся!`);
@@ -1882,10 +2801,10 @@ async function enemyTurn() {
   }
   const power = chosenMove.power;
 
-  // Handle status moves (no power)
+  // ═══ 5. СТАТУС-АТАКА ВРАГА (без урона) ═══
   if (!power) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}!`);
-    handleEnemyStatusEffects(chosenMove);
+    handleEnemyStatusEffects(chosenMove); // Лечение, барьеры, статы, статусы
     S.battleRound++;
     saveBattleState();
     setTimeout(() => {
@@ -1894,7 +2813,7 @@ async function enemyTurn() {
     return;
   }
 
-  // Player Protect check
+  // ═══ 6. PROTECT CHECK (игрок защищается) ═══
   if (S.protectActive && power) {
     appendToLog(`${S.activePlayerMon.apiData.name} защитился от атаки!`);
     S.protectActive = false;
@@ -1906,7 +2825,7 @@ async function enemyTurn() {
     return;
   }
 
-  // Calculate damage via pure function
+  // ═══ 7. РАСЧЁТ УРОНА ═══
   const dmgResult = calculateDamage({
     move: chosenMove,
     attacker: S.activeWild,
@@ -1923,21 +2842,22 @@ async function enemyTurn() {
     naturesList: natures,
   });
   let dmg = dmgResult.damage;
-  const bMod = applyBarrierMod(1, chosenMove, true);
+  const bMod = applyBarrierMod(1, chosenMove, true); // Барьеры игрока
   if (bMod !== 1) dmg = Math.floor(dmg * bMod);
   for (const msg of dmgResult.messages) {
     appendToLog(msg, false, 'dmg');
   }
   const isPhysical = chosenMove.damage_class.name === 'physical';
 
-  // Focus Sash: player survives at 1 HP (consumed on use)
+  // ═══ 8. МОДИФИКАТОРЫ УРОНА ═══
+  // Focus Sash: игрок выживает с 1 HP (предмет расходуется)
   if (S.activePlayerMon.heldItem === 'focusSash' && S.activePlayerMon.currentHp === S.activePlayerMon.maxHp && dmg >= S.activePlayerMon.currentHp) {
     dmg = S.activePlayerMon.currentHp - 1;
     appendToLog(`${S.activePlayerMon.apiData.name} держится благодаря Фокусному поясу!`);
     S.activePlayerMon.heldItem = null;
   }
 
-  // Player Substitute absorbs damage
+  // Player Substitute поглощает урон
   if (S.substituteHP > 0 && dmg > 0) {
     const subBlock = Math.min(S.substituteHP, dmg);
     S.substituteHP -= subBlock;
@@ -1954,7 +2874,7 @@ async function enemyTurn() {
   if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
   updatePlayerHpUI();
 
-  // Rocky Helmet: 1/6 max HP recoil on contact
+  // Rocky Helmet: 1/6 от макс HP врага при контакте
   if (power && isPhysical && S.activePlayerMon.heldItem === 'rockyHelmet') {
     const recoil = Math.max(1, Math.floor(S.wildMaxHP / 6));
     S.wildCurHP -= recoil;
@@ -1963,12 +2883,11 @@ async function enemyTurn() {
     appendToLog(`Каменный шлем ${S.activePlayerMon.apiData.name} ранит ${S.activeWild.name}! (-${recoil} HP)`);
   }
 
-  // Wild lifeOrb recoil
+  // Wild Life Orb recoil: -10% макс HP врага
   if (S.activeWild.heldItem === 'lifeOrb' && power) {
     S.wildCurHP -= Math.max(1, Math.floor(S.wildMaxHP / 10));
     if (S.wildCurHP < 0) S.wildCurHP = 0;
     updateWildHpUI();
-    // Check if Life Orb recoil KO'd the wild mon
     if (S.wildCurHP <= 0) {
       appendToLog(`${S.activeWild.name} потерял сознание от отдачи Life Orb!`, false, 'faint');
       await handleWildFaintRewards(S.battleType === 'wild');
@@ -1976,7 +2895,7 @@ async function enemyTurn() {
     }
   }
 
-  // Rough Skin / Iron Barbs: 1/8 recoil on physical contact (player has the ability)
+  // Rough Skin / Iron Barbs: 1/8 recoil при контакте (способность игрока)
   const playerAbility = getAbilityName(S.activePlayerMon, false);
   if (power && isPhysical && ['rough-skin', 'iron-barbs'].includes(playerAbility)) {
     const recoil = Math.max(1, Math.floor(dmg / 8));
@@ -1986,35 +2905,35 @@ async function enemyTurn() {
     appendToLog(`Шиповатое тело ${S.activePlayerMon.apiData.name} ранит ${S.activeWild.name}! (-${recoil} HP)`);
   }
 
-  // Decrement player screen turns at end of enemy turn
+  // ═══ 9. УМЕНЬШЕНИЕ БАРЬЕРОВ ═══
   if (S.playerReflectTurns > 0) { S.playerReflectTurns--; if (S.playerReflectTurns === 0) appendToLog('Защита рассеялась!', false, 'system'); }
   if (S.playerLightScreenTurns > 0) { S.playerLightScreenTurns--; if (S.playerLightScreenTurns === 0) appendToLog('Световой Экран рассеялся!', false, 'system'); }
-  // Reset Protect at end of opponent's turn
-  S.protectActive = false;
+  S.protectActive = false; // Protect сбрасывается в конце хода противника
 
-  // Berry auto-use for player
+  // ═══ 10. BERRY AUTO-USE ДЛЯ ИГРОКА ═══
   if (S.activePlayerMon.currentHp > 0) checkBerryAutoUse(S.activePlayerMon, true);
 
-
+  // ═══ 11. ПРОВЕРКА FAINTED ═══
   if (S.activePlayerMon.currentHp === 0) {
     appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
     handlePlayerFaint();
     return;
   } else {
+    // Урон от статуса в конце хода (яд/ожог игрока)
     applyStatusEndOfTurn(S.activePlayerMon, true);
     if (S.activePlayerMon.currentHp <= 0) {
       handlePlayerFaint();
       return;
     }
     S.battleRound++;
-    // Leftovers end-of-turn healing (player)
+    // Leftovers healing (игрок) — пассивное восстановление 1/16 макс HP
     if (S.activePlayerMon.heldItem === 'leftovers' && S.activePlayerMon.currentHp > 0 && S.activePlayerMon.currentHp < S.activePlayerMon.maxHp) {
       const heal = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 16));
       S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
       updatePlayerHpUI();
       appendToLog(`${S.activePlayerMon.apiData.name} восстанавливает HP от Объедков! (+${heal})`);
     }
-    // Leftovers end-of-turn healing (wild/gym)
+    // Leftovers healing (дикий/гим)
     if (S.activeWild.heldItem === 'leftovers' && S.wildCurHP > 0 && S.wildCurHP < S.wildMaxHP) {
       const heal = Math.max(1, Math.floor(S.wildMaxHP / 16));
       S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
@@ -2023,21 +2942,39 @@ async function enemyTurn() {
     }
     saveBattleState();
     setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex';
+      document.getElementById('battle-main-menu').style.display = 'flex'; // Ход игрока
     }, 1000);
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 15: ИНИЦИАЛИЗАЦИЯ СОБЫТИЙ БОЯ
+// ═══════════════════════════════════════════════════════════════
+// initEncounterEvents — навешивает обработчики на все кнопки боя.
+// Вызывается ОДИН раз при старте игры (в init.ts или main.ts).
+//
+// Кнопки:
+//   btn-run        — побег (только wild)
+//   btn-switch     — смена покемона (заблокировано в gym/elite/champion)
+//   btn-use-item   — использование предмета (очень большой блок)
+//   btn-leave-battle — выход из боя
+// ─────────────────────────────────────────────────────────────
+
 function initEncounterEvents() {
+
+  // ═══ 15a: ПОБЕГ ═══
   document.getElementById('btn-run').addEventListener('click', () => {
     if (S.battleType !== 'wild') {
-      appendToLog('Нельзя сбежать от лидера!');
+      appendToLog('Нельзя сбежать от лидера!'); // Gym/elite — побег невозможен
       return;
     }
-    S.escapeAttempts++;
+    S.escapeAttempts++; // Каждая неудачная попытка увеличивает шанс
     const playerSpeed = calculateStat(S.activePlayerMon, 'speed', false);
     const wildSpeed = calculateStat(S.activeWild, 'speed', true);
 
+    // Формула побега: (playerSpeed * 128 / wildSpeed) + 30 * attempts
+    // Если результат > 255 — гарантированный побег
+    // Иначе — шанс F/256
     let F = Math.floor((playerSpeed * 128 / wildSpeed) + 30 * S.escapeAttempts);
 
     if (F > 255 || Math.floor(Math.random() * 256) < F) {
@@ -2046,10 +2983,11 @@ function initEncounterEvents() {
     } else {
       document.getElementById('battle-main-menu').style.display = 'none';
       appendToLog('Не удалось сбежать!');
-      setTimeout(() => { enemyTurn(); }, 1500);
+      setTimeout(() => { enemyTurn(); }, 1500); // Противник атакует
     }
   });
 
+  // ═══ 15b: СМЕНА ПОКЕМОНА ═══
   document.getElementById('btn-switch').addEventListener('click', () => {
     if (S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'GS.champion') {
       showToast('Нельзя сменить покемона в бою с лидером!', true);
@@ -2058,59 +2996,83 @@ function initEncounterEvents() {
     switchPokemon();
   });
 
+  // ═══ 15c: ИСПОЛЬЗОВАНИЕ ПРЕДМЕТА ═══
+  // Этот обработчик — самый большой в файле (~300 строк).
+  // Обрабатывает ВСЕ типы предметов в бою:
+  //   - Покеболлы (ловля)       — отдельная механика с catchRate
+  //   - Аптечки (Potion, Super Potion, Full Restore)
+  //   - Лекарства от статусов (Antidote, Paralyze Heal...)
+  //   - PP восстановление (Ether, Elixir, Max Elixir)
+  //   - X-Items (X Attack, X Defense...)
+  //   - Камни эволюции (Evolution Stone, Fire Stone...)
+  //   - TM-совместимость
   document.getElementById('btn-use-item').addEventListener('click', () => {
+    // Читаем выбранный предмет из выпадающего списка
     const item = (document.getElementById('battle-item-select') as HTMLInputElement).value;
 
+    // ═══ БАЛЛЫ (покеболлы) ═══
+    // Собираем конфиги всех реализованных покеболов
     const BALL_CONFIG = {};
     ITEMS.filter(i => i.isBall && i.implemented).forEach(i => {
       BALL_CONFIG[i.id] = {
         label: i.nameRu,
-        mult: i.ballMult,
+        mult: i.ballMult,     // Множитель поимки (например, UltraBall = ×2)
         qty: store.getItemQty(i.id),
         dec: () => store.removeItem(i.id),
       };
     });
     const ballCfg = BALL_CONFIG[item];
     if (ballCfg) {
+      // ── БАЛЛЫ: ЛОВЛЯ ПОКЕМОНА ──
       if (S.battleType !== 'wild') {
         return appendToLog('Нельзя ловить в бою с лидером!');
       }
       if (ballCfg.qty <= 0) return showToast(`У вас нет ${ballCfg.label}ов!`, true);
-      // If team is full, will auto-send to PC box below
 
-      ballCfg.dec();
+      ballCfg.dec(); // Уменьшаем количество в инвентаре
       store.updateInventoryDisplay();
 
-      const hpPct = S.wildCurHP / S.wildMaxHP;
-
-      // Species catch rate (0-255, from PokeAPI or default 100)
+      // ═══ ФОРМУЛА ПОИМКИ ═══
+      // Стандартная формула из игр Pokemon:
+      //   rate = (3*maxHP - 2*curHP) / (3*maxHP) * speciesRate * ballMult * statusMult
+      //   catchChance = min(0.95, rate / 255)
+      //
+      // Факторы:
+      //   - HP: чем меньше HP, тем выше шанс
+      //   - Species catch rate: у легендарок 3-45, у обычных 45-255
+      //   - Ball multiplier: PokeBall ×1, GreatBall ×1.5, UltraBall ×2
+      //   - Status: сон/заморозка ×2.5, яд/ожог/паралич ×1.5
+      //   - Quick Ball: ×5 на первом ходу
+      //   - Dusk Ball: ×3 ночью
+      //   - Timer Ball: +0.3 за каждый ход
+      //   - Love Ball: ×8 если противоположный пол
       const speciesRate = S.activeWild.captureRate || S.activeWild.speciesData?.capture_rate || 100;
-      // Standard formula: rate = (3*maxHP - 2*curHP) * rate / (3*maxHP) * ballBonus * statusBonus
       let catchRate = ((3 * S.wildMaxHP - 2 * S.wildCurHP) * speciesRate) / (3 * S.wildMaxHP);
       catchRate = catchRate * ballCfg.mult;
 
-      // Status bonus
-      if (S.wildStatus === 'slp' || S.wildStatus === 'frz') catchRate *= 2.5;
+      // Бонус за статус-эффект
+      if (S.wildStatus === 'slp' || S.wildStatus === 'frz') catchRate *= 2.5;  // Сон/заморозка — лучший бонус
       else if (S.wildStatus === 'par' || S.wildStatus === 'brn' || S.wildStatus === 'psn') catchRate *= 1.5;
 
-      // Ball special effects
-      if (item === 'quickBall' && S.battleRound < 1) catchRate *= 5;
-      if (item === 'duskBall' && !GS.isDaytime) catchRate *= 3;
-      if (item === 'timerBall') catchRate *= 1 + S.battleRound * 0.3;
+      // Специальные эффекты покеболов
+      if (item === 'quickBall' && S.battleRound < 1) catchRate *= 5;   // Quick Ball — только первый ход
+      if (item === 'duskBall' && !GS.isDaytime) catchRate *= 3;       // Dusk Ball — ночью
+      if (item === 'timerBall') catchRate *= 1 + S.battleRound * 0.3; // Timer Ball — чем дольше бой, тем выше
 
-      // Love Ball: x8 if opposite gender
+      // Love Ball: x8 если противоположный пол
       if (item === 'loveBall') {
         const wildGender = S.activeWild.wildGender;
         const playerGender = S.activePlayerMon?.apiData?.gender || (Math.random() < 0.5 ? 'male' : 'female');
         if (wildGender && playerGender && wildGender !== playerGender) catchRate *= 8;
       }
 
-      // Convert to probability (cap at 95%)
+      // Конвертируем в вероятность (максимум 95%)
       let catchChance = Math.min(0.95, catchRate / 255);
 
       document.getElementById('battle-main-menu').style.display = 'none';
       appendToLog(`Вы бросили ${ballCfg.label}...`);
 
+      // Анимация: ожидание 1 секунду (имитация броска)
       setTimeout(() => {
         if (Math.random() < catchChance) {
           appendToLog(`Попался! ${S.activeWild.name.toUpperCase()} пойман!`, false, 'catch');
@@ -2355,9 +3317,12 @@ function initEncounterEvents() {
     }
   });
 
+  // ═══ 15d: ВЫХОД ИЗ БОЯ ═══
+  // Полная очистка: состояние боя, все стат-стадии, статусы, прогресс гима
   document.getElementById('btn-leave-battle').addEventListener('click', () => {
-    document.getElementById('encounter-modal').style.display = 'none';
-    clearBattleState();
+    document.getElementById('encounter-modal').style.display = 'none'; // Скрываем модалку
+    clearBattleState();                                        // Удаляем localStorage
+    // Сбрасываем все поля боя
     S.gymTeamIndex = 0;
     S.gymTeamIndexInMember = 0;
     S.gymTeamData = null;
@@ -2365,20 +3330,48 @@ function initEncounterEvents() {
     S.battleRound = 0;
     S.wildMovesPP = null;
     if (S.activePlayerMon) S.activePlayerMon.choiceLockedMove = undefined;
-    // Clear all team stat stages, status effects, and battle state after battle
+    // Очищаем стат-стадии и статусы всей команды
     GS.myTeam.forEach(m => {
       m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
       m.choiceLockedMove = undefined;
       m.status = null;
       m.sleepTurns = 0;
     });
-    // Clear stat badges
+    // Очищаем плашки статов в UI
     document.getElementById('player-stat-badges').innerHTML = '';
     document.getElementById('wild-stat-badges').innerHTML = '';
   });
 }
 
-// --- GYM BATTLE SYSTEM (NEW) ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 16: GYM/ELITE/CHAMPION СИСТЕМА
+// ═══════════════════════════════════════════════════════════════
+// Эти функции отвечают за бои с лидерами залов, Элитную Четвёрку и Чемпиона.
+//
+// ОТЛИЧИЯ ОТ WILD БОЯ:
+//   - Нельзя сбежать
+//   - Нельзя сменить покемона (кроме fainted)
+//   - Команда должна быть 4+ живых, без дублирования типов
+//   - Уровень покемонов не выше макс уровня лидера
+//   - EXP за gym не даётся (кроме элиты и чемпиона)
+//   - Gym/Elite покемоны имеют 31 IV во всех статах
+//   - Gym лидеры дают бейджи и награды
+//
+// ПОРЯДОК ВЫЗОВА:
+//   openGymModal(locId) → (кнопка) → startGymBattle → startGymNextPokemon → [победа → след. покемон / поражение]
+//   openEliteModal() → (кнопка) → startEliteBattle → startEliteNextMember → startEliteNextPokemon → championBattle
+//   championBattle → startChampionNextPokemon → [победа → Чемпион!]
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * openGymModal — показать модалку с информацией о лидере зала.
+ * Показывает: имя, титул, тип покемонов, бейдж, команду, награды.
+ * Проверяет условия перед боем: 4+ живых покемона, уникальные типы,
+ *   уровень не выше лидера.
+ *
+ * ЧТО БЕРЁТ ИЗ: GS.gymLeaders[locId] (из gyms.ts)
+ * ЧТО ПОКАЗЫВАЕТ: gym-modal в DOM
+ */
 function openGymModal(locId) {
   const leader = GS.gymLeaders[locId];
   const modal = document.getElementById('gym-modal');
@@ -2452,6 +3445,22 @@ function initGymEvents() {
   });
 }
 
+/**
+ * startGymBattle — начать битву с лидером зала.
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   1. Устанавливает battleType = 'gym', gymLeaderKey, gymTeamData (клонированная команда)
+ *   2. Находит первого живого покемона в команде
+ *   3. Рендерит UI с инфой о лидере
+ *   4. Запускает startGymNextPokemon — первого покемона лидера
+ *
+ * КОМАНДА ЛИДЕРА: клонируется через JSON.parse(JSON.stringify) чтобы
+ * не мутировать оригинальные данные из gyms.ts.
+ *
+ * ТРЕБОВАНИЯ: минимум 4 живых покемона (проверка в openGymModal)
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: из openGymModal по нажатию "Начать битву"
+ */
 async function startGymBattle(locId) {
   GS.itemsUsedInBattle = 0;
   S.battleRound = 0;
@@ -2464,9 +3473,9 @@ async function startGymBattle(locId) {
   S.battleType = 'gym';
   S.gymLeaderKey = locId;
   S.gymTeamIndex = 0;
-  S.gymTeamData = JSON.parse(JSON.stringify(leader.team)); // clone
+  S.gymTeamData = JSON.parse(JSON.stringify(leader.team)); // Клонируем команду лидера (deep copy)
 
-  battle.transition(BattlePhase.GYM_START);
+  battle.transition(BattlePhase.GYM_START); // Фаза: начало гима
 
   S.activePlayerMon = GS.myTeam[activeMonIndex];
   S.activePlayerMon.choiceLockedMove = undefined;
@@ -2498,20 +3507,45 @@ async function startGymBattle(locId) {
   await startGymNextPokemon();
 }
 
+/**
+ * startGymNextPokemon — выпустить следующего покемона лидера зала.
+ *
+ * ЕСЛИ ВСЯ КОМАНДА ЛИДЕРА ПОБЕЖДЕНА:
+ *   - Выдаёт бейдж (GS.gymBadges.push)
+ *   - Выдаёт денежную награду
+ *   - Показывает экран победы
+ *   - Вызывает store.showGymRewardSelection (выбор предмета-награды)
+ *   - Показывает battle-end-menu
+ *
+ * ЕСЛИ ЕСТЬ СЛЕДУЮЩИЙ ПОКЕМОН:
+ *   - Загружает данные из PokeAPI
+ *   - Устанавливает Perfect IVs (31) для всех статов
+ *   - Применяет тренировочный бонус лидера (если есть trainingStage)
+ *   - Умный выбор атак: STAB > coverage > статус-атаки
+ *   - Рендерит UI, проверяет Intimidate
+ *
+ * УМНЫЙ ВЫБОР АТАК:
+ *   1. Определяет физический или специальный тип атакера (по статам)
+ *   2. Cортирует атаки, выбирает лучшие STAB (до 2)
+ *   3. Заполняет Coverage атаками других типов
+ *   4. Добавляет лучшую статус-атаку если есть слот
+ *   5. Избегает дублирования типов атак
+ *
+ * ГДЕ ВЫЗЫВАЕТСЯ: startGymBattle, handleWildFaintRewards (после победы над покемоном)
+ */
 async function startGymNextPokemon() {
   if (S.gymTeamIndex >= S.gymTeamData.length) {
-    // Won the gym battle!
+    // ── ПОБЕДА НАД ВСЕЙ КОМАНДОЙ ЛИДЕРА ──
     const leader = GS.gymLeaders[S.gymLeaderKey];
-    GS.gymBadges.push(leader.badgeName);
-    store.giveReward(leader.moneyReward, []);
-    checkQuestProgress('earn_money', leader.moneyReward);
+    GS.gymBadges.push(leader.badgeName);                                 // Добавляем бейдж
+    store.giveReward(leader.moneyReward, []);                             // Денежная награда
+    checkQuestProgress('earn_money', leader.moneyReward);                 // Прогресс квеста
     appendToLog(`Победа! Вы получили ${leader.badgeName} и ¥${leader.moneyReward}!`);
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
     store.updateMoneyDisplay();
     updateBadgeDisplay();
-    // Trigger reward selection modal after a brief pause
-    setTimeout(() => store.showGymRewardSelection(S.gymLeaderKey), 300);
+    setTimeout(() => store.showGymRewardSelection(S.gymLeaderKey), 300);  // Выбор предмета-награды
     return;
   }
 
@@ -2658,7 +3692,22 @@ function handleGymPlayerFaint() {
   return handlePlayerFaint();
 }
 
-// --- ELITE FOUR (NEW) ---
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 16B: ЭЛИТНАЯ ЧЕТВЁРКА + ЧЕМПИОН
+// ═══════════════════════════════════════════════════════════════
+// openEliteModal — показать модалку с информацией о членах Элитной Четвёрки.
+// startEliteBattle — начало прохождения Элитной Четвёрки (последовательно).
+// startEliteNextMember — переход к следующему члену Элитной Четвёрки.
+// startEliteNextPokemon — выпустить следующего покемона текущего члена.
+// championBattle — бой с Чемпионом после победы над всей Элитной Четвёркой.
+// startChampionNextPokemon — выпустить следующего покемона Чемпиона.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * openEliteModal — показать модалку Элитной Четвёрки.
+ * Отображает всех 4 членов + Чемпиона с их командами.
+ * Кнопка "Начать" запускает startEliteBattle().
+ */
 function openEliteModal() {
   const modal = document.getElementById('elite-modal');
   const list = document.getElementById('elite-member-list');
@@ -2815,10 +3864,21 @@ async function startEliteNextPokemon() {
   }
 }
 
+/**
+ * championBattle — начать финальный бой с Чемпионом.
+ * Вызывается после победы над всей Элитной Четвёркой (startEliteNextMember).
+ * Устанавливает battleType = 'GS.champion', загружает команду чемпиона.
+ *
+ * ПОБЕДА НАД ЧЕМПИОНОМ:
+ *   - Денежная награда (GS.champion.moneyReward)
+ *   - Сообщение "ПОБЕДА! Вы стали Чемпионом Лиги!"
+ *   - Сброс gymTeamIndex, battleType → 'wild'
+ *   - Автосохранение
+ */
 async function championBattle() {
   GS.itemsUsedInBattle = 0;
   S.battleRound = 0;
-  S.gymTeamData = JSON.parse(JSON.stringify(GS.champion.team));
+  S.gymTeamData = JSON.parse(JSON.stringify(GS.champion.team)); // Клонируем команду чемпиона
   S.gymTeamIndexInMember = 0;
   S.battleType = 'GS.champion';
   appendToLog(`--- ${GS.champion.name} вызывает вас! ---`);
@@ -2908,19 +3968,42 @@ async function startChampionNextPokemon() {
 }
 
 
-// === STATE ACCESSORS ===
+// ═══════════════════════════════════════════════════════════════
+// СЕКЦИЯ 17: STATE ACCESSORS (ГЕТТЕРЫ/СЕТТЕРЫ)
+// ═══════════════════════════════════════════════════════════════
+// Используются для безопасного чтения/записи состояния боя из других модулей.
+// getBattleVars — возвращает копию состояния + itemsUsedInBattle.
+// setBattleVars — устанавливает поля из объекта (с обработкой itemsUsedInBattle).
+// ─────────────────────────────────────────────────────────────
+
+/** getBattleVars — получить копию всех переменных боя */
 function getBattleVars() {
   return { ...battle.state, itemsUsedInBattle: GS.itemsUsedInBattle };
 }
 
+/** setBattleVars — установить переменные боя из объекта */
 function setBattleVars(updates: Record<string, any>) {
   for (const [k, v] of Object.entries(updates)) {
     if (k === 'itemsUsedInBattle') {
-      GS.itemsUsedInBattle = v;
+      GS.itemsUsedInBattle = v;     // itemsUsedInBattle в GS, не в battle.state
     } else {
       (battle.state as any)[k] = v;
     }
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ЭКСПОРТ
+// ═══════════════════════════════════════════════════════════════
+// Экспортируются ВСЕ функции, которые могут понадобиться другим модулям.
+// Основные экспорты:
+//   battle — инстанс BattleStateMachine (фазы, переходы)
+//   useMove / enemyTurn — основные функции атак
+//   startHunt / startAutoHunt — начало боя
+//   saveBattleState / restoreBattleState — персистентность
+//   openGymModal / startGymBattle — gym бой
+//   openEliteModal / startEliteBattle — элита
+//   championBattle / startChampionNextPokemon — чемпион
+//   Множество утилит: calculateStat, getStatusIcon, switchPokemon и т.д.
+// ─────────────────────────────────────────────────────────────
 export { saveBattleState, clearBattleState, restoreBattleState, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars };

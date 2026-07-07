@@ -1,3 +1,66 @@
+/**
+ * =============================================================================
+ * Файл: state.ts — Константы игровых данных и чистые утилиты состояния
+ * =============================================================================
+ *
+ * НАЗНАЧЕНИЕ:
+ *   Файл содержит два типа сущностей:
+ *     1) Константы игровых данных — составы Элитной Четвёрки, Чемпиона,
+ *        наборы легендарных покемонов (LEGENDARY_SET, LEGENDARY_NAMES).
+ *     2) Чистые утилитарные функции — генерация UID, получение ID тренера,
+ *        расчёт звёзд силы/редкости, формирование ключей localStorage,
+ *        сборка объекта состояния покедекса.
+ *   Мутабельные переменные игры остаются в main.js / game/state.js,
+ *   так как импортированные примитивы (числа, строки) нельзя переприсвоить
+ *   из импортирующего модуля.
+ *
+ * ЗАВИСИМОСТИ (прямые импорты):
+ *   - ../data/gyms.js      → gymLeaders      — список лидеров стадионов
+ *   - ../data/items.js     → ITEMS           — определения всех предметов
+ *   - ../data/training.js  → trainingStages  — этапы тренировки покемонов
+ *   - ../data/quests.js    → QUEST_CONFIGS   — конфигурации квестов
+ *
+ *   Косвенные зависимости (глобальное окружение):
+ *   - localStorage       — чтение/запись ID тренера и ключей (getTrainerId, lsKey)
+ *   - Telegram WebApp    — опциональный tgUser для привязки к Telegram
+ *
+ * ГДЕ ИСПОЛЬЗУЕТСЯ (прямые импорты из ../utils/state.js):
+ *   — src/game/state.ts             → generateUID, getTrainerId, lsKey
+ *     (ре-экспорт и обёртки с прокидыванием state.tgUser)
+ *   — src/battle/core.ts            → generateUID, getTrainerId
+ *     (каждый пойманный покемон получает uid + originalTrainer)
+ *   — src/game/save.ts              → LEGENDARY_SET
+ *     (проверка лимита легендарных покемонов в команде при сохранении)
+ *   — src/game/getters.ts           → eliteFour, champion
+ *     (геттеры для UI: составы Элитной Четвёрки и Чемпиона)
+ *   — src/ui/profile.ts             → getPowerStars, getRarityStars
+ *     (звёзды силы и редкости в профиле покемона)
+ *   — src/ui/pokedex.ts             → getPowerStars, getRarityStars
+ *     (звёзды в карточке покедекса)
+ *   — src/ui/evolution.ts           → getPowerStars
+ *     (расчёт силы после эволюции)
+ *
+ *   Косвенно (через re-export из game/state.ts): src/game/actions.ts,
+ *   src/game/init.ts, src/ui/trainers.ts, src/ui/gym-reward.ts,
+ *   src/network/socket.ts, src/ui/trade-window.ts, src/ui/daycare.ts,
+ *   src/ui/starter.ts.
+ *
+ * КЛЮЧЕВЫЕ ЭКСПОРТЫ:
+ *   LEGENDARY_SET     — Set<string> — все легендарные покемоны (лимит команды)
+ *   LEGENDARY_NAMES   — Set<string> — имена легендарок для звёзд редкости
+ *   eliteFour         — Member[]     — Элитная Четвёрка Канто (команды + награды)
+ *   champion          — Member       — Чемпион Канто
+ *   johtoEliteFour    — Member[]     — Элитная Четвёрка Джото
+ *   johtoChampion     — Member       — Чемпион Джото
+ *   generateUID       — () => string — уникальный идентификатор
+ *   getTrainerId      — (tgUser?) => string — ID текущего тренера
+ *   lsKey             — (name, tgUser?) => string — ключ localStorage с префиксом
+ *   getPowerStars     — (mon: Pokemon) => number — звёзды силы (1-10) от BST
+ *   getRarityStars    — (mon: Pokemon) => number — звёзды редкости (1-5)
+ *   getPokedexState   — (...) => PokedexState — объект состояния покедекса
+ * =============================================================================
+ */
+
 // Game state helpers — data constants and pure utility functions
 // Mutable game variables remain in main.js (imported bindings can't be reassigned)
 

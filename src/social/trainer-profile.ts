@@ -1,3 +1,28 @@
+// ─────────────────────────────────────────────────────────────
+// trainer-profile.ts — ПРОФИЛЬ ТРЕНЕРА (социальный модуль)
+// ─────────────────────────────────────────────────────────────
+// Показывает профиль других игроков: имя, бейджи, команду, онлайн-статус.
+// Позволяет отправить запрос на обмен (trade) или PvP-бой.
+//
+// ЗАВИСИМОСТИ:
+//   state.ts     — глобальное состояние (onlinePlayersList, tgUser, socket)
+//   config.ts    — API_BASE (URL сервера), SOCKET_COOLDOWN
+//   save.ts      — getCloudAuthHeaders (для авторизованных запросов)
+//   dom.ts       — escHtml, showToast
+//   socket.ts    — initTradeSocket (для инициализации сокета)
+//
+// ИСПОЛЬЗУЕТСЯ В:
+//   chat.ts      — renderOnlinePlayers (список онлайн-игроков)
+//   socket.ts    — updateTrainerLocationList (при обновлении локации)
+//   location.ts  — loadLocationTrainers (список тренеров на локации)
+//
+// КЛЮЧЕВЫЕ ЭКСПОРТЫ:
+//   renderOnlinePlayers     — рендер списка онлайн-игроков
+//   loadLocationTrainers    — загрузка тренеров на текущей локации
+//   updateTrainerLocationList — обновление списка при получении данных
+//   openTrainerProfile      — открытие модалки профиля тренера
+// ─────────────────────────────────────────────────────────────
+
 import { state } from '../game/state.js';
 import { API_BASE, SOCKET_COOLDOWN } from '../game/config.js';
 import { getCloudAuthHeaders } from '../game/save.js';

@@ -1,4 +1,47 @@
-// Sprite and type-color utilities — no dependency on main.js or core.js
+/**
+ * =============================================================================
+ * sprite.ts — Утилиты спрайтов и цветов типов
+ * =============================================================================
+ *
+ * ## Что делает этот файл
+ * Предоставляет набор вспомогательных функций для работы со спрайтами покемонов
+ * и предметов, а также с цветами/градиентами типов покемонов. Используется
+ * для отображения спрайтов в битвах, Pokedex, PC, магазине, окне обмена,
+ * профиле и эволюции.
+ *
+ * ## Зависимости (imports)
+ * - `ITEMS` из `'../data/items.js'` — массив данных предметов (используется
+ *   как fallback в getItemSpriteImg, когда ID предмета нет в ITEM_SPRITE_MAP).
+ *
+ * ## Глобальное состояние (side effects)
+ * - DOM: функции setTypeBg, updateBattleHeldIcons, updateBattleSpriteBgs
+ *   обращаются к document.getElementById(...) для обновления стилей и текста
+ *   элементов интерфейса. Предполагается, что соответствующие DOM-элементы
+ *   уже существуют на момент вызова.
+ * - Структуры покемонов: getSpriteUrl и updateBattleSpriteBgs ожидают, что
+ *   объект покемона содержит поля apiData (со sprites и types), isShiny.
+ *
+ * ## Где используется (9 файлов импортируют из этого модуля)
+ * - src/battle/core.ts          → getSpriteUrl, updateBattleSpriteBgs
+ * - src/battle/pvp-core.ts      → getSpriteUrl
+ * - src/ui/evolution.ts         → getTypeGradient, getSpriteUrl
+ * - src/ui/inventory.ts         → getTypeColor
+ * - src/ui/pokedex.ts           → getTypeColor, getTypeGradient
+ * - src/ui/pc.ts                → getTypeColor, getSpriteUrl
+ * - src/ui/profile.ts           → getTypeGradient, getSpriteUrl, getTypeColor
+ * - src/ui/shop.ts              → getItemSpriteImg
+ * - src/ui/trade-window.ts      → getItemSpriteImg, getSpriteUrl
+ *
+ * ## Ключевые экспорты
+ * - getTypeColor(type)          → hex-цвет типа покемона
+ * - getTypeGradient(types)      → CSS radial-gradient для 1-2 типов
+ * - getSpriteUrl(mon)           → URL спрайта покемона (с учётом shiny)
+ * - setTypeBg(id, types)        → устанавливает фон DOM-элемента по типу
+ * - getItemSpriteImg(itemId, size?) → HTML <img> для иконки предмета
+ * - updateBattleHeldIcons(playerMon, wildMon) → обновляет иконки предметов в битве
+ * - updateBattleSpriteBgs(playerMon, wildMon) → обновляет фон и иконки в битве
+ * =============================================================================
+ */
 
 import { ITEMS } from '../data/items.js';
 
