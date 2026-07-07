@@ -192,13 +192,9 @@ import { API_BASE } from './config.js';
       }
     }
     if (!gameLoaded) {
-      await giveStarter();   // новая игра — даём стартового покемона
-      // Форсированное облачное сохранение — чтобы СРАЗУ зафиксировать "стартовик выдан"
-      if (state.tgToken) {
-        saveGame();
-        cloudSave();
-      }
-      showToast('Добро пожаловать в Лигу Покемонов!', false);
+      await giveStarter();   // ждём пока пользователь выберет покемона
+      // giveStarterMon() уже вызвала store.emit('save') → autoSave() → cloudSave()
+      // Дополнительное сохранение не нужно — оно перезатрёт корректный save пустым
     } else if (state.tgToken) {
       // Синхронизация: если local новее cloud на 5+ сек → cloudSave
       const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');

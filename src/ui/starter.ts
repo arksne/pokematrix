@@ -145,60 +145,65 @@ export async function giveStarterMon(pokemonName: string) {
 // ── giveStarter: показать интерфейс выбора стартового покемона ──
 // Показывает модалку с N картами (по одной на поколение)
 // При клике на карту — случайный покемон из этого поколения
+// Возвращает Promise, который резолвится когда пользователь выбрал покемона
 // Если модалка не найдена — выдаёт Bulbasaur по умолчанию
-export function giveStarter() {
-  // Находим модалку и сетку (DOM-элементы)
-  const modal = document.getElementById('starter-modal');
-  const grid = document.getElementById('starter-grid');
-  if (!modal || !grid) {
-    // Если модалки нет — выдаём Bulbasaur (запасной вариант)
-    giveStarterMon('bulbasaur');
-    return;
-  }
+export function giveStarter(): Promise<void> {
+  return new Promise((resolve) => {
+    // Находим модалку и сетку (DOM-элементы)
+    const modal = document.getElementById('starter-modal');
+    const grid = document.getElementById('starter-grid');
+    if (!modal || !grid) {
+      // Если модалки нет — выдаём Bulbasaur (запасной вариант)
+      giveStarterMon('bulbasaur').then(() => resolve());
+      return;
+    }
 
-  // Очищаем сетку
-  grid.innerHTML = '';
-  // Устанавливаем заголовок
-  const title = document.querySelector('#starter-modal h2');
-  if (title) title.innerText = 'Выберите карту (Поколения 1-9)';
+    // Очищаем сетку
+    grid.innerHTML = '';
+    // Устанавливаем заголовок
+    const title = document.querySelector('#starter-modal h2');
+    if (title) title.innerText = 'Выберите карту (Поколения 1-9)';
 
-  // GEN_STARTERS — массив поколений, каждое поколение = массив имён
-  GEN_STARTERS.forEach((gen: string[], idx: number) => {
-    // Создаём карту для поколения
-    const div = document.createElement('div');
-    div.className = 'starter-option';
-    // Стили: тёмно-синий градиент, белый текст, крупный знак вопроса
-    div.style.background = 'linear-gradient(135deg, #2a5298, #1e3c72)';
-    div.style.color = '#fff';
-    div.style.display = 'flex';
-    div.style.alignItems = 'center';
-    div.style.justifyContent = 'center';
-    div.style.fontSize = '3rem';
-    div.style.fontWeight = 'bold';
-    div.style.cursor = 'pointer';
-    div.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
-    div.style.borderRadius = '10px';
-    div.style.height = '150px';
-    div.style.transition = 'transform 0.2s';
-    div.innerText = '?';  // Пока знак вопроса (сюрприз)
+    // GEN_STARTERS — массив поколений, каждое поколение = массив имён
+    GEN_STARTERS.forEach((gen: string[], idx: number) => {
+      // Создаём карту для поколения
+      const div = document.createElement('div');
+      div.className = 'starter-option';
+      // Стили: тёмно-синий градиент, белый текст, крупный знак вопроса
+      div.style.background = 'linear-gradient(135deg, #2a5298, #1e3c72)';
+      div.style.color = '#fff';
+      div.style.display = 'flex';
+      div.style.alignItems = 'center';
+      div.style.justifyContent = 'center';
+      div.style.fontSize = '3rem';
+      div.style.fontWeight = 'bold';
+      div.style.cursor = 'pointer';
+      div.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+      div.style.borderRadius = '10px';
+      div.style.height = '150px';
+      div.style.transition = 'transform 0.2s';
+      div.innerText = '?';  // Пока знак вопроса (сюрприз)
 
-    // При наведении — масштабирование (анимация)
-    div.addEventListener('mouseenter', () => div.style.transform = 'scale(1.05)');
-    div.addEventListener('mouseleave', () => div.style.transform = 'scale(1)');
+      // При наведении — масштабирование (анимация)
+      div.addEventListener('mouseenter', () => div.style.transform = 'scale(1.05)');
+      div.addEventListener('mouseleave', () => div.style.transform = 'scale(1)');
 
-    // При клике — выбираем случайного покемона из этого поколения
-    div.addEventListener('click', () => {
-      const chosenStarter = gen[Math.floor(Math.random() * gen.length)];  // Случайный
-      modal.style.display = 'none';   // Закрываем модалку
-      giveStarterMon(chosenStarter);  // Создаём и выдаём покемона
-      showToast(
-        `Вам выпал покемон: ${chosenStarter.toUpperCase()}! (Gen ${idx + 1})`,
-        false
-      );
+      // При клике — выбираем случайного покемона из этого поколения
+      div.addEventListener('click', () => {
+        const chosenStarter = gen[Math.floor(Math.random() * gen.length)];  // Случайный
+        modal.style.display = 'none';   // Закрываем модалку
+        giveStarterMon(chosenStarter).then(() => {
+          showToast(
+            `Вам выпал покемон: ${chosenStarter.toUpperCase()}! (Gen ${idx + 1})`,
+            false
+          );
+          resolve();  // Говорим init.ts что стартовик выбран
+        });
+      });
+      grid.appendChild(div);
     });
-    grid.appendChild(div);
-  });
 
-  // Показываем модалку
-  modal.style.display = 'flex';
+    // Показываем модалку
+    modal.style.display = 'flex';
+  });
 }
