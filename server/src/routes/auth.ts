@@ -6,6 +6,7 @@
  *   GET  /auth/is-admin   — проверка админ-статуса
  */
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { eq, and } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -14,6 +15,32 @@ import { generateAccessToken, generateRefreshToken, getRefreshExpiresAt } from '
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
+
+/**
+ * Верификация initData от Telegram Mini App.
+ * Проверяет HMAC-SHA256 подпись через BOT_TOKEN.
+ * Возвращает params если подпись верна, null если нет.
+ * Если botToken не задан, пропускает проверку (dev-режим).
+ */
+function verifyTelegramInitData(initData: string, botToken: string): URLSearchParams | null {
+  const params = new URLSearchParams(initData);
+  const hash = params.get('hash');
+  if (!hash) return null;
+
+  // Сортируем все поля, исключая hash
+  params.delete('hash');
+  const sorted = [...params.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n');
+
+  // HMAC-SHA256: secret = HMAC_SHA256("WebAppData", botToken)
+  const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+  const computed = crypto.createHmac('sha256', secret).update(sorted).digest('hex');
+
+  if (computed !== hash) return null;
+  return params;
+}
 
 // ── POST /auth/tg ────────────────────────────────────────────
 // Вход через Telegram Mini App initData.
@@ -31,10 +58,27 @@ router.post('/tg', async (req: Request, res: Response) => {
     if (config.allowDevLogin && initData === 'test') {
       // ── Режим разработки ──
       tgUser = { id: 1, username: 'dev', first_name: 'Dev' };
+    } else if (config.botToken) {
+      // ── Продакшн: HMAC-SHA256 верификация ──
+      const params = verifyTelegramInitData(initData, config.botToken);
+      if (!params) {
+        res.status(401).json({ error: 'Invalid initData signature' });
+        return;
+      }
+      const userJson = params.get('user');
+      if (!userJson) {
+        res.status(401).json({ error: 'user field missing in initData' });
+        return;
+      }
+      try {
+        tgUser = JSON.parse(decodeURIComponent(userJson));
+      } catch {
+        res.status(401).json({ error: 'Invalid user data in initData' });
+        return;
+      }
     } else {
-      // ── Проверка initData через Telegram Bot API ──
-      // В реальном продакшне нужно проверить HMAC-SHA256 подпись initData
-      // Для упрощения: парсим initData и проверяем auth_date
+      // ── Режим без BOT_TOKEN (fallback, небезопасно) ──
+      console.warn('[auth/tg] BOT_TOKEN not set — initData verification skipped!');
       try {
         const params = new URLSearchParams(initData);
         const userJson = params.get('user');
@@ -48,21 +92,22 @@ router.post('/tg', async (req: Request, res: Response) => {
 
     const db = getDb();
 
-    // ── Найти или создать пользователя ──
-    let user = (await db.select().from(users).where(eq(users.tg_id, tgUser.id)).limit(1))[0];
+    // ── Найти или создать пользователя (через UPSERT без race condition) ──
+    const result = await db.insert(users).values({
+      tg_id: tgUser.id,
+      username: tgUser.username || null,
+      first_name: tgUser.first_name || null,
+      is_admin: config.adminIds.has(tgUser.id) ? 1 : 0,
+      created_at: new Date().toISOString(),
+      last_seen: new Date().toISOString(),
+    }).onConflictDoNothing().returning();
 
-    if (!user) {
-      // Создаём нового пользователя
-      const newUser = await db.insert(users).values({
-        tg_id: tgUser.id,
-        username: tgUser.username || null,
-        first_name: tgUser.first_name || null,
-        is_admin: config.adminIds.has(tgUser.id) ? 1 : 0,
-        created_at: new Date().toISOString(),
-        last_seen: new Date().toISOString(),
-      }).returning();
-      user = newUser[0];
+    let user: typeof users.$inferSelect;
+    if (result.length > 0) {
+      user = result[0];
     } else {
+      // Пользователь уже существовал — читаем его
+      user = (await db.select().from(users).where(eq(users.tg_id, tgUser.id)).limit(1))[0]!;
       // Обновляем last_seen
       await db.update(users)
         .set({ last_seen: new Date().toISOString(), username: tgUser.username || user.username })
@@ -104,9 +149,15 @@ router.post('/register', authMiddleware, async (req: Request, res: Response) => 
     const { nickname, avatar, starterPokemon } = req.body;
     const userId = req.user!.userId;
 
+    // ── Санитизация nickname (XSS-защита) ──
+    const safeNickname = (nickname || '')
+      .replace(/[<>&"']/g, '')    // удаляем HTML-спецсимволы
+      .trim()
+      .slice(0, 32);               // макс 32 символа
+
     const db = getDb();
     await db.update(users).set({
-      nickname: nickname || '',
+      nickname: safeNickname,
       avatar: avatar || 'trainer_f',
       registered: 1,
       last_seen: new Date().toISOString(),
@@ -154,6 +205,16 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return;
     }
 
+    // ── Детекция повторного использования refresh token ──
+    if (stored.consumed_at) {
+      // Токен УЖЕ БЫЛ использован — кто-то пытается переиспользовать
+      console.warn(`[auth/refresh] Token reuse detected! user_id=${stored.user_id}, token_id=${stored.id}`);
+      // Инвалидируем ВСЕ refresh-токены пользователя (stolen token)
+      await db.delete(refreshTokens).where(eq(refreshTokens.user_id, stored.user_id));
+      res.status(401).json({ error: 'Session compromised — please re-login' });
+      return;
+    }
+
     // Проверить срок действия
     if (new Date(stored.expires_at) < new Date()) {
       await db.delete(refreshTokens).where(eq(refreshTokens.id, stored.id));
@@ -168,8 +229,10 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return;
     }
 
-    // Удалить старый refresh token
-    await db.delete(refreshTokens).where(eq(refreshTokens.id, stored.id));
+    // Пометить старый токен как использованный (вместо удаления)
+    await db.update(refreshTokens)
+      .set({ consumed_at: new Date().toISOString() })
+      .where(eq(refreshTokens.id, stored.id));
 
     // Создать новую пару
     const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin };

@@ -86,7 +86,7 @@ async function getUserData(userId: number) {
 router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { itemId, qty } = req.body;
-    if (!itemId || !qty || qty < 1) {
+    if (!itemId || typeof qty !== 'number' || qty < 1 || !Number.isInteger(qty)) {
       res.status(400).json({ error: 'Invalid itemId or qty' });
       return;
     }
@@ -97,28 +97,41 @@ router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const total = price * qty;
-    const { saveData } = await getUserData(req.user!.userId);
-    const currentMoney = saveData.inventory['credit'] || 0;
+    const db = getDb();
+    const userId = req.user!.userId;
 
-    if (currentMoney < total) {
+    // Транзакция: read → check → write атомарно
+    const result = await db.transaction(async (tx) => {
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      if (!user) throw new Error('User not found');
+      let saveData: any = {};
+      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      if (!saveData.inventory) saveData.inventory = {};
+
+      const currentMoney = saveData.inventory['credit'] || 0;
+      const total = price * qty;
+
+      if (currentMoney < total) {
+        throw new Error('Not enough credits');
+      }
+
+      saveData.inventory['credit'] = currentMoney - total;
+      saveData.inventory[itemId] = (saveData.inventory[itemId] || 0) + qty;
+
+      await tx.update(users).set({
+        save_data: JSON.stringify(saveData),
+        money: saveData.inventory['credit'],
+      }).where(eq(users.id, userId));
+
+      return saveData.inventory['credit'];
+    });
+
+    res.json({ money: result });
+  } catch (err: any) {
+    if (err.message === 'Not enough credits') {
       res.status(400).json({ error: 'Not enough credits' });
       return;
     }
-
-    // Списать деньги
-    saveData.inventory['credit'] = currentMoney - total;
-    // Добавить предмет
-    saveData.inventory[itemId] = (saveData.inventory[itemId] || 0) + qty;
-
-    const db = getDb();
-    await db.update(users).set({
-      save_data: JSON.stringify(saveData),
-      money: saveData.inventory['credit'],
-    }).where(eq(users.id, req.user!.userId));
-
-    res.json({ money: saveData.inventory['credit'] });
-  } catch (err: any) {
     console.error('[economy/buy]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -128,37 +141,51 @@ router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
 router.post('/sell', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { itemId, qty } = req.body;
-    if (!itemId || !qty || qty < 1 || itemId === 'credit') {
+    if (!itemId || typeof qty !== 'number' || qty < 1 || !Number.isInteger(qty) || itemId === 'credit') {
       res.status(400).json({ error: 'Invalid itemId or qty' });
       return;
     }
 
-    const { saveData } = await getUserData(req.user!.userId);
-    const currentQty = saveData.inventory[itemId] || 0;
+    const db = getDb();
+    const userId = req.user!.userId;
 
-    if (currentQty < qty) {
+    const result = await db.transaction(async (tx) => {
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      if (!user) throw new Error('User not found');
+      let saveData: any = {};
+      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      if (!saveData.inventory) saveData.inventory = {};
+
+      const currentQty = saveData.inventory[itemId] || 0;
+      if (currentQty < qty) throw new Error('Not enough items');
+
+      const price = priceMap.get(itemId);
+      if (!price) throw new Error('Item cannot be sold');
+      const sellPrice = Math.floor(price / 2);
+      const totalEarned = sellPrice * qty;
+
+      saveData.inventory[itemId] -= qty;
+      if (saveData.inventory[itemId] <= 0) delete saveData.inventory[itemId];
+      saveData.inventory['credit'] = (saveData.inventory['credit'] || 0) + totalEarned;
+
+      await tx.update(users).set({
+        save_data: JSON.stringify(saveData),
+        money: saveData.inventory['credit'],
+      }).where(eq(users.id, userId));
+
+      return { money: saveData.inventory['credit'] };
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    if (err.message === 'Not enough items') {
       res.status(400).json({ error: 'Not enough items' });
       return;
     }
-
-    const price = priceMap.get(itemId) || 100;
-    const sellPrice = Math.floor(price / 2);
-    const totalEarned = sellPrice * qty;
-
-    // Списать предмет
-    saveData.inventory[itemId] -= qty;
-    if (saveData.inventory[itemId] <= 0) delete saveData.inventory[itemId];
-    // Начислить деньги
-    saveData.inventory['credit'] = (saveData.inventory['credit'] || 0) + totalEarned;
-
-    const db = getDb();
-    await db.update(users).set({
-      save_data: JSON.stringify(saveData),
-      money: saveData.inventory['credit'],
-    }).where(eq(users.id, req.user!.userId));
-
-    res.json({ money: saveData.inventory['credit'] });
-  } catch (err: any) {
+    if (err.message === 'Item cannot be sold') {
+      res.status(400).json({ error: 'Item cannot be sold' });
+      return;
+    }
     console.error('[economy/sell]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -174,34 +201,47 @@ router.post('/craft', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const { saveData } = await getUserData(req.user!.userId);
-
-    // Проверить ингредиенты
-    for (const [ingId, ingQty] of Object.entries(recipe.ingredients)) {
-      const have = saveData.inventory[ingId] || 0;
-      if (have < ingQty) {
-        res.status(400).json({ error: `Not enough ${ingId}` });
-        return;
-      }
-    }
-
-    // Списать ингредиенты
-    for (const [ingId, ingQty] of Object.entries(recipe.ingredients)) {
-      saveData.inventory[ingId] -= ingQty;
-      if (saveData.inventory[ingId] <= 0) delete saveData.inventory[ingId];
-    }
-
-    // Выдать результат
-    saveData.inventory[recipe.result] = (saveData.inventory[recipe.result] || 0) + recipe.qty;
-
     const db = getDb();
-    await db.update(users).set({
-      save_data: JSON.stringify(saveData),
-    }).where(eq(users.id, req.user!.userId));
+    const userId = req.user!.userId;
+
+    const inventory = await db.transaction(async (tx) => {
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      if (!user) throw new Error('User not found');
+      let saveData: any = {};
+      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      if (!saveData.inventory) saveData.inventory = {};
+
+      // Проверить ингредиенты
+      for (const [ingId, ingQty] of Object.entries(recipe.ingredients)) {
+        const have = saveData.inventory[ingId] || 0;
+        if (have < ingQty) {
+          throw new Error(`Not enough ${ingId}`);
+        }
+      }
+
+      // Списать ингредиенты
+      for (const [ingId, ingQty] of Object.entries(recipe.ingredients)) {
+        saveData.inventory[ingId] -= ingQty;
+        if (saveData.inventory[ingId] <= 0) delete saveData.inventory[ingId];
+      }
+
+      // Выдать результат
+      saveData.inventory[recipe.result] = (saveData.inventory[recipe.result] || 0) + recipe.qty;
+
+      await tx.update(users).set({
+        save_data: JSON.stringify(saveData),
+      }).where(eq(users.id, userId));
+
+      return saveData.inventory;
+    });
 
     // Клиент ожидает ВЕСЬ inventory
-    res.json({ inventory: saveData.inventory });
+    res.json({ inventory });
   } catch (err: any) {
+    if (err.message && err.message.startsWith('Not enough ')) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     console.error('[economy/craft]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -210,31 +250,50 @@ router.post('/craft', authMiddleware, async (req: Request, res: Response) => {
 // ── POST /economy/reward ─────────────────────────────────────
 router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { money, items } = req.body;
-    if (!money && !items) {
-      res.status(400).json({ error: 'money or items required' });
+    const db = getDb();
+    const userId = req.user!.userId;
+
+    const result = await db.transaction(async (tx) => {
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      if (!user) throw new Error('User not found');
+      let saveData: any = {};
+      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      if (!saveData.inventory) saveData.inventory = {};
+      if (!saveData.lastRewardTime) saveData.lastRewardTime = 0;
+
+      // ── Проверка кулдауна (24h) ──
+      const now = Date.now();
+      const cooldownMs = 24 * 60 * 60 * 1000; // 24 часа
+      const timeSinceLastReward = now - saveData.lastRewardTime;
+      if (timeSinceLastReward < cooldownMs) {
+        const hoursLeft = Math.ceil((cooldownMs - timeSinceLastReward) / (60 * 60 * 1000));
+        throw new Error(`Reward cooldown: ${hoursLeft}h remaining`);
+      }
+
+      // ── Сервер сам определяет награду (не доверяем клиенту) ──
+      const rewardMoney = 500;
+      const rewardItems = { pokeBall: 5, potion: 3 };
+
+      saveData.inventory['credit'] = (saveData.inventory['credit'] || 0) + rewardMoney;
+      for (const [itemId, qty] of Object.entries(rewardItems)) {
+        saveData.inventory[itemId] = (saveData.inventory[itemId] || 0) + qty;
+      }
+      saveData.lastRewardTime = now;
+
+      await tx.update(users).set({
+        save_data: JSON.stringify(saveData),
+        money: saveData.inventory['credit'],
+      }).where(eq(users.id, userId));
+
+      return { rewardMoney, rewardItems };
+    });
+
+    res.json({ ok: true, money: result.rewardMoney, items: result.rewardItems });
+  } catch (err: any) {
+    if (err.message && err.message.startsWith('Reward cooldown:')) {
+      res.status(429).json({ error: err.message });
       return;
     }
-
-    const { saveData } = await getUserData(req.user!.userId);
-
-    if (money) {
-      saveData.inventory['credit'] = (saveData.inventory['credit'] || 0) + money;
-    }
-    if (Array.isArray(items)) {
-      for (const item of items) {
-        saveData.inventory[item.id] = (saveData.inventory[item.id] || 0) + (item.qty || 1);
-      }
-    }
-
-    const db = getDb();
-    await db.update(users).set({
-      save_data: JSON.stringify(saveData),
-      money: saveData.inventory['credit'],
-    }).where(eq(users.id, req.user!.userId));
-
-    res.json({ ok: true });
-  } catch (err: any) {
     console.error('[economy/reward]', err);
     res.status(500).json({ error: 'Internal server error' });
   }

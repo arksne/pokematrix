@@ -25,9 +25,10 @@ export function initLobby(io: Server, socket: Socket) {
   const username = socket.data.user?.username || socket.data.user?.firstName || 'Тренер';
 
   // ── join_lobby ──
-  socket.on('join_lobby', async (data: { username?: string; userId?: number }) => {
-    const name = data?.username || username;
-    const id = data?.userId || userId;
+  socket.on('join_lobby', async (_data: any) => {
+    // ⚠️ ВАЖНО: Игнорируем userId от клиента — используем только из JWT
+    const name = username;
+    const id = userId;
 
     onlinePlayers.set(socket.id, {
       id: socket.id,

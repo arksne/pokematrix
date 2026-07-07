@@ -22,6 +22,7 @@ CREATE TABLE "refresh_tokens" (
 	"user_id" integer NOT NULL,
 	"token" text NOT NULL,
 	"expires_at" text NOT NULL,
+	"consumed_at" text,
 	CONSTRAINT "refresh_tokens_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
@@ -32,7 +33,7 @@ CREATE TABLE "server_features" (
 --> statement-breakpoint
 CREATE TABLE "users" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"tg_id" integer NOT NULL,
+	"tg_id" bigint NOT NULL,
 	"username" text,
 	"first_name" text,
 	"nickname" text DEFAULT '',

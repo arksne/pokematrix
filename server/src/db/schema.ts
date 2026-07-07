@@ -2,11 +2,11 @@
  * Drizzle ORM — PostgreSQL схема.
  * Все таблицы, которые нужны серверу.
  */
-import { pgTable, serial, integer, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, bigint, text, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  tg_id: integer('tg_id').notNull().unique(),
+  tg_id: bigint('tg_id', { mode: 'number' }).notNull().unique(),
   username: text('username'),
   first_name: text('first_name'),
   nickname: text('nickname').default(''),
@@ -29,6 +29,7 @@ export const refreshTokens = pgTable('refresh_tokens', {
   user_id: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   token: text('token').notNull().unique(),
   expires_at: text('expires_at').notNull(),
+  consumed_at: text('consumed_at'),
 });
 
 export const chatMessages = pgTable('chat_messages', {

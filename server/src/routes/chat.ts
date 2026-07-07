@@ -4,16 +4,16 @@
  *   POST /chat/send       — отправка сообщения
  */
 import { Router, Request, Response } from 'express';
-import { gt, asc } from 'drizzle-orm';
+import { eq, gt, asc, inArray } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { chatMessages, users } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { eq } from 'drizzle-orm';
 
 const router = Router();
 
 // ── GET /chat/messages ───────────────────────────────────────
 // Без since — все сообщения. С since — только новые.
+// Использует batch-запрос вместо N+1.
 router.get('/messages', async (req: Request, res: Response) => {
   try {
     const db = getDb();
@@ -29,17 +29,27 @@ router.get('/messages', async (req: Request, res: Response) => {
       .orderBy(asc(chatMessages.id))
       .limit(50);
 
-    // Обогащаем сообщения именами пользователей
-    const enriched = await Promise.all(messages.map(async (msg) => {
-      const user = (await db.select()
-        .from(users)
-        .where(eq(users.tg_id, msg.user_id))
-        .limit(1))[0];
-      return {
-        ...msg,
-        first_name: user?.first_name || '',
-        username: user?.username || '',
-      };
+    // Обогащаем сообщения именами (одним IN-запросом вместо N+1)
+    const userIds = [...new Set(messages.map(m => m.user_id))];
+    const userMap = new Map<number, { first_name: string; username: string }>();
+
+    if (userIds.length > 0) {
+      const msgUsers = await db.select({
+        tg_id: users.tg_id,
+        first_name: users.first_name,
+        username: users.username,
+      }).from(users)
+        .where(inArray(users.tg_id, userIds));
+
+      for (const u of msgUsers) {
+        userMap.set(u.tg_id, { first_name: u.first_name || '', username: u.username || '' });
+      }
+    }
+
+    const enriched = messages.map(msg => ({
+      ...msg,
+      first_name: userMap.get(msg.user_id)?.first_name || '',
+      username: userMap.get(msg.user_id)?.username || '',
     }));
 
     res.json({ messages: enriched });

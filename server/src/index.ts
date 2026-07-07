@@ -47,7 +47,10 @@ async function main() {
   // ── Подключение к БД ─────────────────────────────────────
   logger.info('[server] Connecting to database...');
   const { db } = connectDb();
-  try { await runMigrations(); } catch(e) { logger.warn({ err: e }, '[server] Migrations skipped'); }
+  try { await runMigrations(); } catch(e: any) {
+    logger.error({ err: e, message: e.message }, '[server] Migration FAILED — tables may not exist');
+    // Не падаем — даём шанс, если таблицы уже созданы вручную
+  }
   logger.info('[server] Database connected');
 
   // ── Express ───────────────────────────────────────────────
@@ -146,6 +149,17 @@ async function main() {
   httpServer.listen(config.port, () => {
     logger.info(`[server] PokeMatrix server running on port ${config.port}`);
     logger.info(`[server] Environment: ${config.isProduction ? 'production' : 'development'}`);
+
+    // ── Предупреждения о безопасности ──
+    if (!process.env.JWT_SECRET) {
+      logger.warn('[security] JWT_SECRET не задан — используется default-значение! Установите JWT_SECRET в переменных окружения.');
+    }
+    if (!process.env.ADMIN_PASS) {
+      logger.warn('[security] ADMIN_PASS не задан — используется default-значение! Установите ADMIN_PASS в переменных окружения.');
+    }
+    if (!config.botToken) {
+      logger.warn('[security] BOT_TOKEN не задан — HMAC-верификация initData отключена!');
+    }
   });
 }
 

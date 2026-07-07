@@ -69,10 +69,33 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const db = getDb();
     const userId = req.user!.userId;
 
-    // Сохраняем весь save_data целиком
+    // ── Optimistic locking: проверяем save_version ──
+    const currentUser = (await db.select({ save_version: users.save_version })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1))[0];
+
+    if (!currentUser) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const clientVersion = body.saveVersion ?? 0;
+    const serverVersion = currentUser.save_version ?? 0;
+
+    // Если у клиента устаревшая версия — отклоняем
+    if (clientVersion < serverVersion) {
+      res.status(409).json({
+        error: 'Save conflict: server has newer data',
+        serverVersion,
+      });
+      return;
+    }
+
+    // Сохраняем весь save_data целиком + инкрементим save_version
     const updateData: any = {
       save_data: JSON.stringify(body.saveData),
-      save_version: body.saveVersion ?? 0,
+      save_version: serverVersion + 1,
     };
 
     // Обновляем мета-поля для быстрого доступа (leaderboard, profile)

@@ -20,9 +20,10 @@ let pool: pg.Pool;
 export function connectDb() {
   pool = new Pool({
     connectionString: config.databaseUrl,
-    max: 2,
+    max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
+    ssl: config.isProduction ? { rejectUnauthorized: true } : undefined,
   });
 
   db = drizzle(pool, { schema });

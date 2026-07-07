@@ -13,6 +13,9 @@
  */
 import type { Server, Socket } from 'socket.io';
 import { getOnlinePlayerByUserId } from './lobby.js';
+import { getDb } from '../db/index.js';
+import { users } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 interface TradeSession {
   tradeId: string;
@@ -33,23 +36,17 @@ const activeTrades = new Map<string, TradeSession>();
 export function initTrade(io: Server, socket: Socket) {
   // ── trade_request ──
   socket.on('trade_request', (partnerSocketId: string) => {
-    const initiator = getOnlinePlayerByUserId(socket.data.user?.tgId);
-    const partner = getOnlinePlayerByUserId(
-      // partnerSocketId может быть userId или socketId
-      parseInt(partnerSocketId) ? parseInt(partnerSocketId) : (socket.data.user?.tgId)
-    );
-
-    // Ищем партнёра по socket.id
+    // Ищем партнёра по socket.id (не доверяем userId от клиента)
     const partnerSocket = io.sockets.sockets.get(partnerSocketId);
-    if (!partnerSocket) {
+    if (!partnerSocket || !socket.data.user) {
       socket.emit('trade_rejected');
       return;
     }
 
     // Отправляем запрос партнёру
     partnerSocket.emit('trade_request_received', {
-      fromUsername: socket.data.user?.firstName || socket.data.user?.username || 'Тренер',
-      fromId: socket.data.user?.tgId,
+      fromUsername: socket.data.user.firstName || socket.data.user.username || 'Тренер',
+      fromId: socket.data.user.tgId,
     });
   });
 
@@ -93,17 +90,94 @@ export function initTrade(io: Server, socket: Socket) {
     }
   });
 
-  // ── trade_offer ──
-  socket.on('trade_offer', (data: { tradeId: string; offers: any[] }) => {
+  // ── trade_offer (с верификацией владения) ──
+  socket.on('trade_offer', async (data: { tradeId: string; offers: any[] }) => {
     const session = activeTrades.get(data.tradeId);
     if (!session) return;
 
     const isInitiator = socket.id === session.initiatorId;
+    const userId = isInitiator ? session.initiatorUserId : session.partnerUserId;
+
+    // ── Проверяем владение предлагаемыми предметами ──
+    const offers = data.offers || [];
+    let hasItems = false;
+    let hasMons = false;
+
+    for (const offer of offers) {
+      if (offer.type === 'item') {
+        hasItems = true;
+      } else if (offer.type === 'pokemon') {
+        hasMons = true;
+      }
+    }
+
+    // Если есть предметы — верифицируем через БД
+    if (hasItems) {
+      try {
+        const db = getDb();
+        const user = (await db.select({ save_data: users.save_data })
+          .from(users)
+          .where(eq(users.tg_id, userId))
+          .limit(1))[0];
+
+        if (user) {
+          let saveData: any = {};
+          try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+          const inv = saveData.inventory || {};
+
+          for (const offer of offers) {
+            if (offer.type === 'item' && offer.itemId) {
+              const have = inv[offer.itemId] || 0;
+              if (have < (offer.qty || 1)) {
+                socket.emit('trade_offer_rejected', {
+                  reason: `Not enough ${offer.itemId} (have: ${have}, need: ${offer.qty || 1})`,
+                });
+                return;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[trade] DB verify error:', e);
+      }
+    }
+
+    // Верификация покемонов — по UID (проверяем, что покемон есть в saveData.myTeam)
+    if (hasMons) {
+      try {
+        const db = getDb();
+        const user = (await db.select({ save_data: users.save_data })
+          .from(users)
+          .where(eq(users.tg_id, userId))
+          .limit(1))[0];
+
+        if (user) {
+          let saveData: any = {};
+          try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+          const team = saveData.myTeam || [];
+
+          for (const offer of offers) {
+            if (offer.type === 'pokemon' && offer.uid) {
+              const owned = team.some((m: any) => m.uid === offer.uid);
+              if (!owned) {
+                socket.emit('trade_offer_rejected', {
+                  reason: `Pokemon ${offer.uid} not in your team`,
+                });
+                return;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[trade] DB verify error:', e);
+      }
+    }
+
     if (isInitiator) {
-      session.p1Offers = data.offers || [];
-      session.p1Confirmed = false; // сброс подтверждения при новом оффере
+      session.p1Offers = offers;
+      session.p1Confirmed = false;
     } else {
-      session.p2Offers = data.offers || [];
+      session.p2Offers = offers;
       session.p2Confirmed = false;
     }
 
@@ -111,7 +185,7 @@ export function initTrade(io: Server, socket: Socket) {
     const partnerSocketId = isInitiator ? session.partnerId : session.initiatorId;
     const partnerSocket = io.sockets.sockets.get(partnerSocketId);
     if (partnerSocket) {
-      partnerSocket.emit('trade_partner_offers', data.offers);
+      partnerSocket.emit('trade_partner_offers', offers);
     }
   });
 

@@ -41,8 +41,10 @@ export function initPvP(io: Server, socket: Socket) {
     activeBattles.set(battleId, { playerA: challenger.socketId, playerB: socket.id });
 
     // Обоим: кто первый ходит (инициатор = first)
-    challengerSocket.emit('pvp_start', { battleId, opponent: socket.data.user?.firstName || 'Оппонент', first: true });
-    socket.emit('pvp_start', { battleId, opponent: socket.data.user?.firstName || 'Оппонент', first: false });
+    const challengerName = challengerSocket.data.user?.firstName || challengerSocket.data.user?.username || 'Оппонент';
+    const acceptorName = socket.data.user?.firstName || socket.data.user?.username || 'Оппонент';
+    challengerSocket.emit('pvp_start', { battleId, opponent: acceptorName, first: true });
+    socket.emit('pvp_start', { battleId, opponent: challengerName, first: false });
   });
 
   // ── pvp_decline ──
