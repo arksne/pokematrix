@@ -59,8 +59,12 @@ import { showGymRewardSelection } from '../ui/gym-reward.js';
 import { API_BASE } from './config.js';
 
 // ── ТОЧКА ВХОДА ────────────────────────────────────────────
-// Всё начинается здесь. DOMContentLoaded → init.
-document.addEventListener('DOMContentLoaded', async () => {
+// Всё начинается здесь.
+// ⚠️ ВНИМАНИЕ: скрипт грузится как <script type="module"> — он деферный.
+// DOMContentLoaded уже произошёл к моменту исполнения этого кода.
+// Поэтому НЕ используем addEventListener('DOMContentLoaded', ...), а
+// запускаем init немедленно.
+(async () => {
   try {
     // ── 1. Настройка store (query handlers + event listeners) ──
     // Query handlers: функции, которые возвращают значение (не event-based).
@@ -345,7 +349,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
   } catch(e) { document.body.innerHTML += '<div class="error-bar" style="font-size:14px;padding:15px;white-space:pre-wrap"><b>INIT ERROR:</b> '+e.message+'<br><small>'+e.stack+'</small></div>'; console.error(e); }
-});
+})();
 
 window.addEventListener('pagehide', () => {
   if (!state.tgToken) return;
