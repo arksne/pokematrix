@@ -52,90 +52,6 @@ export const NPC_DATA = {
     quests: [],
   },
 
-  // ── Сёстры Джой на стадионах Канто ──
-  'joy_pewter_stadium': {
-    id: 'joy_pewter_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'pewterStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Пьютера! Я здесь, чтобы помочь тренерам перед битвой с Броком.', default: 'Удачи в бою с каменным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_cerulean_stadium': {
-    id: 'joy_cerulean_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'ceruleanStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Церулина! Я здесь, чтобы помочь тренерам перед битвой с Мисти.', default: 'Удачи в бою с водным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_vermilion_stadium': {
-    id: 'joy_vermilion_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'vermilionStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Вермилиона! Я здесь, чтобы помочь тренерам перед битвой с Лейтенантом Сёрджем.', default: 'Удачи в бою с электрическим типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_celadon_stadium': {
-    id: 'joy_celadon_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'celadonStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Селадона! Я здесь, чтобы помочь тренерам перед битвой с Эрикой.', default: 'Удачи в бою с травяным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_saffron_stadium': {
-    id: 'joy_saffron_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'saffronPsychicStadium',
-    dialog: { greet: 'Добро пожаловать на Психический Стадион Саффрона! Я здесь, чтобы помочь тренерам перед битвой с Сабриной.', default: 'Удачи в бою с психическим типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_fuchsia_stadium': {
-    id: 'joy_fuchsia_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'fuchsiaPoisonStadium',
-    dialog: { greet: 'Добро пожаловать на Ядовитый Стадион Фуксии! Я здесь, чтобы помочь тренерам перед битвой с Когой.', default: 'Удачи в бою с ядовитым типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_cinnabar_stadium': {
-    id: 'joy_cinnabar_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'cinnabarStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Киновари! Я здесь, чтобы помочь тренерам перед битвой с Блейном.', default: 'Удачи в бою с огненным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_viridian_stadium': {
-    id: 'joy_viridian_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'viridianStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Виридиана! Я здесь, чтобы помочь тренерам перед битвой с Джованни.', default: 'Удачи в бою с земляным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-
-  // ── Сёстры Джой на стадионах Джото ──
-  'joy_violet_stadium': {
-    id: 'joy_violet_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'violetStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Вайолет! Я здесь, чтобы помочь тренерам перед битвой с Фолкнером.', default: 'Удачи в бою с летающим типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_azalea_stadium': {
-    id: 'joy_azalea_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'azaleaStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Азалии! Я здесь, чтобы помочь тренерам перед битвой с Багси.', default: 'Удачи в бою с жучиным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_goldenrod_stadium': {
-    id: 'joy_goldenrod_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'goldenrodStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Голденрода! Я здесь, чтобы помочь тренерам перед битвой с Уитни.', default: 'Удачи в бою с нормальным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_ecruteak_stadium': {
-    id: 'joy_ecruteak_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'ecruteakStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Экрютика! Я здесь, чтобы помочь тренерам перед битвой с Морти.', default: 'Удачи в бою с призрачным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_cianwood_stadium': {
-    id: 'joy_cianwood_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'cianwoodStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Сианвуда! Я здесь, чтобы помочь тренерам перед битвой с Чаком.', default: 'Удачи в бою с боевым типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_olivine_stadium': {
-    id: 'joy_olivine_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'olivineStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Оливина! Я здесь, чтобы помочь тренерам перед битвой с Жасмин.', default: 'Удачи в бою со стальным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_mahogany_stadium': {
-    id: 'joy_mahogany_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'mahoganyStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Махогони! Я здесь, чтобы помочь тренерам перед битвой с Прайсом.', default: 'Удачи в бою с ледяным типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-  'joy_blackthorn_stadium': {
-    id: 'joy_blackthorn_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'blackthornStadium',
-    dialog: { greet: 'Добро пожаловать на Стадион Блэкторна! Я здесь, чтобы помочь тренерам перед битвой с Клер.', default: 'Удачи в бою с драконьим типом! Не забудьте вылечить покемонов.' },
-    quests: [],
-  },
-
   // Tutorial NPC at starting location
   // === EAST JOHTO NPCs ===
   'goldenrod_officer': {
@@ -178,7 +94,7 @@ export const NPC_DATA = {
     dialog: { greet: 'Билеты на корабль до Канто и Селена!', default: 'Расписание: 10, 14, 18, 22 часа.', quest_offer: 'Матросы просят {target} {item} для ремонта.', quest_complete: 'Корабль готов к плаванию!', quest_incomplete: 'Ремонт ещё не закончен...' },
     quests: [{ id: 'oli_1', type: 'collect_items', targetItem: 'crystalShard', targetQty: 3, desc: 'Принесите 3 осколка кристалла для порта', rewardMoney: 500, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: null }, { id: 'oli_2', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 портовых города', rewardMoney: 800, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: 'oli_1' }],
   },
-  'olivine_secretary': { id: 'olivine_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'olivine_water_stadium', dialog: { greet: 'Водный Стадион Оливина.', default: 'Лидер ждёт смелых.' }, quests: [] },
+  'olivine_secretary': { id: 'olivine_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'olivineStadium', dialog: { greet: 'Водный Стадион Оливина.', default: 'Лидер ждёт смелых.' }, quests: [] },
   'flourence_gardener': {
     id: 'flourence_gardener', name: 'Садовник Флор', sprite: '🌸', location: 'flourence',
     dialog: { greet: 'Флауренция — город цветов! Хочешь помочь в оранжерее?', default: 'Цветы и травяные покемоны — идеальная пара.', quest_offer: 'Принеси мне {target} {item} для новых саженцев.', quest_complete: 'Чудесно! Приходи ещё.', quest_incomplete: 'Растениям нужна подкормка...' },
@@ -356,7 +272,7 @@ export const NPC_DATA = {
   'cerulean_surfer': { id: 'cerulean_surfer', name: 'Сёрфингист', sprite: '🏄', location: 'ceruleanCity', dialog: { greet: 'Волны Церулина — лучшие в Канто!', default: 'Сёрфинг — это свобода.' }, quests: [] },
 
   'vermilion_judith': { id: 'vermilion_judith', name: 'Джудит', sprite: '👩', location: 'vermilion_fanclub', dialog: { greet: 'Моя кукла Люси пропала...', default: 'Спасибо что помогаете искать!' }, quests: [{ id: 'k_lucy_doll', type: 'collect_items', targetItem: 'plantSample', targetQty: 3, desc: 'Найдите 3 образца растений для поисков куклы Люси', rewardMoney: 600, rewardItem: 'lumBerry', rewardQty: 3, prereqQuest: null }] },
-  'vermilion_secretary': { id: 'vermilion_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'vermilion_stadium', dialog: { greet: 'Я секретарь стадиона. Лидер ждёт.', default: 'Запись на битву открыта.' }, quests: [] },
+  'vermilion_secretary': { id: 'vermilion_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'vermilionStadium', dialog: { greet: 'Я секретарь стадиона. Лидер ждёт.', default: 'Запись на битву открыта.' }, quests: [] },
   'vermilion_librarian': { id: 'vermilion_librarian', name: 'Библиотекарь', sprite: '📚', location: 'vermilion_library', dialog: { greet: 'Добро пожаловать в библиотеку!', default: 'У нас богатая коллекция книг о покемонах.' }, quests: [] },
   'vermilion_kiosk': { id: 'vermilion_kiosk', name: 'Работник киоска', sprite: '🎫', location: 'vermilion_library', dialog: { greet: 'Могу сделать копии документов.', default: 'Библиотека — источник знаний.' }, quests: [] },
   'vermilion_ron': { id: 'vermilion_ron', name: 'Рон', sprite: '👨', location: 'vermilion_library', dialog: { greet: 'Я Рон, захаживаю в библиотеку.', default: 'Книги — мой досуг.' }, quests: [] },
@@ -369,7 +285,7 @@ export const NPC_DATA = {
   'lavender_seller': { id: 'lavender_seller', name: 'Продавец', sprite: '🛒', location: 'lavender_pokemarket', dialog: { greet: 'Товары для тренеров!', default: 'Заходите!' }, quests: [] },
 
   'celadon_arthur_wilford': { id: 'celadon_arthur_wilford', name: 'Артур Вилфорд', sprite: '🎩', location: 'celadonCity', dialog: { greet: 'Я Артур Вилфорд, старейшина Целадона.', default: 'Целадон — город изобилия.' }, quests: [] },
-  'celadon_secretary': { id: 'celadon_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'celadon_stadium', dialog: { greet: 'Стадион Эрики открыт.', default: 'Лидер ждёт.' }, quests: [] },
+  'celadon_secretary': { id: 'celadon_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'celadonStadium', dialog: { greet: 'Стадион Эрики открыт.', default: 'Лидер ждёт.' }, quests: [] },
   'celadon_little_girl': { id: 'celadon_little_girl', name: 'Маленькая девочка', sprite: '👧', location: 'celadonCity', dialog: { greet: 'Я люблю гулять по Целадону!', default: 'У меня есть покемон-друг!' }, quests: [] },
   'celadon_meteorologist': { id: 'celadon_meteorologist', name: 'Ведущий метеоролог', sprite: '🌤️', location: 'celadonCity', dialog: { greet: 'Прогноз погоды — наша работа.', default: 'Погода влияет на покемонов.' }, quests: [{ id: 'cel_weather', type: 'explore', targetItem: null, targetQty: 3, desc: 'Посетите 3 локации для сбора метеоданных', rewardMoney: 700, rewardItem: 'tm', rewardQty: 1, prereqQuest: null }] },
   'celadon_pharmacist': { id: 'celadon_pharmacist', name: 'Аптекарь', sprite: '💊', location: 'celadonCity', dialog: { greet: 'Аптека Целадона.', default: 'Здоровье команды — наш приоритет.' }, quests: [] },
@@ -383,7 +299,7 @@ export const NPC_DATA = {
   'celadon_craftsman': { id: 'celadon_craftsman', name: 'Продавец-ремесленник', sprite: '🔧', location: 'celadonCity', dialog: { greet: 'Ручная работа!', default: 'Каждая вещь с душой.' }, quests: [] },
 
   'saffron_tailor': { id: 'saffron_tailor', name: 'Портниха', sprite: '🧵', location: 'saffron_needle_house', dialog: { greet: 'Шью лучшие костюмы!', default: 'Стиль важен даже в битве.' }, quests: [] },
-  'saffron_secretary': { id: 'saffron_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'saffron_psychic_stadium', dialog: { greet: 'Стадион Сабрины — для сильных духом.', default: 'Психические покемоны чувствуют ауру.' }, quests: [] },
+  'saffron_secretary': { id: 'saffron_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'saffronPsychicStadium', dialog: { greet: 'Стадион Сабрины — для сильных духом.', default: 'Психические покемоны чувствуют ауру.' }, quests: [] },
   'saffron_cashier': { id: 'saffron_cashier', name: 'Кассир', sprite: '💲', location: 'saffron_east_station', dialog: { greet: 'Билеты на поезд!', default: 'Счастливого пути!' }, quests: [] },
   'saffron_lottery': { id: 'saffron_lottery', name: 'Лотерейщик', sprite: '🎰', location: 'saffron_east_station', dialog: { greet: 'Лотерея Лиги-17!', default: 'Главный приз — редкий покемон!' }, quests: [] },
 
@@ -395,7 +311,7 @@ export const NPC_DATA = {
   'goldenrod_prof_karmen': { id: 'goldenrod_prof_karmen', name: 'Профессор Кармен', sprite: '🔬', location: 'goldenrod_academy', dialog: { greet: 'Профессор Кармен.', default: 'Каждая атака имеет свою историю.' }, quests: [] },
   'goldenrod_trainer_ted': { id: 'goldenrod_trainer_ted', name: 'Тренер Тэд', sprite: '🎓', location: 'goldenrod_academy', dialog: { greet: 'Я Тренер Тэд, выпускник Академии.', default: 'Академия дала мне всё.' }, quests: [] },
   'goldenrod_barman': { id: 'goldenrod_barman', name: 'Бармен', sprite: '🍺', location: 'goldenrod_bar', dialog: { greet: 'Лучший бар в Голденроде!', default: 'После трудного дня — только сюда.' }, quests: [] },
-  'goldenrod_secretary': { id: 'goldenrod_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'goldenrod_stadium', dialog: { greet: 'Стадион Уитни открыт.', default: 'Нормальные покемоны сильнее чем кажутся!' }, quests: [] },
+  'goldenrod_secretary': { id: 'goldenrod_secretary', name: 'Секретарь Лидера', sprite: '📋', location: 'goldenrodStadium', dialog: { greet: 'Стадион Уитни открыт.', default: 'Нормальные покемоны сильнее чем кажутся!' }, quests: [] },
   'goldenrod_kiosk': { id: 'goldenrod_kiosk', name: 'Работник киоска', sprite: '🎫', location: 'goldenrod_supermarket', dialog: { greet: 'Информация о городе!', default: 'Всё что нужно тренеру.' }, quests: [] },
   'goldenrod_clan_commander': { id: 'goldenrod_clan_commander', name: 'Командир штаба', sprite: '🛡️', location: 'goldenrod_cityhall', dialog: { greet: 'Кланы — сила Лиги.', default: 'Вступите в клан!' }, quests: [] },
   'goldenrod_clan_master': { id: 'goldenrod_clan_master', name: 'Клан-мастер', sprite: '👑', location: 'goldenrod_cityhall', dialog: { greet: 'Я Клан-мастер.', default: 'Клан — это семья.' }, quests: [] },
@@ -558,11 +474,11 @@ export const NPC_DATA = {
   'cross_trainer_vetti': { id: 'cross_trainer_vetti', name: 'Тренер Ветти', sprite: '🥊', location: 'route_12', dialog: { greet: 'Тренер Ветти.', default: 'Сразись со мной!' }, quests: [] },
   'cross_director_station': { id: 'cross_director_station', name: 'Директор станции', sprite: '⚡', location: 'power_plant', dialog: { greet: 'Директор электростанции.', default: 'Энергия для всего Канто!' }, quests: [{ id: 'k_power', type: 'defeat_x', targetItem: null, targetQty: 4, desc: 'Победите 4 покемонов на электростанции', rewardMoney: 800, rewardItem: 'thunderStone', rewardQty: 1, prereqQuest: null }] },
   'kanto_route18_tracy': { id: 'kanto_route18_tracy', name: 'Трейси', sprite: '📷', location: 'route_18', dialog: { greet: 'Трейси, фотограф.', default: 'Никак не поймаю удачный кадр!' }, quests: [{ id: 'k_photo', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 покемонов для фотосессии', rewardMoney: 400, rewardItem: 'greatBall', rewardQty: 3, prereqQuest: null }] },
-  'elite_lorelei': { id: 'elite_lorelei', name: 'Лорели', sprite: '❄️', location: 'goldenrod_stadium', dialog: { greet: 'Я Лорели, член Элитной Четвёрки. Ледяные покемоны не знают пощады.', default: 'Холод — это то, что ты почувствуешь, когда встретишь меня в бою.' }, quests: [] },
-  'elite_bruno': { id: 'elite_bruno', name: 'Бруно', sprite: '💪', location: 'goldenrod_stadium', dialog: { greet: 'Я Бруно! Мои покемоны боевого типа сокрушат любого!', default: 'Тренировки делают нас сильнее. Ты готов?' }, quests: [] },
-  'elite_agatha': { id: 'elite_agatha', name: 'Агата', sprite: '👻', location: 'goldenrod_stadium', dialog: { greet: 'Хе-хе... Я Агата. Призраки — мои верные спутники.', default: 'Смерть неизбежна, как и моя победа.' }, quests: [] },
-  'elite_lance': { id: 'elite_lance', name: 'Лэнс', sprite: '🐉', location: 'goldenrod_stadium', dialog: { greet: 'Я Лэнс, мастер драконьих покемонов. Элитная Четвёрка — моя стихия.', default: 'Драконы — сильнейшие покемоны. Ты готов это проверить?' }, quests: [] },
-  'elite_champion': { id: 'elite_champion', name: 'Чемпион Блю', sprite: '👑', location: 'goldenrod_stadium', dialog: { greet: 'Я Чемпион Лиги! Мой дед — профессор Оук. Докажи, что достоин.', default: 'Быть чемпионом — значит быть сильнейшим. Попробуй отобрать титул!' }, quests: [] },
+  'elite_lorelei': { id: 'elite_lorelei', name: 'Лорели', sprite: '❄️', location: 'goldenrodStadium', dialog: { greet: 'Я Лорели, член Элитной Четвёрки. Ледяные покемоны не знают пощады.', default: 'Холод — это то, что ты почувствуешь, когда встретишь меня в бою.' }, quests: [] },
+  'elite_bruno': { id: 'elite_bruno', name: 'Бруно', sprite: '💪', location: 'goldenrodStadium', dialog: { greet: 'Я Бруно! Мои покемоны боевого типа сокрушат любого!', default: 'Тренировки делают нас сильнее. Ты готов?' }, quests: [] },
+  'elite_agatha': { id: 'elite_agatha', name: 'Агата', sprite: '👻', location: 'goldenrodStadium', dialog: { greet: 'Хе-хе... Я Агата. Призраки — мои верные спутники.', default: 'Смерть неизбежна, как и моя победа.' }, quests: [] },
+  'elite_lance': { id: 'elite_lance', name: 'Лэнс', sprite: '🐉', location: 'goldenrodStadium', dialog: { greet: 'Я Лэнс, мастер драконьих покемонов. Элитная Четвёрка — моя стихия.', default: 'Драконы — сильнейшие покемоны. Ты готов это проверить?' }, quests: [] },
+  'elite_champion': { id: 'elite_champion', name: 'Чемпион Блю', sprite: '👑', location: 'goldenrodStadium', dialog: { greet: 'Я Чемпион Лиги! Мой дед — профессор Оук. Докажи, что достоин.', default: 'Быть чемпионом — значит быть сильнейшим. Попробуй отобрать титул!' }, quests: [] },
   'summer_trainer_steve': { id: 'summer_trainer_steve', name: 'Тренер Стив', sprite: '🏄', location: 'azure_shoreline', dialog: { greet: 'Я Тренер Стив.', default: 'Расскажу интересные факты о побережье.' }, quests: [] },
   'summer_collector': { id: 'summer_collector', name: 'Коллекционер', sprite: '🎩', location: 'summer_fountain', dialog: { greet: 'Я известный коллекционер со всего региона! Моя коллекция уникальных предметов и редких покемонов ждет пополнения.', default: 'У вас есть что-то интересное для моей коллекции?', quest_offer: 'Для пополнения коллекции нужен {target} {item}.', quest_complete: 'Великолепное пополнение! Вот ваша награда.', quest_incomplete: 'Моя коллекция еще не полна...' }, quests: [{ id: 'sum_collect_1', type: 'collect_items', targetItem: 'rockSample', targetQty: 3, desc: 'Принесите 3 редких образца породы для коллекции', rewardMoney: 2000, rewardItem: 'dawnStone', rewardQty: 1, prereqQuest: 'sum_onyx' }, { id: 'sum_collect_2', type: 'catch_x', targetItem: null, targetQty: 2, desc: 'Поймайте 2 редких покемонов для коллекции', rewardMoney: 3000, rewardItem: 'shinyStone', rewardQty: 1, prereqQuest: 'sum_collect_1' }] },
   'summer_nursery_worker': { id: 'summer_nursery_worker', name: 'Работник питомника', sprite: '🥚', location: 'summer_nursery', dialog: { greet: 'Добро пожаловать в Питомник Западного Джото! Здесь вы можете получить случайных покемонов для тренировки.', default: 'Питомник всегда открыт для тренеров. Новые покемоны появляются регулярно.', quest_offer: 'Выберите набор покемонов для тренировки!', quest_complete: 'Отличная работа с питомцами! Держите награду.', quest_incomplete: 'Покемоны еще растут. Приходите позже.' }, quests: [{ id: 'sum_nursery_1', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Вырастите 3 покемонов из питомника (поймайте 3 разных вида)', rewardMoney: 1500, rewardItem: 'masterBall', rewardQty: 3, prereqQuest: null }] },

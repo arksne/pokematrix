@@ -373,9 +373,11 @@ export let renderLocation = function(locId: any) {
   }
 
   // ── Кнопка лидера зала (гим) ──
-  // Проверяем: есть ли лидер для этой локации И не побеждён ли он
-  const gymKey = CITY_GYM_MAP[locId] || locId;
-  if (gymLeaders[gymKey] && !state.badges.includes(gymLeaders[gymKey].badgeName)) {
+  // Показываем ТОЛЬКО в городах (не в самих стадионах / под-локациях)
+  // Чтобы не было дублирования: в городе кнопка ведёт на стадион,
+  // на стадионе кнопка не нужна — ты уже там.
+  const gymKey = CITY_GYM_MAP[locId];
+  if (gymKey && gymLeaders[gymKey] && !state.badges.includes(gymLeaders[gymKey].badgeName)) {
     const btnGym = document.createElement('button');
     btnGym.className = 'btn-use';
     btnGym.style.backgroundColor = '#af52de';  // Пурпурный
@@ -385,8 +387,8 @@ export let renderLocation = function(locId: any) {
   }
 
   // ── Кнопка Элитной Четвёрки ──
-  // Только в goldenrod_stadium И если собрано 8 значков
-  if (locId === 'goldenrod_stadium' && state.badges.length >= 8) {
+  // Только в Goldenrod Stadium И если собрано 8 значков
+  if (locId === 'goldenrodStadium' && state.badges.length >= 8) {
     const btnElite = document.createElement('button');
     btnElite.className = 'btn-use';
     btnElite.style.backgroundColor = '#ff3b30';  // Красный
