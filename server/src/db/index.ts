@@ -23,7 +23,7 @@ export function connectDb() {
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    ssl: config.isProduction ? { rejectUnauthorized: true } : undefined,
+    ssl: config.isProduction ? { rejectUnauthorized: false } : undefined,
   });
 
   db = drizzle(pool, { schema });
