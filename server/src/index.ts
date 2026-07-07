@@ -81,16 +81,17 @@ async function main() {
   });
 
   // ── Routes ────────────────────────────────────────────────
-  app.use('/auth', authRoutes);
-  app.use('/save', saveRoutes);
-  app.use('/economy', economyRoutes);
-  app.use('/chat', chatRoutes);
-  app.use('/profile', profileRoutes);
+  app.use('/api/auth', authRoutes);
+  app.use('/api/save', saveRoutes);
+  app.use('/api/economy', economyRoutes);
+  app.use('/api/chat', chatRoutes);
+  app.use('/api/profile', profileRoutes);
   app.use('/api/pokeapi', pokeapiRoutes);
   app.use('/api/drops', dropsRoutes);
   app.use('/api/leaderboard', leaderboardRoutes);
   app.use('/api/battle', battleRoutes);
-  app.use('/admin', adminRoutes);
+  app.use('/api/admin', adminRoutes);
+  app.use('/admin', adminRoutes);  // backward compat for client admin panel
   app.use('/api/log-client-error', clientErrorRoutes);
 
   // ── Health check ─────────────────────────────────────────
