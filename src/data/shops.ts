@@ -14,9 +14,8 @@
 //   getters.ts  → getShopState() — данные для UI магазина
 //   items.ts    → price/sellPrice для каждого предмета
 // ─────────────────────────────────────────────────────────────
- * Add only locations that should have RESTRICTED stock.
- */
-
+// Add only locations that should have RESTRICTED stock.
+//
 export const SHOP_STOCK = {
   // ── Kanto ──
   'cerulean_pokemarket': [
