@@ -107,6 +107,17 @@ export const state: Record<string, any> = {
 // Эти функции дублируются здесь, чтобы их можно было импортировать
 // из state.js вместо нескольких разных файлов.
 export { generateUID } from '../utils/state.js';     // Генерация уникального ID
+
+// ── Импорт данных для GS proxy в core.ts ──────────────────
+// GS проксирует в state.*, но gymLeaders/eliteFour/champion
+// не входят в объект state. Явно цепляем их на state,
+// чтобы GS.gymLeaders работал.
+import { gymLeaders } from '../data/gyms.js';
+import { eliteFour, champion } from '../utils/state.js';
+
+state.gymLeaders = gymLeaders;
+state.eliteFour = eliteFour;
+state.champion = champion;
 export { itemDef, itemCategory } from '../utils/items.js'; // Типы предметов
 
 // ── Wrappers, использующие state.tgUser ────────────────────

@@ -59,29 +59,6 @@ import { showToast } from '../utils/dom.js';          // Всплывающие 
 import { autoSave } from '../game/save.js';            // Автосохранение
 import { API_BASE } from '../game/config.js';          // Базовый URL сервера
 
-// ── Карта городов → стадионы с гимами ──
-// Ключ = ID локации (город), значение = ключ в gymLeaders
-const CITY_GYM_MAP: Record<string, string> = {
-  // Канто
-  pewterCity: 'pewterStadium',
-  ceruleanCity: 'ceruleanStadium',
-  vermilionCity: 'vermilionStadium',
-  celadonCity: 'celadonStadium',
-  saffronCity: 'saffronPsychicStadium',
-  fuchsiaCity: 'fuchsiaPoisonStadium',
-  cinnabarIsland: 'cinnabarStadium',
-  viridianCity: 'viridianStadium',
-  // Джото
-  violetCity: 'violetStadium',
-  azaleaTown: 'azaleaStadium',
-  goldenrodCity: 'goldenrodStadium',
-  ecruteakCity: 'ecruteakStadium',
-  cianwoodCity: 'cianwoodStadium',
-  olivineCity: 'olivineStadium',
-  mahoganyTown: 'mahoganyStadium',
-  blackthornCity: 'blackthornStadium',
-};
-
 // ── ЛЕНИВЫЙ ИМПОРТ (циклические зависимости) ────────────
 
 // profile.ts загружается лениво — он импортирует location.ts (через inventory → ...)
@@ -373,11 +350,11 @@ export let renderLocation = function(locId: any) {
   }
 
   // ── Кнопка лидера зала (гим) ──
-  // Показываем ТОЛЬКО в городах (не в самих стадионах / под-локациях)
-  // Чтобы не было дублирования: в городе кнопка ведёт на стадион,
-  // на стадионе кнопка не нужна — ты уже там.
-  const gymKey = CITY_GYM_MAP[locId];
-  if (gymKey && gymLeaders[gymKey] && !state.badges.includes(gymLeaders[gymKey].badgeName)) {
+  // Показываем ТОЛЬКО в стадионах (не в городах).
+  // В городе есть навигация → стадион, а на стадионе — кнопка битвы.
+  // Проверяем: есть ли прямо лидер для этого locId (gymLeaders ключи = stadiumId)
+  const gymKey = gymLeaders[locId] ? locId : null;
+  if (gymKey && !state.badges.includes(gymLeaders[gymKey].badgeName)) {
     const btnGym = document.createElement('button');
     btnGym.className = 'btn-use';
     btnGym.style.backgroundColor = '#af52de';  // Пурпурный
