@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && cp -r src/db/migrations dist/db/",
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate --dialect postgresql --schema src/db/schema.ts --out src/db/migrations",
     "db:migrate": "tsx src/db/migrate.ts",
