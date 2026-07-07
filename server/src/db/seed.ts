@@ -1,7 +1,6 @@
 /**
- * Начальные данные для базы.
+ * Начальные данные для PostgreSQL.
  * Вызывается при первом запуске (если таблицы пусты).
- * ON CONFLICT DO NOTHING — чтобы не перезаписывать при редеплое.
  */
 import { connectDb, closeDb, getDb } from './index.js';
 import { serverFeatures, dropConfig } from './schema.js';
@@ -9,9 +8,9 @@ import { eq } from 'drizzle-orm';
 
 async function seed() {
   console.log('[seed] Seeding database...');
-  const { db } = connectDb();
+  connectDb();
+  const db = getDb();
 
-  // ── Серверные фичи (тогглы) ──
   const defaultFeatures = [
     { feature: 'double_exp', enabled: 0 },
     { feature: 'beta_mode', enabled: 0 },
@@ -25,25 +24,16 @@ async function seed() {
       .from(serverFeatures)
       .where(eq(serverFeatures.feature, feat.feature))
       .limit(1);
-
     if (existing.length === 0) {
       await db.insert(serverFeatures).values(feat);
       console.log(`[seed] Feature ${feat.feature} = ${feat.enabled}`);
     }
   }
 
-  // ── Дроп-конфиг (дефолтный) ──
-  const existingDrop = await db
-    .select()
-    .from(dropConfig)
-    .limit(1);
-
+  const existingDrop = await db.select().from(dropConfig).limit(1);
   if (existingDrop.length === 0) {
     await db.insert(dropConfig).values({
-      monster_drops: JSON.stringify({
-        // Дефолтные дропы: формат как ожидает клиент
-        // location.ts: processMonsterDrop проверяет state.serverDropConfig
-      }),
+      monster_drops: JSON.stringify({}),
       universal_drops: JSON.stringify([
         { item: 'prettyWing', chance: 0.04, qty: 1 },
         { item: 'nugget', chance: 0.02, qty: 1 },

@@ -12,7 +12,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config.js';
-import { connectDb } from './db/index.js';
+import { connectDb, runMigrations, closeDb } from './db/index.js';
 import { socketAuthMiddleware } from './middleware/auth.js';
 import { initLobby } from './socket/lobby.js';
 import { initTrade } from './socket/trade.js';
@@ -47,6 +47,7 @@ async function main() {
   // ── Подключение к БД ─────────────────────────────────────
   logger.info('[server] Connecting to database...');
   const { db } = connectDb();
+  try { await runMigrations(); } catch(e) { logger.warn({ err: e }, '[server] Migrations skipped'); }
   logger.info('[server] Database connected');
 
   // ── Express ───────────────────────────────────────────────
@@ -136,6 +137,7 @@ async function main() {
     logger.info('[server] SIGTERM received, shutting down...');
     io.close();
     httpServer.close();
+    await closeDb();
     process.exit(0);
   });
 
