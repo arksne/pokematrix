@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────────
+﻿// ─────────────────────────────────────────────────────────────
 // core.ts — ДВИЖОК БОЯ (2927 строк)
 // ─────────────────────────────────────────────────────────────
 // Это самый большой файл проекта. Он содержит ВСЮ логику боя:
@@ -150,6 +150,8 @@ function saveBattleState() {
   state.playerLightScreenTurns = s.playerLightScreenTurns;    // Осталось ходов Light Screen у игрока
   state.enemyReflectTurns = s.enemyReflectTurns;              // Осталось ходов Reflect у противника
   state.enemyLightScreenTurns = s.enemyLightScreenTurns;      // Осталось ходов Light Screen у противника
+  state.playerChargedMove = s.playerChargedMove;        // Двух-ходовые атаки (заряд/выпуск)
+  state.enemyChargedMove = s.enemyChargedMove;          // Двух-ходовые атаки (заряд/выпуск)
   if (s.activeWild) {
     state.wildPkmName = s.activeWild.name;       // Имя дикого покемона (для повторной загрузки из PokeAPI)
     state.wildCurHP = s.wildCurHP;               // Текущее HP дикого
@@ -245,6 +247,8 @@ async function restoreBattleState() {
   S.playerLightScreenTurns = state.playerLightScreenTurns || 0; // Ходов Light Screen
   S.enemyReflectTurns = state.enemyReflectTurns || 0;        // Ходов Reflect врага
   S.enemyLightScreenTurns = state.enemyLightScreenTurns || 0; // Ходов Light Screen врага
+  S.playerChargedMove = state.playerChargedMove || null;      // Заряд двух-ходовой атаки игрока
+  S.enemyChargedMove = state.enemyChargedMove || null;        // Заряд двух-ходовой атаки врага
 
   // ── Восстановление gym/elite/champion данных ──
   // Если бой с лидером зала — восстанавливаем индекс, ключ, данные команды
@@ -545,6 +549,74 @@ function calculateStat(pokemon, statName, isWild) {
   return result;
 }
 
+/**
+ * getMultiHitCount — количество ударов для multi-hit атак (Bullet Seed, Rock Blast, etc.)
+ */
+function getMultiHitCount(move) {
+  const minH = move.meta?.min_hits;
+  const maxH = move.meta?.max_hits;
+  if (!minH || !maxH || minH < 2 || maxH < minH) return 1;
+  if (minH === maxH) return minH;
+  const r = Math.random();
+  if (r < 3/8) return 2;
+  if (r < 6/8) return 3;
+  if (r < 7/8) return 4;
+  return 5;
+}
+
+/**
+ * applyWeatherChip — урон от погоды (sandstorm, hail) 1/16 max HP в конце хода.
+ * sandstorm: non-Rock/Ground/Steel
+ * hail: non-Ice
+ */
+function applyWeatherChip(pokemon, maxHp, isPlayer) {
+  if (!pokemon || pokemon.currentHp <= 0) return;
+  const weather = S.currentWeather;
+  if (weather === 'sandstorm') {
+    const immune = pokemon.types?.some(t => ['rock', 'ground', 'steel'].includes(t.type?.name));
+    if (immune) return;
+  } else if (weather === 'hail') {
+    const immune = pokemon.types?.some(t => t.type?.name === 'ice');
+    if (immune) return;
+  } else {
+    return; // No chip damage for other weather
+  }
+  const chip = Math.max(1, Math.floor(maxHp / 16));
+  pokemon.currentHp -= chip;
+  if (pokemon.currentHp < 0) pokemon.currentHp = 0;
+  const name = pokemon.apiData?.name || pokemon.name;
+  if (isPlayer) {
+    updatePlayerHpUI();
+    appendToLog(`${name} получает урон от ${weather === 'sandstorm' ? 'песчаной бури' : 'града'}! (-${chip} HP)`);
+  } else {
+    updateWildHpUI();
+    appendToLog(`Дикий ${name} получает урон от ${weather === 'sandstorm' ? 'песчаной бури' : 'града'}! (-${chip} HP)`);
+  }
+}
+
+/**
+ * applyTypeResistBerry — проверяет и применяет type-resist ягоду (Occa, Passho, Wacan и т.д.).
+ * Возвращает модифицированный урон. Ягода расходуется после активации.
+ */
+const RESIST_BERRY_MAP = {
+  'occaBerry': 'fire', 'passhoBerry': 'water', 'wacanBerry': 'electric',
+  'rindoBerry': 'grass', 'shucaBerry': 'ground', 'chopleBerry': 'fighting',
+  'kebiaBerry': 'poison', 'chartiBerry': 'rock', 'yacheBerry': 'ice',
+  'babiriBerry': 'steel', 'kasibBerry': 'ghost', 'habanBerry': 'dragon',
+};
+function applyTypeResistBerry(defender, moveType, damage, isPlayerDefender) {
+  if (!defender.heldItem || !moveType) return damage;
+  const berryType = RESIST_BERRY_MAP[defender.heldItem];
+  if (!berryType || berryType !== moveType) return damage;
+  // Only activates on super-effective moves
+  const name = defender.apiData?.name || defender.name;
+  appendToLog(`${name} использует ${defender.heldItem} для защиты от ${moveType}-атаки!`);
+  defender.heldItem = null; // Consume berry
+  if (isPlayerDefender) updatePlayerHpUI();
+  else updateWildHpUI();
+  return Math.floor(damage / 2);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // СЕКЦИЯ 3: ЛОГ БОЯ И БАРЬЕРЫ
 // ═══════════════════════════════════════════════════════════════
@@ -614,7 +686,8 @@ function modifyScreenTurns(screen, delta, isPlayer) {
  *   useMove() — строка 1672
  *   enemyTurn() — строка 1927-1928
  */
-function applyBarrierMod(damage, move, defenderIsPlayer) {
+function applyBarrierMod(damage, move, defenderIsPlayer, ignoreBarrier = false) {
+  if (ignoreBarrier) return 1; // Crits ignore Reflect/Light Screen
   const isPhysical = move.damage_class?.name === 'physical'; // physical или special?
   if (defenderIsPlayer) {
     if (S.playerReflectTurns > 0 && isPhysical) return 0.5;       // Reflect игрока от физ. атак
@@ -1389,6 +1462,9 @@ function switchPokemon() {
 
     // Сбрасываем блокировку Choice-предмета
     delete S.activePlayerMon.choiceLockedMove;
+
+    // При смене покемона теряется заряд двух-ходовой атаки
+    S.playerChargedMove = null;
 
     appendToLog(`${oldActive.name || oldActive.apiData?.name}, возвращайся! Вперёд, ${newActive.name || newActive.apiData?.name}!`, false, 'switch');
 
@@ -2371,6 +2447,21 @@ async function useMove(moveIndex) {
     return;
   }
 
+  // ═══ 5b. FLINCH CHECK ═══
+  if (S.activePlayerMon.flinch) {
+    S.activePlayerMon.flinch = false;
+    appendToLog(`${S.activePlayerMon.apiData.name} дрогнул и не может атаковать!`, false, 'system');
+    applyStatusEndOfTurn(S.activePlayerMon, true);
+    if (S.activePlayerMon.currentHp <= 0) {
+      appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
+      handlePlayerFaint();
+      return;
+    }
+    saveBattleState();
+    setTimeout(() => { enemyTurn(); }, 1000);
+    return;
+  }
+
   // ═══ 6. DECREMENT PP ═══
   if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[moveIndex]) {
     S.activePlayerMon.movesPP[moveIndex].current--;
@@ -2384,7 +2475,14 @@ async function useMove(moveIndex) {
 
   // ═══ 8. ACCURACY CHECK ═══
   // Проверяем попала ли атака (учитывает accuracy атаки и evasion цели)
-  const accResult = checkAccuracy(move);
+  let accResult = checkAccuracy(move);
+  // Hustle: 20% additional miss chance for physical moves
+  const playerAbilityName = getAbilityName(S.activePlayerMon, false);
+  if (accResult.hit && playerAbilityName === 'hustle' && power && move.damage_class?.name === 'physical') {
+    if (Math.random() * 100 < 20) {
+      accResult = { hit: false, message: 'Атака промахнулась из-за Hustle!' };
+    }
+  }
   if (!accResult.hit) {
     appendToLog(accResult.message); // "Атака промахнулась!"
     document.getElementById('battle-main-menu').style.display = 'none';
@@ -2397,6 +2495,30 @@ async function useMove(moveIndex) {
   // Sucker Punch проваливается если противник использует статус-атаку
   if (checkSuckerPunchFail(move, S.enemyChosenMove)) {
     appendToLog(`${S.activePlayerMon.apiData.name} использовал Sucker Punch, но провалился!`);
+    document.getElementById('battle-main-menu').style.display = 'none';
+    saveBattleState();
+    setTimeout(() => { enemyTurn(); }, 1000);
+    return;
+  }
+
+  // ═══ 9b. TWO-TURN MOVE (заряд/выпуск) ═══
+  // Проверяем: уже заряжено? Если да — выпускаем атаку.
+  // Если нет и атака требует зарядки — заряжаем и завершаем ход.
+  const isCharge = move.meta?.category?.name === 'charge';
+  if (S.playerChargedMove) {
+    // ═══ ВЫПУСК ═══ Уже заряжено — очищаем заряд и продолжаем с этой атакой
+    if (move.name === S.playerChargedMove.name) {
+      S.playerChargedMove = null;
+      // Продолжаем как обычную атаку
+    } else {
+      // Заряд потерян (выбрали другую атаку)
+      appendToLog(`${S.activePlayerMon.apiData.name} теряет заряд ${S.playerChargedMove.name}!`);
+      S.playerChargedMove = null;
+    }
+  } else if (isCharge) {
+    // ═══ ЗАРЯД ═══ Первый ход — заряжаем атаку
+    S.playerChargedMove = move;
+    appendToLog(`${S.activePlayerMon.apiData.name} заряжает ${move.name}!`);
     document.getElementById('battle-main-menu').style.display = 'none';
     saveBattleState();
     setTimeout(() => { enemyTurn(); }, 1000);
@@ -2491,78 +2613,172 @@ async function useMove(moveIndex) {
 
     // ═══ РАСЧЁТ УРОНА ═══
     const curLvl = S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten;
-    // Stick (Farfetch'd): 50% шанс критического удара
-    const leekCrit = S.activePlayerMon.heldItem === 'stick' && ['farfetchd', 'sirfetchd'].includes(S.activePlayerMon.apiData?.species?.name || '');
-    const dmgResult = calculateDamage({
-      move,
-      attacker: S.activePlayerMon,
-      defender: S.activeWild,
-      attackerLevel: curLvl,
-      defenderLevel: S.wildLvl,
-      isWildAttacker: false,
-      isWildDefender: true,
-      weather: S.currentWeather,
-      attackerStatStages: S.activePlayerMon.statStages,
-      defenderStatStages: S.activeWild.statStages,
-      attackerHeldItem: S.activePlayerMon.heldItem,
-      defenderHeldItem: S.activeWild.heldItem,
-      naturesList: natures,
-      alwaysCrit: leekCrit ? Math.random() < 0.5 : false,
-    });
-    let dmg = dmgResult.damage;
-    // Модификатор от барьеров (Reflect/Light Screen)
-    const bMod = applyBarrierMod(1, move, false);
-    if (bMod !== 1) dmg = Math.floor(dmg * bMod);
-    for (const msg of dmgResult.messages) {
-      appendToLog(msg, false, 'dmg'); // Сообщения о типе, критичности и т.д.
+    // Crit rate stage: base from move (0=normal, 1=high-crit) + items/abilities
+    let critRateStage = move.meta?.crit_rate || 0;
+    // Stick (Farfetch'd/Sirfetch'd): +2 crit stages (25%)
+    if (S.activePlayerMon.heldItem === 'stick' && ['farfetchd', 'sirfetchd'].includes(S.activePlayerMon.apiData?.species?.name || '')) {
+      critRateStage += 2;
     }
     const isPhysical = move.damage_class.name === 'physical';
+    const numHits = getMultiHitCount(move);
 
-    // Focus Sash: выживание с 1 HP (предмет расходуется)
-    if (S.activeWild.heldItem === 'focusSash' && S.wildCurHP === S.wildMaxHP && dmg >= S.wildCurHP) {
-      dmg = S.wildCurHP - 1;
+    // Sheer Force: убирает вторичные эффекты атак, даёт 1.3x урон (в calculateDamage)
+    const playerSheerForce = playerAbilityName === 'sheer-force' &&
+      !!(move.meta?.ailment_chance || move.meta?.flinch_chance || move.meta?.stat_chance || (move.stat_changes?.length > 0));
+
+    // ═══ MULTI-HIT LOOP ═══
+    let totalDmg = 0, hitsLanded = 0, lastCrit = false;
+    const preWildHP = S.wildCurHP;
+    for (let hi = 0; hi < numHits; hi++) {
+      if (S.wildCurHP <= 0) break;
+      if (hi > 0 && S.enemyProtectActive) break;
+
+      const dmgResult = calculateDamage({
+        move, attacker: S.activePlayerMon, defender: S.activeWild,
+        attackerLevel: curLvl, defenderLevel: S.wildLvl,
+        isWildAttacker: false, isWildDefender: true,
+        weather: S.currentWeather,
+        attackerStatStages: S.activePlayerMon.statStages,
+        defenderStatStages: S.activeWild.statStages,
+        attackerHeldItem: S.activePlayerMon.heldItem,
+        defenderHeldItem: S.activeWild.heldItem,
+        naturesList: natures,
+        critRateStage,
+        defenderAbilityName: getAbilityName(S.activeWild, true),
+        attackerAbilityName: getAbilityName(S.activePlayerMon, false),
+      });
+      let hitDmg = dmgResult.damage;
+      const bMod = applyBarrierMod(1, move, false, dmgResult.isCrit);
+      if (bMod !== 1) hitDmg = Math.floor(hitDmg * bMod);
+      lastCrit = dmgResult.isCrit;
+
+      if (hi === 0) {
+        for (const msg of dmgResult.messages) appendToLog(msg, false, 'dmg');
+      } else if (dmgResult.isCrit) {
+        appendToLog('Критический удар!', false, 'dmg');
+      }
+
+      if (S.enemySubstituteHP > 0) {
+        const subDmg = Math.min(S.enemySubstituteHP, hitDmg);
+        S.enemySubstituteHP -= subDmg;
+        hitDmg -= subDmg;
+        if (S.enemySubstituteHP <= 0) { appendToLog('Заменитель разрушен!'); S.enemySubstituteHP = 0; }
+      }
+      if (hitDmg <= 0) continue;
+
+      // Type-resist berry for wild (Occa, Passho, etc.)
+      if (hi === 0) hitDmg = applyTypeResistBerry(S.activeWild, move.type?.name, hitDmg, false);
+
+      S.wildCurHP -= hitDmg;
+      if (S.wildCurHP < 0) S.wildCurHP = 0;
+      totalDmg += hitDmg;
+      hitsLanded++;
+
+      // Drain / Recoil per hit
+      if (move.meta?.drain) {
+        if (move.meta.drain > 0) {
+          const drainPct = move.meta.drain / 100;
+          let heal = Math.floor(hitDmg * drainPct);
+          if (S.activePlayerMon.heldItem === 'bigRoot') heal = Math.floor(heal * 1.3);
+          if (heal > 0) {
+            S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
+            updatePlayerHpUI();
+          }
+        } else {
+          const rPct = Math.abs(move.meta.drain) / 100;
+          let rd = Math.max(1, Math.floor(hitDmg * rPct));
+          S.activePlayerMon.currentHp -= rd;
+          if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
+          updatePlayerHpUI();
+        }
+      }
+
+      // Life Orb per hit
+      if (S.activePlayerMon.heldItem === 'lifeOrb' && power) {
+        S.activePlayerMon.currentHp -= Math.max(1, Math.floor(S.activePlayerMon.maxHp / 10));
+        if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
+        updatePlayerHpUI();
+      }
+
+      // Secondary status per hit (подавляется Sheer Force)
+      if (S.wildCurHP > 0 && !playerSheerForce && move.meta?.ailment && move.meta.ailment.name !== 'none' && move.meta.ailment.name !== 'unknown') {
+        const chance = move.meta.ailment_chance || 10;
+        if (Math.random() * 100 < chance) {
+          const sm = { 'poison': 'psn', 'badly-poison': 'psn', 'burn': 'brn', 'paralysis': 'par', 'sleep': 'slp', 'freeze': 'frz' };
+          const ts = sm[move.meta.ailment.name];
+          if (ts && !S.wildStatus && !isStatusImmune(move.meta.ailment.name, S.activeWild)) {
+            if (applyStatusEffect(S.activeWild, ts)) {
+              S.wildStatus = S.activeWild.status;
+              document.getElementById('wild-status-icon').innerText = getStatusIcon(S.wildStatus);
+              appendToLog(`Дикий ${S.activeWild.name} получил ${STATUS_NAMES[ts]}!`);
+            }
+          }
+        }
+      }
+
+      // Static / Flame Body / Poison Point per physical hit
+      const wcAbil = S.activeWild.abilities?.[0]?.ability?.name;
+      if (power && isPhysical && ['static', 'flame-body', 'poison-point'].includes(wcAbil)) {
+        const sm2 = { 'static': 'par', 'flame-body': 'brn', 'poison-point': 'psn' };
+        if (!S.activePlayerMon.status && Math.random() < 0.3) {
+          const st = sm2[wcAbil];
+          const an = { 'par': 'paralysis', 'brn': 'burn', 'psn': 'poison' }[st];
+          if (an && !isStatusImmune(an, S.activePlayerMon) && applyStatusEffect(S.activePlayerMon, st)) {
+            document.getElementById('player-status-icon').innerText = getStatusIcon(st);
+            appendToLog(`${S.activePlayerMon.apiData.name} получил ${STATUS_NAMES[st]} от способности ${S.activeWild.name}!`);
+          }
+        }
+      }
+
+      // Rough Skin / Iron Barbs per physical hit
+      if (power && isPhysical && ['rough-skin', 'iron-barbs'].includes(wcAbil)) {
+        const recoil = Math.max(1, Math.floor(hitDmg / 8));
+        S.activePlayerMon.currentHp -= recoil;
+        if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
+        updatePlayerHpUI();
+      }
+
+      // Stat changes per hit (with stat_chance probability, подавляется Sheer Force)
+      if (S.wildCurHP > 0 && !playerSheerForce && move.stat_changes && move.stat_changes.length > 0) {
+        const scChance = move.meta?.stat_chance ?? 100;
+        if (Math.random() * 100 < scChance) {
+          const tm = { 'user': S.activePlayerMon, 'selected-pokemon': S.activeWild, 'all-opponents': S.activeWild, 'all-other-pokemon': S.activeWild };
+          const mt = move.target?.name || 'selected-pokemon';
+          const am = tm[mt] || S.activeWild;
+          const mn = am === S.activePlayerMon ? S.activePlayerMon.apiData.name : S.activeWild.name;
+          const snm = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
+          move.stat_changes.forEach(sc => {
+            const sk = snm[sc.stat.name];
+            if (sk) {
+              const os = am.statStages[sk] || 0;
+              const nv = Math.max(-6, Math.min(6, os + sc.change));
+              if (nv !== os) {
+                statStageModify(am, sk, sc.change);
+                const sign = nv >= 0 ? '+' : '';
+                const dir = sc.change > 0 ? 'повышена' : 'понижена';
+                const lbl = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
+                appendToLog(`${lbl[sk] || sk} ${mn} ${dir} (${sign}${nv})`, false, 'system');
+              }
+            }
+          });
+        }
+      }
+
+      // Flinch per hit (подавляется Sheer Force)
+      if (S.wildCurHP > 0 && !playerSheerForce && move.meta?.flinch_chance && Math.random() * 100 < move.meta.flinch_chance) {
+        S.activeWild.flinch = true;
+      }
+    }
+
+    // ─── AFTER ALL HITS ───
+    // Focus Sash (survive with 1 HP if was at full)
+    if (S.activeWild.heldItem === 'focusSash' && preWildHP === S.wildMaxHP && totalDmg >= preWildHP && S.wildCurHP <= 0) {
+      S.wildCurHP = 1;
       appendToLog(`${S.activeWild.name} держится благодаря Фокусному поясу!`);
       S.activeWild.heldItem = null;
     }
 
-    const preWildHP = S.wildCurHP;
-    // Substitute поглощает урон вместо покемона
-    if (S.enemySubstituteHP > 0) {
-      const subDmg = Math.min(S.enemySubstituteHP, dmg);
-      S.enemySubstituteHP -= subDmg;
-      dmg -= subDmg;
-      if (dmg > 0) appendToLog(`Заменитель поглотил ${subDmg} урона!`);
-      if (S.enemySubstituteHP <= 0) {
-        appendToLog('Заменитель разрушен!');
-        S.enemySubstituteHP = 0;
-      }
-    }
-    S.wildCurHP -= dmg;
-    if (S.wildCurHP < 0) S.wildCurHP = 0;
-
-    // Drain healing (Absorb, Mega Drain, Giga Drain, Leech Life...)
-    if (move.meta?.drain > 0) {
-      const drainPct = move.meta.drain / 100;
-      let heal = Math.floor(dmg * drainPct);
-      // Big Root: x1.3 drain healing
-      if (S.activePlayerMon.heldItem === 'bigRoot') {
-        heal = Math.floor(heal * 1.3);
-      }
-      if (heal > 0) {
-        S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
-        updatePlayerHpUI();
-      }
-    }
-
-    // Life Orb recoil: -10% от макс HP каждый раз при атаке
-    if (S.activePlayerMon.heldItem === 'lifeOrb' && power) {
-      const recoil = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 10));
-      S.activePlayerMon.currentHp -= recoil;
-      if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
-      updatePlayerHpUI();
-    }
-
-    // Sturdy check: выживает с 1 HP если был на полном HP до удара
+    // Sturdy check
     const wildAbil = S.activeWild.abilities?.[0]?.ability?.name;
     if (checkSturdy(wildAbil, preWildHP, S.wildMaxHP, S.wildCurHP)) {
       S.wildCurHP = 1;
@@ -2570,55 +2786,17 @@ async function useMove(moveIndex) {
     }
 
     updateWildHpUI();
-    appendToLog(`Нанесено ${dmg} урона!`, false, 'dmg');
 
-    // ═══ ВТОРИЧНЫЕ ЭФФЕКТЫ ═══
-    // Secondary status effect (шанс из move.meta.ailment_chance)
-    // Например: Flamethrower имеет 10% шанс поджечь
-    if (S.wildCurHP > 0 && move.meta && move.meta.ailment && move.meta.ailment.name !== 'none' && move.meta.ailment.name !== 'unknown') {
-      const chance = move.meta.ailment_chance || 10; // Шанс в процентах
-      if (Math.random() * 100 < chance) {
-        const statusMap = {
-          'poison': 'psn', 'badly-poison': 'psn',
-          'burn': 'brn', 'paralysis': 'par',
-          'sleep': 'slp', 'freeze': 'frz'
-        };
-        const targetStatus = statusMap[move.meta.ailment.name];
-        if (targetStatus && !S.wildStatus && !isStatusImmune(move.meta.ailment.name, S.activeWild)) {
-          if (applyStatusEffect(S.activeWild, targetStatus)) {
-            S.wildStatus = S.activeWild.status;
-            document.getElementById('wild-status-icon').innerText = getStatusIcon(S.wildStatus);
-            appendToLog(`Дикий ${S.activeWild.name} получил ${STATUS_NAMES[targetStatus]}!`);
-          }
-        }
-      }
+    // Summary message
+    if (numHits > 1) {
+      appendToLog(`Атака попала ${hitsLanded} раз(а)! Нанесено ${totalDmg} урона!`, false, 'dmg');
+      if (lastCrit) appendToLog('Критический удар!', false, 'dmg');
+    } else if (totalDmg > 0) {
+      appendToLog(`Нанесено ${totalDmg} урона!`, false, 'dmg');
     }
 
-    // Static / Flame Body / Poison Point: 30% на физический контакт (проверка иммунитета по типу)
-    const wildAbilityContact = S.activeWild.abilities?.[0]?.ability?.name;
-    if (power && isPhysical && ['static', 'flame-body', 'poison-point'].includes(wildAbilityContact)) {
-      const statusMapAbility = { 'static': 'par', 'flame-body': 'brn', 'poison-point': 'psn' };
-      if (!S.activePlayerMon.status && Math.random() < 0.3) {
-        const st = statusMapAbility[wildAbilityContact];
-        const ailmentName = { 'par': 'paralysis', 'brn': 'burn', 'psn': 'poison' }[st];
-        if (ailmentName && !isStatusImmune(ailmentName, S.activePlayerMon) && applyStatusEffect(S.activePlayerMon, st)) {
-          document.getElementById('player-status-icon').innerText = getStatusIcon(st);
-          appendToLog(`${S.activePlayerMon.apiData.name} получил ${STATUS_NAMES[st]} от способности ${S.activeWild.name}!`);
-        }
-      }
-    }
-
-    // Berry auto-use for wild
+    // Berry auto-use after all hits
     if (S.wildCurHP > 0) checkBerryAutoUse(S.activeWild, false);
-
-    // Rough Skin / Iron Barbs: 1/8 recoil on physical contact
-    if (power && isPhysical && ['rough-skin', 'iron-barbs'].includes(wildAbilityContact)) {
-      const recoil = Math.max(1, Math.floor(dmg / 8));
-      S.activePlayerMon.currentHp -= recoil;
-      if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
-      updatePlayerHpUI();
-      appendToLog(`Шиповатое тело ${S.activeWild.name} ранит ${S.activePlayerMon.apiData.name}! (-${recoil} HP)`);
-    }
   }
 
   document.getElementById('battle-main-menu').style.display = 'none';
@@ -2668,6 +2846,7 @@ function handlePlayerFaint() {
     // ── Есть живой запасной ──
     S.activePlayerMon = nextMon;
     S.activePlayerMon.choiceLockedMove = undefined; // Сбрасываем Choice-блокировку
+    S.playerChargedMove = null; // Заряд атаки утерян при смене покемона
     appendToLog(`${S.activePlayerMon.apiData.name}, вперёд!`);
     // Обновляем UI
     document.getElementById('player-name').innerText = S.activePlayerMon.nickname || S.activePlayerMon.apiData.name;
@@ -2752,9 +2931,20 @@ async function enemyTurn() {
   // ═══ 1. УРОН ОТ СТАТУСА (начало хода) ═══
   // Применяется раз в раунд в начале хода врага
   applyStatusEndOfTurn(S.activeWild, false);
+  // Berry auto-use для врага после урона от статуса (Lum/Sitrus/Oran)
+  if (S.wildCurHP > 0) checkBerryAutoUse(S.activeWild, false);
   if (S.wildCurHP <= 0) {
     await handleWildFaintRewards(S.battleType === 'wild'); // Статус добил врага
     return;
+  }
+
+  // ═══ 1b. WEATHER CHIP (для дикого) ═══
+  if (S.wildCurHP > 0) {
+    applyWeatherChip(S.activeWild, S.wildMaxHP, false);
+    if (S.wildCurHP <= 0) {
+      await handleWildFaintRewards(S.battleType === 'wild');
+      return;
+    }
   }
 
   // ═══ 2. ПРОВЕРКА СТАТУСА ═══
@@ -2768,30 +2958,71 @@ async function enemyTurn() {
     return;
   }
 
-  // ═══ 3. AI ВЫБОР АТАКИ ═══
-  // selectEnemyMove анализирует: тип атаки, STAB, эффективность, PP
-  const aiResult = selectEnemyMove({
-    moves: S.wildMovesDetailed,
-    movesPP: S.wildMovesPP,
-    attacker: S.activeWild,
-    defender: S.activePlayerMon,
-    isTrainer: S.battleType !== 'wild', // Gym/elite AI умнее (выбирает эффективные атаки)
-    getTypeMultiplier,
-  });
-  // Fallback если AI не вернул атаку (Struggle)
-  const chosenMove = aiResult?.move || { power: 30, damage_class: { name: 'physical' }, type: { name: 'normal' }, name: 'Атака' };
-  const chosenIdx = aiResult?.index ?? -1;
+  // ═══ 2b. FLINCH CHECK ═══
+  if (S.activeWild.flinch) {
+    S.activeWild.flinch = false;
+    appendToLog(`${S.activeWild.name} дрогнул и не может атаковать!`, false, 'system');
+    S.battleRound++;
+    saveBattleState();
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
+
+  // ═══ 2c. TWO-TURN MOVE RELEASE ═══
+  // Если у врага есть заряженная атака — выпускаем её вместо выбора AI
+  const isChargeRelease = !!S.enemyChargedMove;
+
+  // ═══ 3. AI ВЫБОР АТАКИ (или выпуск заряженной) ═══
+  let chosenMove, chosenIdx;
+  if (isChargeRelease) {
+    chosenMove = S.enemyChargedMove;
+    S.enemyChargedMove = null; // Очищаем заряд
+    chosenIdx = S.wildMovesDetailed.findIndex(m => m && m.name === chosenMove.name);
+  } else {
+    const aiResult = selectEnemyMove({
+      moves: S.wildMovesDetailed,
+      movesPP: S.wildMovesPP,
+      attacker: S.activeWild,
+      defender: S.activePlayerMon,
+      isTrainer: S.battleType !== 'wild',
+      getTypeMultiplier,
+    });
+    chosenMove = aiResult?.move || { power: 30, damage_class: { name: 'physical' }, type: { name: 'normal' }, name: 'Атака' };
+    chosenIdx = aiResult?.index ?? -1;
+  }
   const isT = S.battleType !== 'wild';
   S.enemyChosenMove = chosenMove; // Сохраняем для Sucker Punch проверки
   const enemyMoveName = chosenMove.name || 'Атака';
-  if (chosenIdx >= 0 && S.wildMovesPP && S.wildMovesPP[chosenIdx]) {
+  if (!isChargeRelease && chosenIdx >= 0 && S.wildMovesPP && S.wildMovesPP[chosenIdx]) {
     S.wildMovesPP[chosenIdx].current--;
   }
 
+  // ═══ 3b. TWO-TURN MOVE CHARGE ═══
+  // Если атака требует зарядки — заряжаем и завершаем ход врага
+  if (!isChargeRelease && chosenMove.meta?.category?.name === 'charge') {
+    S.enemyChargedMove = chosenMove;
+    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} заряжает ${enemyMoveName}!`);
+    S.battleRound++;
+    saveBattleState();
+    setTimeout(() => {
+      document.getElementById('battle-main-menu').style.display = 'flex';
+    }, 1000);
+    return;
+  }
+
   // ═══ 4. ACCURACY CHECK ═══
-  const enemyAcc = checkAccuracy(chosenMove);
+  let enemyAcc = checkAccuracy(chosenMove);
+  // Hustle: 20% additional miss chance for physical moves
+  const wildAbilityName = getAbilityName(S.activeWild, true);
+  if (enemyAcc.hit && wildAbilityName === 'hustle' && chosenMove.damage_class?.name === 'physical') {
+    if (Math.random() * 100 < 20) {
+      enemyAcc = { hit: false, message: 'Атака промахнулась из-за Hustle!' };
+    }
+  }
   if (!enemyAcc.hit) {
-    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}, но промахнулся!`);
+    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}, но ${enemyAcc.message?.toLowerCase() || 'промахнулся'}!`);
     S.battleRound++;
     saveBattleState();
     setTimeout(() => {
@@ -2825,90 +3056,208 @@ async function enemyTurn() {
     return;
   }
 
-  // ═══ 7. РАСЧЁТ УРОНА ═══
-  const dmgResult = calculateDamage({
-    move: chosenMove,
-    attacker: S.activeWild,
-    defender: S.activePlayerMon,
-    attackerLevel: S.wildLvl,
-    defenderLevel: S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten,
-    isWildAttacker: true,
-    isWildDefender: false,
-    weather: S.currentWeather,
-    attackerStatStages: S.activeWild.statStages,
-    defenderStatStages: S.activePlayerMon.statStages,
-    attackerHeldItem: S.activeWild.heldItem,
-    defenderHeldItem: S.activePlayerMon.heldItem,
-    naturesList: natures,
-  });
-  let dmg = dmgResult.damage;
-  const bMod = applyBarrierMod(1, chosenMove, true); // Барьеры игрока
-  if (bMod !== 1) dmg = Math.floor(dmg * bMod);
-  for (const msg of dmgResult.messages) {
-    appendToLog(msg, false, 'dmg');
-  }
+  // ═══ 7. РАСЧЁТ УРОНА (multi-hit) ═══
   const isPhysical = chosenMove.damage_class.name === 'physical';
+  const numHits = getMultiHitCount(chosenMove);
 
-  // ═══ 8. МОДИФИКАТОРЫ УРОНА ═══
-  // Focus Sash: игрок выживает с 1 HP (предмет расходуется)
-  if (S.activePlayerMon.heldItem === 'focusSash' && S.activePlayerMon.currentHp === S.activePlayerMon.maxHp && dmg >= S.activePlayerMon.currentHp) {
-    dmg = S.activePlayerMon.currentHp - 1;
-    appendToLog(`${S.activePlayerMon.apiData.name} держится благодаря Фокусному поясу!`);
-    S.activePlayerMon.heldItem = null;
-  }
+  // Sheer Force: убирает вторичные эффекты атак, даёт 1.3x урон (в calculateDamage)
+  const enemySheerForce = wildAbilityName === 'sheer-force' &&
+    !!(chosenMove.meta?.ailment_chance || chosenMove.meta?.flinch_chance || chosenMove.meta?.stat_chance || (chosenMove.stat_changes?.length > 0));
 
-  // Player Substitute поглощает урон
-  if (S.substituteHP > 0 && dmg > 0) {
-    const subBlock = Math.min(S.substituteHP, dmg);
-    S.substituteHP -= subBlock;
-    dmg -= subBlock;
-    appendToLog(`Заменитель поглотил ${subBlock} урона!`);
-    if (S.substituteHP <= 0) {
-      appendToLog('Заменитель разрушен!');
-      S.substituteHP = 0;
+  // ═══ MULTI-HIT LOOP (enemy) ═══
+  let totalDmg = 0, hitsLanded = 0, lastCrit = false;
+  const prePlayerHP = S.activePlayerMon.currentHp;
+  for (let hi = 0; hi < numHits; hi++) {
+    if (S.activePlayerMon.currentHp <= 0) break;
+    if (hi > 0 && S.protectActive) break;
+
+    const dmgResult = calculateDamage({
+      move: chosenMove,
+      attacker: S.activeWild,
+      defender: S.activePlayerMon,
+      attackerLevel: S.wildLvl,
+      defenderLevel: S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten,
+      isWildAttacker: true,
+      isWildDefender: false,
+      weather: S.currentWeather,
+      attackerStatStages: S.activeWild.statStages,
+      defenderStatStages: S.activePlayerMon.statStages,
+      attackerHeldItem: S.activeWild.heldItem,
+      defenderHeldItem: S.activePlayerMon.heldItem,
+      naturesList: natures,
+      critRateStage: chosenMove.meta?.crit_rate || 0,
+      defenderAbilityName: getAbilityName(S.activePlayerMon, false),
+      attackerAbilityName: getAbilityName(S.activeWild, true),
+    });
+    let hitDmg = dmgResult.damage;
+    const bMod = applyBarrierMod(1, chosenMove, true, dmgResult.isCrit); // Барьеры игрока
+    if (bMod !== 1) hitDmg = Math.floor(hitDmg * bMod);
+    lastCrit = dmgResult.isCrit;
+
+    if (hi === 0) {
+      for (const msg of dmgResult.messages) {
+        appendToLog(msg, false, 'dmg');
+      }
+    } else if (dmgResult.isCrit) {
+      appendToLog('Критический удар!', false, 'dmg');
+    }
+
+    // Focus Sash: игрок выживает с 1 HP (предмет расходуется)
+    if (S.activePlayerMon.heldItem === 'focusSash' && S.activePlayerMon.currentHp === S.activePlayerMon.maxHp && hitDmg >= S.activePlayerMon.currentHp) {
+      hitDmg = S.activePlayerMon.currentHp - 1;
+      appendToLog(`${S.activePlayerMon.apiData.name} держится благодаря Фокусному поясу!`);
+      S.activePlayerMon.heldItem = null;
+    }
+
+    // Player Substitute поглощает урон
+    if (S.substituteHP > 0 && hitDmg > 0) {
+      const subBlock = Math.min(S.substituteHP, hitDmg);
+      S.substituteHP -= subBlock;
+      hitDmg -= subBlock;
+      appendToLog(`Заменитель поглотил ${subBlock} урона!`);
+      if (S.substituteHP <= 0) {
+        appendToLog('Заменитель разрушен!');
+        S.substituteHP = 0;
+      }
+    }
+
+    if (hitDmg <= 0) continue;
+
+    // Type-resist berry for player (Occa, Passho, etc.)
+    if (hi === 0) hitDmg = applyTypeResistBerry(S.activePlayerMon, chosenMove.type?.name, hitDmg, true);
+
+    S.activePlayerMon.currentHp -= hitDmg;
+    if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
+    totalDmg += hitDmg;
+    hitsLanded++;
+    updatePlayerHpUI();
+
+    // Drain / Recoil per hit
+    if (chosenMove.meta?.drain) {
+      if (chosenMove.meta.drain > 0) {
+        const drainPct = chosenMove.meta.drain / 100;
+        let heal = Math.floor(hitDmg * drainPct);
+        if (S.activeWild.heldItem === 'bigRoot') heal = Math.floor(heal * 1.3);
+        if (heal > 0) {
+          S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
+          updateWildHpUI();
+        }
+      } else {
+        const rPct = Math.abs(chosenMove.meta.drain) / 100;
+        let rd = Math.max(1, Math.floor(hitDmg * rPct));
+        S.wildCurHP -= rd;
+        if (S.wildCurHP < 0) S.wildCurHP = 0;
+        updateWildHpUI();
+      }
+    }
+
+    // Struggle recoil: applies once, not per hit
+    if (hi === 0 && chosenIdx < 0) {
+      const struggleDmg = Math.max(1, Math.floor(S.wildMaxHP / 4));
+      S.wildCurHP -= struggleDmg;
+      if (S.wildCurHP < 0) S.wildCurHP = 0;
+      updateWildHpUI();
+      appendToLog(`${S.activeWild.name} получает урон от Struggle! (-${struggleDmg} HP)`);
+    }
+
+    // Rocky Helmet per physical hit
+    if (power && isPhysical && S.activePlayerMon.heldItem === 'rockyHelmet') {
+      const recoil = Math.max(1, Math.floor(S.wildMaxHP / 6));
+      S.wildCurHP -= recoil;
+      if (S.wildCurHP < 0) S.wildCurHP = 0;
+      updateWildHpUI();
+    }
+
+    // Wild Life Orb per hit
+    if (S.activeWild.heldItem === 'lifeOrb' && power) {
+      S.wildCurHP -= Math.max(1, Math.floor(S.wildMaxHP / 10));
+      if (S.wildCurHP < 0) S.wildCurHP = 0;
+      updateWildHpUI();
+      if (S.wildCurHP <= 0 && hi === 0) {
+        appendToLog(`${S.activeWild.name} потерял сознание от отдачи Life Orb!`, false, 'faint');
+        await handleWildFaintRewards(S.battleType === 'wild');
+        return;
+      }
+    }
+
+    // Rough Skin / Iron Barbs per physical hit (способность игрока)
+    const playerAbility = getAbilityName(S.activePlayerMon, false);
+    if (power && isPhysical && ['rough-skin', 'iron-barbs'].includes(playerAbility)) {
+      const recoil = Math.max(1, Math.floor(hitDmg / 8));
+      S.wildCurHP -= recoil;
+      if (S.wildCurHP < 0) S.wildCurHP = 0;
+      updateWildHpUI();
+    }
+
+    // ── Secondary status от атак врага (Sheer Force) ──
+    if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.meta && chosenMove.meta.ailment && chosenMove.meta.ailment.name !== 'none' && chosenMove.meta.ailment.name !== 'unknown') {
+      const chance = chosenMove.meta.ailment_chance || 10;
+      if (Math.random() * 100 < chance) {
+        const statusMap = {
+          'poison': 'psn', 'badly-poison': 'psn',
+          'burn': 'brn', 'paralysis': 'par',
+          'sleep': 'slp', 'freeze': 'frz'
+        };
+        const targetStatus = statusMap[chosenMove.meta.ailment.name];
+        if (targetStatus && !S.activePlayerMon.status && !isStatusImmune(chosenMove.meta.ailment.name, S.activePlayerMon)) {
+          if (applyStatusEffect(S.activePlayerMon, targetStatus)) {
+            document.getElementById('player-status-icon').innerText = getStatusIcon(targetStatus);
+            appendToLog(`${S.activePlayerMon.apiData.name} получил ${STATUS_NAMES[targetStatus]} от атаки ${S.activeWild.name}!`);
+          }
+        }
+      }
+    }
+
+    // ── Flinch от атак врага (Sheer Force) ──
+    if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.meta?.flinch_chance && Math.random() * 100 < chosenMove.meta.flinch_chance) {
+      S.activePlayerMon.flinch = true;
+    }
+
+    // ── Stat changes от дамажащих атак врага (Sheer Force) ──
+    if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.stat_changes && chosenMove.stat_changes.length > 0) {
+      const scChance = chosenMove.meta?.stat_chance ?? 100;
+      if (Math.random() * 100 < scChance) {
+        const targetMap = { 'user': S.activeWild, 'selected-pokemon': S.activePlayerMon, 'all-opponents': S.activePlayerMon, 'all-other-pokemon': S.activePlayerMon };
+        const moveTarget = chosenMove.target?.name || 'selected-pokemon';
+        const affectedMon = targetMap[moveTarget] || S.activePlayerMon;
+        const monName = affectedMon === S.activeWild ? S.activeWild.name : S.activePlayerMon.apiData.name;
+        const statNameMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
+        chosenMove.stat_changes.forEach(sc => {
+          const statKey = statNameMap[sc.stat.name];
+          if (statKey) {
+            const oldStage = affectedMon.statStages[statKey] || 0;
+            const newVal = Math.max(-6, Math.min(6, oldStage + sc.change));
+            if (newVal !== oldStage) {
+              statStageModify(affectedMon, statKey, sc.change);
+              const sign = newVal >= 0 ? '+' : '';
+              const dir = sc.change > 0 ? 'повышена' : 'понижена';
+              const labels = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
+              appendToLog(`${labels[statKey] || statKey} ${monName} ${dir} (${sign}${newVal})`, false, 'system');
+            }
+          }
+        });
+      }
     }
   }
 
-  appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}! (-${dmg} HP)`, false, 'dmg');
-  S.activePlayerMon.currentHp -= dmg;
-  if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
-  updatePlayerHpUI();
-
-  // Rocky Helmet: 1/6 от макс HP врага при контакте
-  if (power && isPhysical && S.activePlayerMon.heldItem === 'rockyHelmet') {
-    const recoil = Math.max(1, Math.floor(S.wildMaxHP / 6));
-    S.wildCurHP -= recoil;
-    if (S.wildCurHP < 0) S.wildCurHP = 0;
-    updateWildHpUI();
-    appendToLog(`Каменный шлем ${S.activePlayerMon.apiData.name} ранит ${S.activeWild.name}! (-${recoil} HP)`);
-  }
-
-  // Wild Life Orb recoil: -10% макс HP врага
-  if (S.activeWild.heldItem === 'lifeOrb' && power) {
-    S.wildCurHP -= Math.max(1, Math.floor(S.wildMaxHP / 10));
-    if (S.wildCurHP < 0) S.wildCurHP = 0;
-    updateWildHpUI();
-    if (S.wildCurHP <= 0) {
-      appendToLog(`${S.activeWild.name} потерял сознание от отдачи Life Orb!`, false, 'faint');
-      await handleWildFaintRewards(S.battleType === 'wild');
-      return;
-    }
-  }
-
-  // Rough Skin / Iron Barbs: 1/8 recoil при контакте (способность игрока)
-  const playerAbility = getAbilityName(S.activePlayerMon, false);
-  if (power && isPhysical && ['rough-skin', 'iron-barbs'].includes(playerAbility)) {
-    const recoil = Math.max(1, Math.floor(dmg / 8));
-    S.wildCurHP -= recoil;
-    if (S.wildCurHP < 0) S.wildCurHP = 0;
-    updateWildHpUI();
-    appendToLog(`Шиповатое тело ${S.activePlayerMon.apiData.name} ранит ${S.activeWild.name}! (-${recoil} HP)`);
+  // ─── AFTER ALL HITS ───
+  // Summary message
+  if (numHits > 1) {
+    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}! (${hitsLanded} ударов, нанесено ${totalDmg} урона!)`, false, 'dmg');
+    if (lastCrit) appendToLog('Критический удар!', false, 'dmg');
+  } else if (totalDmg > 0) {
+    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}! (-${totalDmg} HP)`, false, 'dmg');
   }
 
   // ═══ 9. УМЕНЬШЕНИЕ БАРЬЕРОВ ═══
   if (S.playerReflectTurns > 0) { S.playerReflectTurns--; if (S.playerReflectTurns === 0) appendToLog('Защита рассеялась!', false, 'system'); }
   if (S.playerLightScreenTurns > 0) { S.playerLightScreenTurns--; if (S.playerLightScreenTurns === 0) appendToLog('Световой Экран рассеялся!', false, 'system'); }
   S.protectActive = false; // Protect сбрасывается в конце хода противника
+
+  // ═══ 9b. WEATHER CHIP (для игрока) ═══
+  if (S.activePlayerMon.currentHp > 0) {
+    applyWeatherChip(S.activePlayerMon, S.activePlayerMon.maxHp, true);
+  }
 
   // ═══ 10. BERRY AUTO-USE ДЛЯ ИГРОКА ═══
   if (S.activePlayerMon.currentHp > 0) checkBerryAutoUse(S.activePlayerMon, true);
@@ -3061,7 +3410,7 @@ function initEncounterEvents() {
 
       // Love Ball: x8 если противоположный пол
       if (item === 'loveBall') {
-        const wildGender = S.activeWild.wildGender;
+        const wildGender = S.activeWild.wildGender !== undefined ? S.activeWild.wildGender : (Math.random() < 0.5 ? 'male' : 'female');
         const playerGender = S.activePlayerMon?.apiData?.gender || (Math.random() < 0.5 ? 'male' : 'female');
         if (wildGender && playerGender && wildGender !== playerGender) catchRate *= 8;
       }
@@ -3556,6 +3905,7 @@ async function startGymNextPokemon() {
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.currentWeather = getDailyWeather(GS.currentLocationId);
+    S.enemyChargedMove = null; // Сброс заряда при смене покемона гима
 
     // Perfect IVs for gym leader pokemon
     S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
@@ -3803,15 +4153,10 @@ async function startEliteNextPokemon() {
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.currentWeather = getDailyWeather(GS.currentLocationId);
+    S.enemyChargedMove = null; // Сброс заряда при смене покемона элиты
 
-    S.activeWild.wildIVs = {
-      hp: Math.floor(Math.random() * 32),
-      atk: Math.floor(Math.random() * 32),
-      def: Math.floor(Math.random() * 32),
-      spa: Math.floor(Math.random() * 32),
-      spd: Math.floor(Math.random() * 32),
-      spe: Math.floor(Math.random() * 32)
-    };
+    // Perfect IVs для Elite Four (как у gym лидеров)
+    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;
@@ -3907,15 +4252,10 @@ async function startChampionNextPokemon() {
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.currentWeather = getDailyWeather(GS.currentLocationId);
+    S.enemyChargedMove = null; // Сброс заряда при смене покемона чемпиона
 
-    S.activeWild.wildIVs = {
-      hp: Math.floor(Math.random() * 32),
-      atk: Math.floor(Math.random() * 32),
-      def: Math.floor(Math.random() * 32),
-      spa: Math.floor(Math.random() * 32),
-      spd: Math.floor(Math.random() * 32),
-      spe: Math.floor(Math.random() * 32)
-    };
+    // Perfect IVs для Чемпиона (как у gym лидеров)
+    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;

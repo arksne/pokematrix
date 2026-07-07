@@ -59,6 +59,29 @@ import { showToast } from '../utils/dom.js';          // Всплывающие 
 import { autoSave } from '../game/save.js';            // Автосохранение
 import { API_BASE } from '../game/config.js';          // Базовый URL сервера
 
+// ── Карта городов → стадионы с гимами ──
+// Ключ = ID локации (город), значение = ключ в gymLeaders
+const CITY_GYM_MAP: Record<string, string> = {
+  // Канто
+  pewterCity: 'pewterStadium',
+  ceruleanCity: 'ceruleanStadium',
+  vermilionCity: 'vermilionStadium',
+  celadonCity: 'celadonStadium',
+  saffronCity: 'saffronPsychicStadium',
+  fuchsiaCity: 'fuchsiaPoisonStadium',
+  cinnabarIsland: 'cinnabarStadium',
+  viridianCity: 'viridianStadium',
+  // Джото
+  violetCity: 'violetStadium',
+  azaleaTown: 'azaleaStadium',
+  goldenrodCity: 'goldenrodStadium',
+  ecruteakCity: 'ecruteakStadium',
+  cianwoodCity: 'cianwoodStadium',
+  olivineCity: 'olivineStadium',
+  mahoganyTown: 'mahoganyStadium',
+  blackthornCity: 'blackthornStadium',
+};
+
 // ── ЛЕНИВЫЙ ИМПОРТ (циклические зависимости) ────────────
 
 // profile.ts загружается лениво — он импортирует location.ts (через inventory → ...)
@@ -351,12 +374,13 @@ export let renderLocation = function(locId: any) {
 
   // ── Кнопка лидера зала (гим) ──
   // Проверяем: есть ли лидер для этой локации И не побеждён ли он
-  if (gymLeaders[locId] && !state.badges.includes(gymLeaders[locId].badgeName)) {
+  const gymKey = CITY_GYM_MAP[locId] || locId;
+  if (gymLeaders[gymKey] && !state.badges.includes(gymLeaders[gymKey].badgeName)) {
     const btnGym = document.createElement('button');
     btnGym.className = 'btn-use';
     btnGym.style.backgroundColor = '#af52de';  // Пурпурный
-    btnGym.innerText = `⚔ ${gymLeaders[locId].name} (${gymLeaders[locId].title})`;
-    btnGym.onclick = () => getBattleCore().then(bc => bc.openGymModal(locId));
+    btnGym.innerText = `⚔ ${gymLeaders[gymKey].name} (${gymLeaders[gymKey].title})`;
+    btnGym.onclick = () => getBattleCore().then(bc => bc.openGymModal(gymKey));
     actionsContainer.appendChild(btnGym);
   }
 

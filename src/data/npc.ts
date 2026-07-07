@@ -52,6 +52,90 @@ export const NPC_DATA = {
     quests: [],
   },
 
+  // ── Сёстры Джой на стадионах Канто ──
+  'joy_pewter_stadium': {
+    id: 'joy_pewter_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'pewterStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Пьютера! Я здесь, чтобы помочь тренерам перед битвой с Броком.', default: 'Удачи в бою с каменным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_cerulean_stadium': {
+    id: 'joy_cerulean_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'ceruleanStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Церулина! Я здесь, чтобы помочь тренерам перед битвой с Мисти.', default: 'Удачи в бою с водным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_vermilion_stadium': {
+    id: 'joy_vermilion_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'vermilionStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Вермилиона! Я здесь, чтобы помочь тренерам перед битвой с Лейтенантом Сёрджем.', default: 'Удачи в бою с электрическим типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_celadon_stadium': {
+    id: 'joy_celadon_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'celadonStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Селадона! Я здесь, чтобы помочь тренерам перед битвой с Эрикой.', default: 'Удачи в бою с травяным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_saffron_stadium': {
+    id: 'joy_saffron_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'saffronPsychicStadium',
+    dialog: { greet: 'Добро пожаловать на Психический Стадион Саффрона! Я здесь, чтобы помочь тренерам перед битвой с Сабриной.', default: 'Удачи в бою с психическим типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_fuchsia_stadium': {
+    id: 'joy_fuchsia_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'fuchsiaPoisonStadium',
+    dialog: { greet: 'Добро пожаловать на Ядовитый Стадион Фуксии! Я здесь, чтобы помочь тренерам перед битвой с Когой.', default: 'Удачи в бою с ядовитым типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_cinnabar_stadium': {
+    id: 'joy_cinnabar_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'cinnabarStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Киновари! Я здесь, чтобы помочь тренерам перед битвой с Блейном.', default: 'Удачи в бою с огненным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_viridian_stadium': {
+    id: 'joy_viridian_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'viridianStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Виридиана! Я здесь, чтобы помочь тренерам перед битвой с Джованни.', default: 'Удачи в бою с земляным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+
+  // ── Сёстры Джой на стадионах Джото ──
+  'joy_violet_stadium': {
+    id: 'joy_violet_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'violetStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Вайолет! Я здесь, чтобы помочь тренерам перед битвой с Фолкнером.', default: 'Удачи в бою с летающим типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_azalea_stadium': {
+    id: 'joy_azalea_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'azaleaStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Азалии! Я здесь, чтобы помочь тренерам перед битвой с Багси.', default: 'Удачи в бою с жучиным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_goldenrod_stadium': {
+    id: 'joy_goldenrod_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'goldenrodStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Голденрода! Я здесь, чтобы помочь тренерам перед битвой с Уитни.', default: 'Удачи в бою с нормальным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_ecruteak_stadium': {
+    id: 'joy_ecruteak_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'ecruteakStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Экрютика! Я здесь, чтобы помочь тренерам перед битвой с Морти.', default: 'Удачи в бою с призрачным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_cianwood_stadium': {
+    id: 'joy_cianwood_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'cianwoodStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Сианвуда! Я здесь, чтобы помочь тренерам перед битвой с Чаком.', default: 'Удачи в бою с боевым типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_olivine_stadium': {
+    id: 'joy_olivine_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'olivineStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Оливина! Я здесь, чтобы помочь тренерам перед битвой с Жасмин.', default: 'Удачи в бою со стальным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_mahogany_stadium': {
+    id: 'joy_mahogany_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'mahoganyStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Махогони! Я здесь, чтобы помочь тренерам перед битвой с Прайсом.', default: 'Удачи в бою с ледяным типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+  'joy_blackthorn_stadium': {
+    id: 'joy_blackthorn_stadium', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'blackthornStadium',
+    dialog: { greet: 'Добро пожаловать на Стадион Блэкторна! Я здесь, чтобы помочь тренерам перед битвой с Клер.', default: 'Удачи в бою с драконьим типом! Не забудьте вылечить покемонов.' },
+    quests: [],
+  },
+
   // Tutorial NPC at starting location
   // === EAST JOHTO NPCs ===
   'goldenrod_officer': {

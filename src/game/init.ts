@@ -129,13 +129,6 @@ import { API_BASE } from './config.js';
       });
     }
 
-    setTimeout(() => {
-      const tutorialDone = localStorage.getItem('league17_tutorial') === 'complete';
-      if (!tutorialDone && state.myTeam && state.myTeam.length > 0) {
-        startOnboarding();
-      }
-    }, 3000);
-
     // ── 2. Авторизация ───────────────────────────────────────
     // Ждём пока пользователь залогинится через Telegram.
     // После этого: state.tgToken, state.tgUser, state.isAdmin.
@@ -180,10 +173,16 @@ import { API_BASE } from './config.js';
     let gameLoaded = false;
     if (state.tgToken) {
       const cloudData = await cloudLoad();
-      if (cloudData && cloudData.myTeam) {
-        applyCloudSave(cloudData);   // применяем серверные данные
-        saveGame();                   // сохраняем локально
-        if (state.myTeam.length > 0) { gameLoaded = true; }
+      if (cloudData) {
+        if (cloudData.myTeam || cloudData.starterGiven) {
+          applyCloudSave(cloudData);
+          saveGame();
+          if (state.myTeam.length > 0) { gameLoaded = true; }
+          else if (cloudData.starterGiven) {
+            gameLoaded = true;
+            console.warn('Cloud save has starterGiven but empty myTeam');
+          }
+        }
       }
     }
     if (!gameLoaded) {
@@ -194,6 +193,11 @@ import { API_BASE } from './config.js';
     }
     if (!gameLoaded) {
       await giveStarter();   // новая игра — даём стартового покемона
+      // Форсированное облачное сохранение — чтобы СРАЗУ зафиксировать "стартовик выдан"
+      if (state.tgToken) {
+        saveGame();
+        cloudSave();
+      }
       showToast('Добро пожаловать в Лигу Покемонов!', false);
     } else if (state.tgToken) {
       // Синхронизация: если local новее cloud на 5+ сек → cloudSave
@@ -210,6 +214,14 @@ import { API_BASE } from './config.js';
     updateInventoryDisplay();
     updateMoneyDisplay();
     updateBadgeDisplay();
+
+    // ── Запуск туториала (после загрузки сохранения и рендера UI) ──
+    setTimeout(() => {
+      const tutorialDone = localStorage.getItem('league17_tutorial') === 'complete';
+      if (!tutorialDone && state.myTeam && state.myTeam.length > 0) {
+        startOnboarding();
+      }
+    }, 500);
 
     initProfileEvents();
     initEncounterEvents();

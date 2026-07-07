@@ -50,6 +50,7 @@ export function getFullSaveData() {
   return {
     _v: state.saveVersion,
     _ts: Date.now(),
+    starterGiven: true,  // Флаг: стартовик уже выдан
     currentLocationId: state.currentLocationId, currentRegion: state.currentRegion,
     inventory: { ...state.inventory },
     money: state.inventory['credit'] || 0, badges: state.badges, trainerNickname: state.trainerNickname,
@@ -297,8 +298,7 @@ export function cloudSave() {
     state.saveTriggerPending = true;
     return;
   }
-  if (state.cloudSaveTimer) clearTimeout(state.cloudSaveTimer);
-  state.cloudSaveTimer = setTimeout(() => doCloudSave(), 2000);
+  doCloudSave();
 }
 
 export async function doCloudSave(attempt = 0) {
@@ -350,7 +350,7 @@ export async function doCloudSave(attempt = 0) {
   // If another save was triggered while we were saving, fire it now
   if (state.saveTriggerPending) {
     state.saveTriggerPending = false;
-    state.cloudSaveTimer = setTimeout(() => doCloudSave(), 500);
+    doCloudSave();
   }
 }
 
@@ -368,7 +368,8 @@ export async function cloudLoad() {
 }
 
 export async function applyCloudSave(data) {
-  if (!data || !data.myTeam) return;
+  if (!data) return;
+  if (!data.myTeam && !data.starterGiven) return;
   // Compare by timestamp (saveVersion can inflate over time — _ts is always monotonic)
   if (data._ts) {
     const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
@@ -385,9 +386,17 @@ export async function applyCloudSave(data) {
     state.currentLocationId = 'goldenrodCity';
     state.currentRegion = 'johto';
   }
-  if (data.inventory) state.inventory = { ...data.inventory };
-  // credit IS money — fall back to data.money for backward compat
-  if (!('credit' in state.inventory)) state.inventory['credit'] = data.money ?? state.inventory['credit'] ?? 500;
+  if (data.inventory) {
+    // Merge inventory: берем макс каждого предмета между локальным и облачным
+    for (const [k, v] of Object.entries(data.inventory)) {
+      if (v > 0 || (state.inventory[k] === undefined)) {
+        state.inventory[k] = Math.max(state.inventory[k] || 0, v as number);
+      }
+    }
+  }
+  // credit IS money — берём максимум между локальным и облачным
+  const cloudCredit = data.inventory?.credit ?? data.money ?? 0;
+  state.inventory['credit'] = Math.max(state.inventory['credit'] || 0, cloudCredit);
   state.badges = data.badges || state.badges;
   state.trainerNickname = data.trainerNickname || state.trainerNickname;
   state.myTeam = data.myTeam || state.myTeam;
@@ -399,6 +408,7 @@ export async function applyCloudSave(data) {
     if (m.baseLevel > 100) m.baseLevel = 100;
     if (m.baseLevel < 1) m.baseLevel = 1;
     if (m.candiesEaten > 0 && m.baseLevel + m.candiesEaten > 100) m.candiesEaten = 100 - m.baseLevel;
+    if (!m.lastMoveCheckLevel) m.lastMoveCheckLevel = m.baseLevel || 1;
   });
   state.currentPokemonIndex = data.currentPokemonIndex ?? state.currentPokemonIndex;
   state.pokedexSeen = new Set(data.pokedexSeen || []);
@@ -406,6 +416,10 @@ export async function applyCloudSave(data) {
   state.pcBoxes = data.pcBoxes || state.pcBoxes;
   state.pcBoxes.forEach(box => box.forEach(m => {
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+    if (!m.learnableMoves) m.learnableMoves = [];
+    if (!m.movesPP) m.movesPP = [];
+    if (!m.berries) m.berries = { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 };
+    if (!m.lastMoveCheckLevel) m.lastMoveCheckLevel = m.baseLevel || 1;
   }));
   state.daycareMons = data.daycareMons || state.daycareMons;
   state.daycareEgg = data.daycareEgg || state.daycareEgg;

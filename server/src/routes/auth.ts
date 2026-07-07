@@ -146,7 +146,7 @@ router.post('/tg', async (req: Request, res: Response) => {
 // Регистрация: ник, аватар, стартовый покемон.
 router.post('/register', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const { nickname, avatar, starterPokemon } = req.body;
+    const { nickname, avatar } = req.body;
     const userId = req.user!.userId;
 
     // ── Санитизация nickname (XSS-защита) ──

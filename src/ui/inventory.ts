@@ -120,6 +120,8 @@ import { itemDef } from '../utils/items.js';
 import { natures } from '../data/natures.js';
 // store — глобальная event-система с методами getMaxStack и т.д.
 import { store } from '../game/store.js';
+// checkNewMovesOnLevelUp — проверка новых атак при повышении уровня
+import { checkNewMovesOnLevelUp } from './levelup_moves.js';
 
 // ── ИНИЦИАЛИЗАЦИЯ СОБЫТИЙ QA-КНОПОК И HELD ITEM ──────────
 // Вызывается один раз при старте игры (init.ts)
@@ -719,7 +721,7 @@ export async function useItem(itemId) {
 
       // ── Проверка эволюции ──
       // Асинхронно проверяем, может ли покемон эволюционировать на этом уровне
-      (async () => {
+      const evoPromise = (async () => {
         const evoTarget = await _checkEvolution(mon);
         if (evoTarget) {
           // Если может — запускаем эволюцию
@@ -728,72 +730,10 @@ export async function useItem(itemId) {
         }
       })();
 
-      // ── Изучение новых атак по уровню ──
+      // ── Изучение новых атак по уровню (через единую функцию) ──
       (async () => {
-        try {
-          // Загружаем все атаки покемона из PokeAPI
-          const pokeData = await fetchPokeAPI(`pokemon/${mon.apiData.id}`);
-          const allMoves = pokeData.moves || [];
-          // Создаём Set известных атак для быстрой проверки
-          const knownNames = new Set((mon.apiData.moves || []).filter(m => m).map(m => m.move.name));
-
-          // Проходим по всем атакам в PokeAPI
-          for (const entry of allMoves) {
-            for (const detail of entry.version_group_details) {
-              // Ищем атаки, изучаемые на текущем уровне
-              // detail.move_learn_method.name === 'level-up' — атака изучается при повышении
-              // detail.level_learned_at === curLvl — на этом конкретном уровне
-              if (detail.move_learn_method.name === 'level-up' && detail.level_learned_at === curLvl) {
-                // Если атака ещё не изучена
-                if (!knownNames.has(entry.move.name)) {
-                  // Ищем пустой слот (всего 4 слота)
-                  const emptySlot = (mon.apiData.moves || []).findIndex(m => !m);
-                  if (emptySlot >= 0) {
-                    // Есть пустой слот — просто добавляем атаку
-                    if (!mon.apiData.moves[emptySlot]) {
-                      mon.apiData.moves[emptySlot] = { move: { name: entry.move.name, url: entry.move.url } };
-                    }
-                    showToast(`${mon.nickname || mon.apiData.name} выучил ${entry.move.name}!`, false);
-                    knownNames.add(entry.move.name);
-                  } else {
-                    // Нет пустых слотов — показываем выбор: заменить атаку или отказаться
-                    const slotItems = (mon.apiData.moves || []).filter(m => m).map((m, i) => ({
-                      label: m.move.name,
-                      subtitle: `Слот ${i + 1}`
-                    }));
-                    slotItems.push({ label: 'Отказаться', subtitle: 'Сохранить в резерв' });
-                    showSelectionModal(
-                      `Заменить атаку на ${entry.move.name}?`,
-                      slotItems,
-                      (pick) => {
-                        if (pick < 4) {
-                          // Заменяем выбранный слот
-                          mon.apiData.moves[pick].move = { name: entry.move.name, url: entry.move.url };
-                          knownNames.add(entry.move.name);
-                          showToast(`${entry.move.name} выучено!`, false);
-                        } else {
-                          // Сохраняем в резерв (learnableMoves — список атак, которые можно изучить позже)
-                          if (!mon.learnableMoves) mon.learnableMoves = [];
-                          if (!mon.learnableMoves.some(m => m.name === entry.move.name)) {
-                            mon.learnableMoves.push({
-                              name: entry.move.name,
-                              url: entry.move.url,
-                              power: 0,
-                              type: 'normal'
-                            });
-                          }
-                          showToast(`${entry.move.name} сохранено в резерв!`, false);
-                        }
-                      },
-                      true  // showCancel=true — можно отменить выбор
-                    );
-                  }
-                }
-                break;  // Выходим из inner цикла после обработки
-              }
-            }
-          }
-        } catch (e) { console.warn('Failed to load level-up moves', e); }
+        await evoPromise;  // Ждём эволюцию, чтобы избежать race condition
+        await checkNewMovesOnLevelUp(mon, curLvl);
       })();
 
       refreshProfileUI();

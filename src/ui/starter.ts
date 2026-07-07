@@ -132,16 +132,10 @@ export async function giveStarterMon(pokemonName: string) {
     store.emit('team:render');
     store.emit('save');
 
-    // ── 6. Регистрация на сервере ──
-    // Отправляем POST /api/auth/register с именем стартового покемона
-    // Это нужно серверу для привязки starter к аккаунту
-    const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (state.tgToken) authHeaders['Authorization'] = `Bearer ${state.tgToken}`;
-    fetch('/api/auth/register', {
-      method: 'POST',
-      headers: authHeaders,
-      body: JSON.stringify({ starterPokemon: pokemonName })
-    }).catch(() => {});  // Игнорируем ошибки сервера
+    // ── 6. Стартовые предметы ──
+    state.inventory['pokeBall'] = (state.inventory['pokeBall'] || 0) + 5;
+    state.inventory['potion'] = (state.inventory['potion'] || 0) + 3;
+    state.inventory['credit'] = Math.max(state.inventory['credit'] || 0, 1000);
 
   } catch (e) {
     console.error('Failed to give starter', e);

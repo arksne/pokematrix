@@ -230,20 +230,6 @@ function createRegistrationOverlay(tgData: any, resolve: (v: boolean) => void): 
         </div>
       </div>
 
-      <!-- Step 3: Starter Pokemon -->
-      <div class="mb-16">
-        <label class="text-muted fs-08 d-block mb-4">Стартовый покемон</label>
-        <div id="reg-starters" class="d-flex flex-wrap gap-8" style="justify-content:center;">
-          ${STARTER_POKEMON.map((sp, i) => `
-            <div class="starter-opt ${i === 0 ? 'selected' : ''}"
-                 data-starter="${sp.id}"
-                 onclick="window.__selectStarter(this)">
-              <div class="sprite" style="font-size:2rem;line-height:56px;">${sp.emoji}</div>
-              <div class="fs-08 mt-4" style="color:var(--tma-text);">${sp.name}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
 
       <button class="tma-btn w-full p-12 fs-1" id="btn-register"
               style="background:#34c759;border:none;border-radius:8px;cursor:pointer;">
@@ -253,16 +239,11 @@ function createRegistrationOverlay(tgData: any, resolve: (v: boolean) => void): 
     </div>
   `;
 
-  // Set up global handlers for avatar/starter selection
+  // Set up global handler for avatar selection
   (window as any).__selectAvatar = function(el: HTMLElement) {
     overlay.querySelectorAll('.avatar-opt').forEach(e => e.classList.remove('selected'));
     el.classList.add('selected');
   };
-  (window as any).__selectStarter = function(el: HTMLElement) {
-    overlay.querySelectorAll('.starter-opt').forEach(e => e.classList.remove('selected'));
-    el.classList.add('selected');
-  };
-
   // Register button handler
   const regBtn = overlay.querySelector('#btn-register') as HTMLElement;
   regBtn.addEventListener('click', async () => {
@@ -277,7 +258,6 @@ function createRegistrationOverlay(tgData: any, resolve: (v: boolean) => void): 
     }
 
     const selectedAvatar = overlay.querySelector('.avatar-opt.selected')?.getAttribute('data-av') || 'trainer_f';
-    const selectedStarter = overlay.querySelector('.starter-opt.selected')?.getAttribute('data-starter') || 'pikachu';
 
     try {
       regBtn.textContent = '⏳ Сохранение...';
@@ -288,7 +268,6 @@ function createRegistrationOverlay(tgData: any, resolve: (v: boolean) => void): 
         body: JSON.stringify({
           nickname,
           avatar: selectedAvatar,
-          starterPokemon: selectedStarter,
         }),
       });
 

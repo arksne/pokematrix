@@ -67,8 +67,8 @@ export function selectEnemyMove({
       const stab = (attacker.types || []).some(t => t.type?.name === m.type?.name) ? 1.5 : 1.0;
       // Type effectiveness против защищающегося
       const mult = getTypeMultiplier(m.type.name, defender.apiData?.types || defender.types || []);
-      // Статус-атаки (без power) имеют базовый score 60 × effectiveness
-      const score = m.power ? power * stab * mult : 60 * mult;
+      // Статус-атаки (без power): self-target (Swords Dance) — 80, debuff (Growl) — 60
+      const score = m.power ? power * stab * mult : (m.target?.name === 'user' ? 80 : 60);
       if (score > bestScore) { bestScore = score; chosenMove = m; chosenIdx = i; }
     }
   } else {

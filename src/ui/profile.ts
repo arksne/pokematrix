@@ -303,7 +303,7 @@ export function refreshProfileUI() {
       // Отображаем PP: текущее / максимум (fallback 30/30 если нет данных)
       const ppDisplay = (mon.movesPP && mon.movesPP[i])
         ? `${mon.movesPP[i].current}/${mon.movesPP[i].max}`
-        : '30/30';
+        : '?/?';
       if (moveNameEl) moveNameEl.innerText = mon.apiData.moves[i].move.name;
       if (movePPEl) movePPEl.innerText = `PP ${ppDisplay}`;
       // Цвет атаки по типу (физическая/специальная/статусная)
@@ -360,6 +360,9 @@ export function refreshProfileUI() {
               if (!mon.apiData.moves[slotPick]) mon.apiData.moves[slotPick] = {};
               // Записываем атаку в слот
               mon.apiData.moves[slotPick].move = { name: move.name, url: move.url };
+              // Инициализируем PP для новой атаки
+              if (!mon.movesPP) mon.movesPP = [];
+              mon.movesPP[slotPick] = { current: 30, max: 30 };
               mon.learnableMoves.splice(idx, 1);  // Убираем из резерва
               refreshProfileUI();                    // Обновляем UI
               showToast(`${move.name} выучено в слот ${slotPick + 1}!`, false);

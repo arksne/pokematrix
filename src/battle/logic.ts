@@ -301,6 +301,7 @@ export function calculateDamage({
   attackerAbilityName = null,
   naturesList = [],
   alwaysCrit = false,
+  critRateStage = 0,  // 0 = 6.25%, 1 = 12.5% (Slash, Stone Edge), 2 = 25%, 3 = 33%, 4+ = 50%
 }) {
   const parts = [];
   const power = move.power;
@@ -350,25 +351,91 @@ export function calculateDamage({
 
   const typeMult = getTypeMultiplier(move.type?.name, defender.apiData?.types || defender.types || []);
   const weatherMult = getWeatherMultiplier(move.type?.name, weather);
-  const randMod = alwaysCrit ? 1.0 : (0.85 + Math.random() * 0.15);
+  const randMod = 0.85 + Math.random() * 0.15;  // Всегда случайно, даже при гарантированном крите
 
-  // Crit
-  const critRate = alwaysCrit ? 1.0 : 0.0625;
+  // Crit — Gen 6+: 1.5x множитель, stages влияют на вероятность
+  const CRIT_RATES = [0.0625, 0.125, 0.25, 1/3, 0.5];
+  const critRate = alwaysCrit ? 1.0 : CRIT_RATES[Math.min(critRateStage, CRIT_RATES.length - 1)];
   const isCrit = Math.random() < critRate;
   const critMult = isCrit ? 1.5 : 1.0;
+
+  // Crit ignores attacker's negative stages and defender's positive stages
+  // Recalculate A/D without stat stages if crit lands
+  if (isCrit) {
+    const critAttackerPkm = { ...attackerPkm, statStages: null };
+    const critDefenderPkm = { ...defenderPkm, statStages: null };
+    const critA = calculateStat(critAttackerPkm, attackStatName, {
+      isWild: isWildAttacker, level: attackerLevel, natures: naturesList,
+    });
+    const critD = calculateStat(critDefenderPkm, defenseStatName, {
+      isWild: isWildDefender, level: defenderLevel, natures: naturesList,
+    });
+    baseDmg = Math.floor((((2 * attackerLevel / 5 + 2) * power * (critA / critD)) / 50) + 2);
+    baseDmg = Math.floor(baseDmg * burnAtkMod);
+  }
 
   // Air Balloon for defender (declare before held items due to Expert Belt check)
   let effectiveTypeMult = typeMult;
   if (defenderHeldItem === 'airBalloon' && move.type?.name === 'ground') effectiveTypeMult = 0;
+
+  // Ability interactions with type effectiveness
+  const moveType = move.type?.name;
+  if (defenderAbilityName) {
+    const defAbil = defenderAbilityName.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    // Immunities
+    if (defAbil === 'levitate' && moveType === 'ground') effectiveTypeMult = 0;
+    if (defAbil === 'flash-fire' && moveType === 'fire') effectiveTypeMult = 0;
+    if (defAbil === 'water-absorb' && moveType === 'water') effectiveTypeMult = 0;
+    if (defAbil === 'volt-absorb' && moveType === 'electric') effectiveTypeMult = 0;
+    if (defAbil === 'dry-skin' && moveType === 'water') effectiveTypeMult = 0;
+    if (defAbil === 'motor-drive' && moveType === 'electric') effectiveTypeMult = 0;
+    if (defAbil === 'sap-sipper' && moveType === 'grass') effectiveTypeMult = 0;
+    if (defAbil === 'storm-drain' && moveType === 'water') effectiveTypeMult = 0;
+    if (defAbil === 'lightning-rod' && moveType === 'electric') effectiveTypeMult = 0;
+    // Wonder Guard: only super-effective moves hit
+    if (defAbil === 'wonder-guard' && effectiveTypeMult <= 1) effectiveTypeMult = 0;
+    // Resistances
+    if (defAbil === 'thick-fat' && (moveType === 'fire' || moveType === 'ice')) effectiveTypeMult *= 0.5;
+    if (defAbil === 'dry-skin' && moveType === 'fire') effectiveTypeMult *= 1.25;
+    if ((defAbil === 'filter' || defAbil === 'solid-rock') && effectiveTypeMult > 1) effectiveTypeMult *= 0.75;
+  }
+  // Guts: nullifies burn Atk penalty and gives 1.5x Atk instead
+  if (attackerAbilityName) {
+    const atkAbil = attackerAbilityName.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (atkAbil === 'guts' && attacker.status === 'brn' && isPhysical) {
+      burnAtkMod = 1.5; // Guts: 1.5x Atk, ignores burn penalty
+    }
+  }
+  // Sniper: 2.25x crit damage instead of 1.5x
+  let sniperCritMult = critMult;
+  if (attackerAbilityName && isCrit) {
+    const atkAbil = attackerAbilityName.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (atkAbil === 'sniper') sniperCritMult = 2.25;
+  }
+
+  // Ability power modifier (Sheer Force 1.3x, Hustle 1.5x physical)
+  let abilityMult = 1.0;
+  if (attackerAbilityName) {
+    const atkAbil = attackerAbilityName.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (atkAbil === 'sheer-force') {
+      const hasSecondary = !!(move.meta?.ailment_chance || move.meta?.flinch_chance || move.meta?.stat_chance || (move.stat_changes?.length > 0));
+      if (hasSecondary) abilityMult = 1.3;
+    }
+    if (atkAbil === 'hustle' && isPhysical) {
+      abilityMult *= 1.5;
+    }
+  }
 
   // Held items
   let heldMult = 1.0;
   if (attackerHeldItem === 'expertBelt' && effectiveTypeMult > 1) heldMult = 1.2;
   if (attackerHeldItem === 'lifeOrb') heldMult = 1.3;
 
-  let dmg = Math.floor(baseDmg * stab * effectiveTypeMult * weatherMult * randMod * critMult * heldMult);
+  let dmg = Math.floor(baseDmg * stab * effectiveTypeMult * weatherMult * randMod * sniperCritMult * heldMult * abilityMult);
 
-  if (dmg < 0) dmg = 0;
+  // Минимум 1 HP для не-иммунных атак (4x резист всё равно наносит 1)
+  if (dmg <= 0 && effectiveTypeMult > 0) dmg = 1;
+  else if (dmg < 0) dmg = 0;
 
   // Sucker Punch fail check (handled before calling this)
 

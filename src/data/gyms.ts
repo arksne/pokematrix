@@ -259,10 +259,10 @@ export const gymLeaders = {
     rewardItem: 'fullRestore',
     rewardQty: 2,
     team: [
-      { name: 'steelix', level: 105 },
-      { name: 'skarmory', level: 105 },
-      { name: 'mawile', level: 105 },
-      { name: 'aggron', level: 105 },
+      { name: 'steelix', level: 100 },
+      { name: 'skarmory', level: 100 },
+      { name: 'mawile', level: 100 },
+      { name: 'aggron', level: 100 },
     ],
   },
 
@@ -278,10 +278,10 @@ export const gymLeaders = {
     rewardItem: 'maxRevive',
     rewardQty: 1,
     team: [
-      { name: 'dewgong', level: 110 },
-      { name: 'cloyster', level: 110 },
-      { name: 'mamoswine', level: 110 },
-      { name: 'glaceon', level: 110 },
+      { name: 'dewgong', level: 100 },
+      { name: 'cloyster', level: 100 },
+      { name: 'mamoswine', level: 100 },
+      { name: 'glaceon', level: 100 },
     ],
   },
 
@@ -297,10 +297,10 @@ export const gymLeaders = {
     rewardItem: 'maxRevive',
     rewardQty: 2,
     team: [
-      { name: 'dragonite', level: 115 },
-      { name: 'salamence', level: 115 },
-      { name: 'garchomp', level: 115 },
-      { name: 'kingdra', level: 115 },
+      { name: 'dragonite', level: 100 },
+      { name: 'salamence', level: 100 },
+      { name: 'garchomp', level: 100 },
+      { name: 'kingdra', level: 100 },
     ],
   },
 

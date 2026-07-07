@@ -129,6 +129,8 @@ export const INITIAL_BATTLE_STATE: BattleStateData = {
   huntActive: false,
   huntTimer: null,
   enemyChosenMove: null,
+  playerChargedMove: null,
+  enemyChargedMove: null,
 };
 
 /** PokeAPI move data (subset used by battle system) */
@@ -145,6 +147,13 @@ export interface MoveData {
     ailment?: { name: string };
     ailment_chance?: number;
     category?: { name: string };
+    crit_rate?: number;
+    flinch_chance?: number;
+    stat_chance?: number;
+    min_hits?: number;
+    max_hits?: number;
+    min_turns?: number;
+    max_turns?: number;
   };
   stat_changes?: Array<{
     change: number;
@@ -241,4 +250,6 @@ export interface BattleStateData {
   huntActive: boolean;
   huntTimer: any;
   enemyChosenMove: MoveData | null;
+  playerChargedMove: any | null;   // Two-turn move charging state — MoveData being charged, or null
+  enemyChargedMove: any | null;    // Same for enemy
 }
