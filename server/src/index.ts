@@ -4,6 +4,8 @@
  * Express + Socket.IO + PostgreSQL (Drizzle ORM).
  * Точка входа: настраивает middleware, маршруты, Socket.IO.
  */
+import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -36,6 +38,11 @@ export const logger = pino({
   transport: config.isProduction ? undefined : { target: 'pino-pretty' },
 });
 
+// ── __dirname для ESM ───────────────────────────────────────
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..', '..'); // server/ → корень проекта
+
 async function main() {
   // ── Подключение к БД ─────────────────────────────────────
   logger.info('[server] Connecting to database...');
@@ -63,7 +70,7 @@ async function main() {
 
   // ── Static files (в продакшне — собранный клиент) ────────
   if (config.isProduction) {
-    app.use(express.static('dist'));
+    app.use(express.static(path.join(ROOT_DIR, 'dist')));
   }
 
   // ── Pino logger middleware ────────────────────────────────
@@ -93,7 +100,7 @@ async function main() {
   // ── SPA fallback (продакшн) ──────────────────────────────
   if (config.isProduction) {
     app.get('*', (_req, res) => {
-      res.sendFile('index.html', { root: 'dist' });
+      res.sendFile('index.html', { root: path.join(ROOT_DIR, 'dist') });
     });
   }
 

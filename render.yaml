@@ -1,0 +1,24 @@
+# PokeMatrix — Render Blueprint
+# Подключается автоматически после связи репозитория с Render
+
+services:
+  - type: web
+    name: pokematrix
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: |
+      npm install && cd server && npm install && npm run build && cd .. && npx vite build
+    startCommand: node server/dist/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_PASS
+        value: league17admin2026
+      - key: ALLOW_DEV_LOGIN
+        value: false
+      - key: ADMIN_IDS
+        value: ""
