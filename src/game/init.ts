@@ -53,6 +53,7 @@ import { openQuestPanel } from '../ui/quests.js';
 import { openAchievements } from '../ui/achievements.js';
 import { showToast } from '../utils/dom.js';
 import { checkTutorialProgress } from '../ui/npcs.js';
+import { renderTutorialBar } from '../ui/npcs.js';
 import { checkNPCQuestProgress } from '../ui/npcs.js';
 import { logItemHistory } from '../game/actions.js';
 import { showGymRewardSelection } from '../ui/gym-reward.js';
@@ -85,7 +86,10 @@ import { API_BASE } from './config.js';
     store.on('team:render', () => renderTeamGrid());
     store.on('location:render', (locId) => renderLocation(locId));
     store.on('notification:add', (title, text) => addNotification(title, text));
-    store.on('tutorial:progress', (type, amount, itemId) => checkTutorialProgress(type, amount, itemId));
+    store.on('tutorial:progress', (type, amount, itemId) => {
+      checkTutorialProgress(type, amount, itemId);
+      renderTutorialBar();
+    });
     store.on('gym:reward', (locId) => showGymRewardSelection(locId));
     store.on('toast', (msg, isErr) => showToast(msg, isErr));
 

@@ -228,6 +228,15 @@ export function setBeforeRenderLocation(fn: (locId: string) => void) {
 // NPC, навигация, транспорт, дикие покемоны
 // Принимает locId — ID локации
 export let renderLocation = function(locId: any) {
+  // ── Гейт: тренировочная зона только для новичков ──
+  if (locId === 'goldenrodCity_trainingGrounds' && state.myTeam.length > 0) {
+    const maxLvl = Math.max(...state.myTeam.map((m: any) => (m.baseLevel || 0) + (m.candiesEaten || 0)));
+    if (maxLvl > 15) {
+      showToast('Тренировочная зона только для новичков (покемоны до 15 уровня)!', true);
+      return;
+    }
+  }
+
   // ── Пре-рендер хук (если зарегистрирован) ──
   if (_beforeRenderLocation) _beforeRenderLocation(locId);
 
@@ -251,6 +260,16 @@ export let renderLocation = function(locId: any) {
   // ── Основная информация локации ──
   document.getElementById('loc-name').innerText = loc.name;     // Название
   document.getElementById('loc-desc').innerText = loc.desc;     // Описание
+
+  // ── Туториал-бар ──
+  let tutBar = document.getElementById('tutorial-quest-bar');
+  if (!tutBar) {
+    tutBar = document.createElement('div');
+    tutBar.id = 'tutorial-quest-bar';
+    tutBar.style.cssText = 'display:none;flex-direction:column;gap:4px;margin:8px 0;padding:8px 10px;background:rgba(0,122,255,0.12);border:1px solid rgba(0,122,255,0.3);border-radius:8px;';
+    document.getElementById('loc-desc')!.after(tutBar);
+  }
+  import('./npcs.js').then(m => m.renderTutorialBar());
 
   // ── Фоновое изображение ──
   const img = loc.image;
@@ -447,8 +466,11 @@ export let renderLocation = function(locId: any) {
     subLinks.forEach(({ id: linkId, loc: linkLoc }) => {
       const btn = document.createElement('button');
       btn.className = 'btn-nav';
-      btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:#555';
-      btn.innerHTML = `<span>🏠 ${linkLoc.name}</span>`;
+      const isTraining = linkId.includes('trainingGrounds');
+      btn.style.cssText = `flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:${isTraining ? '#34c759' : '#555'}`;
+      const icon = isTraining ? '🥋' : '🏠';
+      const label = isTraining ? `${loc.name} (до 15 ур.)` : loc.name;
+      btn.innerHTML = `<span>${icon} ${label}</span>`;
       btn.onclick = () => {
         if (!state.visitedLocations.has(linkId)) {
           state.visitedLocations.add(linkId);

@@ -20,6 +20,7 @@ import { state } from '../game/state.js';          // Глобальное со�
 import { store } from '../game/store.js';            // Event-система (emit)
 import { generateUID, getTrainerId } from '../game/state.js';  // Генерация UID и ID тренера
 import { showToast } from '../utils/dom.js';          // Всплывающие уведомления
+import { addNotification } from './notifications.js';  // Системные уведомления
 import { natures } from '../data/natures.js';         // Массив характеров покемонов
 // GEN_STARTERS — массив массивов: [
 //   ['bulbasaur','charmander','squirtle'],          // Поколение 1
@@ -136,6 +137,10 @@ export async function giveStarterMon(pokemonName: string) {
     state.inventory['pokeBall'] = (state.inventory['pokeBall'] || 0) + 5;
     state.inventory['potion'] = (state.inventory['potion'] || 0) + 3;
     state.inventory['credit'] = Math.max(state.inventory['credit'] || 0, 1000);
+
+    // ── 7. Запуск туториала NPC ──
+    state.tutorialStep = 1;
+    addNotification('🎓 Обучение', 'Поговорите с Профессором Оуком в Goldenrod City, чтобы начать обучение!');
 
   } catch (e) {
     console.error('Failed to give starter', e);

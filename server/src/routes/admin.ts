@@ -98,7 +98,12 @@ router.get('/api', async (req: Request, res: Response) => {
       case 'give_badges': {
         if (!tgId) throw new Error('user required');
         const { saveData } = await getUserData(tgId);
-        saveData.badges = ['boulder', 'cascade', 'thunder', 'rainbow', 'soul', 'marsh', 'volcano', 'earth'];
+        saveData.badges = [
+          'Boulder Badge', 'Cascade Badge', 'Thunder Badge', 'Rainbow Badge',
+          'Soul Badge', 'Marsh Badge', 'Volcano Badge', 'Earth Badge',
+          'Zephyr Badge', 'Hive Badge', 'Plain Badge', 'Fog Badge',
+          'Storm Badge', 'Mineral Badge', 'Glacier Badge', 'Rising Badge',
+        ];
         await saveUserData(tgId, saveData);
         res.json({ status: 'ok' });
         break;
@@ -114,23 +119,6 @@ router.get('/api', async (req: Request, res: Response) => {
         break;
       }
 
-      // ── max_iv ──
-      case 'max_iv': {
-        if (!tgId) throw new Error('user required');
-        const { saveData } = await getUserData(tgId);
-        const allStats = ['hp', 'attack', 'defense', 'spAtk', 'spDef', 'speed'];
-        saveData.myTeam.forEach((m: any) => {
-          if (!m.ivs) m.ivs = {};
-          allStats.forEach(s => { m.ivs[s] = 31; });
-        });
-        saveData.pcBoxes?.forEach((box: any[]) => box.forEach((m: any) => {
-          if (!m.ivs) m.ivs = {};
-          allStats.forEach(s => { m.ivs[s] = 31; });
-        }));
-        await saveUserData(tgId, saveData);
-        res.json({ status: 'ok' });
-        break;
-      }
 
       // ── fix_levels ──
       case 'fix_levels': {
@@ -142,26 +130,6 @@ router.get('/api', async (req: Request, res: Response) => {
         break;
       }
 
-      // ── give_legendary ──
-      case 'give_legendary': {
-        if (!tgId) throw new Error('user required');
-        const { saveData } = await getUserData(tgId);
-        const legends = ['mewtwo', 'lugia', 'ho-oh', 'rayquaza', 'groudon', 'kyogre', 'dialga', 'palkia', 'giratina', 'zekrom', 'reshiram'];
-        const pick = legends[Math.floor(Math.random() * legends.length)];
-        saveData.myTeam.push({
-          uid: `admin_${Date.now()}`,
-          apiData: { name: pick },
-          baseLevel: 70,
-          ivs: { hp: 31, attack: 31, defense: 31, spAtk: 31, spDef: 31, speed: 31 },
-          currentHp: 999,
-          maxHp: 999,
-        });
-        await saveUserData(tgId, saveData);
-        res.json({ status: 'ok' });
-        break;
-      }
-
-      // ── reset_save ──
       case 'reset_save': {
         if (!tgId) throw new Error('user required');
         await db.update(users).set({
@@ -178,12 +146,15 @@ router.get('/api', async (req: Request, res: Response) => {
       case 'teleport': {
         if (!tgId) throw new Error('user required');
         const loc = val || 'goldenrodCity';
+        const { saveData } = await getUserData(tgId);
+        saveData.currentLocationId = loc;
+        await saveUserData(tgId, saveData);
         await db.update(users).set({ location_id: loc }).where(eq(users.tg_id, tgId));
         res.json({ status: 'ok' });
         break;
       }
 
-      // ── add_mon (спавн покемона) ──
+      // ── add_mon (полноценный спавн покемона через PokeAPI) ──
       case 'add_mon': {
         if (!tgId || !val) throw new Error('user and val required');
         let monData: any;
@@ -191,17 +162,84 @@ router.get('/api', async (req: Request, res: Response) => {
           res.status(400).json({ status: 'error', error: 'Invalid JSON in val' });
           return;
         }
+        const species = monData.species || 'mewtwo';
+        const level = monData.level || 50;
+        const shiny = !!monData.shiny;
+        const maxIV = !!monData.maxIV;
+        const natureIdx = monData.natureIdx !== undefined && monData.natureIdx >= 0 ? monData.natureIdx : Math.floor(Math.random() * 25);
+        const trainingStage = monData.trainingStage || 0;
+        const target = monData.target || 'team';
+
+        // Загружаем данные из PokeAPI
+        let pokeData: any;
+        try {
+          const pokeRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${species}`);
+          if (!pokeRes.ok) { res.status(400).json({ status: 'error', error: `PokeAPI: ${species} not found` }); return; }
+          pokeData = await pokeRes.json();
+        } catch (e) {
+          res.status(502).json({ status: 'error', error: 'PokeAPI fetch failed' });
+          return;
+        }
+
+        // Фильтруем атаки до level (только level-up, макс 4)
+        const learnedMoves = pokeData.moves
+          .filter((m: any) => m.version_group_details.some((v: any) => v.move_learn_method.name === 'level-up' && v.level_learned_at <= level))
+          .slice(0, 4);
+        if (learnedMoves.length === 0) learnedMoves.push({ move: { name: 'tackle', url: 'https://pokeapi.co/api/v2/move/33/' } });
+        pokeData.moves = learnedMoves;
+
+        // Расчёт статов
+        const exp = Math.pow(level, 3);
+        const expToNext = Math.pow(level + 1, 3);
+        const baseHp = pokeData.stats[0].base_stat;
+        const iv = maxIV ? 31 : Math.floor(Math.random() * 16) + 15; // 15-30 или 31
+        const maxHp = Math.floor(0.01 * (2 * baseHp + iv) * level) + level + 10;
+
+        const newMon: any = {
+          uid: `admin_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          originalTrainer: tgId.toString(),
+          createdAt: Date.now(),
+          caughtLocation: 'admin',
+          apiData: pokeData,
+          maxHp,
+          currentHp: maxHp,
+          ivs: maxIV
+            ? { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 }
+            : { hp: iv, atk: iv, def: iv, spa: iv, spd: iv, spe: iv },
+          evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+          baseLevel: level,
+          exp,
+          expToNext,
+          candiesEaten: 0,
+          vitaminsEaten: 0,
+          training: null,
+          trainingStage,
+          trainingStat: null,
+          happiness: 70,
+          natureIdx,
+          breedLetter: 'A',
+          gender: Math.random() < 0.5 ? 'male' : 'female',
+          status: null,
+          sleepTurns: 0,
+          movesPP: [],
+          statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+          abilityName: pokeData.abilities?.[0]?.ability?.name || null,
+          heldItem: null,
+          berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
+          learnableMoves: [],
+          isShiny: shiny,
+        };
+
         const { saveData } = await getUserData(tgId);
-        saveData.myTeam.push({
-          uid: `admin_spawn_${Date.now()}`,
-          apiData: { name: monData.species || 'mewtwo' },
-          baseLevel: monData.level || 50,
-          ivs: monData.maxIV
-            ? { hp: 31, attack: 31, defense: 31, spAtk: 31, spDef: 31, speed: 31 }
-            : { hp: 15, attack: 15, defense: 15, spAtk: 15, spDef: 15, speed: 15 },
-          currentHp: 999,
-          maxHp: 999,
-        });
+        if (target === 'pc') {
+          if (!saveData.pcBoxes) saveData.pcBoxes = [[]];
+          if (saveData.pcBoxes.length === 0) saveData.pcBoxes = [[]];
+          saveData.pcBoxes[0].push(newMon);
+        } else {
+          if (!saveData.myTeam) saveData.myTeam = [];
+          saveData.myTeam.push(newMon);
+        }
+
         await saveUserData(tgId, saveData);
         res.json({ status: 'ok' });
         break;
@@ -238,6 +276,46 @@ router.get('/api', async (req: Request, res: Response) => {
         }
 
         res.json({ status: 'ok', enabled: !!enabled });
+        break;
+      }
+
+      // ── get_save (редактор тренера) ──
+      case 'get_save': {
+        if (!tgId) throw new Error('user required');
+        const row = (await db.select().from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
+        if (!row) { res.status(404).json({ status: 'error', error: 'User not found' }); return; }
+        let saveData: any = {};
+        try { saveData = JSON.parse(row.save_data || '{}'); } catch {}
+        res.json({
+          status: 'ok',
+          saveData,
+          meta: {
+            nickname: row.nickname,
+            money: row.money,
+            badges_count: row.badges_count,
+            pokemon_count: row.pokemon_count,
+            registered: row.registered,
+          },
+        });
+        break;
+      }
+
+      // ── edit_trainer (редактор тренера) ──
+      case 'edit_trainer': {
+        if (!tgId || !val) throw new Error('user and val required');
+        let editorData: any;
+        try { editorData = JSON.parse(val); } catch {
+          res.status(400).json({ status: 'error', error: 'Invalid JSON in val' });
+          return;
+        }
+        await saveUserData(tgId, editorData);
+        const nicknameUpdate = editorData.trainerNickname || '';
+        const locationUpdate = editorData.currentLocationId || 'goldenrodCity';
+        await db.update(users).set({
+          nickname: nicknameUpdate,
+          location_id: locationUpdate,
+        }).where(eq(users.tg_id, tgId));
+        res.json({ status: 'ok' });
         break;
       }
 
@@ -336,7 +414,12 @@ router.post('/api', async (req: Request, res: Response) => {
           return;
         }
         const { saveData } = await getUserData(tgId);
-        saveData.badges = ['boulder', 'cascade', 'thunder', 'rainbow', 'soul', 'marsh', 'volcano', 'earth'];
+        saveData.badges = [
+          'Boulder Badge', 'Cascade Badge', 'Thunder Badge', 'Rainbow Badge',
+          'Soul Badge', 'Marsh Badge', 'Volcano Badge', 'Earth Badge',
+          'Zephyr Badge', 'Hive Badge', 'Plain Badge', 'Fog Badge',
+          'Storm Badge', 'Mineral Badge', 'Glacier Badge', 'Rising Badge',
+        ];
         await saveUserData(tgId, saveData);
         res.json({ status: 'ok' });
         break;
@@ -354,25 +437,6 @@ router.post('/api', async (req: Request, res: Response) => {
         break;
       }
 
-      case 'max_iv': {
-        if (!tgId) {
-          res.status(400).json({ status: 'error', error: 'user required' });
-          return;
-        }
-        const { saveData } = await getUserData(tgId);
-        const allStats = ['hp', 'attack', 'defense', 'spAtk', 'spDef', 'speed'];
-        saveData.myTeam.forEach((m: any) => {
-          if (!m.ivs) m.ivs = {};
-          allStats.forEach(s => { m.ivs[s] = 31; });
-        });
-        saveData.pcBoxes?.forEach((box: any[]) => box.forEach((m: any) => {
-          if (!m.ivs) m.ivs = {};
-          allStats.forEach(s => { m.ivs[s] = 31; });
-        }));
-        await saveUserData(tgId, saveData);
-        res.json({ status: 'ok' });
-        break;
-      }
 
       case 'fix_levels': {
         if (!tgId) {
@@ -381,27 +445,6 @@ router.post('/api', async (req: Request, res: Response) => {
         }
         const { saveData } = await getUserData(tgId);
         saveData.myTeam.forEach((m: any) => { m.baseLevel = 50; });
-        await saveUserData(tgId, saveData);
-        res.json({ status: 'ok' });
-        break;
-      }
-
-      case 'give_legendary': {
-        if (!tgId) {
-          res.status(400).json({ status: 'error', error: 'user required' });
-          return;
-        }
-        const { saveData } = await getUserData(tgId);
-        const legends = ['mewtwo', 'lugia', 'ho-oh', 'rayquaza', 'groudon', 'kyogre', 'dialga', 'palkia', 'giratina', 'zekrom', 'reshiram'];
-        const pick = legends[Math.floor(Math.random() * legends.length)];
-        saveData.myTeam.push({
-          uid: `admin_${Date.now()}`,
-          apiData: { name: pick },
-          baseLevel: 70,
-          ivs: { hp: 31, attack: 31, defense: 31, spAtk: 31, spDef: 31, speed: 31 },
-          currentHp: 999,
-          maxHp: 999,
-        });
         await saveUserData(tgId, saveData);
         res.json({ status: 'ok' });
         break;
@@ -428,6 +471,9 @@ router.post('/api', async (req: Request, res: Response) => {
           return;
         }
         const loc = val || 'goldenrodCity';
+        const { saveData } = await getUserData(tgId);
+        saveData.currentLocationId = loc;
+        await saveUserData(tgId, saveData);
         await db.update(users).set({ location_id: loc }).where(eq(users.tg_id, tgId));
         res.json({ status: 'ok' });
         break;
@@ -443,17 +489,71 @@ router.post('/api', async (req: Request, res: Response) => {
           res.status(400).json({ status: 'error', error: 'Invalid JSON in val' });
           return;
         }
+        const species = monData.species || 'mewtwo';
+        const level = monData.level || 50;
+        const shiny = !!monData.shiny;
+        const maxIV = !!monData.maxIV;
+        const natureIdx = monData.natureIdx !== undefined && monData.natureIdx >= 0 ? monData.natureIdx : Math.floor(Math.random() * 25);
+        const trainingStage = monData.trainingStage || 0;
+        const target = monData.target || 'team';
+
+        let pokeData: any;
+        try {
+          const pokeRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${species}`);
+          if (!pokeRes.ok) { res.status(400).json({ status: 'error', error: `PokeAPI: ${species} not found` }); return; }
+          pokeData = await pokeRes.json();
+        } catch (e) {
+          res.status(502).json({ status: 'error', error: 'PokeAPI fetch failed' });
+          return;
+        }
+
+        const learnedMoves = pokeData.moves
+          .filter((m: any) => m.version_group_details.some((v: any) => v.move_learn_method.name === 'level-up' && v.level_learned_at <= level))
+          .slice(0, 4);
+        if (learnedMoves.length === 0) learnedMoves.push({ move: { name: 'tackle', url: 'https://pokeapi.co/api/v2/move/33/' } });
+        pokeData.moves = learnedMoves;
+
+        const exp = Math.pow(level, 3);
+        const expToNext = Math.pow(level + 1, 3);
+        const baseHp = pokeData.stats[0].base_stat;
+        const iv = maxIV ? 31 : Math.floor(Math.random() * 16) + 15;
+        const maxHp = Math.floor(0.01 * (2 * baseHp + iv) * level) + level + 10;
+
+        const newMon: any = {
+          uid: `admin_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          originalTrainer: tgId.toString(),
+          createdAt: Date.now(),
+          caughtLocation: 'admin',
+          apiData: pokeData,
+          maxHp,
+          currentHp: maxHp,
+          ivs: maxIV
+            ? { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 }
+            : { hp: iv, atk: iv, def: iv, spa: iv, spd: iv, spe: iv },
+          evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+          baseLevel: level,
+          exp, expToNext,
+          candiesEaten: 0, vitaminsEaten: 0,
+          training: null, trainingStage, trainingStat: null,
+          happiness: 70, natureIdx,
+          breedLetter: 'A', gender: Math.random() < 0.5 ? 'male' : 'female',
+          status: null, sleepTurns: 0, movesPP: [],
+          statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+          abilityName: pokeData.abilities?.[0]?.ability?.name || null,
+          heldItem: null,
+          berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
+          learnableMoves: [], isShiny: shiny,
+        };
+
         const { saveData } = await getUserData(tgId);
-        saveData.myTeam.push({
-          uid: `admin_spawn_${Date.now()}`,
-          apiData: { name: monData.species || 'mewtwo' },
-          baseLevel: monData.level || 50,
-          ivs: monData.maxIV
-            ? { hp: 31, attack: 31, defense: 31, spAtk: 31, spDef: 31, speed: 31 }
-            : { hp: 15, attack: 15, defense: 15, spAtk: 15, spDef: 15, speed: 15 },
-          currentHp: 999,
-          maxHp: 999,
-        });
+        if (target === 'pc') {
+          if (!saveData.pcBoxes) saveData.pcBoxes = [[]];
+          if (saveData.pcBoxes.length === 0) saveData.pcBoxes = [[]];
+          saveData.pcBoxes[0].push(newMon);
+        } else {
+          if (!saveData.myTeam) saveData.myTeam = [];
+          saveData.myTeam.push(newMon);
+        }
         await saveUserData(tgId, saveData);
         res.json({ status: 'ok' });
         break;
@@ -488,6 +588,52 @@ router.post('/api', async (req: Request, res: Response) => {
         }
 
         res.json({ status: 'ok', enabled: !!enabled });
+        break;
+      }
+
+      // ── get_save (редактор тренера) ──
+      case 'get_save': {
+        if (!tgId) {
+          res.status(400).json({ status: 'error', error: 'user required' });
+          return;
+        }
+        const row = (await db.select().from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
+        if (!row) { res.status(404).json({ status: 'error', error: 'User not found' }); return; }
+        let saveData: any = {};
+        try { saveData = JSON.parse(row.save_data || '{}'); } catch {}
+        res.json({
+          status: 'ok',
+          saveData,
+          meta: {
+            nickname: row.nickname,
+            money: row.money,
+            badges_count: row.badges_count,
+            pokemon_count: row.pokemon_count,
+            registered: row.registered,
+          },
+        });
+        break;
+      }
+
+      // ── edit_trainer (редактор тренера) ──
+      case 'edit_trainer': {
+        if (!tgId || !val) {
+          res.status(400).json({ status: 'error', error: 'user and val required' });
+          return;
+        }
+        let editorData: any;
+        try { editorData = JSON.parse(val); } catch {
+          res.status(400).json({ status: 'error', error: 'Invalid JSON in val' });
+          return;
+        }
+        await saveUserData(tgId, editorData);
+        const nicknameUpdate = editorData.trainerNickname || '';
+        const locationUpdate = editorData.currentLocationId || 'goldenrodCity';
+        await db.update(users).set({
+          nickname: nicknameUpdate,
+          location_id: locationUpdate,
+        }).where(eq(users.tg_id, tgId));
+        res.json({ status: 'ok' });
         break;
       }
 

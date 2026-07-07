@@ -90,6 +90,7 @@ function renderNPCQuests(npc: any) {
         document.getElementById('npc-dialog')!.innerText = npc.dialog.quest_incomplete;
         renderNPCQuests(npc);  // Перерисовываем
         store.emit('save');
+        store.emit('tutorial:progress', 'take', 0);
       };
     } else if (isReady) {
       // ── Квест выполнен — кнопка "Сдать" ──
@@ -110,6 +111,7 @@ function renderNPCQuests(npc: any) {
               `Шаг ${step} завершён! Награда: ${q.rewardMoney}💰 + ${q.rewardQty}x ${itemDef(q.rewardItem).nameRu}`
             );
             appendToLog(`Обучающий квест (шаг ${step}) выполнен!`, false, 'quest');
+            store.emit('tutorial:progress', 'complete', step);
           }
         } else {
           // ── Обычный квест ──
@@ -263,8 +265,8 @@ export function openNPCDialog(npcId: string) {
 //   itemId — ID предмета (для квестов на сбор)
 // Проверяет, соответствует ли действие текущему шагу туториала
 export function checkTutorialProgress(type: string, amount: number, itemId?: string) {
-  // Туториал имеет шаги 1-5
-  if (state.tutorialStep < 1 || state.tutorialStep > 5) return;
+  // Туториал имеет шаги 1-6
+  if (state.tutorialStep < 1 || state.tutorialStep > 6) return;
   const questId = `tutorial_${state.tutorialStep}`;  // ID квеста: tutorial_1, tutorial_2, ...
 
   // Если квест уже выполнен — выходим
@@ -288,6 +290,69 @@ export function checkTutorialProgress(type: string, amount: number, itemId?: str
   }
 
   store.emit('save');
+}
+
+// ── getTutorialQuestInfo: получить данные активного квеста туториала ──
+// Возвращает { quest, config, step, progress, targetQty, isActive, isReady, pct }
+// или null если туториал завершён
+export function getTutorialQuestInfo() {
+  if (state.tutorialStep < 1 || state.tutorialStep > 6) return null;
+  const step = state.tutorialStep;
+  const questId = `tutorial_${step}`;
+  const npc = NPC_DATA['professor_tutorial'];
+  if (!npc) return null;
+  const quest = npc.quests.find((q: any) => q.id === questId);
+  if (!quest) return null;
+  const prereqMet = !quest.prereqQuest || state.completedNPCQuests.includes(quest.prereqQuest);
+  if (!prereqMet) return { step, quest, questId, progress: 0, targetQty: quest.targetQty, pct: 0, isActive: false, isReady: false, prereqMet: false };
+  const progress = state.npcQuestProgress[questId] || 0;
+  const isActive = questId in state.npcQuestProgress;
+  const isReady = progress >= quest.targetQty;
+  const pct = Math.min(100, Math.round((progress / quest.targetQty) * 100));
+  return { step, quest, questId, progress, targetQty: quest.targetQty, pct, isActive, isReady, prereqMet };
+}
+
+// ── renderTutorialBar: перерисовать туториал-бар ──
+// Вызывается из location.ts при рендере локации и из init.ts при прогрессе
+export function renderTutorialBar() {
+  const container = document.getElementById('tutorial-quest-bar');
+  if (!container) return;
+  const info = getTutorialQuestInfo();
+  if (!info) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+
+  const types: Record<string, string> = {
+    catch_x: '🔴 Поймайте', defeat_x: '⚔️ Победите',
+    use_item: '💊 Используйте', explore: '🗺️ Посетите', earn_money: '💰 Заработайте',
+    collect_drop: '💎 Выбейте',
+  };
+  const typeText = types[info.quest.type] || info.quest.type;
+  let desc = info.quest.desc;
+  if (!info.prereqMet) desc = '🔒 Выполните предыдущий квест сначала';
+  else if (!info.isActive) desc = `👨‍🔬 Поговорите с Профессором Оуком чтобы взять квест`;
+  else if (info.isReady) desc = `✅ Квест выполнен! Вернитесь к Профессору Оуку за наградой`;
+  else desc = `${typeText} ${info.progress}/${info.targetQty}`;
+
+  let emoji = '📋';
+  if (info.isReady) emoji = '✅';
+  else if (info.isActive) emoji = '⏳';
+
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;width:100%;">
+      <span>${emoji}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.7rem;font-weight:bold;display:flex;justify-content:space-between;">
+          <span>🎓 Шаг ${info.step}/5: <span id="tut-bar-desc">${desc}</span></span>
+          <span style="color:#888;">${info.isActive ? `${info.progress}/${info.targetQty}` : ''}</span>
+        </div>
+        ${info.isActive ? `
+        <div style="margin-top:3px;height:6px;background:rgba(255,255,255,0.15);border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${info.pct}%;background:${info.isReady ? '#34c759' : '#007aff'};border-radius:3px;transition:width 0.3s;"></div>
+        </div>` : ''}
+        ${info.isReady ? `<div style="font-size:0.65rem;color:#34c759;margin-top:2px;">🏆 Награда: ${info.quest.rewardMoney}💰 + ${info.quest.rewardQty}x ${itemDef(info.quest.rewardItem).nameRu}</div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 // ── checkNPCQuestProgress: обновление прогресса квестов на сбор ──

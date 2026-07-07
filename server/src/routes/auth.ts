@@ -110,7 +110,11 @@ router.post('/tg', async (req: Request, res: Response) => {
       user = (await db.select().from(users).where(eq(users.tg_id, tgUser.id)).limit(1))[0]!;
       // Обновляем last_seen
       await db.update(users)
-        .set({ last_seen: new Date().toISOString(), username: tgUser.username || user.username })
+        .set({
+          last_seen: new Date().toISOString(),
+          username: tgUser.username || user.username,
+          is_admin: config.adminIds.has(tgUser.id) ? 1 : 0,
+        })
         .where(eq(users.id, user.id));
     }
 

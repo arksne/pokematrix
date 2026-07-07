@@ -18,6 +18,24 @@
 // Используется: npcs.ts (UI), core.ts (сражения), init.ts
 // ─────────────────────────────────────────────────────────────
 export const NPC_DATA = {
+  'professor_tutorial': {
+    id: 'professor_tutorial', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'goldenrodCity_trainingGrounds',
+    dialog: {
+      greet: 'Приветствую, молодой тренер! Покематрикс ждёт тебя. Я помогу тебе освоиться.',
+      default: 'Продолжай тренироваться. У тебя большой потенциал!',
+      quest_offer: 'Отлично, ты готов! Вот задание: {target} {item}. Справишься?',
+      quest_complete: 'Превосходно! Ты делаешь успехи. Вот твоя награда!',
+      quest_incomplete: 'Возвращайся когда выполнишь задание. У тебя всё получится!',
+    },
+    quests: [
+      { id: 'tutorial_1', type: 'catch_x', targetItem: null, targetQty: 1, desc: 'Поймайте первого дикого покемона', rewardMoney: 500, rewardItem: 'pokeBall', rewardQty: 5, prereqQuest: null },
+      { id: 'tutorial_2', type: 'defeat_x', targetItem: null, targetQty: 3, desc: 'Победите 3 диких покемонов', rewardMoney: 800, rewardItem: 'potion', rewardQty: 3, prereqQuest: 'tutorial_1' },
+      { id: 'tutorial_3', type: 'use_item', targetItem: null, targetQty: 1, desc: 'Используйте предмет в бою', rewardMoney: 600, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: 'tutorial_2' },
+      { id: 'tutorial_4', type: 'explore', targetItem: null, targetQty: 2, desc: 'Посетите 2 разные локации', rewardMoney: 700, rewardItem: 'paralyzeHeal', rewardQty: 3, prereqQuest: 'tutorial_3' },
+      { id: 'tutorial_5', type: 'earn_money', targetItem: null, targetQty: 500, desc: 'Заработайте ¥500', rewardMoney: 1000, rewardItem: 'rareCandy', rewardQty: 1, prereqQuest: 'tutorial_4' },
+      { id: 'tutorial_6', type: 'collect_drop', targetItem: null, targetQty: 1, desc: 'Выбейте предмет с дикого покемона', rewardMoney: 1500, rewardItem: 'ultraBall', rewardQty: 3, prereqQuest: 'tutorial_5' },
+    ],
+  },
   'oak_lab': {
     id: 'oak_lab', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'ceruleanCity',
     dialog: {

@@ -1634,6 +1634,13 @@ function getWildLevel() {
   const loc = store.getLocation(GS.currentLocationId);
   const name = (loc?.name || '').toLowerCase();
   const id = GS.currentLocationId || '';
+
+  // ── Если локация задаёт min/max уровень — используем его ──
+  if (loc && loc.wildMinLvl !== undefined && loc.wildMaxLvl !== undefined) {
+    const range = loc.wildMaxLvl - loc.wildMinLvl + 1;
+    return Math.floor(Math.random() * range) + loc.wildMinLvl;
+  }
+
   // Johto routes early
   if (id.includes('route29') || id.includes('route30') || id.includes('route31') || id.includes('newBark') || id.includes('cherrygrove')) return Math.floor(Math.random() * 11) + 5;
   // Goldenrod
@@ -2250,6 +2257,8 @@ async function handleWildFaintRewards(isWild: boolean) {
     const rItems = getWildDropItems();
     store.giveReward(S.wildLvl * 20 + 50, rItems);          // Деньги + предметы
     checkQuestProgress('earn_money', S.wildLvl * 20 + 50);  // Квест "заработать деньги"
+    // Туториал: выбить предмет (если хоть что-то выпало)
+    if (rItems.length > 0) store.checkTutorialProgress('collect_drop', 1, rItems[0].id);
   } else {
     appendToLog(`${S.activeWild.name} побежден!`);
     if (S.battleType === 'gym') S.gymTeamIndex++;           // Следующий покемон лидера
@@ -2262,6 +2271,8 @@ async function handleWildFaintRewards(isWild: boolean) {
     const baseExp = S.activeWild.base_experience || 50;
     let expGain = Math.floor((baseExp * S.wildLvl) / 7);    // Базовая формула опыта
     if (S.activePlayerMon.heldItem === 'luckyEgg') expGain = Math.floor(expGain * 1.5); // Lucky Egg ×1.5
+    // Training Grounds: x10 EXP (новички быстро качаются)
+    if (GS.currentLocationId?.includes('trainingGrounds')) expGain *= 10;
 
     // Инициализация EXP если ещё не был установлен
     if (S.activePlayerMon.exp === undefined) {
@@ -3125,6 +3136,11 @@ async function enemyTurn() {
 
     // Type-resist berry for player (Occa, Passho, etc.)
     if (hi === 0) hitDmg = applyTypeResistBerry(S.activePlayerMon, chosenMove.type?.name, hitDmg, true);
+
+    // Training Grounds: 0.01% урона (безопасная тренировка)
+    if (GS.currentLocationId?.includes('trainingGrounds')) {
+      hitDmg = Math.max(1, Math.floor(hitDmg * 0.0001));
+    }
 
     S.activePlayerMon.currentHp -= hitDmg;
     if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
