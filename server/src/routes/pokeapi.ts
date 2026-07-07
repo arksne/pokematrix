@@ -12,71 +12,32 @@ import { pokemonCache } from '../db/schema.js';
 
 const router = Router();
 const POKEAPI_BASE = 'https://pokeapi.co/api/v2';
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 часа
 
 // Все пути /api/pokeapi/* ловятся экспрессом
 router.get('*', async (req: Request, res: Response) => {
   try {
-    // Вытаскиваем путь после /api/pokeapi/
-    // Express роут: GET /api/pokeapi/* → req.path = /api/pokeapi/pokemon/25
-    // Нам нужно: pokemon/25
-    const pokePath = req.path.replace(/^\/api\/pokeapi\//, '');
+    // Express монтирует роутер на /api/pokeapi,
+    // req.path = /pokemon/25 (уже без префикса)
+    const pokePath = req.path.replace(/^\//, '').trim();
     if (!pokePath) {
       res.status(400).json({ error: 'PokeAPI path required' });
       return;
     }
 
-    const db = getDb();
+    // ── Запрашиваем из PokeAPI напрямую (кеш опционально) ──
+    const url = `${POKEAPI_BASE}/${pokePath}`;
+    const response = await fetch(url);
 
-    // ── Проверяем кэш ──
-    const cached = (await db.select()
-      .from(pokemonCache)
-      .where(eq(pokemonCache.name, pokePath))
-      .limit(1))[0];
-
-    if (cached) {
-      const age = Date.now() - new Date(cached.fetched_at).getTime();
-      if (age < CACHE_TTL_MS) {
-        res.json(JSON.parse(cached.data));
-        return;
-      }
-    }
-
-    // ── Запрашиваем из PokeAPI ──
-    const response = await fetch(`${POKEAPI_BASE}/${pokePath}`);
     if (!response.ok) {
-      // Если PokeAPI вернул ошибку, но есть кэш — отдаём его
-      if (cached) {
-        res.json(JSON.parse(cached.data));
-        return;
-      }
       res.status(response.status).json({ error: `PokeAPI error: ${response.status}` });
       return;
     }
 
     const data = await response.json();
-    const dataStr = JSON.stringify(data);
-
-    // ── Сохраняем в кэш ──
-    if (cached) {
-      await db.update(pokemonCache).set({
-        data: dataStr,
-        fetched_at: new Date().toISOString(),
-      }).where(eq(pokemonCache.name, pokePath));
-    } else {
-      await db.insert(pokemonCache).values({
-        name: pokePath,
-        data: dataStr,
-        fetched_at: new Date().toISOString(),
-      }).catch(() => {
-        // Конкурентная вставка — игнорируем, данные те же
-      });
-    }
-
     res.json(data);
   } catch (err: any) {
     console.error('[pokeapi]', err);
-    res.status(500).json({ error: 'PokeAPI proxy error' });
+    res.status(500).json({ error: `PokeAPI proxy error: ${err.message || err}` });
   }
 });
 
