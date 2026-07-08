@@ -83,7 +83,7 @@ router.get('/trainers', async (req: Request, res: Response) => {
 
 // ── GET /profile/trainers/all ────────────────────────────────
 // Все зарегистрированные тренеры.
-router.get('/trainers/all', async (req: Request, res: Response) => {
+router.get('/trainers/all', authMiddleware, async (req: Request, res: Response) => {
   try {
     const db = getDb();
     const allUsers = await db.select({
@@ -97,7 +97,7 @@ router.get('/trainers/all', async (req: Request, res: Response) => {
       region: users.region,
       lastSeen: users.last_seen,
       registered: users.registered,
-    }).from(users).orderBy(users.last_seen);
+    }).from(users).orderBy(users.last_seen).limit(100);
 
     res.json({ users: allUsers });
   } catch (err: any) {
@@ -108,7 +108,7 @@ router.get('/trainers/all', async (req: Request, res: Response) => {
 
 // ── GET /profile/:userId ─────────────────────────────────────
 // Профиль конкретного тренера по Telegram ID.
-router.get('/:userId', async (req: Request, res: Response) => {
+router.get('/:userId', authMiddleware, async (req: Request, res: Response) => {
   try {
     const tgId = parseInt(String(req.params.userId), 10);
     if (isNaN(tgId)) {
@@ -146,6 +146,7 @@ router.get('/:userId', async (req: Request, res: Response) => {
         first_name: user.first_name || '',
         username: user.username || '',
         badges: user.badges_count,
+        money: user.money,
         team,
       },
     });

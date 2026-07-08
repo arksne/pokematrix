@@ -40,6 +40,7 @@ import { showToast, showSelectionModal } from '../utils/dom.js';         // show
 import { itemDef } from '../utils/items.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
 import { getSpriteUrl, updateBattleSpriteBgs } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
 import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
+import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
 import { checkEvolution, triggerEvolution } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
 import { natures } from '../data/natures.js';                            // Массив характеров (nature) с buff/nerf модификаторами
 import { ITEMS } from '../data/items.js';                                // Массив всех предметов игры (ItemDef[])
@@ -163,7 +164,7 @@ function saveBattleState() {
     state.wildMovesDetailed = s.wildMovesDetailed; // Детальные данные атак дикого
     state.wildIsShiny = s.activeWild.isShiny;    // Шайни флаг (для корректного спрайта при restore)
   }
-  if ((s.battleType === 'gym' || s.battleType === 'elite' || s.battleType === 'GS.champion') && s.gymTeamData) {
+  if ((s.battleType === 'gym' || s.battleType === 'elite' || s.battleType === 'champion') && s.gymTeamData) {
     state.gymLeaderKey = s.gymLeaderKey;           // ID лидера зала (из gyms.ts)
     state.gymTeamIndex = s.gymTeamIndex;           // Какой по счёту гимец
     state.gymTeamIndexInMember = s.gymTeamIndexInMember; // Индекс внутри Элитного члена
@@ -3616,7 +3617,7 @@ function initEncounterEvents() {
         enemyTurn();
       }, 1500);
     } else if (['ether', 'elixir', 'maxElixir'].includes(item)) {
-      const elixirMap = { 'ether': 10, 'elixir': 10, 'maxElixir': 40 };
+      const elixirMap = { 'ether': 10, 'elixir': 20, 'maxElixir': 40 };
       const ppRestore = elixirMap[item];
       if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
       if (!S.activePlayerMon.movesPP || S.activePlayerMon.movesPP.every(pp => pp && pp.current >= pp.max)) {
@@ -3626,12 +3627,31 @@ function initEncounterEvents() {
       GS.itemsUsedInBattle++;
       checkQuestProgress('use_item');
       store.updateInventoryDisplay();
-      for (let i = 0; i < 4; i++) {
-        if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[i]) {
-          S.activePlayerMon.movesPP[i].current = Math.min(
-            S.activePlayerMon.movesPP[i].max,
-            S.activePlayerMon.movesPP[i].current + ppRestore
+      if (item === 'ether') {
+        // Ether: восстанавливаем PP атаки с самым низким текущим PP
+        let lowestIdx = -1, lowestVal = 999;
+        for (let i = 0; i < 4; i++) {
+          const pp = S.activePlayerMon.movesPP?.[i];
+          if (pp && pp.current < pp.max && pp.current < lowestVal) {
+            lowestVal = pp.current;
+            lowestIdx = i;
+          }
+        }
+        if (lowestIdx >= 0 && S.activePlayerMon.movesPP) {
+          S.activePlayerMon.movesPP[lowestIdx].current = Math.min(
+            S.activePlayerMon.movesPP[lowestIdx].max,
+            S.activePlayerMon.movesPP[lowestIdx].current + ppRestore
           );
+        }
+      } else {
+        // Elixir/Max Elixir: восстанавливаем PP всех атак
+        for (let i = 0; i < 4; i++) {
+          if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[i]) {
+            S.activePlayerMon.movesPP[i].current = Math.min(
+              S.activePlayerMon.movesPP[i].max,
+              S.activePlayerMon.movesPP[i].current + ppRestore
+            );
+          }
         }
       }
       updateMoveButtonUIs();
@@ -3900,17 +3920,45 @@ async function startGymBattle(locId) {
  */
 async function startGymNextPokemon() {
   if (S.gymTeamIndex >= S.gymTeamData.length) {
-    // ── ПОБЕДА НАД ВСЕЙ КОМАНДОЙ ЛИДЕРА ──
+    // ── ПОБЕДА НАД ВСЕЙ КОМАНДОЙ ЛИДЕРА — server-authoritative ──
     const leader = GS.gymLeaders[S.gymLeaderKey];
-    GS.gymBadges.push(leader.badgeName);                                 // Добавляем бейдж
-    store.giveReward(leader.moneyReward, []);                             // Денежная награда
-    checkQuestProgress('earn_money', leader.moneyReward);                 // Прогресс квеста
-    appendToLog(`Победа! Вы получили ${leader.badgeName} и ¥${leader.moneyReward}!`);
+
+    // Запрашиваем награду у сервера
+    try {
+      const resp = await apiFetch('/economy/badge-reward', {
+        method: 'POST',
+        body: JSON.stringify({ locId: S.gymLeaderKey }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        state.badges.push(data.badgeName);                               // Добавляем бадж (из ответа сервера)
+        store.giveReward(data.moneyReward, []);                          // Деньги (из ответа сервера)
+        checkQuestProgress('earn_money', data.moneyReward);
+        appendToLog(`Победа! Вы получили ${data.badgeName} и ¥${data.moneyReward}!`);
+        store.updateMoneyDisplay();
+        updateBadgeDisplay();
+      } else if (resp.status === 409) {
+        // Бадж уже есть — это нормально (перезапрос), всё равно показываем победу
+        appendToLog(`Победа! (бадж ${leader.badgeName} уже получен)`);
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        appendToLog(`Ошибка сервера: ${err.error || 'неизвестная'}`);
+      }
+    } catch (e) {
+      console.error('[gym] badge-reward error:', e);
+      appendToLog('Ошибка связи с сервером, награда выдана локально');
+      // Fallback: выдаём локально если сервер недоступен
+      state.badges.push(leader.badgeName);
+      store.giveReward(leader.moneyReward, []);
+      checkQuestProgress('earn_money', leader.moneyReward);
+      store.updateMoneyDisplay();
+      updateBadgeDisplay();
+    }
+
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
-    store.updateMoneyDisplay();
-    updateBadgeDisplay();
-    setTimeout(() => store.showGymRewardSelection(S.gymLeaderKey), 300);  // Выбор предмета-награды
+    setTimeout(() => store.showGymRewardSelection(S.gymLeaderKey), 300);
     return;
   }
 

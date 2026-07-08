@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { validateSaveData } from '../validation/save-data.js';
 
 const router = Router();
 
@@ -66,6 +67,17 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    // ── Валидация структуры save_data ──
+    const validation = validateSaveData(body.saveData);
+    if (!validation.success) {
+      console.warn(`[save] Validation rejected for user ${req.user!.userId}:`, validation.errors);
+      res.status(422).json({
+        error: 'Save data validation failed',
+        details: validation.errors,
+      });
+      return;
+    }
+
     const db = getDb();
     const userId = req.user!.userId;
 
@@ -88,6 +100,16 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       res.status(409).json({
         error: 'Save conflict: server has newer data',
         serverVersion,
+      });
+      return;
+    }
+
+    // Дополнительная проверка: если badges_count не совпадает с длиной badges — отклоняем
+    const validatedBadges = validation.data.badges ?? [];
+    if (body.badgesCount !== undefined && body.badgesCount !== validatedBadges.length) {
+      res.status(422).json({
+        error: 'Badge count mismatch',
+        details: `Client reports ${body.badgesCount} badges but save_data has ${validatedBadges.length}`,
       });
       return;
     }

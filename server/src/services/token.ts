@@ -8,12 +8,14 @@ import { config } from '../config.js';
 /**
  * Сгенерировать access token (JWT) — короткоживущий.
  */
-export function generateAccessToken(user: { userId: number; tgId: number; isAdmin: boolean }): string {
+export function generateAccessToken(user: { userId: number; tgId: number; isAdmin: boolean; username?: string; firstName?: string }): string {
   return jwt.sign(
     {
       userId: user.userId,
       tgId: user.tgId,
       isAdmin: user.isAdmin,
+      username: user.username || '',
+      firstName: user.firstName || '',
     },
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn as any }

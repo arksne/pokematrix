@@ -43,7 +43,7 @@ const ITEMS: ItemDef[] = [
   { id: 'lumBerry', price: 300 }, { id: 'chestoBerry', price: 100 },
   { id: 'rawstBerry', price: 100 }, { id: 'oldRod', price: 500 },
   { id: 'goodRod', price: 2000 }, { id: 'superRod', price: 10000 },
-  { id: 'craftingKit', price: 3000 }, { id: 'ether', price: 600 },
+  { id: 'craftersKit', price: 3000 }, { id: 'ether', price: 600 },
   { id: 'elixir', price: 1200 }, { id: 'ppUp', price: 6400 },
   { id: 'expShare', price: 0 }, { id: 'luckyEgg', price: 0 },
 ];
@@ -295,6 +295,94 @@ router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
     console.error('[economy/reward]', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Данные лидеров залов для server-authoritative наград ──
+const GYM_LEADERS: Record<string, { badgeName: string; moneyReward: number; rewardItem?: string; rewardQty?: number }> = {
+  pewterStadium: { badgeName: 'Boulder Badge', moneyReward: 4000, rewardItem: 'fullRestore', rewardQty: 1 },
+  ceruleanStadium: { badgeName: 'Cascade Badge', moneyReward: 5000, rewardItem: 'superPotion', rewardQty: 1 },
+  vermilionStadium: { badgeName: 'Thunder Badge', moneyReward: 6000, rewardItem: 'elixir', rewardQty: 1 },
+  celadonStadium: { badgeName: 'Rainbow Badge', moneyReward: 7000, rewardItem: 'hyperPotion', rewardQty: 1 },
+  saffronPsychicStadium: { badgeName: 'Soul Badge', moneyReward: 9000, rewardItem: 'maxPotion', rewardQty: 1 },
+  fuchsiaStadium: { badgeName: 'Marsh Badge', moneyReward: 8000, rewardItem: 'fullHeal', rewardQty: 1 },
+  cinnabarStadium: { badgeName: 'Volcano Badge', moneyReward: 10000, rewardItem: 'fullRestore', rewardQty: 1 },
+  viridianStadium: { badgeName: 'Earth Badge', moneyReward: 11000, rewardItem: 'fullRestore', rewardQty: 1 },
+  violetStadium: { badgeName: 'Zephyr Badge', moneyReward: 12000, rewardItem: 'superPotion', rewardQty: 1 },
+  azaleaStadium: { badgeName: 'Hive Badge', moneyReward: 13000, rewardItem: 'elixir', rewardQty: 1 },
+  goldenrodStadium: { badgeName: 'Plain Badge', moneyReward: 14000, rewardItem: 'hyperPotion', rewardQty: 1 },
+  ecruteakStadium: { badgeName: 'Fog Badge', moneyReward: 15000, rewardItem: 'fullHeal', rewardQty: 1 },
+  cianwoodStadium: { badgeName: 'Storm Badge', moneyReward: 16000, rewardItem: 'maxPotion', rewardQty: 1 },
+  olivineStadium: { badgeName: 'Mineral Badge', moneyReward: 17000, rewardItem: 'fullRestore', rewardQty: 1 },
+  mahoganyStadium: { badgeName: 'Glacier Badge', moneyReward: 18000, rewardItem: 'fullRestore', rewardQty: 1 },
+  blackthornStadium: { badgeName: 'Rising Badge', moneyReward: 20000, rewardItem: 'fullRestore', rewardQty: 1 },
+};
+
+/**
+ * POST /economy/badge-reward — server-authoritative награда за победу над лидером зала.
+ *
+ * Тело запроса: { locId: string }
+ * Сервер проверяет:
+ *   1. locId — известный лидер зала
+ *   2. Игрок ещё не получал этот бадж
+ *   3. Выдаёт бадж + деньги + предмет в БД
+ */
+router.post('/badge-reward', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { locId } = req.body;
+    if (!locId || !GYM_LEADERS[locId]) {
+      res.status(400).json({ error: 'Invalid gym location' });
+      return;
+    }
+
+    const leader = GYM_LEADERS[locId];
+    const userId = req.user!.userId;
+    const db = getDb();
+
+    const result = await db.transaction(async (tx) => {
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      if (!user) throw new Error('User not found');
+
+      let saveData: any = {};
+      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      if (!saveData.inventory) saveData.inventory = {};
+      if (!saveData.badges) saveData.badges = [];
+
+      // ── Проверка: бадж уже есть? ──
+      if (saveData.badges.includes(leader.badgeName)) {
+        throw new Error(`Badge already awarded: ${leader.badgeName}`);
+      }
+
+      // ── Выдаём награду ──
+      saveData.badges.push(leader.badgeName);
+      saveData.inventory['credit'] = (saveData.inventory['credit'] || 0) + leader.moneyReward;
+
+      if (leader.rewardItem) {
+        saveData.inventory[leader.rewardItem] = (saveData.inventory[leader.rewardItem] || 0) + (leader.rewardQty || 1);
+      }
+
+      await tx.update(users).set({
+        save_data: JSON.stringify(saveData),
+        money: saveData.inventory['credit'],
+        badges_count: saveData.badges.length,
+      }).where(eq(users.id, userId));
+
+      return {
+        badgeName: leader.badgeName,
+        moneyReward: leader.moneyReward,
+        rewardItem: leader.rewardItem,
+        rewardQty: leader.rewardQty,
+      };
+    });
+
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    if (err.message?.startsWith('Badge already awarded')) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    console.error('[economy/badge-reward]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -133,6 +133,7 @@ export function lsKey(name: string): string { return _lsKey(name, state.tgUser);
 
 // ── Инвентарь: утилиты ─────────────────────────────────────
 import { ITEMS } from '../data/items.js';
+import { store } from './store.js';
 
 // Получить количество предмета в инвентаре
 export function getItemQty(itemId: string): number {
@@ -147,11 +148,12 @@ export function hasItem(itemId: string): boolean {
 // Изменить количество предмета (положить/убрать)
 // delta: +1 = добавить, -1 = убрать
 // credit (деньги) нельзя менять через эту функцию
-// Максимум 9999 единиц
+// Использует per-category лимиты из store.ts
 export function toggleBagItem(itemId: string, delta: number): void {
   if (itemId === 'credit') return; // credit управляется отдельно
   const qty = getItemQty(itemId) + delta;
   if (qty <= 0) { delete state.inventory[itemId]; return; }
-  if (qty > 9999) { state.inventory[itemId] = 9999; return; }
+  const maxStack = store.getMaxStack(itemId);
+  if (qty > maxStack) { state.inventory[itemId] = maxStack; return; }
   state.inventory[itemId] = qty;
 }

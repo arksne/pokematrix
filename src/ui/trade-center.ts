@@ -104,7 +104,7 @@ export function renderTradePlayerList() {
       }
       state.lastSocketAction = now;
       // Отправляем запрос на обмен через Socket.IO
-      state.socket.emit('trade_request', p.id);
+      state.socket.emit('trade_request', p.userId);
       // Визуальная обратная связь: галочка на 5 секунд
       tradeBtn.textContent = '✓';
       tradeBtn.disabled = true;
@@ -132,7 +132,7 @@ export function renderTradePlayerList() {
         showToast('Нужен хотя бы один живой покемон!', true);
         return;
       }
-      state.socket.emit('pvp_challenge', p.id);  // Отправляем PvP-вызов
+      state.socket.emit('pvp_challenge', p.userId);  // Отправляем PvP-вызов (по userId)
       battleBtn.textContent = '✓';
       battleBtn.disabled = true;
       battleBtn.style.opacity = '0.5';

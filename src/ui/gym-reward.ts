@@ -139,12 +139,16 @@ export function showGymRewardSelection(locId) {
     const mon = await createAndGivePokemon(chosenName, 1, { isShiny: true });
     if (mon) {
       // Добавляем награду лидера (предмет + 10 супердаркболов)
-      addItem(leader.rewardItem, leader.rewardQty || 1);
-      addItem('superDarkBall', 10);
-      showToast(
-        `Получен Lv.1 ${chosenName} (шини!) + ${itemDef(leader.rewardItem).nameRu} + Супердаркбол×10!`,
-        false
-      );
+      const gotReward = addItem(leader.rewardItem, leader.rewardQty || 1);
+      const gotBalls = addItem('superDarkBall', 10);
+      if (!gotReward && !gotBalls) {
+        showToast('Рюкзак полон! Награда потеряна.', true);
+      } else {
+        showToast(
+          `Получен Lv.1 ${chosenName} (шини!)${gotReward ? ' + ' + itemDef(leader.rewardItem).nameRu : ''}${gotBalls ? ' + Супердаркбол×10' : ''}!`,
+          !gotReward || !gotBalls
+        );
+      }
     }
     autoSave();
     if (typeof renderTeamGrid === 'function') renderTeamGrid();

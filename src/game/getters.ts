@@ -26,6 +26,7 @@
  */
 
 import { state } from './state.js';
+import { store } from './store.js';
 import { POKEDEX_ALL, pokedexData, pokedexTotal } from '../battle/core.js';
 import { SHOP_STOCK } from '../data/shops.js';
 import { ITEMS } from '../data/items.js';
@@ -53,9 +54,12 @@ export function getShopState() {
 }
 
 // ── Деньги ─────────────────────────────────────────────────
-// Прямая мутация state (без событий стора)
+// Прямая мутация state + события
 export function modifyMoney(delta) {
-  state.inventory['credit'] = (state.inventory['credit'] || 0) + delta;
+  const cur = state.inventory['credit'] || 0;
+  state.inventory['credit'] = Math.max(0, cur + delta);
+  store.emit('money:changed');
+  store.emit('inventory:changed', 'credit', delta);
 }
 
 // ── Команда ────────────────────────────────────────────────
@@ -132,6 +136,7 @@ export function setGameState(patch: any) {
       case 'tutorialStep': state.tutorialStep = v; break;
       case 'trainerNickname': state.trainerNickname = v; break;
       case 'lastLocation': state.lastLocation = v; break;
+      case 'expShareActive': state.expShareActive = v; break;
     }
   }
 }

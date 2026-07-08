@@ -63,6 +63,7 @@ import('./src/game/init.js').then((m) => {
   // Каждая команда делает toast с результатом.
   const init = m as any;
 
+  if (init.state?.isAdmin) {
   window.help = () => {
     init.showToast('Доступные команды: money(N), items, allBadges, heal, lvlup(N), legendary', false);
   };
@@ -143,4 +144,5 @@ import('./src/game/init.js').then((m) => {
       init.showToast('✨ Mew получен!', false);
     } catch { init.showToast('Ошибка получения Mew', true); }
   };
+  }
 });

@@ -177,8 +177,11 @@ export function collectDaycareEgg() {
     const minsLeft = Math.ceil((state.daycareEgg.readyTime - Date.now()) / 60000);
     return showToast(`Яйцо ещё не готово! Осталось ~${minsLeft} мин.`, true);
   }
+  if (!addItem('suspiciousEgg')) {
+    showToast('Рюкзак полон! Освободите место и попробуйте снова.', true);
+    return;
+  }
   state.daycareEgg = null;  // Сбрасываем (яйцо забрано)
-  addItem('suspiciousEgg');  // Добавляем предмет "Подозрительное яйцо" в инвентарь
   showToast('Вы получили яйцо! Оно добавлено в инвентарь.', false);
   store.emit('save');
 }

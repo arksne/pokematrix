@@ -12,6 +12,8 @@ export interface AuthUser {
   userId: number;
   tgId: number;
   isAdmin: boolean;
+  username: string;
+  firstName: string;
 }
 
 declare global {
@@ -41,6 +43,8 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
       userId: payload.userId,
       tgId: payload.tgId,
       isAdmin: payload.isAdmin,
+      username: payload.username || '',
+      firstName: payload.firstName || '',
     };
     next();
   } catch (err) {

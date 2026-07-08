@@ -8,6 +8,13 @@
       "when": 1783437490569,
       "tag": "0000_happy_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786038490569,
+      "tag": "0001_naughty_warstar",
+      "breakpoints": true
     }
   ]
 }

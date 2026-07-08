@@ -38,6 +38,7 @@ import { autoSave } from '../game/save.js';
 // showToast — всплывающее уведомление (true=красное/ошибка, false=зелёное/успех)
 // escHtml — экранирует HTML-спецсимволы (защита от XSS-атак)
 import { showToast, escHtml } from '../utils/dom.js';
+import { apiFetch } from '../game/apiClient.js';
 
 // ── ЛОКАЛЬНОЕ СОСТОЯНИЕ ─────────────────────────────────
 // Все данные тренеров для текущей вкладки (загружаются с сервера)
@@ -59,7 +60,7 @@ export async function loadAllTrainers() {
 
   try {
     // Запрашиваем список тренеров с сервера
-    const res = await fetch('/api/profile/trainers/all');
+    const res = await apiFetch('/api/profile/trainers/all');
     const data = await res.json();
     trainersAllData = data.users || [];  // Сохраняем в локальное состояние
 

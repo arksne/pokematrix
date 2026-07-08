@@ -128,8 +128,8 @@ import { API_BASE } from './config.js';
       document.getElementById('btn-achievements')?.addEventListener('click', () => openAchievements());
       document.getElementById('btn-tutorial')?.addEventListener('click', () => startOnboarding());
       document.getElementById('btn-pvp')?.addEventListener('click', async () => {
-        const m = await import('../battle/pvp.js');
-        m.showPvpPanel();
+        const { showPvpPanel } = await import('../battle/pvp-core.js');
+        showPvpPanel();
       });
     }
 
@@ -382,3 +382,11 @@ window.addEventListener('pagehide', () => {
     }).catch(function() {});
   }
 });
+
+export { state } from './state.js';
+export { store } from './store.js';
+export { showToast } from '../utils/dom.js';
+export { renderTeamGrid } from '../ui/profile.js';
+export { updateInventoryDisplay } from '../ui/inventory.js';
+export { updateBadgeDisplay } from '../ui/location.js';
+export { getTrainerId } from './state.js';

@@ -55,3 +55,12 @@ export const pokemonCache = pgTable('pokemon_cache', {
   data: text('data').notNull(),
   fetched_at: text('fetched_at').notNull(),
 });
+
+export const battleRatings = pgTable('battle_ratings', {
+  id: serial('id').primaryKey(),
+  user_id: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  rating: integer('rating').default(1000),
+  wins: integer('wins').default(0),
+  losses: integer('losses').default(0),
+  updated_at: text('updated_at'),
+});

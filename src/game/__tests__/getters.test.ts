@@ -259,9 +259,9 @@ describe('modifyMoney', () => {
     expect(mockState.inventory['credit']).toBe(700);
   });
 
-  it('allows negative balance', () => {
+  it('clamps to 0', () => {
     modifyMoney(-2000);
-    expect(mockState.inventory['credit']).toBe(-1000);
+    expect(mockState.inventory["credit"]).toBe(0);
   });
 });
 

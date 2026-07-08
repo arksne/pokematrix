@@ -130,8 +130,8 @@ export function initInventoryEvents() {
   // QA = Quick Access — быстрый доступ к часто используемым предметам
   const qaMap = {
     'qa-potion': 'potion',           // Аптечка (+20 HP)
-    'qa-candy': 'candy',             // Конфета (уровень)
-    'qa-vitamin': 'vitamin',         // Витамин (+EV)
+    'qa-candy': 'rareCandy',             // Конфета (уровень)
+    'qa-vitamin': 'hpUp',         // Витамин (+EV)
     'qa-train': 'train',             // Тренировка (усиление стата)
     'qa-weaken': 'weaken',           // Ослабление (сброс тренировки)
     'qa-super-potion': 'superPotion', // Супер Аптечка (+50 HP)
@@ -376,8 +376,8 @@ export function updateQADisplays() {
   // Карта: ID элемента метки → ID предмета
   const map = {
     'qa-qty-potion': 'potion',
-    'qa-qty-candy': 'candy',
-    'qa-qty-vitamin': 'vitamin',
+    'qa-qty-candy': 'rareCandy',
+    'qa-qty-vitamin': 'hpUp',
     'qa-qty-train': 'train',
     'qa-qty-weaken': 'weaken',
     'qa-qty-super-potion': 'superPotion',
@@ -901,15 +901,38 @@ export async function useItem(itemId) {
     }
 
     // ── Восстановление PP (Ether, Elixir, Max Elixir) ──
-    case 'ether': case 'elixir': case 'maxElixir': {
-      // Количество восстанавливаемых PP:
-      //   Ether = 10, Elixir = 20, Max Elixir = 40
-      const ppRestore = itemId === 'ether' ? 10 : itemId === 'elixir' ? 20 : 40;
-      // Проверяем: есть ли атаки с неполными PP
+    case 'ether': {
+      // Ether: восстанавливает 10 PP ОДНОЙ атаки по выбору
       if (!mon.movesPP || mon.movesPP.every(pp => !pp || pp.current >= pp.max)) {
         return showToast('Все PP уже максимальны!', true);
       }
-      // Восстанавливаем PP каждой атаки (не превышая максимум)
+      const movesWithPP = mon.movesPP.map((pp, i) => {
+        const moveName = mon.apiData?.moves?.[i]?.move?.name || `Атака ${i+1}`;
+        return { ...pp, moveName, index: i };
+      }).filter(m => m && m.max > 0);
+      if (movesWithPP.length === 0) return showToast('Нет атак для восстановления!', true);
+      showSelectionModal('Восстановить PP: Ether (10)', movesWithPP.map(m => ({
+        label: m.moveName,
+        subtitle: `PP: ${m.current}/${m.max}`
+      })), (choiceIdx) => {
+        const picked = movesWithPP[choiceIdx];
+        if (!picked) return;
+        const oldMax = picked.max;
+        const restored = Math.min(10, oldMax - picked.current);
+        if (restored <= 0) { showToast('PP этой атаки уже полные!', true); return; }
+        removeItem('ether');
+        mon.movesPP[picked.index].current = Math.min(oldMax, mon.movesPP[picked.index].current + 10);
+        if (getTeamState().currentPokemonIndex !== null) refreshProfileUI();
+        showToast(`PP атаки ${picked.moveName} +${restored} (${mon.movesPP[picked.index].current}/${oldMax})`, false);
+      }, true);
+      break;
+    }
+    case 'elixir': case 'maxElixir': {
+      // Elixir/Max Elixir: восстанавливают PP всех атак
+      const ppRestore = itemId === 'elixir' ? 20 : 40;
+      if (!mon.movesPP || mon.movesPP.every(pp => !pp || pp.current >= pp.max)) {
+        return showToast('Все PP уже максимальны!', true);
+      }
       mon.movesPP.forEach(pp => {
         if (pp) pp.current = Math.min(pp.max, pp.current + ppRestore);
       });
@@ -943,7 +966,11 @@ export async function useItem(itemId) {
           'Заменить предмет?',
           `Покемон уже держит ${heldName}. Заменить на Счастливое яйцо?`,
           () => {
-            addItem(mon.heldItem);   // Возвращаем старый предмет в инвентарь
+            // Возвращаем старый предмет в инвентарь; если рюкзак полон — отмена
+            if (!addItem(mon.heldItem)) {
+              showToast('Рюкзак полон! Старый предмет потерян.', true);
+              return;
+            }
             removeItem('luckyEgg');
             mon.heldItem = 'luckyEgg';
             refreshProfileUI();
@@ -1015,10 +1042,11 @@ export async function useItem(itemId) {
     }
 
     // ── EV-витамины: +10 к конкретному стату ──
-    case 'protein': case 'iron': case 'calcium': case 'zinc': case 'carbos': {
+    case 'protein': case 'iron': case 'calcium': case 'zinc': case 'carbos': case 'hpUp': {
       // Определяем, какой стат усиливает витамин:
-      //   Protein → Atk, Iron → Def, Calcium → SpA, Zinc → SpD, Carbos → Spe
-      const evKey = itemId === 'protein' ? 'atk'
+      //   hpUp → HP, Protein → Atk, Iron → Def, Calcium → SpA, Zinc → SpD, Carbos → Spe
+      const evKey = itemId === 'hpUp' ? 'hp'
+        : itemId === 'protein' ? 'atk'
         : itemId === 'iron' ? 'def'
         : itemId === 'calcium' ? 'spa'
         : itemId === 'zinc' ? 'spd'
@@ -1054,7 +1082,11 @@ export async function useItem(itemId) {
             'Заменить предмет?',
             `Покемон держит ${heldName}. Заменить на ${item.nameRu}?`,
             () => {
-              addItem(mon.heldItem);   // Возвращаем старый предмет
+              // Возвращаем старый предмет в инвентарь; если рюкзак полон — отмена
+              if (!addItem(mon.heldItem)) {
+                showToast('Рюкзак полон! Старый предмет потерян.', true);
+                return;
+              }
               removeItem(itemId);
               mon.heldItem = itemId;
               refreshProfileUI();
@@ -1068,7 +1100,6 @@ export async function useItem(itemId) {
           mon.heldItem = itemId;
           refreshProfileUI();
           showToast(`${mon.nickname || mon.apiData.name} теперь держит ${item.nameRu}!`, false);
-          autoSave();
         }
         break;
       }
@@ -1133,8 +1164,11 @@ export function openHeldItemPicker(monIndex) {
       // ── Если выбран "Снять предмет" ──
       if (mon.heldItem && selIdx === 0) {
         const itemId = mon.heldItem;
-        addItem(itemId);                    // Возвращаем предмет в инвентарь
-        mon.heldItem = null;                 // Снимаем
+        if (!addItem(itemId)) {
+          showToast('Рюкзак полон! Нельзя снять предмет.', true);
+          return;
+        }
+        mon.heldItem = null;
         // Сбрасываем счётчик ягод (если это была ягода)
         if (mon.berries && mon.berries[itemId] !== undefined) mon.berries[itemId] = 0;
         refreshProfileUI();                  // Обновляем профиль
@@ -1147,14 +1181,16 @@ export function openHeldItemPicker(monIndex) {
       // Если был held item — selIdx сдвинут на 1 (из-за unshift)
       const chosen = mon.heldItem ? choices[selIdx - 1] : choices[selIdx];
       if (chosen) {
-        removeItem(chosen.id);  // Убираем предмет из инвентаря
-
-        // Возвращаем старый held item (если был)
+        // Сначала возвращаем старый held item (если был)
         if (mon.heldItem) {
-          addItem(mon.heldItem);
+          if (!addItem(mon.heldItem)) {
+            showToast('Рюкзак полон! Нельзя заменить предмет.', true);
+            return;
+          }
           if (mon.berries && mon.berries[mon.heldItem] !== undefined) mon.berries[mon.heldItem] = 0;
         }
 
+        removeItem(chosen.id);  // Убираем предмет из инвентаря
         mon.heldItem = chosen.id;  // Надеваем новый предмет
 
         // Если это ягода — инициализируем счётчик

@@ -105,7 +105,8 @@ function renderNPCQuests(npc: any) {
             delete state.npcQuestProgress[q.id];       // Очищаем прогресс
             // Награда: деньги + предмет
             state.inventory['credit'] = (state.inventory['credit'] || 0) + q.rewardMoney;
-            addItem(q.rewardItem, q.rewardQty);
+            const rewardAdded = addItem(q.rewardItem, q.rewardQty);
+            if (!rewardAdded) showToast('Рюкзак полон! Часть награды потеряна.', true);
             addNotification(
               '🎓 Обучение',
               `Шаг ${step} завершён! Награда: ${q.rewardMoney}💰 + ${q.rewardQty}x ${itemDef(q.rewardItem).nameRu}`
@@ -121,7 +122,8 @@ function renderNPCQuests(npc: any) {
           delete state.npcQuestProgress[q.id];   // Очищаем прогресс
           // Награда: деньги + предмет
           state.inventory['credit'] = (state.inventory['credit'] || 0) + q.rewardMoney;
-          addItem(q.rewardItem, q.rewardQty);
+          const rewardAdded2 = addItem(q.rewardItem, q.rewardQty);
+          if (!rewardAdded2) showToast('Рюкзак полон! Часть награды потеряна.', true);
           appendToLog(`Квест "${q.desc}" выполнен!`, false, 'quest');
         }
         // Общий UI для обоих типов

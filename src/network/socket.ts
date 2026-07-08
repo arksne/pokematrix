@@ -33,6 +33,7 @@
 
 import { io } from 'socket.io-client';
 import { state, generateUID, getTrainerId } from '../game/state.js';
+import { store } from '../game/store.js';
 import { API_BASE } from '../game/config.js';
 import { showToast, showConfirmModal } from '../utils/dom.js';
 import { cloudLoad, applyCloudSave } from '../game/save.js';
@@ -61,10 +62,6 @@ export function initTradeSocket() {
   state.socket.on('connect', () => {
     state.socket.emit('join_lobby', { username: state.tgUser?.first_name || state.tgUser?.username || 'Тренер', userId: state.tgUser?.id });
     initChatSocket();
-    // Lazy-load PvP module
-    if (state.tgUser) {
-      import('../battle/pvp.js').then(m => m.initPvpSocket(state.socket)).catch(() => {});
-    }
   });
 
   state.socket.on('disconnect', () => {
@@ -85,14 +82,35 @@ export function initTradeSocket() {
   });
 
   state.socket.on('save_updated', async () => {
+    const oldVersion = state.saveVersion || 0;
     const data = await cloudLoad();
     if (data) {
+      if (data.saveVersion !== undefined && data.saveVersion <= oldVersion) {
+        console.log('[save] skipping stale save_updated (local:', oldVersion, 'remote:', data.saveVersion, ')');
+        return;
+      }
       state.saveVersion = 0;
       await applyCloudSave(data);
       updateMoneyDisplay();
       updateInventoryDisplay();
       if (typeof renderTeamGrid === 'function') renderTeamGrid();
       showToast('Сохранение обновлено администратором', false);
+    }
+  });
+
+  state.socket.on('save_reset', (data) => {
+    const uid = data?.userId;
+    if (!uid || uid === (state.tgUser?.id || 0)) {
+      showToast('⚠️ Ваш прогресс был сброшен администратором. Перезагрузка...', true);
+      setTimeout(() => window.location.reload(), 2000);
+    }
+  });
+
+  state.socket.on('admin_announcement', (data) => {
+    const msg = data?.message || 'announcement';
+    showToast('📢 ' + msg, false);
+    if (typeof addNotification === 'function') {
+      addNotification('📢 Announcement', msg);
     }
   });
 
@@ -222,7 +240,7 @@ export function initTradeSocket() {
     }
     if (action.type === 'surrender') {
       showToast('🏆 Соперник сдался! Победа!', false);
-      state.inventory['credit'] = (state.inventory['credit'] || 0) + 500; updateMoneyDisplay();
+      // Награда выдаётся сервером через pvp_reward
       const pvpModal = document.getElementById('pvp-modal');
       if (pvpModal) pvpModal.style.display = 'none';
       state.pvpBattleId = null;
@@ -233,6 +251,16 @@ export function initTradeSocket() {
       if (pvpModal) pvpModal.style.display = 'none';
       state.pvpBattleId = null;
       autoSave();
+    }
+  });
+
+  // ── pvp_reward: server-authoritative награда за PvP победу ──
+  state.socket.on('pvp_reward', (data: { money: number }) => {
+    if (data.money) {
+      state.inventory['credit'] = (state.inventory['credit'] || 0) + data.money;
+      updateMoneyDisplay();
+      store.emit('money:changed');
+      showToast(`🏆 +${data.money}¥ за победу в PvP!`, false);
     }
   });
 }

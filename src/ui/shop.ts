@@ -195,6 +195,8 @@ export function initShopEvents() {
       // Обновляем количество кредитов в глобальном состоянии
       // Сервер возвращает новый баланс в data.money
       state.inventory['credit'] = data.money;
+      // Добавляем купленный предмет в локальный инвентарь
+      state.inventory[itemId] = (state.inventory[itemId] || 0) + qty;
 
       // Обновляем отображение денег в модалке магазина
       document.getElementById('shop-money-display').innerText = String(data.money);
@@ -340,7 +342,7 @@ export function initSellTab() {
     const qty = Math.max(
       1,
       Math.min(
-        getShopState().inv[itemId] || 1,             // максимум = сколько есть
+        getShopState().inventory[itemId] || 1,       // максимум = сколько есть
         parseInt((qtyInput as HTMLInputElement)?.value) || 1  // введённое значение
       )
     );
@@ -371,6 +373,11 @@ export function initSellTab() {
           // Успешная продажа!
           // Обновляем баланс кредитов в глобальном состоянии
           state.inventory['credit'] = data.money;
+          // Удаляем проданный предмет из локального инвентаря
+          if (state.inventory[itemId] !== undefined) {
+            state.inventory[itemId] -= qty;
+            if (state.inventory[itemId] <= 0) delete state.inventory[itemId];
+          }
 
           // Обновляем отображение денег
           document.getElementById('shop-money-display').innerText = String(data.money);

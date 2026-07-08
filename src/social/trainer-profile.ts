@@ -149,7 +149,7 @@ export async function openTrainerProfile(userId) {
           showToast('Подключение к серверу...', true);
           return;
         }
-        state.socket.emit('trade_request', onlinePlayer.id);
+        state.socket.emit('trade_request', onlinePlayer.userId);
         showToast('Запрос на обмен отправлен!', false);
       };
       battleBtn.onclick = () => {
@@ -159,7 +159,7 @@ export async function openTrainerProfile(userId) {
         if (!state.myTeam.some(m => m.currentHp > 0)) { showToast('Нужен живой покемон!', true); return; }
         modal.style.display = 'none';
         initTradeSocket();
-        state.socket.emit('pvp_challenge', onlinePlayer.id);
+        state.socket.emit('pvp_challenge', onlinePlayer.userId);
         showToast('Вызов на бой отправлен!', false);
       };
     } else if (actionsDiv) {

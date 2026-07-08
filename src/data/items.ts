@@ -93,7 +93,7 @@ export const ITEMS: ItemDef[] = [
   { id: 'lemonade', nameRu: 'Лимонад', category: 'healing', desc: 'Restores 80 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/lemonade.png', spriteType: 'pokeapi', price: 400, sellPrice: 200, isUsable: true, isBall: false, implemented: true },
   { id: 'maxPotion', nameRu: 'Макс-Зелье', category: 'healing', desc: 'Restores HP to full.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/max-potion.png', spriteType: 'pokeapi', price: 2500, sellPrice: 1250, isUsable: true, isBall: false, implemented: true },
   { id: 'moomooMilk', nameRu: 'Молоко Муму', category: 'healing', desc: 'Restores 100 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/moomoo-milk.png', spriteType: 'pokeapi', price: 600, sellPrice: 300, isUsable: true, isBall: false, implemented: true },
-  { id: 'potion', nameRu: 'Зелье', category: 'healing', desc: 'Restores 20 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/potion.png', spriteType: 'pokeapi', price: 200, sellPrice: 100, isUsable: true, isBall: false, implemented: true },
+  { id: 'potion', nameRu: 'Зелье', category: 'healing', desc: 'Restores 20 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/potion.png', spriteType: 'pokeapi', price: 300, sellPrice: 150, isUsable: true, isBall: false, implemented: true },
   { id: 'sodaPop', nameRu: 'Содовая', category: 'healing', desc: 'Restores 60 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/soda-pop.png', spriteType: 'pokeapi', price: 300, sellPrice: 150, isUsable: true, isBall: false, implemented: true },
   { id: 'superPotion', nameRu: 'Супер-Зелье', category: 'healing', desc: 'Restores 50 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/super-potion.png', spriteType: 'pokeapi', price: 700, sellPrice: 350, isUsable: true, isBall: false, implemented: true },
   { id: 'sweetHeart', nameRu: 'Сладкое Сердце', category: 'healing', desc: 'Restores 20 HP.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/sweet-heart.png', spriteType: 'pokeapi', price: 3000, sellPrice: 1500, isUsable: true, isBall: false, implemented: true },
@@ -1419,4 +1419,7 @@ export const ITEMS: ItemDef[] = [
 
   // ── currency ──
   { id: 'credit', nameRu: 'Кредит', category: 'currency', desc: 'Игровая валюта', sprite: 'credit_coin.png', spriteType: 'local', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+
+  // ── ключевые предметы (keyItems) ──
+  { id: 'craftersKit', nameRu: 'Набор Крафта', category: 'training', desc: 'Открывает интерфейс крафта предметов.', sprite: 'train.gif', spriteType: 'local', price: 3000, sellPrice: 1500, isUsable: true, isBall: false, implemented: true },
 ];

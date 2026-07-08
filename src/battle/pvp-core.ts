@@ -26,10 +26,20 @@
 // ─────────────────────────────────────────────────────────────
 
 import { state } from '../game/state.js';
+import { store } from '../game/store.js';
 import { showToast } from '../utils/dom.js';
 import { getSpriteUrl } from '../utils/sprite.js';
 import { autoSave } from '../game/save.js';
 import { updateMoneyDisplay } from '../ui/location.js';
+import { openTradeCenter } from '../ui/trade-center.js';
+
+/**
+ * showPvpPanel — открыть панель PvP (список тренеров для вызова).
+ * Использует Trade Center UI, где есть кнопка PvP-вызова.
+ */
+export function showPvpPanel() {
+  openTradeCenter();
+}
 
 /**
  * openPvPArena — открыть арену PvP-боя с оппонентом.
@@ -240,7 +250,11 @@ export function doPvPAttack(moveIdx) {
   logEl.innerHTML = `Вы: ${moveName}! ${crit ? '💥Крит! ' : ''}(-${dmg})\n${logEl.innerHTML}`;
 
   state.pvpMyTurn = false; // Передаём ход оппоненту
-  state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: { type: 'attack', moveName, dmg, crit } });
+  // Отправляем данные атаки + статы для server-authoritative валидации
+  state.socket.emit('pvp_action', {
+    battleId: state.pvpBattleId,
+    action: { type: 'attack', moveName, dmg, crit, lvl, atk, power },
+  });
   updatePvPUI();
 }
 
@@ -258,8 +272,8 @@ export function doPvPAttack(moveIdx) {
  * ГДЕ ВЫЗЫВАЕТСЯ: из обработчика socket → 'pvp_result'
  */
 export function endPvP(won) {
-  showToast(won ? '🏆 Победа в PvP! +500¥' : '💀 Поражение в PvP...', !won);
-  if (won) { state.inventory['credit'] = (state.inventory['credit'] || 0) + 500; updateMoneyDisplay(); }
+  showToast(won ? '🏆 Победа в PvP!' : '💀 Поражение в PvP...', !won);
+  // Награда теперь выдается сервером (слушаем pvp_reward)
   document.getElementById('pvp-modal').style.display = 'none';
   state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: won ? 'win' : 'lose' } });
   state.pvpBattleId = null;

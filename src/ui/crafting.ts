@@ -28,7 +28,6 @@ import { state } from '../game/state.js';            // Глобальное с�
 import { store } from '../game/store.js';              // Event-система
 import { API_BASE } from '../game/config.js';          // URL сервера
 import { getCloudAuthHeaders, autoSave } from '../game/save.js';  // Авторизация + сохранение
-import { getShopState } from '../game/getters.js';     // Состояние магазина
 import { getItemQty } from '../game/state.js';          // Количество предметов в инвентаре
 import { addItem, removeItem } from '../game/actions.js';  // Добавление/удаление предметов
 import { showToast } from '../utils/dom.js';              // Уведомления
@@ -176,8 +175,10 @@ function craftItem(recipeId: string) {
     if (data.error) return showToast('Ошибка крафта: ' + data.error, true);
 
     // Обновляем инвентарь из ответа сервера
-    const shopState = getShopState() as any;
-    shopState.inventory = data.inventory;
+    // Сохраняем credit, если сервер не вернул его в инвентаре
+    const oldCredit = state.inventory?.credit || 0;
+    state.inventory = data.inventory;
+    if (state.inventory && !('credit' in state.inventory)) state.inventory['credit'] = oldCredit;
 
     // Показываем уведомление об успехе
     const resultItem = ITEMS.find(i => i.id === recipe.result);

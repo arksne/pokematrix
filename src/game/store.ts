@@ -162,6 +162,7 @@ class GameStore {
     if (!this._state.inventory || !(itemId in this._state.inventory)) return false;
     if (this._state.inventory[itemId] < qty) return false;
     this._state.inventory[itemId] -= qty;
+    if (this._state.inventory[itemId] <= 0) delete this._state.inventory[itemId];
     this._markDirty('inventory');
     this.emit('inventory:changed', itemId, -qty);
     return true;
@@ -177,39 +178,14 @@ class GameStore {
     this.emit('money:changed');
   }
 
-  async giveReward(money: number, items: Array<{id: string, qty: number}> = []) {
-    // Local optimistic update
+  giveReward(money: number, items: Array<{id: string, qty: number}> = []) {
+    // Purely local: battle drops are applied optimistically and synced to cloud
+    // via the regular autoSave cycle. Do NOT call /economy/reward — that's the
+    // daily reward endpoint with a 24h cooldown that hardcodes money=500 and
+    // would overwrite the player's real inventory.
     if (money) this.modifyMoney(money);
     for (const item of items) {
       if (item.id && item.qty > 0) this.addItem(item.id, item.qty);
-    }
-
-    // Server sync
-    try {
-      const { API_BASE } = await import('./config.js');
-      const { getCloudAuthHeaders } = await import('./save.js');
-      const res = await fetch(`${API_BASE}/economy/reward`, {
-        method: 'POST',
-        headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ money, items })
-      });
-      const data = await res.json();
-      if (!data.error) {
-        this._state.inventory['credit'] = data.money;
-        // Merge server inventory with local: keep max of each item
-        // (prevents losing items used/added between optimistic update and server response)
-        if (data.inventory) {
-          for (const [id, qty] of Object.entries(data.inventory)) {
-            if (id !== 'credit') {
-              this._state.inventory[id] = Math.max(this._state.inventory[id] || 0, qty as number);
-            }
-          }
-        }
-        this.updateMoneyDisplay();
-        this.updateInventoryDisplay();
-      }
-    } catch (e) {
-      console.error('Reward sync failed', e);
     }
   }
 

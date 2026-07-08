@@ -137,6 +137,9 @@ export async function giveStarterMon(pokemonName: string) {
     state.inventory['pokeBall'] = (state.inventory['pokeBall'] || 0) + 5;
     state.inventory['potion'] = (state.inventory['potion'] || 0) + 3;
     state.inventory['credit'] = Math.max(state.inventory['credit'] || 0, 1000);
+    store.emit('money:changed');
+    store.emit('inventory:changed', 'pokeBall', 5);
+    store.emit('inventory:changed', 'potion', 3);
 
     // ── 7. Запуск туториала NPC ──
     state.tutorialStep = 1;

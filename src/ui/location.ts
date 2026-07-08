@@ -651,7 +651,8 @@ export function processMonsterDrop(pokemonName: string) {
 // Раньше показывало деньги в заголовке, теперь только в инвентаре
 // Функция сохранена для обратной совместимости (вызывается из других модулей)
 export function updateMoneyDisplay() {
-  // Пусто — отображение денег убрано из заголовка
+  const el = document.getElementById('money-display');
+  if (el) el.textContent = '¥' + ((state.inventory?.credit || 0).toLocaleString());
 }
 
 // ── updateBadgeDisplay: обновление отображения значков ──

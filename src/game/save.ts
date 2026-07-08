@@ -97,8 +97,7 @@ export function validateGameState() {
   if (!state.pcBoxes) state.pcBoxes = [[]];
   if (!state.badges) state.badges = [];
   if (!state.inventory) state.inventory = {};
-  // Ensure all ITEMS exist in state.inventory (credit is just another item now)
-  ITEMS.forEach(item => { if (item.id !== 'credit' && !(item.id in state.inventory)) state.inventory[item.id] = 0; });
+  // НЕ добавляем все 1300+ предметов с нулём — getItemQty() и так возвращает 0 для отсутствующих
   // Ensure credit exists (it IS money)
   if (!('credit' in state.inventory)) state.inventory['credit'] = 500;
   // Validate team pokemon have required fields
@@ -387,16 +386,13 @@ export async function applyCloudSave(data) {
     state.currentRegion = 'johto';
   }
   if (data.inventory) {
-    // Merge inventory: берем макс каждого предмета между локальным и облачным
-    for (const [k, v] of Object.entries(data.inventory)) {
-      if (v > 0 || (state.inventory[k] === undefined)) {
-        state.inventory[k] = Math.max(state.inventory[k] || 0, v as number);
-      }
-    }
+    // inventory: полностью заменяем локальное облачным, т.к. data._ts > localTs (проверено выше)
+    // Math.max merge приводил к дублированию предметов при облачной синхронизации
+    state.inventory = { ...data.inventory };
   }
-  // credit IS money — берём максимум между локальным и облачным
+  // credit IS money — используем облачное значение (сервер — источник истины)
   const cloudCredit = data.inventory?.credit ?? data.money ?? 0;
-  state.inventory['credit'] = Math.max(state.inventory['credit'] || 0, cloudCredit);
+  if (cloudCredit) state.inventory['credit'] = cloudCredit;
   state.badges = data.badges || state.badges;
   state.trainerNickname = data.trainerNickname || state.trainerNickname;
   state.myTeam = data.myTeam || state.myTeam;

@@ -119,7 +119,7 @@ router.post('/tg', async (req: Request, res: Response) => {
     }
 
     // ── Генерируем токены ──
-    const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin };
+    const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin, username: user.username || '', firstName: user.first_name || '' };
     const token = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken();
 
@@ -169,7 +169,7 @@ router.post('/register', authMiddleware, async (req: Request, res: Response) => 
 
     // ── Новые токены (после регистрации) ──
     const user = (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
-    const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin };
+    const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin, username: user.username || '', firstName: user.first_name || '' };
     const token = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken();
 
@@ -258,7 +258,13 @@ router.post('/refresh', async (req: Request, res: Response) => {
 
 // ── GET /auth/is-admin ───────────────────────────────────────
 router.get('/is-admin', authMiddleware, async (req: Request, res: Response) => {
-  res.json({ isAdmin: !!req.user?.isAdmin });
+  try {
+    const db = getDb();
+    const user = (await db.select().from(users).where(eq(users.id, req.user!.userId)).limit(1))[0];
+    res.json({ isAdmin: !!user?.is_admin });
+  } catch {
+    res.json({ isAdmin: false });
+  }
 });
 
 export default router;
