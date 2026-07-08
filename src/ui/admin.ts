@@ -256,7 +256,7 @@ export function initAdminPanel() {
         }
       });
       try {
-        const res = await apiFetch('/profile/trainers/all');
+        const res = await apiFetch('/api/profile/trainers/all');
         const data = await res.json();
         if (data.users) {
           data.users.forEach((u: any) => {
@@ -274,7 +274,7 @@ export function initAdminPanel() {
     if (!id) { targetInfo.textContent = 'Enter ID'; return; }
     targetInfo.textContent = 'Searching...';
     try {
-      const res = await apiFetch('/profile/' + id);
+      const res = await apiFetch('/api/profile/' + id);
       const data = await res.json();
       if (data.profile) {
         const p = data.profile;
