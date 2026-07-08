@@ -30,7 +30,7 @@
 import { state, lsKey } from './state.js';
 import { store } from './store.js';
 import { REGIONS } from '../data/regions.js';
-import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, restoreBattleStateFromServer, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress } from '../battle/core.js';
+import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress } from '../battle/core.js';
 import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents } from './save.js';
 import { authTelegram } from './auth.js';
 import { initAppNav } from '../ui/nav.js';
@@ -225,10 +225,7 @@ import { API_BASE } from './config.js';
 
     initProfileEvents();
     initEncounterEvents();
-    // Сначала проверяем сервер — он может перезаписать localStorage свежим battle_state
-    restoreBattleStateFromServer().then(() => {
-      restoreBattleState();
-    });
+    restoreBattleState();
 
     if (localStorage.getItem(lsKey('hunt_active')) === '1' && state.myTeam.some(m => m.currentHp > 0)) {
       startAutoHunt();
