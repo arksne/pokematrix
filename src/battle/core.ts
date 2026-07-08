@@ -132,45 +132,109 @@ function initBattleRefs() { _gsCache = state; }
  *   GS.currentLocationId — ID текущей локации (проверяется при restore)
  *   GS.myTeam — команда игрока (индекс activeMonIndex)
  */
-function saveBattleState() {
+/**
+ * saveBattleStateToServer — сохранить battle_state на сервер (POST /api/battle/state).
+ * Вызывается после локального saveBattleState(), чтобы сервер тоже знал о бое.
+ * При F5 клиент сможет восстановить бой с сервера.
+ */
+async function saveBattleStateToServer() {
   const s = battle.state;
-  if (!s.battleType || s.battleType === 'none') return;     // Не сохраняем если бой не начат
-  const state: Record<string, any> = {};
-  state.battleType = s.battleType;                           // Тип боя: 'wild' | 'gym' | 'elite' | 'champion' | 'pvp'
-  state.locationId = GS.currentLocationId;                   // Локация (без неё restore не сработает — защита от загрузки сохранения на другой локации)
-  state.activeMonIndex = GS.myTeam.indexOf(s.activePlayerMon); // Индекс активного покемона в команде
-  state.activeMonCurHP = s.activePlayerMon?.currentHp;       // Текущее HP (восстанавливается в restore)
-  state.activeMonMovesPP = s.activePlayerMon?.movesPP;       // PP атак (восстанавливается)
-  state.activeMonStatStages = s.activePlayerMon?.statStages; // Стат-стадии (баффы/дебпфы)
-  state.activeMonChoiceLocked = s.activePlayerMon?.choiceLockedMove; // Заблокированная атака (Choice-предметы)
-  state.currentWeather = s.currentWeather;                    // Текущая погода
-  state.escapeAttempts = s.escapeAttempts;                    // Попытки побега счётчик
-  state.battleRound = s.battleRound;                          // Номер раунда (для Timer Ball, Quick Ball и т.д.)
-  state.itemsUsedInBattle = GS.itemsUsedInBattle;             // Сколько предметов уже использовано
-  state.playerReflectTurns = s.playerReflectTurns;            // Осталось ходов Reflect у игрока
-  state.playerLightScreenTurns = s.playerLightScreenTurns;    // Осталось ходов Light Screen у игрока
-  state.enemyReflectTurns = s.enemyReflectTurns;              // Осталось ходов Reflect у противника
-  state.enemyLightScreenTurns = s.enemyLightScreenTurns;      // Осталось ходов Light Screen у противника
-  state.playerChargedMove = s.playerChargedMove;        // Двух-ходовые атаки (заряд/выпуск)
-  state.enemyChargedMove = s.enemyChargedMove;          // Двух-ходовые атаки (заряд/выпуск)
+  if (!s.battleType || s.battleType === 'none') return;
+  const battleState: Record<string, any> = {};
+  battleState.battleType = s.battleType;
+  battleState.locationId = GS.currentLocationId;
+  battleState.activeMonIndex = GS.myTeam.indexOf(s.activePlayerMon);
+  battleState.activeMonCurHP = s.activePlayerMon?.currentHp;
+  battleState.activeMonMovesPP = s.activePlayerMon?.movesPP;
+  battleState.activeMonStatStages = s.activePlayerMon?.statStages;
+  battleState.activeMonChoiceLocked = s.activePlayerMon?.choiceLockedMove;
+  battleState.currentWeather = s.currentWeather;
+  battleState.escapeAttempts = s.escapeAttempts;
+  battleState.battleRound = s.battleRound;
+  battleState.itemsUsedInBattle = GS.itemsUsedInBattle;
+  battleState.playerReflectTurns = s.playerReflectTurns;
+  battleState.playerLightScreenTurns = s.playerLightScreenTurns;
+  battleState.enemyReflectTurns = s.enemyReflectTurns;
+  battleState.enemyLightScreenTurns = s.enemyLightScreenTurns;
+  battleState.playerChargedMove = s.playerChargedMove;
+  battleState.enemyChargedMove = s.enemyChargedMove;
   if (s.activeWild) {
-    state.wildPkmName = s.activeWild.name;       // Имя дикого покемона (для повторной загрузки из PokeAPI)
-    state.wildCurHP = s.wildCurHP;               // Текущее HP дикого
-    state.wildMaxHP = s.wildMaxHP;               // Макс HP дикого
-    state.wildLvl = s.wildLvl;                   // Уровень дикого
-    state.wildStatus = s.wildStatus;             // Статус дикого (psn/brn/par/slp/frz)
-    state.wildSleepTurns = s.wildSleepTurns;     // Осталось ходов сна
-    state.wildMovesPP = s.wildMovesPP;           // PP атак дикого
-    state.wildMovesDetailed = s.wildMovesDetailed; // Детальные данные атак дикого
-    state.wildIsShiny = s.activeWild.isShiny;    // Шайни флаг (для корректного спрайта при restore)
+    battleState.wildPkmName = s.activeWild.name;
+    battleState.wildCurHP = s.wildCurHP;
+    battleState.wildMaxHP = s.wildMaxHP;
+    battleState.wildLvl = s.wildLvl;
+    battleState.wildStatus = s.wildStatus;
+    battleState.wildSleepTurns = s.wildSleepTurns;
+    battleState.wildMovesPP = s.wildMovesPP;
+    battleState.wildMovesDetailed = s.wildMovesDetailed;
+    battleState.wildIsShiny = s.activeWild.isShiny;
   }
   if ((s.battleType === 'gym' || s.battleType === 'elite' || s.battleType === 'champion') && s.gymTeamData) {
-    state.gymLeaderKey = s.gymLeaderKey;           // ID лидера зала (из gyms.ts)
-    state.gymTeamIndex = s.gymTeamIndex;           // Какой по счёту гимец
-    state.gymTeamIndexInMember = s.gymTeamIndexInMember; // Индекс внутри Элитного члена
-    state.gymTeamData = s.gymTeamData;             // Клонированная команда лидера
+    battleState.gymLeaderKey = s.gymLeaderKey;
+    battleState.gymTeamIndex = s.gymTeamIndex;
+    battleState.gymTeamIndexInMember = s.gymTeamIndexInMember;
+    battleState.gymTeamData = s.gymTeamData;
   }
-  try { localStorage.setItem(store.lsKey('battle_state'), JSON.stringify(state)); } catch(e) {} // JSON.stringify может выбросить при циклических ссылках — игнорируем
+  try {
+    await apiFetch('/battle/state', {
+      method: 'POST',
+      body: JSON.stringify({ battleState }),
+    });
+  } catch(e) {
+    // Сервер недоступен — не критично, localStorage сохранился
+  }
+}
+
+/**
+ * clearBattleStateOnServer — удалить battle_state с сервера (DELETE /api/battle/state).
+ */
+async function clearBattleStateOnServer() {
+  try {
+    await apiFetch('/battle/state', { method: 'DELETE' });
+  } catch(e) {}
+}
+
+function saveBattleState() {
+  const s = battle.state;
+  if (!s.battleType || s.battleType === 'none') return;
+  const state: Record<string, any> = {};
+  state.battleType = s.battleType;
+  state.locationId = GS.currentLocationId;
+  state.activeMonIndex = GS.myTeam.indexOf(s.activePlayerMon);
+  state.activeMonCurHP = s.activePlayerMon?.currentHp;
+  state.activeMonMovesPP = s.activePlayerMon?.movesPP;
+  state.activeMonStatStages = s.activePlayerMon?.statStages;
+  state.activeMonChoiceLocked = s.activePlayerMon?.choiceLockedMove;
+  state.currentWeather = s.currentWeather;
+  state.escapeAttempts = s.escapeAttempts;
+  state.battleRound = s.battleRound;
+  state.itemsUsedInBattle = GS.itemsUsedInBattle;
+  state.playerReflectTurns = s.playerReflectTurns;
+  state.playerLightScreenTurns = s.playerLightScreenTurns;
+  state.enemyReflectTurns = s.enemyReflectTurns;
+  state.enemyLightScreenTurns = s.enemyLightScreenTurns;
+  state.playerChargedMove = s.playerChargedMove;
+  state.enemyChargedMove = s.enemyChargedMove;
+  if (s.activeWild) {
+    state.wildPkmName = s.activeWild.name;
+    state.wildCurHP = s.wildCurHP;
+    state.wildMaxHP = s.wildMaxHP;
+    state.wildLvl = s.wildLvl;
+    state.wildStatus = s.wildStatus;
+    state.wildSleepTurns = s.wildSleepTurns;
+    state.wildMovesPP = s.wildMovesPP;
+    state.wildMovesDetailed = s.wildMovesDetailed;
+    state.wildIsShiny = s.activeWild.isShiny;
+  }
+  if ((s.battleType === 'gym' || s.battleType === 'elite' || s.battleType === 'champion') && s.gymTeamData) {
+    state.gymLeaderKey = s.gymLeaderKey;
+    state.gymTeamIndex = s.gymTeamIndex;
+    state.gymTeamIndexInMember = s.gymTeamIndexInMember;
+    state.gymTeamData = s.gymTeamData;
+  }
+  try { localStorage.setItem(store.lsKey('battle_state'), JSON.stringify(state)); } catch(e) {}
+  // Асинхронно сохраняем на сервер (не блокируем UI)
+  saveBattleStateToServer();
 }
 
 /**
@@ -181,6 +245,8 @@ function saveBattleState() {
 function clearBattleState() {
   try { localStorage.removeItem(store.lsKey('battle_state')); } catch(e) {}
   clearScreens(); // Сбросить все барьеры (Reflect, Light Screen, Protect, Substitute)
+  // Асинхронно чистим на сервере
+  clearBattleStateOnServer();
 }
 
 /**
@@ -4396,6 +4462,28 @@ function setBattleVars(updates: Record<string, any>) {
   }
 }
 
+/**
+ * restoreBattleStateFromServer — восстановить бой с сервера.
+ * Вызывается при инициализации ДО restoreBattleState().
+ * Если на сервере есть активный бой — сохраняет его в localStorage
+ * (чтобы restoreBattleState() подхватил).
+ * Возвращает true если бой восстановлен, false если нет.
+ */
+async function restoreBattleStateFromServer() {
+  try {
+    const resp = await apiFetch('/battle/state');
+    const data = await resp.json();
+    if (data?.battleState && data.battleState.battleType && data.battleState.battleType !== 'none') {
+      // Сохраняем в localStorage — restoreBattleState() подхватит
+      localStorage.setItem(store.lsKey('battle_state'), JSON.stringify(data.battleState));
+      return true;
+    }
+  } catch(e) {
+    // Сервер недоступен — пробуем localStorage
+  }
+  return false;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ЭКСПОРТ
 // ═══════════════════════════════════════════════════════════════
@@ -4410,4 +4498,4 @@ function setBattleVars(updates: Record<string, any>) {
 //   championBattle / startChampionNextPokemon — чемпион
 //   Множество утилит: calculateStat, getStatusIcon, switchPokemon и т.д.
 // ─────────────────────────────────────────────────────────────
-export { saveBattleState, clearBattleState, restoreBattleState, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars };
+export { saveBattleState, clearBattleState, restoreBattleState, restoreBattleStateFromServer, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars };

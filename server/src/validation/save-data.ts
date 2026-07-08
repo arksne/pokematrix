@@ -58,7 +58,7 @@ const ivSchema = z.object({
 // ── Схема покемона в команде ──
 const teamMonSchema = z.object({
   uid: z.string().min(1, 'uid обязателен'),
-  baseLevel: z.number().int().min(1).max(100).default(1),
+  baseLevel: z.number().int().min(0).max(100).default(1),
   currentHp: z.number().int().min(0).optional(),
   maxHp: z.number().int().min(1).optional(),
   apiData: z.any().optional(),
@@ -92,7 +92,7 @@ export const saveDataSchema = z.object({
   // Обязательные поля с минимальной валидацией
   inventory: z.record(
     z.string(),
-    z.number().int().min(0).max(999999)
+    z.number().int().min(0).max(99999999)
   ).optional().default({}),
 
   myTeam: z.array(teamMonSchema)

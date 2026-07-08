@@ -22,6 +22,7 @@ export const users = pgTable('users', {
   last_seen: text('last_seen'),
   location_id: text('location_id').default('goldenrodCity'),
   region: text('region').default('johto'),
+  battle_state: text('battle_state').default('{}'),
 });
 
 export const refreshTokens = pgTable('refresh_tokens', {
