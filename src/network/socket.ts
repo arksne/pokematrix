@@ -32,7 +32,8 @@
  */
 
 import { io } from 'socket.io-client';
-import { state, generateUID, getTrainerId } from '../game/state.js';
+import { state, generateUID, getTrainerId, lsKey } from '../game/state.js';
+import { refreshAccessToken } from '../game/apiClient.js';
 import { store } from '../game/store.js';
 import { API_BASE } from '../game/config.js';
 import { showToast, showConfirmModal } from '../utils/dom.js';
@@ -59,6 +60,48 @@ export function initTradeSocket() {
     auth: { token: state.tgToken }
   });
 
+  /**
+   * Переподключение со свежим токеном.
+   *
+   * Токен доступа живёт 15 минут, а socket.io auth — статический объект: он
+   * читается один раз при подключении. Раньше сокет несла токен из момента входа
+   * и через 15 минут умирала вместе с чатом, списком онлайн-игроков, трейдами и
+   * PvP. Механизма восстановления не было: обработчик auth_expired на сервере
+   * никто не вызывал, а connect_error просто ждал реконнекта с тем же мёртвым
+   * токеном. Теперь при отказе по авторизации обновляем токен и пересоздаём
+   * соединение с ним.
+   */
+  let reconnecting = false;
+  state.socket.on('connect_error', async (err: any) => {
+    const msg = String(err?.message || '');
+    if (!/auth|token|unauthorized|jwt/i.test(msg) || reconnecting) return;
+    reconnecting = true;
+    try {
+      const refreshed = await refreshAccessToken();
+      if (!refreshed) {
+        console.warn('[socket] не удалось обновить токен для переподключения');
+        return;
+      }
+      const socket = state.socket;
+      socket.auth = { token: state.tgToken };
+      socket.disconnect();
+      socket.connect();
+      console.log('[socket] переподключение с обновлённым токеном');
+    } catch (e) {
+      console.warn('[socket] ошибка переподключения:', e);
+    } finally {
+      reconnecting = false;
+    }
+  });
+
+  // Сокет мог подключиться до того, как обновился токен: на переподключении
+  // сервер отвергнет старый, поэтому проверяем и освежаем proactively.
+  state.socket.on('reconnect_attempt', () => {
+    if (state.socket && state.socket.auth && state.socket.auth.token !== state.tgToken) {
+      state.socket.auth = { token: state.tgToken };
+    }
+  });
+
   state.socket.on('connect', () => {
     state.socket.emit('join_lobby', { username: state.tgUser?.first_name || state.tgUser?.username || 'Тренер', userId: state.tgUser?.id });
     initChatSocket();
@@ -82,20 +125,23 @@ export function initTradeSocket() {
   });
 
   state.socket.on('save_updated', async () => {
-    const oldVersion = state.saveVersion || 0;
     const data = await cloudLoad();
-    if (data) {
-      if (data.saveVersion !== undefined && data.saveVersion <= oldVersion) {
-        console.log('[save] skipping stale save_updated (local:', oldVersion, 'remote:', data.saveVersion, ')');
-        return;
-      }
-      state.saveVersion = 0;
-      await applyCloudSave(data);
-      updateMoneyDisplay();
-      updateInventoryDisplay();
-      if (typeof renderTeamGrid === 'function') renderTeamGrid();
-      showToast('Сохранение обновлено администратором', false);
+    if (!data) return;
+    // Сравниваем по _ts — метке времени в сейве. Раньше здесь читался
+    // data.saveVersion, которого getFullSaveData() никогда не пишет (пишет _v),
+    // поэтому проверка устаревания не могла сработать никогда.
+    const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+    if (data._ts !== undefined && data._ts <= localTs) {
+      console.log('[save] save_updated: локальная версия новее, пропускаю (local:', localTs, 'remote:', data._ts, ')');
+      return;
     }
+    // state.saveVersion = 0 здесь больше нет: это обнуляло счётчик версий и
+    // навсегда отключало серверную блокировку от устаревших сохранений.
+    await applyCloudSave(data);
+    updateMoneyDisplay();
+    updateInventoryDisplay();
+    if (typeof renderTeamGrid === 'function') renderTeamGrid();
+    showToast('Сохранение обновлено администратором', false);
   });
 
   state.socket.on('save_reset', (data) => {

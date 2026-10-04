@@ -206,12 +206,24 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
  * Backward-compatible wrapper for code that uses getCloudAuthHeaders().
  * Returns the headers object with Authorization if a token exists.
  */
-export function getCloudAuthHeaders(): Record<string, string> {
-  return {
-    'Content-Type': 'application/json',
-    ...(state.tgToken ? { Authorization: `Bearer ${state.tgToken}` } : {}),
-  };
-}
+  export function getCloudAuthHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      ...(state.tgToken ? { Authorization: `Bearer ${state.tgToken}` } : {}),
+    };
+  }
+
+  /**
+   * Обновляет access token по refresh token.
+   *
+   * Экспортируется для Socket.IO: у сокета нет перехватчика 401, и без этого
+   * он молча умирал через 15 минут после входа вместе со всем онлайн-сообществом
+   * — чат, онлайн-игроки, трейды и PvP. Публичная функция нужна, чтобы
+   * переподключение сокета использовало тот же refreshPromise, что и apiFetch,
+   * и не плодило параллельные запросы.
+   */
+  export { attemptTokenRefresh as refreshAccessToken };
+
 
 // Expose refresh token helpers for other modules
 export { getRefreshToken, setRefreshToken };

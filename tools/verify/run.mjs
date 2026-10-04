@@ -397,7 +397,11 @@ async function main() {
       ALLOW_DEV_LOGIN: 'false',
       CORS_ORIGINS: `http://localhost:${APP_PORT},http://${HOST_ALIAS}:${APP_PORT}`,
       LOG_LEVEL: 'info',
-      DB_SSL: 'disable',
+          DB_SSL: 'disable',
+          // PGlite отдаёт одно соединение по pg-wire. С пулом больше одного
+          // параллельные запросы рвали его с ECONNRESET, и чат отвечал 500.
+          DB_POOL_MAX: '1',
+
     },
     stdio: ['ignore', out, err],
   });

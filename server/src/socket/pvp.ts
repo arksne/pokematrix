@@ -12,6 +12,7 @@
  *   A/B -> pvp_end → завершение
  */
 import type { Server, Socket } from 'socket.io';
+import { parseSaveStrict } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
 import { getDb } from '../db/index.js';
 import { users, battleRatings } from '../db/schema.js';
@@ -234,8 +235,7 @@ export function initPvP(io: Server, socket: Socket) {
             .limit(1))[0];
 
           if (userRow) {
-            let sd: any = {};
-            try { sd = JSON.parse(userRow.save_data || '{}'); } catch {}
+            const sd: any = parseSaveStrict(userRow.save_data, senderUserId)
             if (!sd.inventory) sd.inventory = {};
             sd.inventory.credit = (sd.inventory.credit || 0) + 500;
 

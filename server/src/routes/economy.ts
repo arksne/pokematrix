@@ -8,6 +8,7 @@
  * save_data.inventory — { itemId: quantity, ... }
  * Инвентарь хранится в JSON-колонке users.save_data.
  */
+import { parseSaveStrict } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
@@ -76,8 +77,7 @@ async function getUserData(userId: number) {
   const db = getDb();
   const user = (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
   if (!user) throw new Error('User not found');
-  let saveData: any = {};
-  try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+  const saveData = parseSaveStrict(user.save_data, user.id)
   if (!saveData.inventory) saveData.inventory = {};
   return { user, saveData };
 }
@@ -104,8 +104,7 @@ router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
     const result = await db.transaction(async (tx) => {
       const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
       if (!user) throw new Error('User not found');
-      let saveData: any = {};
-      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
 
       const currentMoney = saveData.inventory['credit'] || 0;
@@ -152,8 +151,7 @@ router.post('/sell', authMiddleware, async (req: Request, res: Response) => {
     const result = await db.transaction(async (tx) => {
       const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
       if (!user) throw new Error('User not found');
-      let saveData: any = {};
-      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
 
       const currentQty = saveData.inventory[itemId] || 0;
@@ -207,8 +205,7 @@ router.post('/craft', authMiddleware, async (req: Request, res: Response) => {
     const inventory = await db.transaction(async (tx) => {
       const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
       if (!user) throw new Error('User not found');
-      let saveData: any = {};
-      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
 
       // Проверить ингредиенты
@@ -256,8 +253,7 @@ router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
     const result = await db.transaction(async (tx) => {
       const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
       if (!user) throw new Error('User not found');
-      let saveData: any = {};
-      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
 
       // Проверка кулдауна (24h) по серверной колонке, а не по клиентскому полю:
@@ -345,8 +341,7 @@ router.post('/badge-reward', authMiddleware, async (req: Request, res: Response)
       const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
       if (!user) throw new Error('User not found');
 
-      let saveData: any = {};
-      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
       if (!saveData.badges) saveData.badges = [];
 

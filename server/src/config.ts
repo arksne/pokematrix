@@ -20,6 +20,8 @@ export const config = {
   // 'require', 'disable' или 'no-verify'. Сертификат проверяется всегда, кроме
   // 'no-verify' — он нужен только для self-hosted БД с самоподписанным сертификатом.
   dbSsl: (process.env.DB_SSL || 'auto') as 'require' | 'disable' | 'no-verify' | 'auto',
+  // Размер пула. По умолчанию 10 — норма для Neon и любого внешнего Postgres.
+  dbPoolMax: Math.max(1, parseInt(process.env.DB_POOL_MAX || '10', 10) || 10),
   corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173').split(','),
   isProduction: process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),

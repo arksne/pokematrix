@@ -5,6 +5,7 @@
  *   GET  /profile/trainers/all      — все тренеры
  *   GET  /profile/:userId           — профиль конкретного тренера
  */
+import { parseSaveStrict } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
@@ -128,8 +129,7 @@ router.get('/:userId', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Парсим save_data чтобы получить команду
-    let saveData: any = {};
-    try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+    const saveData = parseSaveStrict(user.save_data, user.id)
 
     const team = Array.isArray(saveData.myTeam)
       ? saveData.myTeam.slice(0, 6).map((mon: any) => ({

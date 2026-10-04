@@ -21,7 +21,11 @@ let pool: pg.Pool;
 export function connectDb() {
   pool = new Pool({
     connectionString: config.databaseUrl,
-    max: 10,
+    // PGlite в проверках отдаёт ровно одно соединение по pg-wire. При пуле больше
+    // одного параллельные запросы рвали его с ECONNRESET, и чат отвечал 500 —
+    // ограничение тестового окружения, а не поведение сервера. На настоящем
+    // PostgreSQL (Neon) значение по умолчанию корректно.
+    max: config.dbPoolMax,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
     ssl: resolveDbSsl(),

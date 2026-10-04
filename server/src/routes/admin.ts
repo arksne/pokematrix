@@ -8,11 +8,12 @@
  *
  * Все команды работают с save_data целевого пользователя.
  */
+import { parseSaveStrict, countSavePokemon } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
-import { users, serverFeatures } from '../db/schema.js';
+import { users, serverFeatures, saveHistory } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, message: { status: 'error', error: 'Too many admin requests' } });
@@ -24,22 +25,42 @@ async function getUserData(tgId: number) {
   const db = getDb();
   const user = (await db.select().from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
   if (!user) throw new Error('User not found');
-  let saveData: any = {};
-  try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+  const saveData: any = parseSaveStrict(user.save_data, user.id)
   if (!saveData.inventory) saveData.inventory = { credit: 500 };
   if (!saveData.myTeam) saveData.myTeam = [];
   if (!saveData.badges) saveData.badges = [];
   return { user, saveData };
 }
 
-async function saveUserData(tgId: number, saveData: any) {
+async function saveUserData(tgId: number, saveData: any, reason = 'admin') {
   const db = getDb();
   const inv = saveData.inventory || {};
+  const existing = (await db.select({ id: users.id, save_data: users.save_data, save_version: users.save_version })
+    .from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
+
+  // Бэкап прежнего сейва. Раньше админский редактор писал save_data целиком без
+  // копии: пустой textarea в форме превращался в пятиключевой объект и стирал
+  // прогресс игрока безвозвратно.
+  if (existing?.save_data) {
+    try {
+      await db.insert(saveHistory).values({
+        user_id: existing.id,
+        save_data: existing.save_data,
+        save_version: existing.save_version ?? 0,
+        reason,
+        created_at: new Date().toISOString(),
+      });
+    } catch (e: any) {
+      console.error(`[admin] не удалось сохранить бэкап для tg ${tgId}:`, e);
+    }
+  }
+
   await db.update(users).set({
     save_data: JSON.stringify(saveData),
     money: inv['credit'] || 0,
     badges_count: Array.isArray(saveData.badges) ? saveData.badges.length : 0,
-    pokemon_count: Array.isArray(saveData.myTeam) ? saveData.myTeam.length : 0,
+    pokemon_count: countSavePokemon(saveData),
+    save_version: (existing?.save_version ?? 0) + 1,
   }).where(eq(users.tg_id, tgId));
 }
 
@@ -326,8 +347,7 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
         }
         const row = (await db.select().from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
         if (!row) { res.status(404).json({ status: 'error', error: 'User not found' }); return; }
-        let saveData: any = {};
-        try { saveData = JSON.parse(row.save_data || '{}'); } catch {}
+        const saveData: any = parseSaveStrict(row.save_data, row.id)
         res.json({
           status: 'ok',
           saveData,
@@ -353,7 +373,33 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
           res.status(400).json({ status: 'error', error: 'Invalid JSON in val' });
           return;
         }
-        await saveUserData(tgId, editorData);
+
+        // Редактор собирает объект из textarea и четырёх полей формы. Если
+        // textarea пуста или не содержит myTeam, результат — пять ключей без
+        // покемонов, и такой сейв затирал прогресс игрока целиком. Поэтому
+        // сверяем с тем, что уже лежит в базе, и отказываем при подозрении на
+        // потерю. Намеренное обнуление — только через wipe или reset.
+        const before = parseSaveStrict(
+          (await db.select({ save_data: users.save_data })
+            .from(users).where(eq(users.tg_id, tgId)).limit(1))[0]?.save_data,
+          null
+        );
+        const beforeCount = countSavePokemon(before);
+        const afterCount = countSavePokemon(editorData);
+        if (afterCount === 0 && beforeCount > 0) {
+          console.warn(
+            `[admin] edit_trainer отклонён: tg ${tgId}, в базе ${beforeCount} покемонов, в редакторе 0.`,
+          );
+          res.status(422).json({
+            status: 'error',
+            error: 'Refusing to wipe a non-empty save',
+            storedPokemon: beforeCount,
+            hint: 'Load the trainer first, or use db:wipe for a deliberate reset',
+          });
+          return;
+        }
+
+        await saveUserData(tgId, editorData, 'admin_edit_trainer');
         const nicknameUpdate = editorData.trainerNickname || '';
         const locationUpdate = editorData.currentLocationId || 'goldenrodCity';
         await db.update(users).set({

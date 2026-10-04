@@ -12,6 +12,7 @@
  *   A/B -> trade_cancel / disconnect -> trade_cancelled
  */
 import type { Server, Socket } from 'socket.io';
+import { parseSaveStrict } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
@@ -271,8 +272,7 @@ export function initTrade(io: Server, socket: Socket) {
         return;
       }
 
-      let saveData: any = {};
-      try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
+      const saveData: any = parseSaveStrict(user.save_data, userId)
       const inv = saveData.inventory || {};
       const team: any[] = Array.isArray(saveData.myTeam) ? saveData.myTeam : [];
       const boxes: any[][] = Array.isArray(saveData.pcBoxes) ? saveData.pcBoxes : [];
@@ -466,12 +466,13 @@ async function executeTradeSwap(
 
       if (!p1[0] || !p2[0]) throw new Error('Trade failed: user not found');
 
-      let sd1: any = {};
-      let sd2: any = {};
-      try { sd1 = JSON.parse(p1[0].save_data || '{}'); } catch {}
-      try { sd2 = JSON.parse(p2[0].save_data || '{}'); } catch {}
-      if (!sd1.inventory) sd1.inventory = {};
-      if (!sd2.inventory) sd2.inventory = {};
+        // Строгий разбор: если сейв битый, лучше прервать трейд, чем записать
+        // поверх прогресса состояние по умолчанию.
+        const sd1 = parseSaveStrict(p1[0].save_data, session.initiatorUserId);
+        const sd2 = parseSaveStrict(p2[0].save_data, session.partnerUserId);
+        if (!sd1.inventory) sd1.inventory = {};
+        if (!sd2.inventory) sd2.inventory = {};
+
 
       // ── TOCTOU-перепроверка: то, что предлагают, ещё должно быть у владельца ──
       const checkOffers = (inv: Record<string, any>, offers: CanonicalOffer[], ownUids: Set<string>, allMons: any[]) => {
