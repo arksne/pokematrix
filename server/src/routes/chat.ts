@@ -14,7 +14,7 @@ const router = Router();
 // ── GET /chat/messages ───────────────────────────────────────
 // Без since — все сообщения. С since — только новые.
 // Использует batch-запрос вместо N+1.
-router.get('/messages', async (req: Request, res: Response) => {
+router.get('/messages', authMiddleware, async (req: Request, res: Response) => {
   try {
     const db = getDb();
     const since = req.query.since as string | undefined;

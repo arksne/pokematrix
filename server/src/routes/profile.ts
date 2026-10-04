@@ -57,7 +57,7 @@ router.post('/location', authMiddleware, async (req: Request, res: Response) => 
 
 // ── GET /profile/trainers?locationId=... ─────────────────────
 // Список тренеров на конкретной локации.
-router.get('/trainers', async (req: Request, res: Response) => {
+router.get('/trainers', authMiddleware, async (req: Request, res: Response) => {
   try {
     const locationId = req.query.locationId as string;
     if (!locationId) {

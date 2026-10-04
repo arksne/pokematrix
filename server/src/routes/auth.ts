@@ -7,7 +7,7 @@
  */
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { users, refreshTokens } from '../db/schema.js';
@@ -268,10 +268,23 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return;
     }
 
-    // Пометить старый токен как использованный (вместо удаления)
-    await db.update(refreshTokens)
+    // Пометить старый токен как использованный.
+    // UPDATE с условием consumed_at IS NULL делает это атомарно: раньше SELECT и
+    // UPDATE шли раздельно, поэтому два параллельных refresh с одним токеном
+    // оба видели consumed_at = null и оба получали действующую пару токенов —
+    // детект повторного использования обходился гонкой.
+    const consumed = await db.update(refreshTokens)
       .set({ consumed_at: new Date().toISOString() })
-      .where(eq(refreshTokens.id, stored.id));
+      .where(and(eq(refreshTokens.id, stored.id), isNull(refreshTokens.consumed_at)))
+      .returning({ id: refreshTokens.id });
+
+    if (consumed.length === 0) {
+      // Токен уже израсходован другим запросом — это повторное использование.
+      console.warn(`[auth/refresh] Concurrent reuse detected! user_id=${stored.user_id}, token_id=${stored.id}`);
+      await db.delete(refreshTokens).where(eq(refreshTokens.user_id, stored.user_id));
+      res.status(401).json({ error: 'Session compromised — please re-login' });
+      return;
+    }
 
     // Создать новую пару
     const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin };

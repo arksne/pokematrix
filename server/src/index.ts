@@ -11,6 +11,7 @@ import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { connectDb, getDb, runMigrations, closeDb } from './db/index.js';
 import { sql } from 'drizzle-orm';
@@ -65,19 +66,41 @@ function guardSocketHandlers(socket: Socket) {
     });
 }
 
+/** Читает целое из окружения с запасным значением. */
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 async function main() {
   // ── Подключение к БД ─────────────────────────────────────
   logger.info('[server] Connecting to database...');
   const { db } = connectDb();
-  try { await runMigrations(); } catch(e: any) {
-    logger.error({ err: e, message: e.message }, '[server] Migration FAILED — tables may not exist');
-    // Не падаем — даём шанс, если таблицы уже созданы вручную
+  try {
+    await runMigrations();
+  } catch (e: any) {
+    // Раньше ошибка миграций только логировалась, сервер продолжал подниматься,
+    // /api/health отвечал ok, и каждый запрос к данным падал с 500. В production
+    // это означало тихий полный отказ, поэтому теперь останавливаемся.
+    logger.error({ err: e, message: e.message }, '[server] Migration FAILED');
+    if (config.isProduction) {
+      logger.fatal('[server] Не запускаюсь: миграции не применились, схема может отсутствовать');
+      await closeDb().catch(() => {});
+      process.exit(1);
+    }
+    logger.warn('[server] Продолжаю работу без миграций (development)');
   }
   logger.info('[server] Database connected');
 
   // ── Express ───────────────────────────────────────────────
   const app = express();
   const httpServer = createServer(app);
+
+  // За балансировщиком (Render, Koyeb, nginx) req.ip без доверия к прокси
+  // равен IP балансировщика, и все клиенты делят один счётчик rate limit.
+  app.set('trust proxy', 1);
 
   // ── CORS ──────────────────────────────────────────────────
   app.use(cors({
@@ -106,6 +129,43 @@ async function main() {
   });
 
   // ── Routes ────────────────────────────────────────────────
+  // Лимиты стоят до маршрутов: раньше единственный rate limit во всём сервере
+  // был на /api/admin/api, а /api/save (до 5 МБ на запрос), /api/auth/* и
+  // /api/economy/* остались без ограничений.
+  //
+  // Значения считаются по IP клиента (app.set('trust proxy', 1) выше), но за
+  // мобильным NAT или корпоративным прокси адрес общий, поэтому значения
+  // достаточно мягкие и настраиваются переменными окружения.
+  const authLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: envInt('RATE_LIMIT_AUTH', 30),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many auth attempts, try again later' },
+  });
+  const writeLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: envInt('RATE_LIMIT_WRITE', 60),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, slow down' },
+  });
+  const errorReportLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: envInt('RATE_LIMIT_LOG', 20),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many error reports' },
+  });
+
+  app.use('/api/auth/tg', authLimiter);
+  app.use('/api/auth/register', authLimiter);
+  app.use('/api/auth/refresh', authLimiter);
+  app.use('/api/save', writeLimiter);
+  app.use('/api/economy', writeLimiter);
+  app.use('/api/chat/send', writeLimiter);
+  app.use('/api/log-client-error', errorReportLimiter);
+
   app.use('/api/auth', authRoutes);
   app.use('/api/save', saveRoutes);
   app.use('/api/economy', economyRoutes);
