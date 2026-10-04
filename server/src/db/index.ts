@@ -8,6 +8,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '../config.js';
+import { logger } from '../logger.js';
 import * as schema from './schema.js';
 
 const { Pool } = pg;
@@ -24,6 +25,14 @@ export function connectDb() {
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
     ssl: resolveDbSsl(),
+  });
+
+  // pg.Pool — EventEmitter. Ошибка на idle-клиенте (перезапуск БД, обрыв сети,
+  // срабатывание idleTimeoutMillis) эмитится в 'error', а без слушателя Node
+  // выбрасывает это как uncaughtException. На serverless-Postgres (Neon, Supabase),
+  // который рвёт idle-соединения агрессивно, это происходило само по себе.
+  pool.on('error', (err) => {
+    logger.error({ err }, '[db] idle pool client error');
   });
 
   db = drizzle(pool, { schema });

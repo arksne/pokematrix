@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, type Socket } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config.js';
@@ -31,17 +31,38 @@ import battleRoutes from './routes/battle.js';
 import adminRoutes from './routes/admin.js';
 import clientErrorRoutes from './routes/client-error.js';
 
-// ── Pino logger ──────────────────────────────────────────────
-import pino from 'pino';
-export const logger = pino({
-  level: config.logLevel,
-  transport: config.isProduction ? undefined : { target: 'pino-pretty' },
-});
+// ── Pino logger ─────────────────────────────────────────────
+import { logger } from './logger.js';
+export { logger };
 
 // ── __dirname для ESM ───────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..', '..'); // server/ → корень проекта
+
+/**
+ * Обёртка socket.on: ловит синхронные исключения и отклонённые промисы внутри
+ * обработчика, логирует их и гасит. Исключение из callback'а socket.io иначе
+ * превращается в uncaughtException и завершает процесс.
+ */
+function guardSocketHandlers(socket: Socket) {
+  const originalOn = socket.on.bind(socket);
+  (socket as any).on = (event: string, handler: (...args: any[]) => any) =>
+    originalOn(event, (...args: any[]) => {
+      try {
+        const result = handler(...args);
+        if (result && typeof result.then === 'function') {
+          result.catch((err: unknown) => {
+            logger.error({ err, event }, '[socket] async handler rejected');
+          });
+        }
+        return result;
+      } catch (err) {
+        logger.error({ err, event }, '[socket] handler threw synchronously');
+        return undefined;
+      }
+    });
+}
 
 async function main() {
   // ── Подключение к БД ─────────────────────────────────────
@@ -126,6 +147,15 @@ async function main() {
   io.on('connection', (socket) => {
     logger.info(`[socket] connected: ${socket.id} (user: ${socket.data.user?.tgId})`);
 
+    // Обработчики событий защищаем от исключений в одной точке.
+    // Раньше socket.on регистрировался напрямую, и обработчик вроде
+    // pvp_action считал data.battleId до входа в свой try/catch — то есть
+    // socket.emit('pvp_action') без аргументов давал TypeError, а обработчик
+    // disconnect это вовсе не ловил. Синхронное исключение из callback'а
+    // socket.io доходит до uncaughtException и роняет процесс, а на Render
+    // Free это cold start с потерей всего in-memory состояния.
+    guardSocketHandlers(socket);
+
     // Инициализируем обработчики событий
     initLobby(io, socket);
     initTrade(io, socket);
@@ -137,31 +167,67 @@ async function main() {
   });
 
   // ── Graceful shutdown ─────────────────────────────────────
-  process.on('SIGTERM', async () => {
-    logger.info('[server] SIGTERM received, shutting down...');
-    io.close();
-    httpServer.close();
-    await closeDb();
-    process.exit(0);
-  });
+  const shutdown = async (signal: string) => {
+    logger.info({ signal }, '[server] shutdown signal received');
+    try {
+      // Прекращаем принимать новые соединения, но даём текущим завершиться:
+      // httpServer.close() не ждёт уже принятые запросы, а process.exit()
+      // следующей строкой обрывал бы незавершённые POST /api/save.
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => { if (!settled) { settled = true; resolve(); } };
+        io.close();
+        httpServer.close(() => done());
+        httpServer.closeIdleConnections?.();
+        setTimeout(done, 8000).unref();
+      });
+      await closeDb();
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, '[server] error during shutdown');
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
+  process.on('SIGINT', () => { void shutdown('SIGINT'); });
 
   // ── Запуск ───────────────────────────────────────────────
   httpServer.listen(config.port, () => {
     logger.info(`[server] PokeMatrix server running on port ${config.port}`);
     logger.info(`[server] Environment: ${config.isProduction ? 'production' : 'development'}`);
 
-    // ── Предупреждения о безопасности ──
+    // ── Startup diagnostics ──
     if (!process.env.JWT_SECRET) {
-      logger.warn('[security] JWT_SECRET не задан — используется default-значение! Установите JWT_SECRET в переменных окружения.');
+      logger.warn('[security] JWT_SECRET не задан — используется default-значение (только для разработки).');
     }
-    if (!process.env.ADMIN_PASS) {
-      logger.warn('[security] ADMIN_PASS не задан — используется default-значение! Установите ADMIN_PASS в переменных окружения.');
+    if (!config.adminPass) {
+      logger.warn('[security] ADMIN_PASS не задан — админ-API недоступен.');
     }
     if (!config.botToken) {
-      logger.warn('[security] BOT_TOKEN не задан — HMAC-верификация initData отключена!');
+      logger.warn('[security] BOT_TOKEN не задан — вход через Telegram отклоняется.');
     }
   });
 }
+
+// ── Глобальные обработчики ошибок ───────────────────────────
+// Раньше их не было вовсе. Node 22 по умолчанию завершает процесс на
+// необработанном отклонении и на событии 'error' без слушателя, а источники были
+// реальные: исключение в socket-обработчике (например emit('pvp_action') без
+// аргументов) и ошибка idle-соединения pg Pool. Любой авторизованный сокет мог
+// уронить процесс, а на Render Free это означало cold start и потерю всего
+// in-memory состояния (лобби, трейды, PvP).
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason instanceof Error ? reason : new Error(String(reason)) },
+    '[process] unhandled promise rejection — процесс продолжает работу');
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, '[process] uncaught exception');
+  // Завершаем процесс явно: после необработанного исключения состояние процесса
+  // нельзя считать достоверным. Но это контролируемый рестарт, а не падение.
+  process.exit(1);
+});
 
 main().catch((err) => {
   logger.error({ err }, '[server] Failed to start');
