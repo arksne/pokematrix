@@ -449,6 +449,57 @@ function calculateStat(pokemon, statName, isWild) {
 }
 
 /**
+ * Множитель стадии для стата: -6..+6 → 2/8 … 3/2 с полом на нижней границе.
+ * Стадии идут шагами по 2/3 в основной игре, здесь округление сделано вниз.
+ */
+const STAGE_MULTIPLIER: Record<number, number> = {
+  6: 4, 5: 3.5, 4: 3, 3: 2.5, 2: 2, 1: 1.5, 0: 1,
+  '-1': 2 / 3, '-2': 1 / 2, '-3': 2 / 5, '-4': 1 / 3, '-5': 1 / 4, '-6': 1 / 4,
+};
+
+/**
+ * Эффективная скорость для порядка хода.
+ *
+ * Раньше порядок хода вообще не учитывал скорость: useMove() отрабатывал атаку
+ * игрока и вызывал enemyTurn() следом, то есть первым бил всегда игрок, независимо
+ * от статов. Здесь считается то, что действительно влияет на очерёдность:
+ * стадия стата, паралич, Choice Scarf, Swift Swim и хвост ветра, плюс приоритет
+ * самой атаки (Quick Attack и т.п. бьют вне зависимости от скорости).
+ */
+function getEffectiveSpeed(pokemon, isWild): number {
+  let speed = calculateStat(pokemon, 'speed', isWild) || 1;
+
+  const stage = pokemon?.statStages?.spe || 0;
+  speed *= STAGE_MULTIPLIER[stage] ?? 1;
+
+  // Паралич: скорость падает вдвое
+  if (pokemon?.status === 'par') speed *= 0.5;
+
+  const ability = getAbilityName(pokemon, isWild);
+
+  if (pokemon?.heldItem === 'choiceScarf') speed *= 1.5;
+  // Swift Swim / Rain Dish — только под дождём, Chlorophyll / Solar Power — под солнцем
+  if (S.currentWeather === 'rain' && (ability === 'swiftswim' || ability === 'raindish')) speed *= 2;
+  if (S.currentWeather === 'sun' && (ability === 'chlorophyll' || ability === 'solarpower')) speed *= 2;
+
+  return Math.max(1, speed);
+}
+
+/**
+ * Кто ходит первым. Приоритет атаки важнее скорости; при равном приоритете
+ * решает скорость, при полном равенстве — игрок, как в основной игре.
+ */
+function playerMovesFirst(playerMove, enemyMove): boolean {
+  const pPrio = playerMove?.priority ?? 0;
+  const ePrio = enemyMove?.priority ?? 0;
+  if (pPrio !== ePrio) return pPrio > ePrio;
+
+  const pSpe = getEffectiveSpeed(S.activePlayerMon, false);
+  const eSpe = getEffectiveSpeed(S.activeWild, true);
+  return pSpe >= eSpe;
+}
+
+/**
  * getMultiHitCount — количество ударов для multi-hit атак (Bullet Seed, Rock Blast, etc.)
  */
 function getMultiHitCount(move) {
@@ -693,7 +744,61 @@ function handlePlayerStatusEffects(move) {
     return true;
   }
 
+  // 5. Leech Seed — засевает противника.
+  // Раньше атака не была реализована вообще: попадала в «ничего не произошло»
+  // и просто ничего не делала. Травяные типы и повторное засевание невозможны.
+  if (move.name === 'leech-seed') {
+    if (isGrassType(S.activeWild)) {
+      appendToLog(`${S.activeWild.name} — травяной тип, Семя Ужаса не действует.`, false, 'system');
+    } else if (S.seedWild) {
+      appendToLog(`${S.activeWild.name} уже засеян.`, false, 'system');
+    } else {
+      S.seedWild = true;
+      appendToLog(`${S.activeWild.name} засеян! Каждый ход он теряет HP, а противник лечится.`, false, 'system');
+    }
+    return true;
+  }
+
   return false; // Ничего не произошло — атака не была статус-атакой из списка
+}
+
+/** Травяной тип — иммунитет к Семени Ужаса. */
+function isGrassType(pokemon): boolean {
+  return !!pokemon?.types?.some((t: any) => t?.type?.name === 'grass');
+}
+
+/**
+ * Ежеходовый урон от Семени Ужаса.
+ *
+ * Засеянный теряет 1/8 максимального HP, а нападавший половину этого лечит.
+ * Вызывается в конце хода с обеих сторон.
+ */
+function applyLeechSeedTick(seededIsPlayer: boolean) {
+  if (seededIsPlayer) {
+    if (!S.seedPlayer || S.activePlayerMon.currentHp <= 0) return;
+    const dmg = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 8));
+    S.activePlayerMon.currentHp = Math.max(1, S.activePlayerMon.currentHp - dmg);
+    updatePlayerHpUI();
+    appendToLog(`Семя Ужаса отнимает у ${S.activePlayerMon.apiData.name} ${dmg} HP!`, false, 'dmg');
+    const heal = Math.max(1, Math.floor(dmg / 2));
+    if (S.wildCurHP > 0 && S.activeWild.currentHp < S.wildMaxHP) {
+      S.activeWild.currentHp = Math.min(S.wildMaxHP, S.activeWild.currentHp + heal);
+      updateWildHpUI();
+      appendToLog(`${S.activeWild.name} восстановил ${heal} HP за счёт Семени.`, false, 'heal');
+    }
+  } else {
+    if (!S.seedWild || S.wildCurHP <= 0) return;
+    const dmg = Math.max(1, Math.floor(S.wildMaxHP / 8));
+    S.wildCurHP = Math.max(1, S.wildCurHP - dmg);
+    updateWildHpUI();
+    appendToLog(`Семя Ужаса отнимает у ${S.activeWild.name} ${dmg} HP!`, false, 'dmg');
+    const heal = Math.max(1, Math.floor(dmg / 2));
+    if (S.activePlayerMon.currentHp > 0 && S.activePlayerMon.currentHp < S.activePlayerMon.maxHp) {
+      S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
+      updatePlayerHpUI();
+      appendToLog(`${S.activePlayerMon.apiData.name} восстановил ${heal} HP за счёт Семени.`, false, 'heal');
+    }
+  }
 }
 
 /**
@@ -760,6 +865,19 @@ function handleEnemyStatusEffects(move) {
       appendToLog(`${S.activeWild.name} создал Заменителя! (-${cost} HP)`, false, 'system');
     } else {
       appendToLog('Недостаточно HP для создания Заменителя!');
+    }
+    return true;
+  }
+
+  // 4b. Leech Seed — враг засевает нашего покемона (зеркально игроку)
+  if (move.name === 'leech-seed') {
+    if (isGrassType(S.activePlayerMon)) {
+      appendToLog(`${S.activePlayerMon.apiData.name} — травяной тип, Семя Ужаса не действует.`, false, 'system');
+    } else if (S.seedPlayer) {
+      appendToLog(`${S.activePlayerMon.apiData.name} уже засеян.`, false, 'system');
+    } else {
+      S.seedPlayer = true;
+      appendToLog(`${S.activePlayerMon.apiData.name} засеян врагом!`, false, 'system');
     }
     return true;
   }
@@ -2372,7 +2490,54 @@ async function useMove(moveIndex) {
     return;
   }
 
-  // ═══ 6. DECREMENT PP ═══
+  // ═══ 5c. ПОРЯДОК ХОДА ПО СКОРОСТИ ═══
+    // Если враг быстрее, его ход идёт первым, и только потом наш. Раньше порядок
+    // был жёстко «игрок, потом враг»: скорость, стадии, Choice Scarf, паралич и
+    // приоритет атаки не учитывались вообще.
+    //
+    // runEnemyTurnBody() самодостаточен: он отрабатывает весь ход врага и
+    // заканчивает показом меню выбора, поэтому его можно вызвать здесь, не
+    // вызывая enemyTurn() и не зацикливая ходы.
+    let enemyAlreadyMoved = false;
+
+    /**
+     * Завершение хода. Если враг уже отработал первым, второй раз его не зовём —
+     * просто возвращаем меню выбора, иначе ход удваивался бы.
+     */
+    const endTurn = () => {
+      if (enemyAlreadyMoved) {
+        setTimeout(() => { document.getElementById('battle-main-menu').style.display = 'flex'; }, 1000);
+      } else {
+         endTurn();
+      }
+    };
+
+    if (S.wildCurHP > 0 && S.activePlayerMon.currentHp > 0) {
+      let enemyMoveForOrder: any = null;
+      if (S.enemyChargedMove) {
+        enemyMoveForOrder = S.enemyChargedMove;
+      } else {
+        const aiPreview = selectEnemyMove({
+          moves: S.wildMovesDetailed,
+          movesPP: S.wildMovesPP,
+          attacker: S.activeWild,
+          defender: S.activePlayerMon,
+          isTrainer: S.battleType !== 'wild',
+          getTypeMultiplier,
+        });
+        enemyMoveForOrder = aiPreview?.move || null;
+      }
+
+      if (!playerMovesFirst(move, enemyMoveForOrder)) {
+        document.getElementById('battle-main-menu').style.display = 'none';
+        await runEnemyTurnBody();
+        enemyAlreadyMoved = true;
+        // Враг мог добить кого-то — тогда ход закончен, обработчики уже отработали.
+        if (S.activePlayerMon.currentHp <= 0 || S.wildCurHP <= 0) return;
+      }
+    }
+
+    // ═══ 6. DECREMENT PP ═══
   if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[moveIndex]) {
     S.activePlayerMon.movesPP[moveIndex].current--;
   }
@@ -2397,7 +2562,7 @@ async function useMove(moveIndex) {
     appendToLog(accResult.message); // "Атака промахнулась!"
     document.getElementById('battle-main-menu').style.display = 'none';
     saveBattleState();
-    setTimeout(() => { enemyTurn(); }, 1000);
+     endTurn();
     return;
   }
 
@@ -2407,7 +2572,7 @@ async function useMove(moveIndex) {
     appendToLog(`${S.activePlayerMon.apiData.name} использовал Sucker Punch, но провалился!`);
     document.getElementById('battle-main-menu').style.display = 'none';
     saveBattleState();
-    setTimeout(() => { enemyTurn(); }, 1000);
+     endTurn();
     return;
   }
 
@@ -2431,7 +2596,7 @@ async function useMove(moveIndex) {
     appendToLog(`${S.activePlayerMon.apiData.name} заряжает ${move.name}!`);
     document.getElementById('battle-main-menu').style.display = 'none';
     saveBattleState();
-    setTimeout(() => { enemyTurn(); }, 1000);
+     endTurn();
     return;
   }
 
@@ -2513,7 +2678,7 @@ async function useMove(moveIndex) {
       S.enemyProtectActive = false;
       document.getElementById('battle-main-menu').style.display = 'none';
       saveBattleState();
-      setTimeout(() => { enemyTurn(); }, 1000);
+       endTurn();
       return;
     }
     // Если есть Substitute — уведомляем
@@ -2696,6 +2861,18 @@ async function useMove(moveIndex) {
       appendToLog(`${S.activeWild.name} выдерживает удар благодаря Прочной Броне!`);
     }
 
+    // False Swipe — оставляет противнику ровно 1 HP.
+    // Раньше атака не была реализована: она наносила обычный урон и могла
+    // добить противника, то есть работала как обычная атака вдвое слабее.
+    if (move.name === 'false-swipe' || move.name === 'falseswipe') {
+      if (S.wildCurHP > 0 && S.wildCurHP < 1) S.wildCurHP = 1;
+      else if (S.wildCurHP > 0) {
+        S.wildCurHP = 1;
+        appendToLog(`Ложный Удар оставляет ${S.activeWild.name} 1 HP!`, false, 'system');
+      }
+      updateWildHpUI();
+    }
+
     updateWildHpUI();
 
     // Summary message
@@ -2721,7 +2898,7 @@ async function useMove(moveIndex) {
   if (S.wildCurHP === 0) {
     await handleWildFaintRewards(S.battleType === 'wild');
   } else {
-    setTimeout(() => { enemyTurn(); }, 1000);
+     endTurn();
   }
 }
 
@@ -3196,8 +3373,18 @@ async function runEnemyTurnBody() {
     }
   }
 
-  // ─── AFTER ALL HITS ───
-  // Summary message
+// ─── AFTER ALL HITS ───
+    // False Swipe от врага — оставляет игроку ровно 1 HP.
+    // Раньше не был реализован: наносил обычный урон и мог добить.
+    if (chosenMove.name === 'false-swipe' || chosenMove.name === 'falseswipe') {
+      if (S.activePlayerMon.currentHp > 0) {
+        S.activePlayerMon.currentHp = 1;
+        appendToLog(`Ложный Удар оставляет ${S.activePlayerMon.apiData.name} 1 HP!`, false, 'system');
+        updatePlayerHpUI();
+      }
+    }
+
+    // Summary message
   if (numHits > 1) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}! (${hitsLanded} ударов, нанесено ${totalDmg} урона!)`, false, 'dmg');
     if (lastCrit) appendToLog('Критический удар!', false, 'dmg');

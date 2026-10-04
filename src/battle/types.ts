@@ -117,14 +117,18 @@ export const INITIAL_BATTLE_STATE: BattleStateData = {
   gymTeamData: null,
   gymTeamIndexInMember: 0,
 
-  playerReflectTurns: 0,
-  playerLightScreenTurns: 0,
-  enemyReflectTurns: 0,
-  enemyLightScreenTurns: 0,
-  protectActive: false,
-  substituteHP: 0,
-  enemyProtectActive: false,
-  enemySubstituteHP: 0,
+playerReflectTurns: 0,
+    playerLightScreenTurns: 0,
+    enemyReflectTurns: 0,
+    enemyLightScreenTurns: 0,
+    protectActive: false,
+    substituteHP: 0,
+    enemyProtectActive: false,
+    enemySubstituteHP: 0,
+    // Leech Seed: кто засеян. seedPlayer=true — засеян наш покемон (урон ему,
+    // лечение противнику), seedWild=true — засеян противник.
+    seedPlayer: false,
+    seedWild: false,
 
   huntActive: false,
   huntTimer: null,
@@ -246,6 +250,9 @@ export interface BattleStateData {
   substituteHP: number;
   enemyProtectActive: boolean;
   enemySubstituteHP: number;
+  // Leech Seed: true — соответствующий покемон засеян и теряет 1/8 HP каждый ход.
+  seedPlayer: boolean;
+  seedWild: boolean;
 
   huntActive: boolean;
   huntTimer: any;
