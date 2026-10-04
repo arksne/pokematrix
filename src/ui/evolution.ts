@@ -32,6 +32,7 @@ import { getTypeGradient, getSpriteUrl } from '../utils/sprite.js';  // Град
 import { fetchPokeAPI } from '../utils/api.js';          // HTTP-клиент для PokeAPI с кэшированием
 // STONE_ITEM_MAP — маппинг: ID предмета камня (из items.ts) → имя в PokeAPI
 // Например: 'fireStone' → 'fire-stone'
+import { showToast } from '../utils/dom.js';
 import { STONE_ITEM_MAP } from '../data/stones.js';
 
 // ── ЛЕНИВЫЙ ИМПОРТ (циклическая зависимость core.ts ↔ evolution.ts) ──
@@ -307,7 +308,13 @@ export async function triggerEvolution(pokemon, targetName) {
     // Загружаем данные новой формы из PokeAPI
     const newData = await fetchPokeAPI(`pokemon/${targetName}`);
 
-    // ── Сохраняем текущие атаки (эволюция НЕ должна их сбрасывать) ──
+    // fetchPokeAPI возвращает null при недоступности PokeAPI, лимите прокси или
+    // сетевой ошибке. Раньше следующая строка обращалась к null.moves и падала,
+    // а игрок видел только «Ошибка эволюции...» без причины.
+    if (!newData || typeof newData !== 'object') {
+      throw new Error('PokeAPI не вернул данные новой формы (лимит прокси или сеть)');
+    }
+
     const oldMoves = pokemon.apiData.moves ? [...pokemon.apiData.moves] : [];
     const oldPP = pokemon.movesPP ? [...pokemon.movesPP] : [];
     const oldLearnable = pokemon.learnableMoves ? [...pokemon.learnableMoves] : [];
@@ -332,11 +339,15 @@ export async function triggerEvolution(pokemon, targetName) {
     if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
     const reserveNames = new Set(pokemon.learnableMoves.map(m => m.name));
 
-    // Проходим по всем атакам новой формы
+    // Проходим по всем атакам новой формы.
+    // version_group_details опционален: PokeAPI отдаёт его не для всех записей,
+    // и обычный for..of по undefined ронял всю эволюцию.
     for (const entry of (newData.moves || [])) {
-      for (const detail of entry.version_group_details) {
+      const details = entry?.version_group_details;
+      if (!Array.isArray(details)) continue;
+      for (const detail of details) {
         // Если атака изучается по уровню ≤ текущего
-        if (detail.move_learn_method.name === 'level-up' && detail.level_learned_at <= curLvl) {
+        if (detail.move_learn_method?.name === 'level-up' && detail.level_learned_at <= curLvl) {
           // И она ещё не изучена и не в резерве — добавляем
           if (!knownMoveNames.has(entry.move.name) && !reserveNames.has(entry.move.name)) {
             pokemon.learnableMoves.push({
@@ -349,7 +360,11 @@ export async function triggerEvolution(pokemon, targetName) {
     }
 
     // ── Пересчёт HP ──
-    const baseHp = newData.stats[0].base_stat;
+    // Ищем HP по имени, а не по позиции: PokeAPI не гарантирует порядок stats,
+    // и oldMaxHp/newMaxHp считались бы от чужого стата.
+    const hpStat = newData.stats?.find((s: any) => s?.stat?.name === 'hp') || newData.stats?.[0];
+    if (!hpStat) throw new Error('у новой формы нет характеристики HP');
+    const baseHp = hpStat.base_stat;
     const newMaxHp = Math.floor(
       0.01 * (2 * baseHp + pokemon.ivs.hp + Math.floor(0.25 * pokemon.evs.hp)) * curLvl
     ) + curLvl + 10;
@@ -380,9 +395,12 @@ export async function triggerEvolution(pokemon, targetName) {
     await wait(3000);
 
   } catch (e) {
-    // Ошибка загрузки PokeAPI
-    console.warn('Evolution fetch failed for', targetName, e);
-    evoText.innerHTML = 'Ошибка эволюции...';
+    // Показываем настоящую причину. Раньше здесь была одна строка «Ошибка
+    // эволюции...», из-за чего игрок и разработчик не знали, что именно сломалось.
+    console.warn('Evolution failed for', targetName, e);
+    const reason = (e as any)?.message ? String((e as any).message) : 'неизвестная ошибка';
+    evoText.innerHTML = `<b style="color:#f66">Ошибка эволюции</b><br><small style="color:#999">${reason}</small>`;
+    showToast(`Эволюция не удалась: ${reason}`, true);
     await wait(2000);
   }
 

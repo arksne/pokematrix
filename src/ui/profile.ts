@@ -346,20 +346,26 @@ export function refreshProfileUI() {
           const idx = parseInt(btn.getAttribute('data-lm') || '0');
           const move = mon.learnableMoves[idx];
 
-          // Показываем выбор: в какой слот поместить атаку
-          // Выбираем слот только среди первых четырёх: бой читает лишь moves[0..3]
-          // (battle/core.ts loadMoveButtons), поэтому предложение слотов 5+ приводило
-          // к записи атаки в неиспользуемый слот и её удалению из learnableMoves.
-          const usableSlots = (mon.apiData.moves || []).slice(0, 4);
-          const slotItems = usableSlots.map((m, i) => ({
-            label: m ? m.move.name : '(пусто)',
-            subtitle: `Слот ${i + 1}`
-          }));
+          // Показываем выбор: в какой слот поместить атаку.
+          // Слотов всегда ровно четыре, независимо от того, сколько атак сейчас
+          // в apiData. Раньше список строился как (apiData.moves || []).slice(0, 4),
+          // то есть если атак было три, четвёртый слот не предлагался вообще и
+          // положить в него атаку было невозможно. Бой читает moves[0..3]
+          // (battle/core.ts loadMoveButtons), поэтому пустые слоты надо
+          // показывать явно, а не прятать.
+          const slotItems = [0, 1, 2, 3].map((i) => {
+            const m = mon.apiData.moves?.[i];
+            return {
+              label: m?.move?.name || '(пусто)',
+              subtitle: `Слот ${i + 1}`
+            };
+          });
 
           showSelectionModal(
             `Заменить ${move.name} (?${move.power}) каким?`,
             slotItems,
             (slotPick) => {
+              if (!mon.apiData.moves) mon.apiData.moves = [];
               if (!mon.apiData.moves[slotPick]) mon.apiData.moves[slotPick] = {};
               // Заменяем атаку - сбрасываем PP
               mon.apiData.moves[slotPick].move = { name: move.name, url: move.url };
@@ -374,6 +380,7 @@ export function refreshProfileUI() {
             },
             true  // showCancel — кнопка "Отмена"
           );
+
         });
       });
     }
@@ -663,8 +670,14 @@ export function initProfileUXEvents() {
       }
 
       if (toAdd > 0) {
-        mon.evs[stat] += toAdd;  // Добавляем EV
+        // Через currentEV, а не `mon.evs[stat] += toAdd`: если ключа стата в
+        // объекте нет, сложение с undefined давало NaN, и EV покемона портились
+        // навсегда — молча, без ошибки в консоли.
+        evs[stat] = currentEV + toAdd;
         refreshProfileUI();       // Обновляем UI
+        // Раньше сохранения здесь не было вовсе: EV начислялись, но терялись при
+        // следующей же перезагрузке, и выглядело это так, будто они не падают.
+        autoSave();
       } else {
         showToast(
           'Нет свободных EV! Дайте покемону Конфеты (+4 EV) или Витамины (+10 EV).',
