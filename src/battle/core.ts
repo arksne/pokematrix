@@ -47,6 +47,7 @@ import { ITEMS } from '../data/items.js';                                // Ма
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy } from './logic.js';
+import { calculateStat as calculateStatShared } from './stats.js';
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
 import { store } from '../game/store.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
 import { state } from '../game/state.js';                                 // state — глобальное состояние игры (инвентарь, команда, локация)
@@ -439,114 +440,12 @@ function renderBattleUI() {
  *   5. Применяет стат-стадии (-6 до +6, множитель 2/2..8/2)
  *   6. Применяет предметы (Choice Band, Eviolite, Assault Vest, Thick Club)
  *
- * ОТКУДА ВХОДНЫЕ ДАННЫЕ:
- *   pokemon.stats (дикий) или pokemon.apiData.stats (игрок) — из PokeAPI
- *   pokemon.wildIVs / pokemon.ivs — сгенерированы или из сохранения
- *   pokemon.evs — только для игрока (изначально 0)
- *   pokemon.natureIdx — только для игрока (индекс в массиве natures)
- *   pokemon.statStages — устанавливаются через statStageModify()
- *   pokemon.heldItem — предмет в руке
- *
- * ГДЕ ИСПОЛЬЗУЕТСЯ:
- *   calculateDamage (через calcStat из logic.ts) — расчёт урона
- *   startHunt — расчёт HP дикого
- *   switchPokemon — расчёт скорости для побега
- *   handleWildFaintRewards — расчёт HP при левелапе
- *   useMove / enemyTurn — везде где нужно сравнить скорость
- *
- * ВОЗВРАЩАЕТ: число — вычисленное значение характеристики.
+ * Расчёт характеристики. Реализация в battle/stats.ts — раньше здесь была
+ * вторая копия формулы, из-за чего HP и скорость в бою считались не так же,
+ * как статы в профиле.
  */
 function calculateStat(pokemon, statName, isWild) {
-  // ── Базовый стат ──
-  // У дикого pokemon.stats — массив с PokeAPI
-  // У игрока pokemon.apiData.stats — то же самое
-  const baseStats = isWild ? pokemon.stats : pokemon.apiData.stats;
-  const statObj = baseStats.find(s => s.stat.name === statName);
-  const base = statObj ? statObj.base_stat : 50; // Fallback 50 если стат не найден
-
-  // ── Уровень ──
-  // Для дикого — S.wildLvl, для игрока — baseLevel + candiesEaten
-  const level = isWild ? S.wildLvl : (pokemon.baseLevel + pokemon.candiesEaten);
-
-  // Маппинг названий статов PokeAPI (attack → atk)
-  const mapName = { 'hp': 'hp', 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' }[statName] || 'hp';
-
-  // ── IV (Individual Values) ──
-  // У дикого: wildIVs (0-31), случайные при встрече
-  // У игрока: ivs (0-31), изначально случайные
-  const iv = isWild ? (pokemon.wildIVs ? pokemon.wildIVs[mapName] : 15) : (pokemon.ivs?.[mapName] ?? 15);
-
-  // ── EV (Effort Values) ──
-  // Только для игрока, изначально все 0. Растут при тренировках/боях.
-  const ev = isWild ? 0 : pokemon.evs[mapName];
-
-  // ── Натура (Nature) ──
-  // Каждая натура buff-ит один стат (×1.1) и nerf-ит другой (×0.9).
-  // Только для игрока, только не-HP статы.
-  let natureMod = 1.0;
-  if (statName !== 'hp' && !isWild && pokemon.natureIdx !== undefined) {
-    const nature = natures[pokemon.natureIdx];
-    if (nature) {
-      if (nature.buff === mapName) natureMod = 1.1;   // Повышенный стат
-      else if (nature.nerf === mapName) natureMod = 0.9; // Пониженный стат
-    }
-  }
-
-  // ── Формула расчёта стата ──
-  // Специальная формула для HP (добавляется level + 10)
-  // Для остальных — стандартная формула с natureMod
-  let result;
-  if (statName === 'hp') {
-    result = Math.floor(0.01 * (2 * base + iv + Math.floor(0.25 * ev)) * level) + level + 10;
-  } else {
-    result = Math.floor((Math.floor((2 * base + iv + Math.floor(0.25 * ev)) * level / 100) + 5) * natureMod);
-  }
-
-  // ── Стат-стадии (баффы/дебаффы) ──
-  // Swords Dance (+2 Atk) → stage = 2 → множитель (2+2)/2 = 2.0 (×2)
-  // Growl (-1 Atk) → stage = -1 → множитель 2/(2-(-1)) = 2/3 (×0.66)
-  // Диапазон: -6 до +6
-  if (pokemon.statStages) {
-    const stageMapName = { 'hp': 'hp', 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' }[statName];
-    if (stageMapName && pokemon.statStages[stageMapName] !== undefined) {
-      const stage = pokemon.statStages[stageMapName];
-      if (stage !== 0) {
-        const stageMult = stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
-        if (statName !== 'hp') { // HP не меняется от стадий
-          result = Math.floor(result * stageMult);
-        }
-      }
-    }
-  }
-
-  // ── Множители от предметов ──
-  // Choice Band: ×1.5 к Attack
-  // Choice Scarf: ×1.5 к Speed
-  // Choice Specs: ×1.5 к Sp.Atk
-  // Thick Club (Cubone/Marowak): ×2 к Attack
-  // Eviolite (если может эволюционировать): ×1.5 к Def/SpDef
-  // Assault Vest: ×1.5 к SpDef
-  if (!isWild && pokemon.heldItem) {
-    const choiceMap = { 'choiceBand': 'attack', 'choiceScarf': 'speed', 'choiceSpecs': 'special-attack' };
-    if (choiceMap[pokemon.heldItem] === statName) {
-      result = Math.floor(result * 1.5);
-    }
-    // thickClub: x2 Atk для Cubone/Marowak
-    if (pokemon.heldItem === 'thickClub' && statName === 'attack') {
-      const species = pokemon.apiData?.species?.name || pokemon.apiData?.name || '';
-      if (species === 'cubone' || species === 'marowak') result = Math.floor(result * 2);
-    }
-    // eviolite: x1.5 Def/SpDef если покемон может эволюционировать
-    if (pokemon.heldItem === 'eviolite' && (statName === 'defense' || statName === 'special-defense')) {
-      if (pokemon.apiData?.species?.url) result = Math.floor(result * 1.5); // Если есть species.url — значит может эволюционировать
-    }
-    // assaultVest: x1.5 SpDef (статус-атаки блокируются отдельно)
-    if (pokemon.heldItem === 'assaultVest' && statName === 'special-defense') {
-      result = Math.floor(result * 1.5);
-    }
-  }
-
-  return result;
+  return calculateStatShared(pokemon, statName, { isWild, level: isWild ? S.wildLvl : undefined });
 }
 
 /**

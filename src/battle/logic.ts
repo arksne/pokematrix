@@ -72,76 +72,20 @@ export function getTypeMultiplier(attackType, defenderTypes) {
 }
 
 import { getWeatherMultiplier } from '../data/weather.js';
+import { calculateStat as calculateStatShared } from './stats.js';
 export { getWeatherMultiplier };
-
-const STAT_MAP = { hp: 'hp', attack: 'atk', defense: 'def', 'special-attack': 'spa', 'special-defense': 'spd', speed: 'spe' };
 
 /**
  * @param {object} pokemon - has .stats (wild) or .apiData.stats (player), .ivs/, .evs/, .natureIdx
  * @param {string} statName - 'hp'|'attack'|'defense'|'special-attack'|'special-defense'|'speed'
  * @param {object} opts - { isWild, level, ivs, evs, natures }
+ *
+ * Реализация вынесена в battle/stats.ts: эта же формула считалась ещё в
+ * battle/core.ts и ui/inventory.ts, и из-за расхождений профиль показывал статы,
+ * отличные от боевых. Здесь оставлена обёртка ради обратной совместимости.
  */
 export function calculateStat(pokemon, statName, opts: Record<string, any> = {}) {
-  const isWild = opts.isWild || false;
-  const baseStats = isWild ? pokemon.stats : pokemon.apiData?.stats;
-  const statObj = baseStats?.find(s => s.stat?.name === statName);
-  const base = statObj ? statObj.base_stat : 50;
-
-  const level = opts.level ?? (isWild ? 50 : (pokemon.baseLevel + (pokemon.candiesEaten || 0)));
-  const mapName = STAT_MAP[statName] || 'hp';
-
-  const iv = isWild
-    ? (pokemon.wildIVs?.[mapName] ?? opts.ivs?.[mapName] ?? 15)
-    : (opts.ivs?.[mapName] ?? pokemon.ivs?.[mapName] ?? 15);
-  const ev = isWild ? 0 : (opts.evs?.[mapName] ?? pokemon.evs?.[mapName] ?? 0);
-
-  let natureMod = 1.0;
-  if (statName !== 'hp' && !isWild && pokemon.natureIdx !== undefined) {
-    const nature = (opts.natures || [])[pokemon.natureIdx];
-    if (nature) {
-      if (nature.buff === mapName) natureMod = 1.1;
-      else if (nature.nerf === mapName) natureMod = 0.9;
-    }
-  }
-
-  let result;
-  if (statName === 'hp') {
-    result = Math.floor(0.01 * (2 * base + iv + Math.floor(0.25 * ev)) * level) + level + 10;
-  } else {
-    result = Math.floor((Math.floor((2 * base + iv + Math.floor(0.25 * ev)) * level / 100) + 5) * natureMod);
-  }
-
-  // Apply stat stages
-  if (pokemon.statStages) {
-    const stageKey = STAT_MAP[statName];
-    if (stageKey && pokemon.statStages[stageKey] !== undefined) {
-      const stage = pokemon.statStages[stageKey];
-      if (stage !== 0) {
-        const stageMult = stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
-        if (statName !== 'hp') result = Math.floor(result * stageMult);
-      }
-    }
-  }
-
-  // Choice item / held item multipliers (player mons only)
-  if (!isWild && pokemon.heldItem) {
-    const choiceMap = { choiceBand: 'attack', choiceScarf: 'speed', choiceSpecs: 'special-attack' };
-    if (choiceMap[pokemon.heldItem] === statName) {
-      result = Math.floor(result * 1.5);
-    }
-    if (pokemon.heldItem === 'thickClub' && statName === 'attack') {
-      const species = pokemon.apiData?.species?.name || pokemon.apiData?.name || '';
-      if (species === 'cubone' || species === 'marowak') result = Math.floor(result * 2);
-    }
-    if (pokemon.heldItem === 'eviolite' && (statName === 'defense' || statName === 'special-defense')) {
-      if (pokemon.apiData?.species?.url) result = Math.floor(result * 1.5);
-    }
-    if (pokemon.heldItem === 'assaultVest' && statName === 'special-defense') {
-      result = Math.floor(result * 1.5);
-    }
-  }
-
-  return result;
+  return calculateStatShared(pokemon, statName, opts);
 }
 
 export function getAbilityName(pokemon, isWild) {

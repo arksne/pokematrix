@@ -123,6 +123,8 @@ import { store } from '../game/store.js';
 // checkNewMovesOnLevelUp — проверка новых атак при повышении уровня
 import { checkNewMovesOnLevelUp } from './levelup_moves.js';
 
+import { calculateStat as calculateStatShared } from '../battle/stats.js';
+
 // ── ИНИЦИАЛИЗАЦИЯ СОБЫТИЙ QA-КНОПОК И HELD ITEM ──────────
 // Вызывается один раз при старте игры (init.ts)
 export function initInventoryEvents() {
@@ -260,33 +262,21 @@ function updateStats() {
     'speed': { idx: 5, el: 'spe' }            // Скорость
   };
 
-  // Процент усиления от тренировки (trainingStage 0-6)
-  // Берётся из trainingStages[mon.trainingStage].pct / 100
-  // Например, stage 3 = 30%, stage 6 = 100%
-  const trainPct = getInvState().trainingStages[mon.trainingStage].pct / 100;
   // Текущий уровень = базовый уровень + съеденные конфеты
   const curLvl = mon.baseLevel + mon.candiesEaten;
 
   // Проходим по всем статам и вычисляем финальные значения
   for (const [statName, info] of Object.entries(statsMapping)) {
-    const baseStat = mon.apiData.stats[info.idx].base_stat;  // Базовый стат (из PokeAPI)
-    const ev = mon.evs[info.el];                               // EV (0-252)
-    const iv = mon.ivs[info.el];                               // IV (0-31)
-
-    let natureMod = 1.0;  // Модификатор характера (1.0 = нейтрально)
-    let isTrained = false; // Флаг тренировки
+    let isTrained = false; // Флаг тренировки (для подсветки в UI)
 
     // Берём DOM-элемент названия стата для подсветки
     const labelEl = document.getElementById(`label-${info.el}`);
     if (labelEl) {
       labelEl.className = 'stat-name';  // Сбрасываем класс
-      // Если характер усиливает этот стат (buff) — модификатор 1.1
+      // Подсветка характера: сам множитель считает calculateStat
       if (localNature.buff === info.el) {
-        natureMod = 1.1;
         labelEl.classList.add('nature-buff');  // Красная подсветка
-      // Если характер ослабляет этот стат (nerf) — модификатор 0.9
       } else if (localNature.nerf === info.el) {
-        natureMod = 0.9;
         labelEl.classList.add('nature-nerf');   // Синяя подсветка
       }
 
@@ -296,26 +286,11 @@ function updateStats() {
       }
     }
 
-    // ── Формула расчёта статов ──
-    // Формула из оригинальных игр Pokémon:
-    // HP:  floor(0.01 * (2*base + IV + floor(0.25*EV)) * level) + level + 10
-    // Other: floor(floor(0.01 * (2*base + IV + floor(0.25*EV)) * level) + 5) * nature
-    let finalStat = 0;
-    if (statName === 'hp') {
-      // HP считается по отдельной формуле (без характера)
-      finalStat = Math.floor(0.01 * (2 * baseStat + iv + Math.floor(0.25 * ev)) * curLvl) + curLvl + 10;
-    } else {
-      // Остальные статы: базовая формула
-      finalStat = Math.floor(Math.floor(0.01 * (2 * baseStat + iv + Math.floor(0.25 * ev)) * curLvl) + 5);
-      // Применяем модификатор характера (×1.1 или ×0.9)
-      finalStat = Math.floor(finalStat * natureMod);
-
-      // Если стат тренирован — применяем бонус тренировки
-      // Например: тренировка 6 стадия = +100% к стату
-      if (isTrained) {
-        finalStat = Math.floor(finalStat * (1 + trainPct));
-      }
-    }
+    // Считаем тем же кодом, что и бой (battle/stats.ts).
+    // Раньше здесь была третья копия формулы: она не учитывала стадии и
+    // предметы и давала другие числа, чем бой — расхождение доходило до 39.6 %
+    // на тренированном покемоне.
+    const finalStat = calculateStatShared(mon, statName, { isWild: false, level: curLvl });
 
     // Отображаем финальное значение стата
     document.getElementById(`val-${info.el}`).innerText = String(finalStat);
