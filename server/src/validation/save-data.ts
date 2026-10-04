@@ -70,6 +70,24 @@ const evSchema = z.object({
 });
 
 // ── Схема покемона в команде ──
+/**
+ * Поле, которое клиент пишет как строку, но может положить числом.
+ *
+ * Так случилось с originalTrainer: getTrainerId() возвращает tgUser.id, то есть
+ * число, а схема требовала строку. Из-за этого КАЖДЫЙ облачный сейв возвращал
+ * 422 — «myTeam.0.originalTrainer: Expected string, received number» — и прогресс
+ * жил только в localStorage. Потеря кэша или смена устройства означали полную
+ * потерю игры, при этом в консоли было лишь «Cloud save failed», а в интерфейсе
+ * значок ☁️✗.
+ *
+ * Такие поля — идентификаторы и названия, к ним нет требований по безопасности,
+ * поэтому приводим к строке вместо отклонения всего сейва.
+ */
+const strish = z.union([z.string(), z.number()])
+  .transform((v) => String(v))
+  .nullable()
+  .optional();
+
 const teamMonSchema = z.object({
   uid: z.string().min(1, 'uid обязателен'),
   baseLevel: z.number().int().min(1).max(100).default(1),
@@ -79,22 +97,23 @@ const teamMonSchema = z.object({
   ivs: ivSchema.optional(),
   evs: evSchema.optional(),
   isShiny: z.boolean().optional(),
-  nickname: z.string().optional(),
-  gender: z.string().optional(),
+  nickname: strish,
+  gender: strish,
   natureIdx: z.number().int().min(0).max(24).optional(),
   happiness: z.number().int().min(0).max(255).optional(),
-  status: z.string().nullable().optional(),
-  heldItem: z.string().nullable().optional(),
-  abilityName: z.string().nullable().optional(),
-  originalTrainer: z.string().optional(),
-  createdAt: z.number().optional(),
-  caughtLocation: z.string().optional(),
+  status: strish,
+  heldItem: strish,
+  abilityName: strish,
+  // Число, а не строка: см. strish выше.
+  originalTrainer: strish,
+  createdAt: z.union([z.number(), z.string()]).optional(),
+  caughtLocation: strish,
   candiesEaten: z.number().int().min(0).optional(),
   vitaminsEaten: z.number().int().min(0).optional(),
   exp: z.number().int().min(0).optional(),
   expToNext: z.number().int().min(0).optional(),
   trainingStage: z.number().int().min(0).optional(),
-  trainingStat: z.string().nullable().optional(),
+  trainingStat: strish,
   movesPP: z.array(z.object({ current: z.number(), max: z.number() })).optional(),
   statStages: z.any().optional(),
   berries: z.record(z.number()).optional(),

@@ -446,6 +446,7 @@ async function main() {
     ['[5] проверки данных', 'data.test.mjs'],
     ['[6] проверки безопасности', 'security.test.mjs'],
     ['[7] проверки экономики', 'economy.test.mjs'],
+    ['[8] схема против настоящего сейва', 'schema-real-save.test.mjs'],
   ]) {
     log(`\n${title}`);
     const r = await runSuite(title, file);
