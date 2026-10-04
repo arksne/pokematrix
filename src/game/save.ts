@@ -132,16 +132,20 @@ export function getFullSaveData() {
   return {
     _v: state.saveVersion,
     _ts: Date.now(),
-    // Флаг «стартовик выдан» — явный и сохраняемый, а не вычисляемый из
-    // количества покемонов. Раньше здесь стояла константа true, потом я
-    // заменил её на totalPokemonCount() > 0 — и обе версии были неверны: первая
-    // делала полупустой сейв неотличимым от настоящего, вторая делала
-    // непредставимым состояние «стартовик выдан, команда пуста». Из-за второго
-    // игрок, выпустивший последнего покемона в ПК, при следующей загрузке
-    // получал нового случайного стартовика, и так бесконечно, с перебросом IV,
-    // натуры и блеска. Именно на этот флаг смотрит init.ts, решая, применять
-    // ли облачный сейв.
-    starterGiven: state.starterGiven === true,
+    // Флаг «стартовик выдан» — явный, сохраняемый и самовосстанавливающийся.
+    // Раньше здесь стояла константа true, потом я заменил её на
+    // totalPokemonCount() > 0 — и обе версии были неверны: первая делала
+    // полупустой сейв неотличимым от настоящего, вторая делала непредставимым
+    // состояние «стартовик выдан, команда пуста». Из-за второго игрок, выпустивший
+    // последнего покемона в ПК, при следующей загрузке получал нового случайного
+    // стартовика, и так бесконечно, с перебросом IV, натуры и блеска.
+    //
+    // Теперь это «явный ИЛИ есть покемоны»: покемон в коллекции — доказательство,
+    // что старт был, а явный флаг сохраняет состояние «выдан, но команда пуста».
+    // Такое и самовосстанавливается: в проде лежал сейв с torchic 15 уровня и
+    // starterGiven: false, что грозило новым стартовиком при потере последнего
+    // покемона.
+    starterGiven: state.starterGiven === true || totalPokemonCount() > 0,
     currentLocationId: state.currentLocationId, currentRegion: state.currentRegion,
     inventory: { ...state.inventory },
     money: state.inventory['credit'] || 0, badges: state.badges, trainerNickname: state.trainerNickname,
@@ -149,7 +153,7 @@ export function getFullSaveData() {
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
       caughtLocation: m.caughtLocation, previousOwner: m.previousOwner,
       apiData: slimApiData(m.apiData), maxHp: m.maxHp, currentHp: m.currentHp,
-      ivs: m.ivs, evs: m.evs, baseLevel: m.baseLevel,
+      ivs: m.ivs, evs: m.evs, evFromLevel: m.evFromLevel, baseLevel: m.baseLevel,
       exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
       vitaminsEaten: m.vitaminsEaten, training: m.training, trainingStage: m.trainingStage,
       trainingStat: m.trainingStat, happiness: m.happiness, natureIdx: m.natureIdx,
@@ -166,7 +170,7 @@ export function getFullSaveData() {
     pcBoxes: state.pcBoxes.map(box => box.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
       caughtLocation: m.caughtLocation, apiData: slimApiData(m.apiData), maxHp: m.maxHp,
-      currentHp: m.currentHp, ivs: m.ivs, evs: m.evs, baseLevel: m.baseLevel,
+      currentHp: m.currentHp, ivs: m.ivs, evs: m.evs, evFromLevel: m.evFromLevel, baseLevel: m.baseLevel,
       exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
       vitaminsEaten: m.vitaminsEaten, trainingStage: m.trainingStage, trainingStat: m.trainingStat,
       happiness: m.happiness, natureIdx: m.natureIdx, breedLetter: m.breedLetter, gender: m.gender,

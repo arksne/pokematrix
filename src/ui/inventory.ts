@@ -53,6 +53,7 @@
 // getInvState  — возвращает состояние инвентаря: ITEMS, inventory, money, eggs, trainingStages
 // toggleExpShare — переключает Exp. Share (вкл/выкл)
 import { getTeamState, getInvState, toggleExpShare } from '../game/getters.js';
+import { evBudget } from '../battle/core.js';
 // addItem — добавляет предмет в инвентарь (через store.dispatch)
 // removeItem — удаляет предмет из инвентаря (через store.dispatch)
 import { addItem, removeItem } from '../game/actions.js';
@@ -180,7 +181,7 @@ export function updateDynamicEVs() {
 
   // Максимум EV = (конфеты × 4) + (витамины × 10)
   // Каждая конфета даёт 4 очка распределения, каждый витамин — 10
-  const maxTotalEV = (mon.candiesEaten * 4) + (mon.vitaminsEaten * 10);
+  const maxTotalEV = evBudget(mon);
   // Отображаем максимум
   document.getElementById('ev-total').innerText = String(maxTotalEV);
 
@@ -191,7 +192,7 @@ export function updateDynamicEVs() {
   evInputs.forEach(input => currentTotal += parseInt((input as HTMLInputElement).value) || 0);
 
   // Отображаем остаток: максимум - уже распределено
-  document.getElementById('ev-remaining').innerText = String(maxTotalEV - currentTotal);
+  document.getElementById('ev-remaining').innerText = String(Math.max(0, maxTotalEV - currentTotal));
 }
 
 // ── applyEVs: применить распределение EV ─────────────────
@@ -202,7 +203,7 @@ export function applyEVs() {
   const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
 
   // Вычисляем максимальное количество EV как в updateDynamicEVs
-  const maxTotalEV = (mon.candiesEaten * 4) + (mon.vitaminsEaten * 10);
+  const maxTotalEV = evBudget(mon);
   // Собираем все EV-инпуты
   const evInputs = document.querySelectorAll('.reborn-input-ev');
   let currentTotal = 0;

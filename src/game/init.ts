@@ -195,6 +195,16 @@ import { API_BASE } from './config.js';
           // ниже продолжал работать с пустой командой, считал игру незагруженной
           // и выкладывал в облако состояние без покемонов поверх реального.
           await applyCloudSave(cloudData);
+          // Решение видно в консоли: при двух устройствах важно понимать, какая
+          // сторона победила. Раньше расхождение прогресса между телефоном и
+          // ноутбуком было невозможно объяснить — обе стороны молча решали
+          // по-своему.
+          const appliedCloud = totalPokemonCountOf(cloudData) > 0;
+          const localBefore = totalPokemonCountOf(state as any);
+          console.log(
+            `[save] облако принято: в облаке ${appliedCloud ? 'покемоны' : 'пусто'}, ` +
+            `локально до этого ${localBefore}. lastSync=${state.lastCloudSync}`
+          );
           if (state.myTeam.length > 0) { gameLoaded = true; }
           else if (cloudData.starterGiven) {
             gameLoaded = true;

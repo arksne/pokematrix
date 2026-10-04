@@ -59,6 +59,7 @@ import { escHtml, renderStars, showSelectionModal, showToast } from '../utils/do
 // applyEVs — применяет распределение EV
 import { getHeldItemName, openHeldItemPicker, updateDynamicEVs, applyEVs } from './inventory.js';
 // autoSave — сохраняет игру (localStorage + сервер)
+import { evBudget } from '../battle/core.js';
 import { autoSave } from '../game/save.js';
 
 // ── Ленивый импорт battle/core.js (избегает циклических зависимостей) ──
@@ -653,7 +654,7 @@ export function initProfileUXEvents() {
 
       const evs = mon.evs as Record<string, number>;
       let totalEVs = Object.values(evs).reduce((a, b) => a + b, 0);  // Сумма всех EV
-      let maxTotal = (mon.candiesEaten * 4) + (mon.vitaminsEaten * 10); // Максимум доступных EV
+      let maxTotal = evBudget(mon); // Максимум доступных EV, включая EV за уровни
 
       let currentEV = evs[stat] || 0;
       let toAdd = 0;

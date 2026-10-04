@@ -2462,7 +2462,26 @@ function grantLevelUpEVs(pokemon) {
   if (pokemon.evs[bestKey] >= 252) return null;
 
   pokemon.evs[bestKey] += 1;
+  // Сколько EV начислено за уровни. Это часть бюджета распределения, иначе
+  // остаток в интерфейсе уходил в минус: максимум считался только по конфетам и
+  // витаминам, а эти EV уже были разложены по статам.
+  if (typeof pokemon.evFromLevel !== 'number') pokemon.evFromLevel = 0;
+  pokemon.evFromLevel += 1;
   return { key: bestKey, total: pokemon.evs[bestKey] };
+}
+
+/**
+ * Бюджет EV для ручного распределения.
+ *
+ * Конфеты дают 4 очка, витамины 10, а уровни добавляют своё — раньше это
+ * не учитывалось, и поле «осталось» показывало отрицательное число.
+ */
+export function evBudget(mon): number {
+  if (!mon) return 0;
+  const candies = (mon.candiesEaten || 0) * 4;
+  const vitamins = (mon.vitaminsEaten || 0) * 10;
+  const fromLevel = mon.evFromLevel || 0;
+  return candies + vitamins + fromLevel;
 }
 
 async function useMove(moveIndex) {
