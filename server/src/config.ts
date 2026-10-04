@@ -12,6 +12,10 @@ export const config = {
   adminPass: process.env.ADMIN_PASS || '',
   allowDevLogin: process.env.ALLOW_DEV_LOGIN === 'true',
   databaseUrl: process.env.DATABASE_URL || '',
+  // Каталог собранного клиента. По умолчанию — <корень проекта>/dist, что верно
+  // для нативного деплоя (Render). В контейнере путь задаётся явно, потому что
+  // там /app/dist уже занят серверным кодом.
+  clientDist: process.env.CLIENT_DIST || '',
   // TLS для PostgreSQL: 'require' (по умолчанию в production), 'disable' или 'auto'.
   // Нужен для хостов без поддержки SSL и для локальной проверки на PGlite.
   dbSsl: (process.env.DB_SSL || 'auto') as 'require' | 'disable' | 'auto',

@@ -41,6 +41,9 @@ export { logger };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..', '..'); // server/ → корень проекта
+// Каталог собранного клиента: по умолчанию <корень>/dist, но в контейнере путь
+// задаётся через CLIENT_DIST, потому что там /app/dist занят серверным кодом.
+const CLIENT_DIST = config.clientDist || path.join(ROOT_DIR, 'dist');
 
 /**
  * Обёртка socket.on: ловит синхронные исключения и отклонённые промисы внутри
@@ -119,7 +122,7 @@ async function main() {
 
   // ── Static files (в продакшне — собранный клиент) ────────
   if (config.isProduction) {
-    app.use(express.static(path.join(ROOT_DIR, 'dist')));
+    app.use(express.static(CLIENT_DIST));
   }
 
   // ── Pino logger middleware ────────────────────────────────
@@ -210,7 +213,7 @@ async function main() {
   // ── SPA fallback (продакшн) ──────────────────────────────
   if (config.isProduction) {
     app.get('*', (_req, res) => {
-      res.sendFile('index.html', { root: path.join(ROOT_DIR, 'dist') });
+      res.sendFile('index.html', { root: CLIENT_DIST });
     });
   }
 
