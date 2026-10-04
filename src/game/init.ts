@@ -233,6 +233,22 @@ import { API_BASE } from './config.js';
         if (state.tgToken) cloudSave();
       }
     }
+    // Стартовик нельзя пропустить: пока модалка висит, init.ts стоит на
+    // await giveStarter(). Раньше клик по фону просто скрывал её, и промис
+    // никогда не резолвился — игра не доходила ни до рендера локации, ни до
+    // восстановления состояния.
+    //
+    // Слушатель обязательно ставится ДО ветки с giveStarter(): раньше он был
+    // зарегистрирован ниже по файлу, то есть уже после того, как промис
+    // должен был разблокироваться, и событие закрытия приходило в никуда.
+    // Игрок, закрывший модалку по фону, ждал 90 секунд до страховки.
+    document.getElementById('starter-modal')?.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) {
+        (e.currentTarget as HTMLElement).style.display = 'none';
+        document.dispatchEvent(new CustomEvent('starter-modal:dismissed'));
+      }
+    });
+
     if (!gameLoaded) {
       // Настоящая новая игра: стартовика ещё не выдали, поэтому состояние пустое
       // законно. Снимаем гейт, иначе cloudSave() не сможет сохранить выбор.
@@ -399,18 +415,6 @@ import { API_BASE } from './config.js';
     document.getElementById('trainer-profile-modal')?.addEventListener('click', (e) => {
       if (e.target === e.currentTarget) {
         (e.currentTarget as HTMLElement).style.display = 'none';
-      }
-    });
-
-    // Стартовик нельзя пропустить: пока модалка висит, init.ts стоит на
-    // await giveStarter(). Раньше клик по фону просто скрывал её, и промис
-    // никогда не резолвился — игра не доходила ни до рендера локации, ни до
-    // восстановления состояния. Поэтому закрытие по фону выдаёт стартовика по
-    // умолчанию, а не вешает игру.
-    document.getElementById('starter-modal')?.addEventListener('click', (e) => {
-      if (e.target === e.currentTarget) {
-        (e.currentTarget as HTMLElement).style.display = 'none';
-        document.dispatchEvent(new CustomEvent('starter-modal:dismissed'));
       }
     });
 
