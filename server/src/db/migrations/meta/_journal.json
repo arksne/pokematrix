@@ -15,6 +15,13 @@
       "when": 1786038490569,
       "tag": "0001_naughty_warstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0003_reward_cooldown",
+      "breakpoints": true
     }
   ]
 }

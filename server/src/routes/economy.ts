@@ -259,18 +259,19 @@ router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
       let saveData: any = {};
       try { saveData = JSON.parse(user.save_data || '{}'); } catch {}
       if (!saveData.inventory) saveData.inventory = {};
-      if (!saveData.lastRewardTime) saveData.lastRewardTime = 0;
 
-      // ── Проверка кулдауна (24h) ──
+      // Проверка кулдауна (24h) по серверной колонке, а не по клиентскому полю:
+      // lastRewardTime в save_data затирался каждым обычным сохранением клиента.
       const now = Date.now();
-      const cooldownMs = 24 * 60 * 60 * 1000; // 24 часа
-      const timeSinceLastReward = now - saveData.lastRewardTime;
+      const cooldownMs = 24 * 60 * 60 * 1000; // 24 ч
+      const lastRewardAt = Number(user.last_reward_at || 0);
+      const timeSinceLastReward = now - lastRewardAt;
       if (timeSinceLastReward < cooldownMs) {
         const hoursLeft = Math.ceil((cooldownMs - timeSinceLastReward) / (60 * 60 * 1000));
         throw new Error(`Reward cooldown: ${hoursLeft}h remaining`);
       }
 
-      // ── Сервер сам определяет награду (не доверяем клиенту) ──
+      // Что получить: 500 кред. + 5 покеболов + 3 аптечки
       const rewardMoney = 500;
       const rewardItems = { pokeBall: 5, potion: 3 };
 
@@ -278,11 +279,11 @@ router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
       for (const [itemId, qty] of Object.entries(rewardItems)) {
         saveData.inventory[itemId] = (saveData.inventory[itemId] || 0) + qty;
       }
-      saveData.lastRewardTime = now;
 
       await tx.update(users).set({
         save_data: JSON.stringify(saveData),
         money: saveData.inventory['credit'],
+        last_reward_at: now,
       }).where(eq(users.id, userId));
 
       return { rewardMoney, rewardItems };

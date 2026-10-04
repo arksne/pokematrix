@@ -55,6 +55,17 @@ const ivSchema = z.object({
   spe: z.number().int().min(0).max(31).default(0),
 });
 
+// Схема EV: 0..252. Должна быть отдельной от IV — ранее здесь стояла ivSchema
+// с max(31), из-за чего любой EV >= 32 приводил к 422 на весь POST /api/save.
+const evSchema = z.object({
+  hp: z.number().int().min(0).max(252).default(0),
+  atk: z.number().int().min(0).max(252).default(0),
+  def: z.number().int().min(0).max(252).default(0),
+  spa: z.number().int().min(0).max(252).default(0),
+  spd: z.number().int().min(0).max(252).default(0),
+  spe: z.number().int().min(0).max(252).default(0),
+});
+
 // ── Схема покемона в команде ──
 const teamMonSchema = z.object({
   uid: z.string().min(1, 'uid обязателен'),
@@ -63,7 +74,7 @@ const teamMonSchema = z.object({
   maxHp: z.number().int().min(1).optional(),
   apiData: z.any().optional(),
   ivs: ivSchema.optional(),
-  evs: ivSchema.optional(),
+  evs: evSchema.optional(),
   isShiny: z.boolean().optional(),
   nickname: z.string().optional(),
   gender: z.string().optional(),

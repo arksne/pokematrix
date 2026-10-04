@@ -16,6 +16,9 @@ export const users = pgTable('users', {
   save_data: text('save_data').default('{}'),
   save_version: integer('save_version').default(0),
   money: integer('money').default(500),
+  // Серверная метка последней ежедневной награды. Раньше она лежала в клиентском
+  // JSON save_data, из-за чего любое обычное сохранение обнуляло 24-часовой кулдаун.
+  last_reward_at: bigint('last_reward_at', { mode: 'number' }).default(0),
   badges_count: integer('badges_count').default(0),
   pokemon_count: integer('pokemon_count').default(0),
   created_at: text('created_at'),

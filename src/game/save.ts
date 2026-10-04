@@ -140,10 +140,15 @@ export function saveGame() {
   } catch (e) {
     console.warn('localStorage save failed — freeing space', e);
     try {
-      ['save_backup', 'save_bak1', 'save_bak2', 'save_ts', 'save_v', 'quest_date', 'pokedex_seen', 'pokedex_caught', 'battle_state'].forEach(k => {
+      // Чистим только производные данные. Бэкапы сейвов и живое состояние боя
+      // раньше удалялись здесь же: игрок терял незавершённый бой и откатывался на
+      // предыдущий сейв, хотя освобождения это не давало (они и так пустые к моменту
+      // переполнения) — а battle_state весит около мегабайта и удалялся всегда.
+      ['quest_date', 'pokedex_seen', 'pokedex_caught', 'save_bak2', 'save_bak1'].forEach(k => {
         try { localStorage.removeItem(lsKey(k)); } catch(_) {}
       });
       localStorage.setItem(lsKey('save'), saveJson);
+      console.warn('localStorage: сейв записан после освобождения места (бэкапы боя сохранены)');
     } catch (e2) {
       console.error('CRITICAL: Cannot save to localStorage', e2);
     }
@@ -282,7 +287,13 @@ export function resetGame() {
       try {
         await apiFetch('/save', {
           method: 'POST',
-          body: JSON.stringify({ saveData: { _v: Date.now(), myTeam: [], inventory: { credit: 500 }, money: 500, badges: [] } })
+          // saveVersion обязателен: без него сервер получает clientVersion = 0
+          // и отвечает 409 для любого аккаунта, который хоть раз сохранился.
+          body: JSON.stringify({
+            saveData: { _v: Date.now(), starterGiven: false, myTeam: [], pcBoxes: [[]], inventory: { credit: 500 }, money: 500, badges: [] },
+            money: 500,
+            saveVersion: Date.now(),
+          })
         });
       } catch(e) { console.warn('Cloud reset failed', e); }
     }
@@ -309,6 +320,7 @@ export async function doCloudSave(attempt = 0) {
   const saveData = getFullSaveData();
   const lb = getLeaderboardData();
 
+  let result: any = null;
   try {
     const res = await apiFetch('/save', {
       method: 'POST',
@@ -317,40 +329,42 @@ export async function doCloudSave(attempt = 0) {
     // 429 = rate limited — don't retry, just stop hammering the server
     if (res.status === 429) {
       console.warn('Cloud save rate-limited (429), backing off');
-      state.saveInProgress = false;
       const btnSync = document.getElementById('btn-cloud-sync');
       if (btnSync) { btnSync.textContent = '☁️✗'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 5000); }
-      return;
+      return null;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const result = await res.json();
+    result = await res.json();
     state.lastCloudSync = Date.now();
     state.saveRetryCount = 0;
     localStorage.setItem(lsKey('save_sync'), String(state.lastCloudSync));
     const btnSync = document.getElementById('btn-cloud-sync');
     if (btnSync) { btnSync.textContent = '☁️✓'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 1500); }
-    return result;
   } catch (e) {
     console.warn(`Cloud save failed (attempt ${attempt + 1}/${MAX_RETRIES})`, e.message);
     if (attempt < MAX_RETRIES - 1) {
       state.saveRetryCount = attempt + 1;
-      state.saveInProgress = false;
       const delay = RETRY_DELAYS[attempt];
       state.cloudSaveTimer = setTimeout(() => doCloudSave(attempt + 1), delay);
-      return;
     } else {
       state.saveRetryCount = MAX_RETRIES;
       const btnSync = document.getElementById('btn-cloud-sync');
       if (btnSync) { btnSync.textContent = '☁️✗'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 3000); }
     }
+  } finally {
+    // Флаг обязан сбрасываться на ЛЮБОМ выходе, включая успешный.
+    // Раньше успешная ветка делала return выше этой строки, и saveInProgress
+    // залипал навсегда — облачный сейв переставал работать после первого успеха.
+    state.saveInProgress = false;
   }
-  state.saveInProgress = false;
 
   // If another save was triggered while we were saving, fire it now
   if (state.saveTriggerPending) {
     state.saveTriggerPending = false;
     doCloudSave();
   }
+
+  return result;
 }
 
 export async function cloudLoad() {
