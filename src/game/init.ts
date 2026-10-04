@@ -213,14 +213,21 @@ import { API_BASE } from './config.js';
         }
       }
     }
-    if (!gameLoaded) {
-      // Локальный сейв уступает, если сброс был свежее его записи.
-      const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
-      if (resetAt && resetAt > localTs) {
-        localStorage.removeItem(lsKey('save'));
-        localStorage.setItem(lsKey('save_ts'), '0');
-        console.log('[save] локальный сейв старше намеренного сброса — не восстанавливаем его');
-      }
+    // Локальный сейв уступает, если сброс был свежее его записи.
+    //
+    // Метка _resetAt лежит в облачном сейве постоянно, поэтому её нужно
+    // «съесть» один раз. Раньше проверка была только на resetAt > localTs, и
+    // после первого же обнуления save_ts становился равен 0 — то есть условие
+    // выполнялось при каждом входе, и локальный сейв удалялся снова и снова.
+    // Прогресс, который ещё не попал в облако, стирался при каждом обновлении
+    // страницы. Теперь метка применяется один раз на конкретный сброс.
+    const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+    const resetSeenAt = parseInt(localStorage.getItem(lsKey('save_reset_seen')) || '0');
+    if (resetAt && resetAt > localTs && resetAt > resetSeenAt) {
+      localStorage.removeItem(lsKey('save'));
+      localStorage.setItem(lsKey('save_ts'), '0');
+      localStorage.setItem(lsKey('save_reset_seen'), String(resetAt));
+      console.log('[save] применён намеренный сброс от', new Date(resetAt).toISOString(), '— локальный сейв сброшен');
     }
     if (!gameLoaded) {
       if (localLoaded && state.myTeam.length > 0) {
@@ -457,14 +464,21 @@ function flushSaveOnExit() {
     validateGameState();
     const saveData = getFullSaveData();
     const lb = getLeaderboardData();
+    const payload = JSON.stringify({ saveData, ...lb, saveVersion: state.saveVersion });
+    // Один запрос на один уход со страницы. Telegram шлёт visibilitychange→hidden,
+    // а потом pagehide, и раньше на каждый событие уходил свой fetch: первый
+    // отменялся вторым, и в консоли появлялось «Failed to fetch» — то есть
+    // последний сейв перед закрытием не доезжал.
+    if (exitFlushSent) return;
+    exitFlushSent = true;
     const res = fetch(`${API_BASE}/save`, {
       method: 'POST',
       headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ saveData, ...lb, saveVersion: state.saveVersion }),
+      body: payload,
       // keepalive ограничен браузером примерно 64 КБ. Команда с полными данными
       // Pokemon API в это не помещается, и запрос молча не уходит. navigator
-      // .sendBeacon умеет больше, но не показывает ответ — поэтому шлём через
-      // fetch и хотя бы логируем неудачу.
+      // .sendBeacon умеет больше, но не позволяет задать Authorization, поэтому
+      // остаёмся на fetch и хотя бы сообщаем о неудаче.
       keepalive: true
     });
     res.catch((e) => console.warn('[save] не удалось сохранить при закрытии:', e));
@@ -473,9 +487,16 @@ function flushSaveOnExit() {
   }
 }
 
+/** Один сброс на уход со страницы; сбрасывается, когда игрок вернулся. */
+let exitFlushSent = false;
+
 window.addEventListener('pagehide', flushSaveOnExit);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') flushSaveOnExit();
+  if (document.visibilityState === 'hidden') {
+    flushSaveOnExit();
+  } else {
+    exitFlushSent = false;
+  }
 });
 
 export { state } from './state.js';
