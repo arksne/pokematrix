@@ -132,7 +132,11 @@ export function getFullSaveData() {
   return {
     _v: state.saveVersion,
     _ts: Date.now(),
-    starterGiven: true,  // Флаг: стартовик уже выдан
+    // Флаг «стартовик выдан» выводится из состояния, а не выдумывается.
+    // Раньше здесь стояла константа true, и полупустой сейв, снятый до
+    // загрузки игры, был на проводе неотличим от настоящего — именно на этот
+    // флаг смотрит init.ts, решая, применять облачный сейв или нет.
+    starterGiven: totalPokemonCount() > 0 || state.starterGiven === true,
     currentLocationId: state.currentLocationId, currentRegion: state.currentRegion,
     inventory: { ...state.inventory },
     money: state.inventory['credit'] || 0, badges: state.badges, trainerNickname: state.trainerNickname,
@@ -255,7 +259,11 @@ export async function loadGame() {
 
     // Version tracking
     state.saveVersion = parseInt(localStorage.getItem(lsKey('save_v')) || '0');
-    state.lastCloudSync = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+    // Именно save_sync — время последнего УСПЕШНОГО облачного сохранения.
+    // Раньше здесь читался save_ts, то есть время последней локальной записи.
+    // Из-за этого сравнение «локальный новее облака» в init.ts срабатывало на
+    // каждом холодном старте, и пустое состояние выкладывалось поверх реального.
+    state.lastCloudSync = parseInt(localStorage.getItem(lsKey('save_sync')) || '0');
 
     state.currentLocationId = data.currentLocationId || 'goldenrodCity';
     state.currentRegion = data.currentRegion || 'johto';
@@ -385,6 +393,9 @@ export function resetGame() {
           body: JSON.stringify({
             saveData: { _v: Date.now(), starterGiven: false, myTeam: [], pcBoxes: [[]], inventory: { credit: 500 }, money: 500, badges: [] },
             money: 500,
+            // reset: true — намеренный сброс. Без этого флага сервер отклонит
+            // пустой сейв поверх непустого, и сброс просто не сработает.
+            reset: true,
             saveVersion: Date.now(),
           })
         });
@@ -396,6 +407,16 @@ export function resetGame() {
 
 export function cloudSave() {
   if (!state.tgToken) return;
+  // Не сохраняем, пока игра не загрузилась. До этого момента state.myTeam пуст,
+  // и такой сейв затирал бы реальный облачный прогресс. Исключение — сброс игры:
+  // там пустое состояние задумано.
+  if (!state.gameLoaded && !state.resetInProgress) return;
+  // Абсолютный запрет: выкладывать состояние без покемонов, когда облако
+  // уже содержит команду. Это последняя линия обороны после гонки при старте.
+  if (isDegenerateState() && state.lastCloudHadTeam) {
+    console.warn('[save] облачное сохранение пропущено: состояние без команды, а в облаке команда была. Не выкладываю, чтобы не затереть прогресс.');
+    return;
+  }
   // If a save is in flight, mark pending — it'll fire right after the current one
   if (state.saveInProgress) {
     state.saveTriggerPending = true;
@@ -404,17 +425,35 @@ export function cloudSave() {
   doCloudSave();
 }
 
+/** Все покемоны игрока: команда, ПК, питомник, яйца. */
+export function totalPokemonCount(): number {
+  const pc = (state.pcBoxes || []).reduce((n, box) => n + (box?.length || 0), 0);
+  return (state.myTeam?.length || 0) + pc + (state.daycareMons?.length || 0) + (state.eggs?.length || 0);
+}
+
+/** То же самое, но для сырых данных сейва — до того, как они применены. */
+export function totalPokemonCountOf(data: any): number {
+  if (!data) return 0;
+  const pc = Array.isArray(data.pcBoxes) ? data.pcBoxes.reduce((n, b) => n + (b?.length || 0), 0) : 0;
+  return (data.myTeam?.length || 0) + pc + (data.daycareMons?.length || 0) + (data.eggs?.length || 0);
+}
+
+/** Состояние без единого покемона — почти всегда потеря данных, а не новая игра. */
+function isDegenerateState(): boolean {
+  return totalPokemonCount() === 0;
+}
+
 export async function doCloudSave(attempt = 0) {
   if (state.saveInProgress) return; // already saving, coalesced call will pick it up
   state.saveInProgress = true;
   state.saveTriggerPending = false;
 
-  validateGameState();
-  const saveData = getFullSaveData();
-  const lb = getLeaderboardData();
-
   let result: any = null;
   try {
+    validateGameState();
+    const saveData = getFullSaveData();
+    const lb = getLeaderboardData();
+
     const res = await apiFetch('/save', {
       method: 'POST',
       body: JSON.stringify({ saveData, ...lb, saveVersion: state.saveVersion })
@@ -476,11 +515,13 @@ export async function cloudLoad() {
 export async function applyCloudSave(data) {
   if (!data) return;
   if (!data.myTeam && !data.starterGiven) return;
-  // Compare by timestamp (saveVersion can inflate over time — _ts is always monotonic)
+  // Сравниваем с временем последнего УСПЕШНОГО облачного сохранения, а не с
+  // временем последней локальной записи. Иначе saveGame(), вызванный сразу
+  // после applyCloudSave, делал настоящий облачный сейв «старым» навсегда.
   if (data._ts) {
-    const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
-    if (data._ts <= localTs) return;
-    console.log(`[sync] Server ts ${data._ts} > local ts ${localTs} — applying server data`);
+    const lastSync = parseInt(localStorage.getItem(lsKey('save_sync')) || '0');
+    if (data._ts <= lastSync) return;
+    console.log(`[sync] Server ts ${data._ts} > last sync ${lastSync} — applying server data`);
   } else {
     console.log(`[sync] No timestamp on server data — applying as authoritative`);
   }

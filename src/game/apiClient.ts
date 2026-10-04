@@ -143,13 +143,16 @@ export interface ApiFetchOptions extends RequestInit {
  * Enhanced fetch wrapper with automatic 401 → refresh → retry interceptor.
  * Use this for ALL game API calls instead of raw fetch().
  *
- * @param url — API URL (relative paths like '/api/save' are resolved)
+ * @param url — путь БЕЗ префикса /api, например '/save'. API_BASE подставляется
+ *   внутри. Если передать '/api/save', получится '/api/api/save' и 404 — именно
+ *   так сломалась вкладка «Тренеры». Голый fetch здесь тоже не нужен: он не
+ *   подставит Bearer и не обновит токен по 401.
  * @param options — fetch options (Authorization header injected automatically)
  * @returns Promise<Response> — the final response after any refresh+retry
  *
  * Usage:
- *   const res = await apiFetch('/api/save');
- *   const data = await apiFetch('/api/save', { method: 'POST', body: JSON.stringify({...}) });
+ *   const res = await apiFetch('/save');
+ *   const data = await apiFetch('/save', { method: 'POST', body: JSON.stringify({...}) });
  */
 export async function apiFetch(url: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { skipAuth, ...fetchOptions } = options;

@@ -31,7 +31,7 @@ import { state, lsKey } from './state.js';
 import { store } from './store.js';
 import { REGIONS } from '../data/regions.js';
 import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress } from '../battle/core.js';
-import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents } from './save.js';
+import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents, totalPokemonCountOf } from './save.js';
 import { authTelegram } from './auth.js';
 import { initAppNav } from '../ui/nav.js';
 import { renderTrainerCard } from '../ui/trainer-card.js';
@@ -178,9 +178,15 @@ import { API_BASE } from './config.js';
     if (state.tgToken) {
       const cloudData = await cloudLoad();
       if (cloudData) {
+        // Сколько покемонов было в облаке — запоминаем ДО применения, чтобы
+        // знать, что именно нельзя затирать пустым состоянием.
+        state.lastCloudHadTeam = totalPokemonCountOf(cloudData) > 0;
         if (cloudData.myTeam || cloudData.starterGiven) {
-          applyCloudSave(cloudData);
-          saveGame();
+          // await обязателен. applyCloudSave — async, и его первый await стоит
+          // на getLocationLazy() ДО присваивания state.myTeam. Без await код
+          // ниже продолжал работать с пустой командой, считал игру незагруженной
+          // и выкладывал в облако состояние без покемонов поверх реального.
+          await applyCloudSave(cloudData);
           if (state.myTeam.length > 0) { gameLoaded = true; }
           else if (cloudData.starterGiven) {
             gameLoaded = true;
@@ -206,14 +212,22 @@ import { API_BASE } from './config.js';
       }
     }
     if (!gameLoaded) {
+      // Настоящая новая игра: стартовика ещё не выдали, поэтому состояние пустое
+      // законно. Снимаем гейт, иначе cloudSave() не сможет сохранить выбор.
+      state.gameLoaded = true;
       await giveStarter();   // ждём пока пользователь выберет покемона
       // giveStarterMon() уже вызвала store.emit('save') → autoSave() → cloudSave()
       // Дополнительное сохранение не нужно — оно перезатрёт корректный save пустым
-    } else if (state.tgToken) {
-      // Синхронизация: если local новее cloud на 5+ сек → cloudSave
-      const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
-      const cloudTs = state.lastCloudSync || 0;
-      if (localTs > cloudTs + 5000) { cloudSave(); }
+    } else {
+      state.gameLoaded = true;
+      if (state.tgToken) {
+        // Синхронизация: если локальная запись свежее последнего УСПЕШНОГО
+        // облачного сохранения — выкладываем её. Сравнение идёт с save_sync,
+        // а не с save_ts, иначе ветка срабатывала на каждом старте.
+        const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+        const cloudTs = state.lastCloudSync || 0;
+        if (localTs > cloudTs + 5000) { cloudSave(); }
+      }
     }
 
     // Sync store._state with the actual game state so store.getItemQty() works
@@ -382,24 +396,48 @@ import { API_BASE } from './config.js';
   } catch(e) { document.body.innerHTML += '<div class="error-bar" style="font-size:14px;padding:15px;white-space:pre-wrap"><b>INIT ERROR:</b> '+e.message+'<br><small>'+e.stack+'</small></div>'; console.error(e); }
 })();
 
-window.addEventListener('pagehide', () => {
+/**
+ * Последний шанс сохранить прогресс при закрытии Mini App.
+ *
+ * Раньше здесь стоял fetch с пустым catch и без try вокруг сборки сейва: любой
+ * сбой — и прогресс молча терялся, а игрок уже видел «сохранено» от предыдущего
+ * успешного цикла. Добавлен visibilitychange: Telegram закрывает Mini App не
+ * всегда через pagehide, и без него хвост прогресса уходил.
+ */
+function flushSaveOnExit() {
   if (!state.tgToken) return;
+  // Не выкладываем состояние, которое ещё не загружено, — иначе закрытие вкладки
+  // во время старта затрёт реальный облачный сейв пустым.
+  if (!state.gameLoaded) return;
   if (state.cloudSaveTimer) {
     clearTimeout(state.cloudSaveTimer);
     state.cloudSaveTimer = null;
   }
   const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
-  if (localTs > state.lastCloudSync + 2000) {
+  if (localTs <= state.lastCloudSync + 2000) return;
+  try {
     validateGameState();
     const saveData = getFullSaveData();
     const lb = getLeaderboardData();
-    fetch(`${API_BASE}/save`, {
+    const res = fetch(`${API_BASE}/save`, {
       method: 'POST',
       headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ saveData, ...lb, saveVersion: state.saveVersion }),
+      // keepalive ограничен браузером примерно 64 КБ. Команда с полными данными
+      // Pokemon API в это не помещается, и запрос молча не уходит. navigator
+      // .sendBeacon умеет больше, но не показывает ответ — поэтому шлём через
+      // fetch и хотя бы логируем неудачу.
       keepalive: true
-    }).catch(function() {});
+    });
+    res.catch((e) => console.warn('[save] не удалось сохранить при закрытии:', e));
+  } catch (e) {
+    console.warn('[save] сбой при сохранении на выходе:', e);
   }
+}
+
+window.addEventListener('pagehide', flushSaveOnExit);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushSaveOnExit();
 });
 
 export { state } from './state.js';

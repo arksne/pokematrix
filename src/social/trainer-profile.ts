@@ -24,6 +24,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { state } from '../game/state.js';
+import { apiFetch } from '../game/apiClient.js';
 import { API_BASE, SOCKET_COOLDOWN } from '../game/config.js';
 import { getCloudAuthHeaders } from '../game/save.js';
 import { escHtml, showToast } from '../utils/dom.js';
@@ -60,11 +61,10 @@ export async function loadLocationTrainers() {
   const listEl = document.getElementById('trainer-location-list');
   if (!listEl) return;
   try {
-    // Заголовок обязателен: /profile/trainers закрыт authMiddleware, и без
-    // Bearer сервер отвечает 401, из-за чего список всегда был пустым.
-    // Раньше здесь был голый fetch() без авторизации.
-    const headers = getCloudAuthHeaders();
-    const res = await fetch(`${API_BASE}/profile/trainers?locationId=${encodeURIComponent(state.currentLocationId)}`, { headers });
+    // apiFetch, а не голый fetch: он сам добавляет Bearer и обновляет токен
+    // при 401. С ручными заголовками запрос переставал работать через 15 минут
+    // после входа, когда access token истекал.
+    const res = await apiFetch(`/profile/trainers?locationId=${encodeURIComponent(state.currentLocationId)}`);
     if (!res.ok) {
       listEl.textContent = '—';
       return;
@@ -123,10 +123,14 @@ export async function openTrainerProfile(userId) {
   document.getElementById('modal-trainer-team').innerHTML = '<div class="trainer-team-empty">Загрузка...</div>';
 
   try {
-      // Заголовок обязателен: /profile/:userId закрыт authMiddleware.
-      const res = await fetch(`${API_BASE}/profile/${userId}`, { headers: getCloudAuthHeaders() });
+      // apiFetch добавляет Bearer и обновляет токен при 401.
+      const res = await apiFetch(`/profile/${userId}`);
+      if (!res.ok) {
+        document.getElementById('modal-trainer-name').innerText = 'Не удалось загрузить профиль';
+        return;
+      }
+      const data = await res.json();
 
-    const data = await res.json();
     if (!data.profile) {
       document.getElementById('modal-trainer-name').innerText = 'Тренер не найден';
       return;

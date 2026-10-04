@@ -131,6 +131,9 @@ export async function giveStarterMon(pokemonName: string) {
     // Отправляем события: перерисовать локацию, команду, сохранить
     store.emit('location:render', state.currentLocationId);
     store.emit('team:render');
+    // Стартовик реально выдан. Флаг выводится из состояния при сборке сейва,
+    // но и здесь ставится явно — он решает, применит ли init.ts облачный сейв.
+    state.starterGiven = true;
     store.emit('save');
 
     // ── 6. Стартовые предметы ──

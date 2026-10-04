@@ -80,6 +80,16 @@ export const state: Record<string, any> = {
   saveInProgress: false,           // Флаг: идёт сохранение
   saveTriggerPending: false,       // Флаг: ещё одно сохранение в очереди
   cloudSaveTimer: null as any,     // Таймер debounced cloudSave
+  // Игра загружена. До этого state.myTeam пуст, и сохранение такого состояния
+  // затирало бы реальный облачный прогресс, поэтому cloudSave() ждёт этого флага.
+  gameLoaded: false,
+  // В облаке была команда. Ставится из ответа сервера и используется как
+  // последняя линия обороны: не дать выложить состояние без покемонов.
+  lastCloudHadTeam: false,
+  // Сброс игры: пустое состояние здесь задумано, поэтому гейт gameLoaded
+  // и проверка на вырожденность не применяются.
+  resetInProgress: false,
+  starterGiven: false,             // Стартовик реально выдан (не константа true)
 
   // ── Socket / PvP / Trade ─────────────────────────────────
   socket: null as any,             // Socket.IO соединение

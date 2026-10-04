@@ -39,6 +39,7 @@ import { updateMoneyDisplay } from './location.js';
 import { autoSave, getCloudAuthHeaders } from '../game/save.js';
 // API_BASE — базовый URL сервера (например, https://api.pokematrix.com)
 import { API_BASE } from '../game/config.js';
+import { apiFetch } from '../game/apiClient.js';
 // showToast — показывает всплывающее уведомление (зелёное/красное)
 // showConfirmModal — показывает модальное окно подтверждения с callback'ом
 import { showToast, showConfirmModal } from '../utils/dom.js';
@@ -176,10 +177,9 @@ export function initShopEvents() {
 
     // ── Отправка запроса на сервер ──
     // POST /economy/buy — покупка предмета
-    fetch(`${API_BASE}/economy/buy`, {
+    // apiFetch вместо fetch: сам добавляет Bearer и обновляет токен при 401.
+    apiFetch('/economy/buy', {
       method: 'POST',
-      // Заголовки: авторизация (Bearer token) + тип контента JSON
-      headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
       // Тело запроса: ID предмета и количество
       body: JSON.stringify({ itemId, qty })
     })
@@ -359,9 +359,8 @@ export function initSellTab() {
 
         // ── Отправка запроса на сервер ──
         // POST /economy/sell — продажа предмета
-        fetch(`${API_BASE}/economy/sell`, {
+        apiFetch('/economy/sell', {
           method: 'POST',
-          headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ itemId, qty })  // ID предмета и количество
         })
         .then(r => r.json())  // Парсим JSON-ответ

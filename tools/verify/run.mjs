@@ -111,6 +111,10 @@ async function browserScenarios() {
     let trainersAllUrl = '';
     let trainersAllBody = '';
     let locationPostStatus = null;
+    let chatStatus = null;
+    let chatUrl = '';
+    let chatBody = '';
+
     page.on('pageerror', (e) => pageErrors.push(e.message));
     page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') consoleErrors.push(m.text().slice(0, 240)); });
 
@@ -141,6 +145,14 @@ async function browserScenarios() {
       if (r.url().includes('/api/profile/location') && r.request().method() === 'POST') {
         locationPostStatus = r.status();
       }
+      // Чат. Там был тот же баг, что и в списке тренеров: голый fetch() без
+      // Bearer давал 401, и пустой чат выглядел как «сообщений нет».
+      if (r.url().includes('/api/chat/messages')) {
+        chatStatus = r.status();
+        chatUrl = r.url();
+        try { chatBody = (await r.text()).slice(0, 80); } catch { chatBody = '(не читается)'; }
+      }
+
     });
 
     const { signInitData, webAppShim, makeUser } = await import('./tgsign.mjs');
@@ -172,6 +184,14 @@ async function browserScenarios() {
       const until = Date.now() + 15000;
       while ((trainersStatus === null || trainersAllStatus === null) && Date.now() < until) await sleep(500);
     }
+    await page.evaluate(() => {
+      document.querySelector('[data-target="view-chat"]')?.click();
+      document.getElementById('view-chat')?.click();
+      document.querySelector('.nav-btn[data-target*="chat" i]')?.click();
+    });
+    const chatUntil = Date.now() + 12000;
+    while (chatStatus === null && Date.now() < chatUntil) await sleep(400);
+
     const listText = await page.evaluate(() => document.getElementById('trainer-location-list')?.textContent ?? null);
     const cardDiag = await page.evaluate(() => ({
       'trainer-name': document.getElementById('trainer-name')?.textContent ?? '(нет элемента)',
@@ -194,7 +214,11 @@ async function browserScenarios() {
 
     results.push({
       id: 'A', name: 'Mini App: валидная подпись initData -> игра грузится',
-      pass: authStatus === 200 && !!trainerId && !overlayVisible && domSize > 5000 && pageErrors.length === 0,
+      pass: authStatus === 200 && !!trainerId && !overlayVisible && domSize > 5000 && pageErrors.length === 0
+        // 4xx на фоновых запросах раньше только попадали в details и никогда не
+        // роняли прогон. Из-за этого chat/messages 401-ился на каждом опросе,
+        // попадал в badResponses — и набор оставался зелёным.
+        && badResponses.length === 0,
       details: {
         'диагностика': JSON.stringify(diag),
         'HTTP /api/auth/tg': authStatus,
@@ -202,9 +226,10 @@ async function browserScenarios() {
         'login-overlay виден': overlayVisible,
         'DOM размер': domSize,
         'pageerror': pageErrors,
-        'ответы с ошибкой': badResponses.slice(0, 5),
+        'ответы с ошибкой': badResponses.slice(0, 8),
       },
     });
+
 
     // A2. Оба списка тренеров
     // Общий список — это вкладка «Тренеры», он обязан работать: с двойным
@@ -214,9 +239,10 @@ async function browserScenarios() {
     // ушёл — обязан быть 200. Исходные баги были именно 401 (нет Bearer) и 404.
     const allOk = trainersAllStatus === 200 && /"users"/.test(trainersAllBody);
     const locOk = trainersStatus === null ? true : (trainersStatus === 200 && /"trainers"/.test(trainersBody));
+    const chatOk = chatStatus === 200 && /"messages"/.test(chatBody);
     results.push({
-      id: 'A2', name: 'Списки тренеров загружаются (общий и по локации)',
-      pass: allOk && locOk,
+      id: 'A2', name: 'Списки тренеров и чат загружаются с авторизацией',
+      pass: allOk && locOk && chatOk,
       details: {
         'HTTP /api/profile/trainers/all': trainersAllStatus === null ? '(запрос не уходил)' : trainersAllStatus,
         'URL all': trainersAllUrl || '(не было)',
@@ -224,10 +250,13 @@ async function browserScenarios() {
         'HTTP /api/profile/trainers': trainersStatus === null ? '(панель не отрисована, запрос не уходил)' : trainersStatus,
         'URL': trainersUrl || '(не было)',
         'ответ': (trainersBody || '(пусто)').slice(0, 90),
+        'HTTP /api/chat/messages': chatStatus === null ? '(запрос не уходил)' : chatStatus,
+        'URL chat': chatUrl || '(не было)',
+        'ответ chat': chatBody || '(пусто)',
         'текст в панели': listText === null ? '(элемента нет)' : `"${listText}"`,
         'карточка тренера': JSON.stringify(cardDiag),
         'POST /api/profile/location': locationPostStatus === null ? '(не уходил)' : locationPostStatus,
-        'почему важно': '401 без Bearer -> пустой список по локации; /api/api/... -> 404 во вкладке «Тренеры»',
+        'почему важно': '401 без Bearer -> пустой список и пустой чат; /api/api/... -> 404',
       },
     });
 

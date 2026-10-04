@@ -8,13 +8,41 @@
  * Это гарантирует, что структура всегда совпадает с клиентом.
  */
 import { Router, Request, Response } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
-import { users } from '../db/schema.js';
+import { users, saveHistory } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { validateSaveData } from '../validation/save-data.js';
 
 const router = Router();
+
+/**
+ * Сколько всего покемонов в сейве: команда + ПК + питомник + яйца.
+ * Пустой сейв при непустом хранилище — это почти всегда потеря данных, а не
+ * начало новой игры, поэтому сервер такие запросы отклоняет.
+ */
+function countPokemon(d: any): number {
+  if (!d || typeof d !== 'object') return 0;
+  const pc = Array.isArray(d.pcBoxes) ? d.pcBoxes.reduce((a: number, b: unknown[]) => a + (Array.isArray(b) ? b.length : 0), 0) : 0;
+  return (Array.isArray(d.myTeam) ? d.myTeam.length : 0)
+    + pc
+    + (Array.isArray(d.daycareMons) ? d.daycareMons.length : 0)
+    + (Array.isArray(d.eggs) ? d.eggs.length : 0);
+}
+
+/** Разбор сохранённого JSON. Молчаливый подстанов пустого объекта тут опасен:
+ *  один непарсимый байт приводил к записи состояния по умолчанию. */
+function parseSave(raw: string | null | undefined): { data: any; broken: boolean } {
+  if (!raw) return { data: {}, broken: false };
+  try {
+    return { data: JSON.parse(raw), broken: false };
+  } catch {
+    return { data: {}, broken: true };
+  }
+}
+
+/** Сколько копий сейва хранить на пользователя. */
+const HISTORY_LIMIT = 10;
 
 // ── Приватный ключ для GetUserID ─────────────────────────────
 interface SaveDataPayload {
@@ -25,6 +53,8 @@ interface SaveDataPayload {
   pokemonCount?: number;
   legendaryCount?: number;
   saveVersion?: number;
+  /** Намеренный сброс прогресса. Без этого флага пустой сейв отклоняется. */
+  reset?: boolean;
 }
 
 // ── GET /save ────────────────────────────────────────────────
@@ -43,11 +73,8 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     }
 
     let saveData;
-    try {
-      saveData = JSON.parse(user.save_data || '{}');
-    } catch {
-      saveData = {};
-    }
+    const parsed = parseSave(user.save_data);
+    saveData = parsed.data;
 
     res.json({ saveData });
   } catch (err: any) {
@@ -81,8 +108,12 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const db = getDb();
     const userId = req.user!.userId;
 
-    // ── Optimistic locking: проверяем save_version ──
-    const currentUser = (await db.select({ save_version: users.save_version, money: users.money })
+    // ── Optimistic locking + защита от затирания прогресса ──
+    const currentUser = (await db.select({
+      save_version: users.save_version,
+      money: users.money,
+      save_data: users.save_data,
+    })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1))[0];
@@ -112,6 +143,57 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    // ── Главная защита от потери прогресса ──
+    // Клиент шлёт save_data целиком. Если он прислал состояние без единого
+    // покемона, а в базе команда есть — это не «новая игра», а потеря данных:
+    // именно так клиент с незагруженным состоянием затирал реальный сейв при
+    // старте. Сброс игры идёт отдельным флагом reset.
+    const stored = parseSave(currentUser.save_data);
+    const storedCount = countPokemon(stored.data);
+    const incomingCount = countPokemon(body.saveData);
+
+    if (incomingCount === 0 && storedCount > 0 && !body.reset) {
+      console.warn(
+        `[save] Отклонено затирание прогресса: user ${userId}, в базе ${storedCount} покемонов, ` +
+        `в запросе 0. Клиент должен прислать reset: true, если это намеренный сброс.`,
+      );
+      res.status(409).json({
+        error: 'Refusing to overwrite a non-empty save with an empty one',
+        storedPokemon: storedCount,
+        hint: 'send reset: true for an intentional wipe',
+      });
+      return;
+    }
+
+    // ── Бэкап прежнего сейва ──
+    // Делается до записи, поэтому восстановление возможно даже после того,
+    // как сломанный клиент прислал пустое состояние.
+    if (stored.data && Object.keys(stored.data).length > 0) {
+      try {
+        await db.insert(saveHistory).values({
+          user_id: userId,
+          save_data: currentUser.save_data ?? null,
+          save_version: serverVersion,
+          reason: body.reset ? 'reset' : 'overwrite',
+          created_at: new Date().toISOString(),
+        });
+        // Подрезаем историю, чтобы она не росла бесконечно.
+        await db.execute(sql`
+          DELETE FROM save_history
+          WHERE user_id = ${userId}
+            AND id NOT IN (
+              SELECT id FROM save_history WHERE user_id = ${userId}
+              ORDER BY id DESC LIMIT ${HISTORY_LIMIT}
+            )
+        `);
+      } catch (e: any) {
+        // Бэкап не удался — не пишем, но и не роняем сохранение целиком:
+        // предупреждаем и продолжаем, иначе игрок потеряет прогресс из-за
+        // служебной ошибки. Событие важное, поэтому дублируем в stderr.
+        console.error(`[save] НЕ УДАЛОСЬ сохранить бэкап для user ${userId}:`, e);
+      }
+    }
+
     // Дополнительная проверка: если badges_count не совпадает с длиной badges — отклоняем
     const validatedBadges = validation.data.badges ?? [];
     if (body.badgesCount !== undefined && body.badgesCount !== validatedBadges.length) {
@@ -130,11 +212,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const money = Number.isFinite(moneyFromSave)
       ? Math.min(Math.max(Math.trunc(moneyFromSave), 0), 2_000_000_000)
       : currentUser.money ?? 0;
-    const pokemonCount = Array.isArray(validation.data.myTeam)
-      ? validation.data.myTeam.length
-      : Array.isArray(validation.data.pcBoxes)
-        ? validation.data.pcBoxes.reduce((a: number, b: unknown[]) => a + (Array.isArray(b) ? b.length : 0), 0)
-        : 0;
+    const pokemonCount = countPokemon(validation.data);
 
     const updateData: any = {
       save_data: JSON.stringify(body.saveData),

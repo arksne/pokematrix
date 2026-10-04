@@ -26,7 +26,8 @@
 
 import { state } from '../game/state.js';            // Глобальное состояние
 import { store } from '../game/store.js';              // Event-система
-import { API_BASE } from '../game/config.js';          // URL сервера
+import { API_BASE } from '../game/config.js';
+import { apiFetch } from '../game/apiClient.js';          // URL сервера
 import { getCloudAuthHeaders, autoSave } from '../game/save.js';  // Авторизация + сохранение
 import { getItemQty } from '../game/state.js';          // Количество предметов в инвентаре
 import { addItem, removeItem } from '../game/actions.js';  // Добавление/удаление предметов
@@ -164,9 +165,8 @@ function craftItem(recipeId: string) {
   if (btnEl) btnEl.disabled = true;
 
   // Отправка запроса на сервер
-  fetch(`${API_BASE}/economy/craft`, {
+  apiFetch('/economy/craft', {
     method: 'POST',
-    headers: { ...getCloudAuthHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ recipeId })
   })
   .then(r => r.json())

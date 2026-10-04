@@ -45,7 +45,14 @@ export async function loadChatMessages() {
     const url = chatLastTimestamp
       ? `${API_BASE}/chat/messages?since=${encodeURIComponent(chatLastTimestamp)}`
       : `${API_BASE}/chat/messages`;
-    const res = await fetch(url);
+    // Заголовок обязателен: /chat/messages закрыт authMiddleware. Без Bearer
+    // сервер отвечал 401, data.messages был undefined, и строка ниже молча
+    // выходила — чат выглядел пустым, а на самом деле был сломан.
+    const res = await fetch(url, { headers: getCloudAuthHeaders() });
+    if (!res.ok) {
+      console.warn(`[chat] загрузка сообщений: HTTP ${res.status}`);
+      return;
+    }
     const data = await res.json();
     if (!data.messages) return;  // Нет сообщений
 
@@ -166,11 +173,22 @@ export async function sendChatMessage() {
 
   try {
     // Отправляем сообщение на сервер
-    await fetch(`${API_BASE}/chat/send`, {
+    const res = await fetch(`${API_BASE}/chat/send`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ text })
     });
+    // Поле очищаем только после успеха. Раньше оно очищалось всегда, и при 401
+    // текст игрока просто исчезал без ошибки — fetch резолвится и на 401.
+    if (!res.ok) {
+      console.warn(`[chat] отправка: HTTP ${res.status}`);
+      const container = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = 'chat-system-msg';
+      div.innerText = `Не удалось отправить сообщение (HTTP ${res.status}). Текст сохранён в поле.`;
+      container.appendChild(div);
+      return;
+    }
     input.value = '';  // Очищаем поле ввода
     await loadChatMessages();  // Загружаем обновлённый чат
   } catch (e) {

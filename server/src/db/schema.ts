@@ -2,7 +2,7 @@
  * Drizzle ORM — PostgreSQL схема.
  * Все таблицы, которые нужны серверу.
  */
-import { pgTable, serial, integer, bigint, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, bigint, text, uniqueIndex, index } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -67,3 +67,20 @@ export const battleRatings = pgTable('battle_ratings', {
   losses: integer('losses').default(0),
   updated_at: text('updated_at'),
 });
+
+/**
+ * История сохранений. Заполняется автоматически перед каждой перезаписью
+ * save_data, если прежний сейв содержал покемонов. Нужна потому, что клиент
+ * присылает save_data целиком: любая ошибка на его стороне перетирает весь
+ * прогресс одним запросом, и без копии восстановиться нечем.
+ */
+export const saveHistory = pgTable('save_history', {
+  id: serial('id').primaryKey(),
+  user_id: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  save_data: text('save_data'),
+  save_version: integer('save_version').default(0),
+  reason: text('reason'),
+  created_at: text('created_at'),
+}, (t) => ({
+  userIdx: index('save_history_user_id_idx').on(t.user_id),
+}));

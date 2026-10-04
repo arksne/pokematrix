@@ -29,7 +29,8 @@
 
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
-import { state } from '../game/state.js';          // Глобальное состояние игры
+import { state } from '../game/state.js';          // Глобальное состояние
+import { apiFetch } from '../game/apiClient.js';     // fetch с авторизацией и обновлением токена игры
 import { REGIONS } from '../data/regions.js';       // Все регионы с локациями
 // gymLeaders — объект { locId: { name, title, badgeName, badgeIcon, team, ... } }
 import { gymLeaders } from '../data/gyms.js';
@@ -112,24 +113,24 @@ export function getRegionOfLocation(locId: string) {
 // Отправляет POST /profile/location с текущими state.currentLocationId и state.currentRegion
 // Нужно чтобы другие игроки видели, где вы находитесь
 export async function updatePlayerLocation() {
-  // Подготавливаем заголовки: Content-Type + Bearer token (если авторизованы)
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(state.tgToken ? { 'Authorization': `Bearer ${state.tgToken}` } : {})
-  };
-  // Если нет токена — выходим (неавторизованный запрос)
-  if (!headers.Authorization) return;
+  if (!state.tgToken) return;
   try {
-    await fetch(`${API_BASE}/profile/location`, {
+    // apiFetch, а не голый fetch: он сам добавляет Bearer и, главное, обновляет
+    // токен при 401. Раньше здесь собирались заголовки вручную, поэтому после
+    // истечения 15 минут запрос уходил с мёртвым токеном, а catch был пустым —
+    // другие игроки просто переставали видеть ваши перемещения.
+    const res = await apiFetch('/profile/location', {
       method: 'POST',
-      headers,
       body: JSON.stringify({
         locationId: state.currentLocationId,
         region: state.currentRegion
       })
     });
+    if (!res.ok) console.warn(`[location] не отправили локацию: HTTP ${res.status}`);
   } catch (e) {
-    // Сервер может быть недоступен — молча игнорируем ошибку
+    // Сервер недоступен или сеть отвалилась — локация обновится при следующем
+    // перемещении, но молчать нельзя: молчание и скрывало проблему.
+    console.warn('[location] не удалось обновить локацию на сервере:', e);
   }
 }
 

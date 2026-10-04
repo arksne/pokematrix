@@ -399,9 +399,17 @@ export async function authTelegram() {
       if (adminRes.ok) {
         const adminData = await adminRes.json();
         state.isAdmin = adminData.isAdmin;
+      } else {
+        // Раньше ветки else не было: ответ 401/403 оставлял state.isAdmin в
+        // прежнем значении, и панель администратора просто не появлялась без
+        // единого следа в консоли.
+        console.warn(`[auth] проверка прав администратора: HTTP ${adminRes.status}`);
+        state.isAdmin = false;
       }
-    } catch (_) {
-      // Admin check failure is non-fatal
+    } catch (e) {
+      // Проверка прав не критична: игра работает и без неё.
+      console.warn('[auth] проверка прав администратора не удалась:', e);
+      state.isAdmin = false;
     }
 
     // Restore refresh token from localStorage if server didn't return one
