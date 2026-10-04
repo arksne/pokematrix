@@ -16,9 +16,10 @@ export const config = {
   // для нативного деплоя (Render). В контейнере путь задаётся явно, потому что
   // там /app/dist уже занят серверным кодом.
   clientDist: process.env.CLIENT_DIST || '',
-  // TLS для PostgreSQL: 'require' (по умолчанию в production), 'disable' или 'auto'.
-  // Нужен для хостов без поддержки SSL и для локальной проверки на PGlite.
-  dbSsl: (process.env.DB_SSL || 'auto') as 'require' | 'disable' | 'auto',
+  // TLS для PostgreSQL: 'auto' (по умолчанию — TLS в production, без TLS локально),
+  // 'require', 'disable' или 'no-verify'. Сертификат проверяется всегда, кроме
+  // 'no-verify' — он нужен только для self-hosted БД с самоподписанным сертификатом.
+  dbSsl: (process.env.DB_SSL || 'auto') as 'require' | 'disable' | 'no-verify' | 'auto',
   corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173').split(','),
   isProduction: process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),

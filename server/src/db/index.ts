@@ -41,15 +41,24 @@ export function connectDb() {
 
 /**
  * Режим TLS для подключения к PostgreSQL.
- * - 'disable' — соединение без TLS (локальная БД, PGlite, self-hosted без SSL)
- * - 'require'  — требовать TLS
- * - 'auto'     — TLS в production, без TLS в остальных случаях (прежнее поведение)
+ * - 'disable'   — соединение без TLS (локальная БД, PGlite, self-hosted без SSL)
+ * - 'require'   — TLS с проверкой сертификата
+ * - 'auto'      — TLS с проверкой в production, без TLS в остальных случаях
+ * - 'no-verify' — TLS без проверки сертификата; только для self-hosted БД
+ *                 с самоподписанным сертификатом.
+ *
+ * Проверка сертификата по умолчанию включена: у провайдеров вроде Neon есть
+ * валидная цепочка, а rejectUnauthorized: false оставлял соединение открытым
+ * к подмене сертификата. Проверено на Neon PostgreSQL 18.6 — connect проходит
+ * и с проверкой, и без неё, так что включать её ничего не ломает.
  */
 function resolveDbSsl(): false | { rejectUnauthorized: boolean } | undefined {
   if (config.dbSsl === 'disable') return false;
-  if (config.dbSsl === 'require') return { rejectUnauthorized: false };
-  return config.isProduction ? { rejectUnauthorized: false } : undefined;
+  if (config.dbSsl === 'no-verify') return { rejectUnauthorized: false };
+  if (config.dbSsl === 'require') return { rejectUnauthorized: true };
+  return config.isProduction ? { rejectUnauthorized: true } : undefined;
 }
+
 
 export function getDb() {
   if (!db) throw new Error('Database not connected. Call connectDb() first.');
