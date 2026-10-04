@@ -12,7 +12,8 @@ import { Server, type Socket } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config.js';
-import { connectDb, runMigrations, closeDb } from './db/index.js';
+import { connectDb, getDb, runMigrations, closeDb } from './db/index.js';
+import { sql } from 'drizzle-orm';
 import { socketAuthMiddleware } from './middleware/auth.js';
 import { initLobby } from './socket/lobby.js';
 import { initTrade } from './socket/trade.js';
@@ -119,8 +120,31 @@ async function main() {
   app.use('/api/log-client-error', clientErrorRoutes);
 
   // ── Health check ─────────────────────────────────────────
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', uptime: process.uptime() });
+  // Проверяет и БД: раньше возвращал ok всегда, а ошибка миграций
+  // проглатывалась, поэтому Render считал сервис здоровым при полностью
+  // сломанной базе, и все API отдавали 500.
+  app.get('/api/health', async (_req, res) => {
+    try {
+      await getDb().execute(sql`SELECT 1`);
+      res.json({ status: 'ok', db: true, uptime: process.uptime() });
+    } catch {
+      res.status(503).json({ status: 'degraded', db: false, uptime: process.uptime() });
+    }
+  });
+
+  // ── 404 для неизвестных API-маршрутов ─────────────────────
+  // Должен идти ДО SPA-fallback: тот перехватывал любой GET /api/* и отдавал
+  // index.html (200, text/html), из-за чего клиентский res.json() получал HTML
+  // и падал с SyntaxError вместо обработки 404.
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
+  // ── 404 для несуществующих статических файлов ─────────────
+  // Тоже до SPA-fallback: иначе сбитый чанк тихо отдавался как HTML и в консоли
+  // появлялся Uncaught SyntaxError вместо внятной ошибки.
+  app.use('/assets', (_req, res) => {
+    res.status(404).type('text/plain').send('Not found');
   });
 
   // ── SPA fallback (продакшн) ──────────────────────────────

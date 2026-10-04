@@ -619,36 +619,49 @@ describe('Burn halves physical attack damage', () => {
   };
 
   it('burned physical attack does ~half damage', () => {
-    const result = calculateDamage({
-      move: { name: 'karate-chop', power: 50, accuracy: 100, type: { name: 'fighting' }, damage_class: { name: 'physical' }, pp: 25 },
-      attacker,
-      defender,
-      alwaysCrit: true,
-    });
-    const resultNoBurn = calculateDamage({
-      move: { name: 'karate-chop', power: 50, accuracy: 100, type: { name: 'fighting' }, damage_class: { name: 'physical' }, pp: 25 },
-      attacker: { ...attacker, status: null },
-      defender,
-      alwaysCrit: true,
-    });
-    expect(result.damage).toBeLessThan(resultNoBurn.damage);
-    expect(result.damage).toBe(Math.floor(resultNoBurn.damage * 0.5));
+    // calculateDamage бросает Math.random() для разброса урона (logic.ts: randMod),
+    // поэтому два независимых вызова давали разные числа и проверка точного
+    // равенства падала в зависимости от прогона. Фиксируем бросок.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      const result = calculateDamage({
+        move: { name: 'karate-chop', power: 50, accuracy: 100, type: { name: 'fighting' }, damage_class: { name: 'physical' }, pp: 25 },
+        attacker,
+        defender,
+        alwaysCrit: true,
+      });
+      const resultNoBurn = calculateDamage({
+        move: { name: 'karate-chop', power: 50, accuracy: 100, type: { name: 'fighting' }, damage_class: { name: 'physical' }, pp: 25 },
+        attacker: { ...attacker, status: null },
+        defender,
+        alwaysCrit: true,
+      });
+      expect(result.damage).toBeLessThan(resultNoBurn.damage);
+      expect(result.damage).toBe(Math.floor(resultNoBurn.damage * 0.5));
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('burn does NOT affect special attacks', () => {
-    const result = calculateDamage({
-      move: { name: 'flamethrower', power: 90, accuracy: 100, type: { name: 'fire' }, damage_class: { name: 'special' }, pp: 15 },
-      attacker,
-      defender,
-      alwaysCrit: true,
-    });
-    const resultNoBurn = calculateDamage({
-      move: { name: 'flamethrower', power: 90, accuracy: 100, type: { name: 'fire' }, damage_class: { name: 'special' }, pp: 15 },
-      attacker: { ...attacker, status: null },
-      defender,
-      alwaysCrit: true,
-    });
-    expect(result.damage).toBe(resultNoBurn.damage);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      const result = calculateDamage({
+        move: { name: 'flamethrower', power: 90, accuracy: 100, type: { name: 'fire' }, damage_class: { name: 'special' }, pp: 15 },
+        attacker,
+        defender,
+        alwaysCrit: true,
+      });
+      const resultNoBurn = calculateDamage({
+        move: { name: 'flamethrower', power: 90, accuracy: 100, type: { name: 'fire' }, damage_class: { name: 'special' }, pp: 15 },
+        attacker: { ...attacker, status: null },
+        defender,
+        alwaysCrit: true,
+      });
+      expect(result.damage).toBe(resultNoBurn.damage);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
 

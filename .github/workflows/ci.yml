@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Юнит-тесты клиента. Раньше в CI не запускались вовсе, хотя 255 тестов
+  # часть из которых падала при локальном прогоне.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12
+          cache: npm
+      - run: npm ci
+      - name: Тесты клиента
+        run: npm run test:vitest
+
+  # Типизация и сборка сервера со strict: true.
+  # Ошибка tsc здесь означала бы падение Render-деплоя, потому что
+  # render-build — это цепочка через &&, и серверная сборка в CI не проверялась.
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci --prefix server
+      - name: Типизация сервера
+        run: npx tsc --noEmit -p server/tsconfig.json
+      - name: Сборка сервера
+        run: npm run server:build
+
+  # Сборка клиента. Отдельный шаг от Pages-деплоя: клиент работает только
+  # на одном origin с API (API_BASE = '/api'), поэтому зелёный Pages-деплой
+  # сам по себе не означает, что приложение рабочее.
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, server]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12
+          cache: npm
+      - run: npm ci
+      - run: npm run build
