@@ -9,7 +9,7 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
   refreshTokenExpiresMs: 30 * 24 * 60 * 60 * 1000,
   botToken: process.env.BOT_TOKEN || '',
-  adminPass: process.env.ADMIN_PASS || 'league17admin2026',
+  adminPass: process.env.ADMIN_PASS || '',
   allowDevLogin: process.env.ALLOW_DEV_LOGIN === 'true',
   databaseUrl: process.env.DATABASE_URL || '',
   // TLS для PostgreSQL: 'require' (по умолчанию в production), 'disable' или 'auto'.
@@ -29,6 +29,18 @@ if (config.isProduction) {
   }
   if (!process.env.ADMIN_PASS) {
     console.error('\x1b[31m[FATAL] ADMIN_PASS не задан! Установите ADMIN_PASS в переменных окружения для production.\x1b[0m');
+    process.exit(1);
+  }
+  if (!process.env.BOT_TOKEN) {
+    console.error('\x1b[31m[FATAL] BOT_TOKEN не задан! Без него сервер не может проверить подпись Telegram initData, а значит не может отличить подлинный вход от подделки. Задайте BOT_TOKEN или отключите NODE_ENV=production.\x1b[0m');
+    process.exit(1);
+  }
+  if (!process.env.DATABASE_URL) {
+    console.error('\x1b[31m[FATAL] DATABASE_URL не задан! Без него pg подключится к localhost:5432 и все запросы будут падать, а /api/health продолжит отвечать ok.\x1b[0m');
+    process.exit(1);
+  }
+  if (config.allowDevLogin) {
+    console.error('\x1b[31m[FATAL] ALLOW_DEV_LOGIN=true в production — это вход без Telegram по initData="test". Задайте ALLOW_DEV_LOGIN=false.\x1b[0m');
     process.exit(1);
   }
 } else {

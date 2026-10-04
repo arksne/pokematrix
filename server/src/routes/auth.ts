@@ -16,6 +16,23 @@ import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
+/** Максимальный возраст initData (Telegram рекомендует проверять подлинность в течение часа). */
+const MAX_INIT_DATA_AGE_SEC = 3600;
+
+/**
+ * Допустимые аватары тренера. Должны совпадать с TRAINER_AVATARS в src/game/auth.ts.
+ * Всё, чего здесь нет, отбрасывается — иначе значение попадёт в innerHTML на клиенте.
+ */
+const VALID_AVATARS = new Set([
+  'trainer_f',
+  'trainer_m',
+  'ninja',
+  'sailor',
+  'super_nerd',
+  'beauty',
+  'gentleman',
+]);
+
 /**
  * Верификация initData от Telegram Mini App.
  * Проверяет HMAC-SHA256 подпись через BOT_TOKEN.
@@ -27,7 +44,14 @@ function verifyTelegramInitData(initData: string, botToken: string): URLSearchPa
   const hash = params.get('hash');
   if (!hash) return null;
 
-  // Сортируем все поля, исключая hash
+  // auth_date: не старше MAX_INIT_DATA_AGE секунд, иначе перехваченная строка
+  // initData оставалась бы валидной навсегда (бессрочный replay).
+  const authDate = Number(params.get('auth_date'));
+  if (!Number.isFinite(authDate)) return null;
+  const ageSec = Math.floor(Date.now() / 1000) - authDate;
+  if (ageSec > MAX_INIT_DATA_AGE_SEC || ageSec < -60) return null;
+
+  // Удаляем hash, сортируем параметры
   params.delete('hash');
   const sorted = [...params.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -38,7 +62,11 @@ function verifyTelegramInitData(initData: string, botToken: string): URLSearchPa
   const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
   const computed = crypto.createHmac('sha256', secret).update(sorted).digest('hex');
 
-  if (computed !== hash) return null;
+  // Сравнение постоянного времени, чтобы нельзя было подбирать подпись по таймингу.
+  const a = Buffer.from(computed, 'utf8');
+  const b = Buffer.from(hash, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
   return params;
 }
 
@@ -56,10 +84,18 @@ router.post('/tg', async (req: Request, res: Response) => {
     let tgUser: { id: number; username?: string; first_name?: string };
 
     if (config.allowDevLogin && initData === 'test') {
-      // ── Режим разработки ──
+      // ── Режим разработки (требует ALLOW_DEV_LOGIN=true) ──
       tgUser = { id: 1, username: 'dev', first_name: 'Dev' };
-    } else if (config.botToken) {
-      // ── Продакшн: HMAC-SHA256 верификация ──
+    } else {
+      // ── HMAC-SHA256 верификация Telegram initData ──
+      // Небезопасного fallback'а «BOT_TOKEN не задан — просто распарсим user» больше нет:
+      // он позволял без каких-либо учётных данных получить JWT на любой tg_id,
+      // то есть захватить чужой аккаунт вместе с его save_data.
+      if (!config.botToken) {
+        console.error('[auth/tg] BOT_TOKEN is not set — refusing to authenticate');
+        res.status(503).json({ error: 'Server is not configured for Telegram login' });
+        return;
+      }
       const params = verifyTelegramInitData(initData, config.botToken);
       if (!params) {
         res.status(401).json({ error: 'Invalid initData signature' });
@@ -76,16 +112,8 @@ router.post('/tg', async (req: Request, res: Response) => {
         res.status(401).json({ error: 'Invalid user data in initData' });
         return;
       }
-    } else {
-      // ── Режим без BOT_TOKEN (fallback, небезопасно) ──
-      console.warn('[auth/tg] BOT_TOKEN not set — initData verification skipped!');
-      try {
-        const params = new URLSearchParams(initData);
-        const userJson = params.get('user');
-        if (!userJson) throw new Error('user field missing');
-        tgUser = JSON.parse(decodeURIComponent(userJson));
-      } catch {
-        res.status(401).json({ error: 'Invalid initData format' });
+      if (!Number.isInteger(tgUser.id) || tgUser.id <= 0) {
+        res.status(401).json({ error: 'Invalid user id in initData' });
         return;
       }
     }
@@ -160,9 +188,16 @@ router.post('/register', authMiddleware, async (req: Request, res: Response) => 
       .slice(0, 32);               // макс 32 символа
 
     const db = getDb();
+
+    // avatar рендерится клиентом через innerHTML, поэтому принимаем только
+    // закрытый список спрайтов из TRAINER_AVATARS. Раньше сюда писалось любое
+    // значение — это давало stored XSS (например '/avatars/x" onerror=...'),
+    // а refresh-токен лежит в localStorage, то есть это был захват аккаунтов.
+    const safeAvatar = VALID_AVATARS.has(avatar) ? avatar : 'trainer_f';
+
     await db.update(users).set({
       nickname: safeNickname,
-      avatar: avatar || 'trainer_f',
+      avatar: safeAvatar,
       registered: 1,
       last_seen: new Date().toISOString(),
     }).where(eq(users.id, userId));

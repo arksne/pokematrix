@@ -81,9 +81,15 @@ export async function loadAllTrainers() {
       // ── Аватар ──
       // Если аватар лежит на сервере (/avatars/) — показываем как <img>
       // Иначе — показываем эмодзи (👤 или выбранный)
-      const avatarHtml = (u.avatar && u.avatar.startsWith('/avatars/'))
-        ? `<img src="${u.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
-        : `<span style="font-size:1.5rem;">${u.avatar || '👤'}</span>`;
+      // Аватар приходит из сохранённых данных игрока. Раньше он подставлялся
+      // в innerHTML без экранирования, а сервер принимал любое значение, включая
+      // '/avatars/x" onerror=...' — это stored XSS. Теперь значение и
+      // экранируется, и проверяется по форме: только путь к .png внутри /avatars/.
+      const rawAvatar = typeof u.avatar === 'string' ? u.avatar : '';
+      const isAvatarPath = /^\/avatars\/[a-z0-9_-]+\.png$/.test(rawAvatar);
+      const avatarHtml = isAvatarPath
+        ? `<img src="${escHtml(rawAvatar)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+        : `<span style="font-size:1.5rem;">${escHtml(rawAvatar || '👤')}</span>`;
 
       // ── Последний визит ──
       // Парсим ISO дату: "2026-07-05T14:30:00.000Z" → "2026-07-05 14:30"

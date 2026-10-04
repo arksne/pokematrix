@@ -17,9 +17,21 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
+      # ADMIN_PASS больше не хранится в репозитории: значение из git считалось
+      # скомпрометированным и давало полный доступ к save_data любого игрока.
+      # Сгенерируйте новое и задайте его вручную в Render Dashboard.
       - key: ADMIN_PASS
-        value: league17admin2026
+        generateValue: true
+      # Без BOT_TOKEN сервер не может проверить подпись Telegram initData.
+      # Задайте реальный токен своего бота в Render Dashboard (sync: false).
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # Вход без Telegram по initData="test" допустим только при явной разработке.
       - key: ALLOW_DEV_LOGIN
-        value: true
+        value: false
       - key: ADMIN_IDS
-        value: ""
+        sync: false
