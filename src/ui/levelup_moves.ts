@@ -177,17 +177,25 @@ export function offerLearnMove(pokemon, move) {
     };
 
     // ── Обработчик: замена слота ──
-    modal.querySelectorAll('.replace-slot').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const slot = parseInt(btn.getAttribute('data-slot')!);
-        const oldName = pokemon.apiData.moves[slot].move.name;
-        // Заменяем атаку в слоте
-        pokemon.apiData.moves[slot].move = { name: moveName, url };
-        appendToLogLazy(
-          `${monName}: ${moveName} заменил ${oldName} в слоте ${slot + 1}!`,
-          false, 'system'
-        );
-        cleanup();
+modal.querySelectorAll('.replace-slot').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const slot = parseInt(btn.getAttribute('data-slot')!);
+          // Имя старой атаки читаем безопасно. Раньше здесь стояло
+          // `pokemon.apiData.moves[slot].move.name`, что падало с TypeError на
+          // пустом слоте — то есть на слот 4, если атак было три. Клик ничего
+          // не делал, и выглядело это как «слот 4 не работает».
+          const oldName = pokemon.apiData.moves[slot]?.move?.name || '(пусто)';
+          if (!pokemon.apiData.moves[slot]) pokemon.apiData.moves[slot] = {};
+          // Заменяем атаку — сбрасываем PP под новую
+          pokemon.apiData.moves[slot].move = { name: moveName, url };
+          if (!pokemon.movesPP) pokemon.movesPP = [];
+          const pp = move?.pp || 30;
+          pokemon.movesPP[slot] = { current: pp, max: pp };
+          appendToLogLazy(
+            `${monName}: ${moveName} заменил${oldName === '(пусто)' ? '' : `ла ${oldName}`} в слоте ${slot + 1}!`,
+            false, 'system'
+          );
+          cleanup();
         resolve(true);  // Атака выучена
       });
     });

@@ -2321,6 +2321,9 @@ async function handleWildFaintRewards(isWild: boolean) {
             const newMax = calculateStat(mon, 'hp', false);
             mon.maxHp = newMax;
             mon.currentHp += (newMax - oldMax); // Восстанавливаем HP пропорционально новому макс
+            // EV за уровень — то же, что и для активного покемона
+            const ev = grantLevelUpEVs(mon);
+            if (ev) appendToLog(`${mon.apiData.name}: +1 EV в ${ev.key.toUpperCase()} (всего ${ev.total})`, false, 'system');
           }
         }
       });
@@ -2336,6 +2339,10 @@ async function handleWildFaintRewards(isWild: boolean) {
       S.activePlayerMon.maxHp = newMax;
       S.activePlayerMon.currentHp += (newMax - oldMax);
       appendToLog(`${S.activePlayerMon.apiData.name} достиг ${S.activePlayerMon.baseLevel} уровня!`);
+      // EV за уровень. Раньше опыт копился, уровень рос, а evs оставались нулевыми,
+      // поэтому распределить их было нечем — бюджет считался только из конфет.
+      const evGain = grantLevelUpEVs(S.activePlayerMon);
+      if (evGain) appendToLog(`Растёт: +1 EV в ${evGain.key.toUpperCase()} (всего ${evGain.total})`, false, 'system');
       await checkNewMovesOnLevelUp(S.activePlayerMon, S.activePlayerMon.baseLevel); // Новые атаки
     }
 
@@ -2421,6 +2428,43 @@ async function handleWildFaintRewards(isWild: boolean) {
  *   - Запускает enemyTurn если враг жив
  *   - Запускает handleWildFaintRewards если враг побеждён
  */
+/**
+ * EV за повышение уровня.
+ *
+ * Раньше при росте уровня EV не начислялись вообще: опыт копился, baseLevel
+ * рос, а evs оставались нулевыми, пока игрок вручную не разбрасывал их кнопками в
+ * профиле. Начисление идёт в натуральную характеристику — с самую высокую базу
+ * среди hp/atk/def/spa/spd/spe, — поэтому рост уровня ощутимо влияет на поке��она.
+ *
+ * По одному EV за уровень: до 99-го уровня покемон получает не больше 99 EV,
+ * что заведомо ниже предела в 252 на характеристику и не конфликтует с
+ * бюджетом из конфет и витаминов (candiesEaten*4 + vitaminsEaten*10).
+ */
+function grantLevelUpEVs(pokemon) {
+  if (!pokemon?.apiData?.stats?.length) return null;
+
+  const names: Record<string, string> = {
+    hp: 'hp', attack: 'atk', defense: 'def',
+    'special-attack': 'spa', 'special-defense': 'spd', speed: 'spe',
+  };
+  let bestKey: string | null = null;
+  let bestBase = -1;
+  for (const s of pokemon.apiData.stats) {
+    const key = names[s?.stat?.name];
+    if (!key) continue;
+    const base = s.base_stat || 0;
+    if (base > bestBase) { bestBase = base; bestKey = key; }
+  }
+  if (!bestKey) return null;
+
+  if (!pokemon.evs) pokemon.evs = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+  if (typeof pokemon.evs[bestKey] !== 'number') pokemon.evs[bestKey] = 0;
+  if (pokemon.evs[bestKey] >= 252) return null;
+
+  pokemon.evs[bestKey] += 1;
+  return { key: bestKey, total: pokemon.evs[bestKey] };
+}
+
 async function useMove(moveIndex) {
   const move = S.playerMovesDetailed[moveIndex];
   if (!move) return;
