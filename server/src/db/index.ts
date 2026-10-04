@@ -23,11 +23,23 @@ export function connectDb() {
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    ssl: config.isProduction ? { rejectUnauthorized: false } : undefined,
+    ssl: resolveDbSsl(),
   });
 
   db = drizzle(pool, { schema });
   return { pool, db };
+}
+
+/**
+ * Режим TLS для подключения к PostgreSQL.
+ * - 'disable' — соединение без TLS (локальная БД, PGlite, self-hosted без SSL)
+ * - 'require'  — требовать TLS
+ * - 'auto'     — TLS в production, без TLS в остальных случаях (прежнее поведение)
+ */
+function resolveDbSsl(): false | { rejectUnauthorized: boolean } | undefined {
+  if (config.dbSsl === 'disable') return false;
+  if (config.dbSsl === 'require') return { rejectUnauthorized: false };
+  return config.isProduction ? { rejectUnauthorized: false } : undefined;
 }
 
 export function getDb() {

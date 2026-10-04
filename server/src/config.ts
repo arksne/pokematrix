@@ -12,6 +12,9 @@ export const config = {
   adminPass: process.env.ADMIN_PASS || 'league17admin2026',
   allowDevLogin: process.env.ALLOW_DEV_LOGIN === 'true',
   databaseUrl: process.env.DATABASE_URL || '',
+  // TLS для PostgreSQL: 'require' (по умолчанию в production), 'disable' или 'auto'.
+  // Нужен для хостов без поддержки SSL и для локальной проверки на PGlite.
+  dbSsl: (process.env.DB_SSL || 'auto') as 'require' | 'disable' | 'auto',
   corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173').split(','),
   isProduction: process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
