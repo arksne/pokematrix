@@ -33,7 +33,8 @@ import { loadAllTrainers } from './trainers.js';          // Загрузка с
 import { loadChatMessages, startChatPolling, stopChatPolling } from './chat.js';
 import { resetGame } from '../game/save.js';               // Сброс всей игры
 import { initTradeSocket } from '../network/socket.js';    // Инициализация сокета торговли
-import { renderTrainerCard } from './trainer-card.js';     // Рендер карточки тренера
+import { renderTrainerCard } from './trainer-card.js';
+import { renderDropLog, renderDropSummary } from './drop-log.js';   // журнал выпавшего
 
 // ── initAppNav: инициализация навигации ─────────────────
 // Вешает обработчики на все кнопки навигации, вызывается один раз при старте
@@ -53,7 +54,8 @@ export function initAppNav() {
     'view-backpack': 'Рюкзак',              // Инвентарь
     'view-team': 'Команда Покемонов',        // Команда
     'view-chat': 'Чат',                     // Чат
-    'view-trainers': 'Тренеры'              // Список тренеров
+    'view-trainers': 'Тренеры',
+    'view-drop': 'Дроп'              // что выпало с покемонов
   };
 
   // ── ОБРАБОТЧИК КЛИКА ПО КНОПКАМ НАВИГАЦИИ ──
@@ -94,6 +96,10 @@ export function initAppNav() {
       }
 
       // Экран "Тренеры": загружаем список всех тренеров
+      // Вкладка "Дроп": журнал выпавшего. Раньше дроп жил только строкой в логе
+      // боя и пропадал вместе с ним.
+      if (targetId === 'view-drop') { renderDropLog(); renderDropSummary(); }
+
       if (targetId === 'view-trainers') {
         loadAllTrainers();
       }

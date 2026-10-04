@@ -145,6 +145,7 @@ export function getFullSaveData() {
     // Такое и самовосстанавливается: в проде лежал сейв с torchic 15 уровня и
     // starterGiven: false, что грозило новым стартовиком при потере последнего
     // покемона.
+    dropLog: state.dropLog,
     starterGiven: state.starterGiven === true || totalPokemonCount() > 0,
     currentLocationId: state.currentLocationId, currentRegion: state.currentRegion,
     inventory: { ...state.inventory },
@@ -555,6 +556,8 @@ export async function applyCloudSave(data) {
   // Флаг восстанавливается из сейва, иначе после перезагрузки он забывался бы
   // и игрок с пустой командой получил бы нового стартовика.
   if (typeof data.starterGiven === 'boolean') state.starterGiven = data.starterGiven;
+  // Журнал дропа — часть прогресса, поэтому синхронизируется вместе с сейвом.
+  state.dropLog = Array.isArray(data.dropLog) ? data.dropLog.slice(0, 60) : [];
   state.myTeam = data.myTeam || state.myTeam;
   state.myTeam.forEach(m => {
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };

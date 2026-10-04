@@ -37,7 +37,8 @@
 // Все ui/* импорты — это DOM-манипуляции (кнопки, модалки).
 // Все data/* импорты — статические конфиги (погода, предметы).
 import { showToast, showSelectionModal } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
-import { itemDef } from '../utils/items.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
+import { itemDef } from '../utils/items.js';
+import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
 import { getSpriteUrl, updateBattleSpriteBgs } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
 import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
@@ -2272,6 +2273,8 @@ async function handleWildFaintRewards(isWild: boolean) {
     appendToLog(`Дикий ${S.activeWild.name} побежден!`);
     checkQuestProgress('defeat_x');                          // Квест "победить N покемонов"
     const rItems = getWildDropItems();
+    // Журнал дропа: строка лога исчезает вместе с боем, а выпавшее нужно помнить.
+    recordDrop(S.activeWild.name, S.wildLvl, rItems);
     store.giveReward(S.wildLvl * 20 + 50, rItems);          // Деньги + предметы
     checkQuestProgress('earn_money', S.wildLvl * 20 + 50);  // Квест "заработать деньги"
     // Туториал: выбить предмет (если хоть что-то выпало)

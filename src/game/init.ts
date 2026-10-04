@@ -40,6 +40,7 @@ import { renderTeamGrid, initProfileEvents, initProfileUXEvents } from '../ui/pr
 import { updateInventoryDisplay, initInventoryEvents } from '../ui/inventory.js';
 import { initShopEvents, initSellTab } from '../ui/shop.js';
 import { initTrainersTab } from '../ui/trainers.js';
+import { initDropTab } from '../ui/drop-log.js';
 import { sendChatMessage } from '../ui/chat.js';
 import { openPokedex } from '../ui/pokedex.js';
 import { editNickname } from '../ui/nickname.js';
@@ -95,8 +96,9 @@ import { API_BASE } from './config.js';
 
     initAppNav();
     initShopEvents();
-    initGymEvents();
-    initTrainersTab();
+initGymEvents();
+  initTrainersTab();
+  initDropTab();
 
     const mapHeader = document.getElementById('map-header');
     const mapContainer = document.getElementById('map-container');
