@@ -46,6 +46,91 @@ export function getLeaderboardData() {
   return { badgesCount, teamLevelSum, money: state.inventory['credit'] || 0, pokemonCount, legendaryCount };
 }
 
+/**
+ * Сжимает PokeAPI-объект покемона до полей, которые реально читаются из сейва.
+ *
+ * Зачем: полный ответ PokeAPI — это 200–435 КБ на покемона, из которых
+ * 85–90 % приходится на moves[].version_group_details. Сейв писался трижды
+ * (save + бэкап + battle_state), и квота localStorage в 5 МБ исчерпывалась
+ * примерно на 6 покемонах, после чего сохранение падало с QuotaExceeded
+ * и игрок терял прогресс.
+ *
+ * Что обязательно остаётся (иначе ломается игра):
+ *   id          — ключ перезагрузки с PokeAPI (levelup_moves, tm)
+ *   name        — 110 мест чтения, эволюции, лидерборд
+ *   stats[]     — порядок PokeAPI (hp, attack, defense, sp-a, sp-d, speed) и
+ *                 stat.name обязательны: logic.ts ищет по имени, inventory — по индексу
+ *   types[]     — порядок важен (types[0] — основной тип), нужен type.name
+ *   abilities   — [0].ability.name
+ *   species     — name (сравнения) и url (реальный fetch в daycare)
+ *   sprites     — 4 URL, которые читает utils/sprite.ts
+ *   moves[0..3] — боевые слоты; move.url обязателен, иначе слот молча
+ *                 выпадает из боя (core.ts проверяет именно url)
+ *   isShiny, captureRate, wildGender — собственные поля, которые клиент пишет
+ *                 внутрь apiData; isShiny в белом списке монстра отсутствует,
+ *                 поэтому здесь это единственное место, где шайни сохраняются
+ */
+export function slimApiData(api: any): any {
+  if (!api || typeof api !== 'object') return api;
+  const out: any = {};
+
+  if (api.id !== undefined) out.id = api.id;
+  if (api.name !== undefined) out.name = api.name;
+  if (api.isShiny !== undefined) out.isShiny = api.isShiny;
+  if (api.captureRate !== undefined) out.captureRate = api.captureRate;
+  if (api.wildGender !== undefined) out.wildGender = api.wildGender;
+
+  // stats: сохраняем порядок и stat.name — по нему идёт поиск в calculateStat
+  if (Array.isArray(api.stats)) {
+    out.stats = api.stats.map((s: any) => ({
+      base_stat: s?.base_stat,
+      stat: s?.stat ? { name: s.stat.name } : undefined,
+    }));
+  }
+
+  if (Array.isArray(api.types)) {
+    out.types = api.types.map((t: any) => ({ type: t?.type ? { name: t.type.name } : undefined }));
+  }
+
+  if (Array.isArray(api.abilities)) {
+    out.abilities = api.abilities.map((a: any) => ({
+      ability: a?.ability ? { name: a.ability.name } : undefined,
+      is_hidden: a?.is_hidden,
+    }));
+  }
+
+  if (api.species && typeof api.species === 'object') {
+    out.species = { name: api.species.name, url: api.species.url };
+  }
+
+  // Ровно те URL, которые читает getSpriteUrl
+  const sp = api.sprites;
+  if (sp) {
+    const art = sp.other?.['official-artwork'];
+    out.sprites = {
+      front_default: sp.front_default ?? null,
+      front_shiny: sp.front_shiny ?? null,
+      other: art ? {
+        'official-artwork': {
+          front_default: art.front_default ?? null,
+          front_shiny: art.front_shiny ?? null,
+        },
+      } : {},
+    };
+  }
+
+  // Четыре боевых слота. Пустой слот пишем как null, а не {}: проверки вида
+  // `if (mon.apiData.moves[i])` истинны для {}, и следующее чтение
+  // `.move.name` падает с TypeError.
+  if (Array.isArray(api.moves)) {
+    out.moves = api.moves.slice(0, 4).map((m: any) =>
+      m && m.move && m.move.url ? { move: { name: m.move.name, url: m.move.url } } : null
+    );
+  }
+
+  return out;
+}
+
 export function getFullSaveData() {
   return {
     _v: state.saveVersion,
@@ -57,7 +142,7 @@ export function getFullSaveData() {
     myTeam: state.myTeam.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
       caughtLocation: m.caughtLocation, previousOwner: m.previousOwner,
-      apiData: m.apiData, maxHp: m.maxHp, currentHp: m.currentHp,
+      apiData: slimApiData(m.apiData), maxHp: m.maxHp, currentHp: m.currentHp,
       ivs: m.ivs, evs: m.evs, baseLevel: m.baseLevel,
       exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
       vitaminsEaten: m.vitaminsEaten, training: m.training, trainingStage: m.trainingStage,
@@ -74,7 +159,7 @@ export function getFullSaveData() {
     visitedLocations: Array.from(state.visitedLocations), itemsUsedInBattle: state.itemsUsedInBattle, itemHistory: state.itemHistory,
     pcBoxes: state.pcBoxes.map(box => box.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
-      caughtLocation: m.caughtLocation, apiData: m.apiData, maxHp: m.maxHp,
+      caughtLocation: m.caughtLocation, apiData: slimApiData(m.apiData), maxHp: m.maxHp,
       currentHp: m.currentHp, ivs: m.ivs, evs: m.evs, baseLevel: m.baseLevel,
       exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
       vitaminsEaten: m.vitaminsEaten, trainingStage: m.trainingStage, trainingStat: m.trainingStat,
@@ -84,7 +169,12 @@ export function getFullSaveData() {
       berries: m.berries, learnableMoves: m.learnableMoves,
       lastMoveCheckLevel: m.lastMoveCheckLevel,
     }))),
-    daycareMons: state.daycareMons, daycareEgg: state.daycareEgg, lastLocation: state.lastLocation, expShareActive: state.expShareActive,
+    daycareMons: state.daycareMons.map((d: any) => ({
+      depositTime: d.depositTime,
+      // Питомник раньше писался в сейв как есть, целиком, без белого списка —
+      // это третий путь, через который полный apiData попадал в сохранение.
+      mon: d.mon ? { ...d.mon, apiData: slimApiData(d.mon.apiData) } : d.mon,
+    })), daycareEgg: state.daycareEgg, lastLocation: state.lastLocation, expShareActive: state.expShareActive,
     breedingPairs: state.breedingPairs.map(p => ({ boxIdx: p.boxIdx, mon1Uid: p.mon1Uid, mon2Uid: p.mon2Uid, startTime: p.startTime, readyTime: p.readyTime })),
     eggs: state.eggs.map(e => ({ uid: e.uid, species: e.species, types: e.types, ivs: e.ivs, readyTime: e.readyTime, boxIdx: e.boxIdx, parent1Uid: e.parent1Uid, parent2Uid: e.parent2Uid })),
     notifications: state.notifications.slice(0, 30),

@@ -147,7 +147,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
  * сортируются по уровню изучения (от высокого к низкому),
  * выбираются топ-4.
  */
-export function updatePvPUI() {
+export async function updatePvPUI() {
   if (!state.pvpMyMon) return;
   const mon = state.pvpMyMon;
   const curLvl = mon.baseLevel + (mon.candiesEaten || 0);
@@ -164,15 +164,28 @@ export function updatePvPUI() {
   document.getElementById('pvp-turn-indicator').style.color = state.pvpMyTurn ? '#34c759' : '#ff9500';
 
   // ── Загрузка атак ──
+  // Список атак берём из PokeAPI по apiData.id, а не из сохранённого
+  // apiData.moves: в сейв кладётся только 4 боевых слота, а перебрать нужно
+  // весь лёрнсет с level_learned_at. Раньше здесь читался
+  // apiData.moves[].version_group_details из сейва, поэтому сохранять его
+  // было нельзя — это 90% объёма apiData.
   const movesDiv = document.getElementById('pvp-moves');
   movesDiv.innerHTML = '';
   state.pvpMovesDetailed = [];
 
-  // Фильтруем атаки: только level-up, до текущего уровня
+  const speciesId = mon.apiData?.id;
+  if (!speciesId) {
+    movesDiv.innerHTML = '<span class="text-muted">Нет данных о покемоне</span>';
+    return;
+  }
+
   const seen = new Set();
   const lm = [];
-  if (mon.apiData?.moves) {
-    for (const entry of mon.apiData.moves) {
+  try {
+    const r = await fetch(`/api/pokeapi/pokemon/${speciesId}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const pokeData = await r.json();
+    for (const entry of pokeData.moves || []) {
       if (!entry.move?.url) continue;
       const vgd = entry.version_group_details || [];
       let learnLevel = 0;
@@ -189,7 +202,12 @@ export function updatePvPUI() {
         lm.push({ name: entry.move.name, url: entry.move.url, level: learnLevel });
       }
     }
+  } catch (err) {
+    console.warn('[pvp] не удалось загрузить список атак:', err);
+    movesDiv.innerHTML = '<span class="text-muted">Не удалось загрузить атаки</span>';
+    return;
   }
+
   // Сортируем: последние выученные атаки — первыми
   lm.sort((a, b) => b.level - a.level);
   const topMoves = lm.slice(0, 4); // Топ-4 атаки
