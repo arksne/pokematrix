@@ -361,7 +361,13 @@ import { API_BASE } from './config.js';
     }
 
     if (state.tgToken) {
-      setTimeout(() => cloudSave(), 2000);
+      // Страховка от «облако ничего не знает»: если через 2 секунды ещё не было
+      // ни одного успешного облачного сохранения, выкладываем текущее
+      // состояние. Раньше проверки не было, и таймер срабатывал всегда — в том
+      // числе до того, как загрузилась игра, выкладывая пустое состояние.
+      setTimeout(() => {
+        if (!state.lastCloudSync && state.gameLoaded) cloudSave();
+      }, 2000);
     }
 
     document.getElementById('btn-close-trainer-profile')?.addEventListener('click', () => {
@@ -374,9 +380,15 @@ import { API_BASE } from './config.js';
       }
     });
 
+    // Стартовик нельзя пропустить: пока модалка висит, init.ts стоит на
+    // await giveStarter(). Раньше клик по фону просто скрывал её, и промис
+    // никогда не резолвился — игра не доходила ни до рендера локации, ни до
+    // восстановления состояния. Поэтому закрытие по фону выдаёт стартовика по
+    // умолчанию, а не вешает игру.
     document.getElementById('starter-modal')?.addEventListener('click', (e) => {
       if (e.target === e.currentTarget) {
         (e.currentTarget as HTMLElement).style.display = 'none';
+        document.dispatchEvent(new CustomEvent('starter-modal:dismissed'));
       }
     });
 

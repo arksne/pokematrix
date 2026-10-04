@@ -169,6 +169,32 @@ export function giveStarter(): Promise<void> {
       return;
     }
 
+    // Модалку закрыли, не выбрав карту. Раньше в этом случае промис не
+    // резолвился никогда, и await giveStarter() в init.ts висел до перезагрузки:
+    // не отображалась локация, не восстанавливалось состояние, не запускались
+    // облачные события. Закрытие равнозначно выбору — выдаём стартовика по
+    // умолчанию, чтобы игрок гарантированно получил играбельное состояние.
+    let settled = false;
+    const finish = (chosen: string, viaFallback: boolean) => {
+      if (settled) return;
+      settled = true;
+      modal.style.display = 'none';
+      giveStarterMon(chosen).then(() => {
+        showToast(
+          viaFallback
+            ? `Стартовик выдан по умолчанию: ${chosen.toUpperCase()}`
+            : `Вам выпал покемон: ${chosen.toUpperCase()}!`,
+          false
+        );
+        resolve();
+      });
+    };
+    document.addEventListener('starter-modal:dismissed', () => finish('bulbasaur', true), { once: true });
+
+    // Страховка на случай, если модалка исчезла иначе (например, скрыта скриптом):
+    // через 90 секунд отдаём стартовика, чтобы init не остался висеть навсегда.
+    setTimeout(() => finish('bulbasaur', true), 90_000);
+
     // Очищаем сетку
     grid.innerHTML = '';
     // Устанавливаем заголовок
@@ -200,17 +226,7 @@ export function giveStarter(): Promise<void> {
       div.addEventListener('mouseleave', () => div.style.transform = 'scale(1)');
 
       // При клике — выбираем случайного покемона из этого поколения
-      div.addEventListener('click', () => {
-        const chosenStarter = gen[Math.floor(Math.random() * gen.length)];  // Случайный
-        modal.style.display = 'none';   // Закрываем модалку
-        giveStarterMon(chosenStarter).then(() => {
-          showToast(
-            `Вам выпал покемон: ${chosenStarter.toUpperCase()}! (Gen ${idx + 1})`,
-            false
-          );
-          resolve();  // Говорим init.ts что стартовик выбран
-        });
-      });
+      div.addEventListener('click', () => finish(gen[Math.floor(Math.random() * gen.length)], false));
       grid.appendChild(div);
     });
 
