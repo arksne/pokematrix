@@ -225,6 +225,19 @@ async function main() {
   mkdirSync(STATE_DIR, { recursive: true });
   if (!KEEP_PG) rmSync(path.join(STATE_DIR, 'pgdata'), { recursive: true, force: true });
 
+  // Проверка миграций на пустой базе идёт первой и в своём процессе: она
+  // поднимает собственный PGlite, поэтому порт основной БД ещё свободен.
+  // В продакшене база создаётся заново, и applied с нуля — самый рискованный
+  // момент: любая ошибка порядка видна только там.
+  log('[0] миграции на пустой базе (сверка с schema.ts)');
+  {
+    const r = await runSuite('migrations', 'migrate-fresh.test.mjs');
+    for (const l of r.out.split('\n')) {
+      if (/PASS|FAIL|МИГРАЦИИ/.test(l)) log('  ' + l.trimEnd());
+    }
+    if (r.code !== 0) exitCode = 1;
+  }
+
   log('[1] PostgreSQL (PGlite, pg-wire)');
   const pg = await startPg({ fresh: false });
   log(`    ${PG_URL}`);

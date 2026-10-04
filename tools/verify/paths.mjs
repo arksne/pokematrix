@@ -35,6 +35,10 @@ export const BOT_TOKEN = '1234567890:VERIFY_BOT_TOKEN_local_only';
 export const SERVER_DIR = path.join(REPO, 'server');
 export const DIST_DIR = path.join(REPO, 'dist');
 
+/** Каталог SQL-миграций и файл объявленной схемы drizzle. */
+export const MIGRATIONS_DIR = path.join(SERVER_DIR, 'src', 'db', 'migrations');
+export const SCHEMA_FILE = path.join(SERVER_DIR, 'src', 'db', 'schema.ts');
+
 /** Резолвит модуль из node_modules репозитория (root или server). */
 export function requireFrom(specifier, fromDir) {
   const { createRequire } = requireFrom;
