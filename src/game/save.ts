@@ -128,11 +128,15 @@ export function saveGame() {
 
   const saveJson = JSON.stringify(saveData);
   try {
-    // Rotate backups: keep last 2 previous saves
-    const prev1 = localStorage.getItem(lsKey('save'));
-    if (prev1) {
-      try { localStorage.setItem(lsKey('save_bak2'), localStorage.getItem(lsKey('save_bak1')) || ''); } catch(_) {}
-      try { localStorage.setItem(lsKey('save_bak1'), prev1); } catch(_) {}
+    // Ротация бэкапов: держим только один предыдущий сейв.
+    // Раньше их было два, то есть в localStorage лежало три полные копии save_data;
+    // при apiData каждого покемона квота в 5 МБ исчерпывалась, и сохранение
+    // начинало падать с QuotaExceeded. loadGame() по-прежнему проверяет bak1 и
+    // bak2, так что старые бэкапы используются как последний резерв.
+    const prev = localStorage.getItem(lsKey('save'));
+    if (prev) {
+      try { localStorage.setItem(lsKey('save_bak1'), prev); } catch(_) {}
+      try { localStorage.removeItem(lsKey('save_bak2')); } catch(_) {}
     }
     localStorage.setItem(lsKey('save'), saveJson);
     localStorage.setItem(lsKey('save_ts'), String(Date.now()));
@@ -251,23 +255,25 @@ export async function loadGame() {
     validateGameState();
     return true;
   } catch (e) {
-    console.warn('Load failed — data corrupted', e);
+    console.warn('Load failed - data corrupted', e);
     try { localStorage.setItem(lsKey('save_corrupted'), raw || ''); } catch (_) {}
-    // Try backup recovery
+    // Восстановление из резервной копии.
+    // Использованный бэкап удаляется: иначе битый save_bak1 снова записывался бы
+    // в save, loadGame() падал бы на нём же и уходил в бесконечную рекурсию
+    // (в стеке это выглядит как переполнение и падение вкладки).
     for (const bak of ['save_bak1', 'save_bak2']) {
       try {
         const bakRaw = localStorage.getItem(lsKey(bak));
         if (!bakRaw) continue;
         const bakData = JSON.parse(bakRaw);
-        if (bakData.myTeam) {
-          console.warn(`Recovered from ${bak}!`);
-          showToast('Данные восстановлены из резервной копии!', false);
-          // Re-run load with backup data
-          localStorage.setItem(lsKey('save'), bakRaw);
-          localStorage.setItem(lsKey('save_v'), String(bakData._v || 0));
-          return loadGame(); // Retry with recovered data
-        }
-      } catch(_) {}
+        if (!bakData.myTeam) continue;
+        console.warn(`Recovered from ${bak}!`);
+        showToast('Сохранение восстановлено из резервной копии!', false);
+        localStorage.setItem(lsKey('save'), bakRaw);
+        localStorage.setItem(lsKey('save_v'), String(bakData._v || 0));
+        localStorage.removeItem(lsKey(bak));
+        return loadGame(); // Retry with recovered data
+      } catch (_) {}
     }
     return false;
   }
