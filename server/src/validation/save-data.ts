@@ -19,7 +19,7 @@ const VALID_BADGES = [
 ] as const;
 
 // ── Известные предметы (из src/data/items.ts + economy.ts) ──
-const VALID_ITEM_IDS = [
+export const VALID_ITEM_IDS = [
   'pokeBall', 'greatBall', 'ultraBall', 'masterBall',
   'potion', 'superPotion', 'hyperPotion', 'maxPotion', 'fullRestore',
   'revive', 'maxRevive', 'antidote', 'burnHeal', 'iceHeal', 'awakening', 'paralyzeHeal',
@@ -44,6 +44,9 @@ const VALID_ITEM_IDS = [
   'xAttack', 'xDefend', 'xSpeed', 'xSpAtk', 'xSpDef', 'xAccuracy',
   'direHit', 'guardSpec',
 ] as const;
+
+/** Белый список предметов: только эти itemId могут попасть в инвентарь. */
+export const VALID_ITEM_ID_SET: ReadonlySet<string> = new Set(VALID_ITEM_IDS);
 
 // ── Схема IV ──
 const ivSchema = z.object({
@@ -101,8 +104,11 @@ const teamMonSchema = z.object({
 // ── Основная схема save_data ──
 export const saveDataSchema = z.object({
   // Обязательные поля с минимальной валидацией
+  // Только известные itemId. Раньше здесь стоял z.record(z.string(), ...), то есть
+  // в инвентарь можно было записать любой ключ с количеством до 999999 — белый
+  // список VALID_ITEM_IDS был объявлен, но не использовался.
   inventory: z.record(
-    z.string(),
+    z.enum(VALID_ITEM_IDS),
     z.number().int().min(0).max(999999)
   ).optional().default({}),
 

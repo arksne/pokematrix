@@ -82,7 +82,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user!.userId;
 
     // ── Optimistic locking: проверяем save_version ──
-    const currentUser = (await db.select({ save_version: users.save_version })
+    const currentUser = (await db.select({ save_version: users.save_version, money: users.money })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1))[0];
@@ -95,8 +95,16 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const clientVersion = body.saveVersion ?? 0;
     const serverVersion = currentUser.save_version ?? 0;
 
-    // Если у клиента устаревшая версия — отклоняем
-    if (clientVersion < serverVersion) {
+    // Оптимистическая блокировка. Раньше сравнение шло против порядка величин
+    // разных шкал: клиент присылает Date.now() (~1.8e12), сервер считает до
+    // единиц, поэтому условие не срабатывало никогда. Сравниваем только когда
+    // клиент прислал версию того же вида, что и серверная (малое целое).
+    if (
+      Number.isInteger(clientVersion) &&
+      clientVersion > 0 &&
+      clientVersion < 1_000_000_000 &&
+      clientVersion < serverVersion
+    ) {
       res.status(409).json({
         error: 'Save conflict: server has newer data',
         serverVersion,
@@ -114,17 +122,28 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    // Сохраняем весь save_data целиком + инкрементим save_version
+    // Клиент не управляет деньгами, количеством покемонов и баджами: эти поля
+    // считаются из проверенного save_data. Раньше money брался из тела запроса
+    // вообще вне Zod-схемы, а money — колонка int4, то есть значение 1e300
+    // роняло сохранение с 500.
+    const moneyFromSave = Number(validation.data.inventory?.['credit'] ?? 0);
+    const money = Number.isFinite(moneyFromSave)
+      ? Math.min(Math.max(Math.trunc(moneyFromSave), 0), 2_000_000_000)
+      : currentUser.money ?? 0;
+    const pokemonCount = Array.isArray(validation.data.myTeam)
+      ? validation.data.myTeam.length
+      : Array.isArray(validation.data.pcBoxes)
+        ? validation.data.pcBoxes.reduce((a: number, b: unknown[]) => a + (Array.isArray(b) ? b.length : 0), 0)
+        : 0;
+
     const updateData: any = {
       save_data: JSON.stringify(body.saveData),
       save_version: serverVersion + 1,
+      money,
+      badges_count: validatedBadges.length,
+      pokemon_count: pokemonCount,
+      last_seen: new Date().toISOString(),
     };
-
-    // Обновляем мета-поля для быстрого доступа (leaderboard, profile)
-    if (body.money !== undefined) updateData.money = body.money;
-    if (body.badgesCount !== undefined) updateData.badges_count = body.badgesCount;
-    if (body.pokemonCount !== undefined) updateData.pokemon_count = body.pokemonCount;
-    updateData.last_seen = new Date().toISOString();
 
     await db.update(users)
       .set(updateData)
