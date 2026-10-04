@@ -18,9 +18,13 @@
         "test:e2e": "node e2e/smoke.mjs",
         "test:e2e:headed": "node e2e/smoke.mjs --headed",
         "test:watch": "vitest",
-        "test": "vitest run"
+        "test": "vitest run",
+        "verify": "node tools/verify/run.mjs",
+        "verify:serve": "node tools/verify/run.mjs --serve"
     },
     "devDependencies": {
+        "@electric-sql/pglite": "^0.5.8",
+        "@electric-sql/pglite-socket": "^0.2.11",
         "@types/node": "^25.9.1",
         "drizzle-kit": "^0.31.10",
         "playwright": "^1.60.0",

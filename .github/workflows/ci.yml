@@ -46,12 +46,36 @@ jobs:
       - name: Сборка сервера
         run: npm run server:build
 
+  # Проверка работоспособности через Telegram Mini App.
+  # Поднимает настоящий PostgreSQL (PGlite в режиме pg-wire), собирает клиент и
+  # сервер, поднимает сервер в production-режиме с настоящим BOT_TOKEN и проверяет
+  # вход в Chromium. Сюда же входят проверки данных, безопасности и экономики.
+  verify:
+    runs-on: ubuntu-latest
+    needs: [test, server]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12
+          cache: npm
+      - run: npm ci
+      - name: Установка зависимостей сервера
+        run: npm ci --prefix server
+      - name: Браузер для Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Проверка работоспособности (Telegram Mini App)
+        run: npm run verify
+      - name: Логи сервера при падении
+        if: failure()
+        run: cat tools/verify/.state/server.err.log tools/verify/.state/server.out.log || true
+
   # Сборка клиента. Отдельный шаг от Pages-деплоя: клиент работает только
   # на одном origin с API (API_BASE = '/api'), поэтому зелёный Pages-деплой
   # сам по себе не означает, что приложение рабочее.
   build:
     runs-on: ubuntu-latest
-    needs: [test, server]
+    needs: [verify]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

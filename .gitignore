@@ -38,3 +38,6 @@ logs/
 *.data
 settings.local.json
 console.log*
+
+# Артефакты проверки работоспособности
+tools/verify/.state/
