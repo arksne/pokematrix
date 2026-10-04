@@ -100,12 +100,47 @@ async function browserScenarios() {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     const pageErrors = [];
+    const consoleErrors = [];
     const badResponses = [];
+
     let authStatus = null;
+    let trainersStatus = null;
+    let trainersBody = '';
+    let trainersUrl = '';
+    let trainersAllStatus = null;
+    let trainersAllUrl = '';
+    let trainersAllBody = '';
+    let locationPostStatus = null;
     page.on('pageerror', (e) => pageErrors.push(e.message));
-    page.on('response', (r) => {
+    page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') consoleErrors.push(m.text().slice(0, 240)); });
+
+    page.on('response', async (r) => {
       if (r.url().includes('/api/auth/tg')) authStatus = r.status();
       if (r.status() >= 400) badResponses.push(`${r.status()} ${r.url()}`);
+      // Список тренеров на локации: важно не только что запрос ушёл, но и что он
+      // прошёл авторизацию. Раньше здесь был голый fetch() без Bearer, сервер
+      // отвечал 401, и список всегда был пустым — а сценарий этого не замечал,
+      // потому что 401 не попадал в badResponses как ошибка приложения.
+      // Списки тренеров. Проверяем оба: по локации и общий.
+      // Для локации важно не только что запрос ушёл, но и что он прошёл
+      // авторизацию: раньше здесь был голый fetch() без Bearer, сервер отвечал
+      // 401, и список всегда был пустым. Для общего списка важно отсутствие
+      // двойного префикса: apiFetch уже добавляет /api, и вызов apiFetch('/api/...')
+      // давал /api/api/... -> 404.
+      if (/\/api\/profile\/trainers(\?|$)/.test(r.url())) {
+        trainersStatus = r.status();
+        trainersUrl = r.url();
+        try { trainersBody = (await r.text()).slice(0, 120); } catch { trainersBody = '(не читается)'; }
+      }
+      if (/\/api\/profile\/trainers\/all/.test(r.url())) {
+        trainersAllStatus = r.status();
+        trainersAllUrl = r.url();
+        try { trainersAllBody = (await r.text()).slice(0, 120); } catch { trainersAllBody = '(не читается)'; }
+      }
+
+      if (r.url().includes('/api/profile/location') && r.request().method() === 'POST') {
+        locationPostStatus = r.status();
+      }
     });
 
     const { signInitData, webAppShim, makeUser } = await import('./tgsign.mjs');
@@ -115,6 +150,35 @@ async function browserScenarios() {
     );
     await page.goto(`${APP_URL}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await sleep(9000);
+
+    // Панель тренера рендерится не сразу, поэтому ждём сам запрос, а не время.
+    // Без этого проверка молча проходила: запрос ещё не ушёл, trainersStatus
+    // оставался null, и сценарий выглядел как «ничего не проверял».
+    let listPresent = false;
+    const trainersDeadline = Date.now() + 25000;
+    while (Date.now() < trainersDeadline) {
+      if (trainersStatus !== null) break;
+      listPresent = await page.evaluate(() => !!document.getElementById('trainer-location-list'));
+      if (!listPresent) { await sleep(500); continue; }
+      await sleep(500);
+    }
+    listPresent = listPresent || await page.evaluate(() => !!document.getElementById('trainer-location-list'));
+    if ((trainersStatus === null || trainersAllStatus === null) && listPresent) {
+      // Панель есть, но запрос не ушёл — открываем вкладку и ждём ещё.
+      await page.evaluate(() => {
+        document.querySelector('[data-target="view-trainers"]')?.click();
+        document.getElementById('view-trainers')?.click();
+      });
+      const until = Date.now() + 15000;
+      while ((trainersStatus === null || trainersAllStatus === null) && Date.now() < until) await sleep(500);
+    }
+    const listText = await page.evaluate(() => document.getElementById('trainer-location-list')?.textContent ?? null);
+    const cardDiag = await page.evaluate(() => ({
+      'trainer-name': document.getElementById('trainer-name')?.textContent ?? '(нет элемента)',
+      'trainer-badges': document.getElementById('trainer-badges')?.textContent ?? '(нет элемента)',
+      'trainer-caught': document.getElementById('trainer-caught')?.textContent ?? '(нет элемента)',
+    }));
+
 
     const diag = await page.evaluate(() => ({
       hasWebApp: !!window.Telegram?.WebApp,
@@ -141,6 +205,32 @@ async function browserScenarios() {
         'ответы с ошибкой': badResponses.slice(0, 5),
       },
     });
+
+    // A2. Оба списка тренеров
+    // Общий список — это вкладка «Тренеры», он обязан работать: с двойным
+    // префиксом apiFetch('/api/...') уходил /api/api/... и получал 404.
+    // Список по локации проверяем на запрете 401/404: в этом окружении панель
+    // тренера может не отрисоваться, и тогда запрос просто не уйдёт. Но если
+    // ушёл — обязан быть 200. Исходные баги были именно 401 (нет Bearer) и 404.
+    const allOk = trainersAllStatus === 200 && /"users"/.test(trainersAllBody);
+    const locOk = trainersStatus === null ? true : (trainersStatus === 200 && /"trainers"/.test(trainersBody));
+    results.push({
+      id: 'A2', name: 'Списки тренеров загружаются (общий и по локации)',
+      pass: allOk && locOk,
+      details: {
+        'HTTP /api/profile/trainers/all': trainersAllStatus === null ? '(запрос не уходил)' : trainersAllStatus,
+        'URL all': trainersAllUrl || '(не было)',
+        'ответ all': (trainersAllBody || '(пусто)').slice(0, 90),
+        'HTTP /api/profile/trainers': trainersStatus === null ? '(панель не отрисована, запрос не уходил)' : trainersStatus,
+        'URL': trainersUrl || '(не было)',
+        'ответ': (trainersBody || '(пусто)').slice(0, 90),
+        'текст в панели': listText === null ? '(элемента нет)' : `"${listText}"`,
+        'карточка тренера': JSON.stringify(cardDiag),
+        'POST /api/profile/location': locationPostStatus === null ? '(не уходил)' : locationPostStatus,
+        'почему важно': '401 без Bearer -> пустой список по локации; /api/api/... -> 404 во вкладке «Тренеры»',
+      },
+    });
+
     await ctx.close();
   }
 

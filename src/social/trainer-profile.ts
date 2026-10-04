@@ -51,23 +51,24 @@ export function renderOnlinePlayers() {
 
 // --- Location-based trainer list ---
 
-async function updatePlayerLocation() {
-  const headers = getCloudAuthHeaders();
-  if (!headers.Authorization) return;
-  try {
-    await fetch(`${API_BASE}/profile/location`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ locationId: state.currentLocationId, region: state.currentRegion })
-    });
-  } catch (e) { /* silent */ }
-}
+// Раньше здесь была своя копия updatePlayerLocation() с POST /profile/location.
+// Вызовов у неё не было ни одного: реальная версия живёт в ui/location.ts и
+// вызывается при смене локации. Дубль удалён, чтобы править пришлось в одном
+// месте, а не в двух расходящихся.
 
 export async function loadLocationTrainers() {
   const listEl = document.getElementById('trainer-location-list');
   if (!listEl) return;
   try {
-    const res = await fetch(`${API_BASE}/profile/trainers?locationId=${encodeURIComponent(state.currentLocationId)}`);
+    // Заголовок обязателен: /profile/trainers закрыт authMiddleware, и без
+    // Bearer сервер отвечает 401, из-за чего список всегда был пустым.
+    // Раньше здесь был голый fetch() без авторизации.
+    const headers = getCloudAuthHeaders();
+    const res = await fetch(`${API_BASE}/profile/trainers?locationId=${encodeURIComponent(state.currentLocationId)}`, { headers });
+    if (!res.ok) {
+      listEl.textContent = '—';
+      return;
+    }
     const data = await res.json();
     listEl.innerHTML = '';
     if (!data.trainers || data.trainers.length === 0) {
@@ -83,7 +84,12 @@ export async function loadLocationTrainers() {
       span.addEventListener('click', () => openTrainerProfile(t.id));
       listEl.appendChild(span);
     });
-  } catch (e) { listEl.textContent = '---'; }
+  } catch (e) {
+    // Раньше здесь был пустой catch, из-за которого ошибка оставалась невидимой:
+    // ни в консоли, ни в проверках. Молчаливый catch и скрыл исходный баг.
+    console.warn('[trainers] список по локации не загрузился:', e);
+    listEl.textContent = '—';
+  }
 }
 
 export function updateTrainerLocationList(data) {
@@ -117,7 +123,9 @@ export async function openTrainerProfile(userId) {
   document.getElementById('modal-trainer-team').innerHTML = '<div class="trainer-team-empty">Загрузка...</div>';
 
   try {
-    const res = await fetch(`${API_BASE}/profile/${userId}`);
+      // Заголовок обязателен: /profile/:userId закрыт authMiddleware.
+      const res = await fetch(`${API_BASE}/profile/${userId}`, { headers: getCloudAuthHeaders() });
+
     const data = await res.json();
     if (!data.profile) {
       document.getElementById('modal-trainer-name').innerText = 'Тренер не найден';

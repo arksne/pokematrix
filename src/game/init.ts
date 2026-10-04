@@ -35,7 +35,7 @@ import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameS
 import { authTelegram } from './auth.js';
 import { initAppNav } from '../ui/nav.js';
 import { renderTrainerCard } from '../ui/trainer-card.js';
-import { getLocation, renderLocation, travelToRegion, updateTimeOfDay, updateMoneyDisplay, updateBadgeDisplay, fetchDropConfig, processMonsterDrop } from '../ui/location.js';
+import { getLocation, renderLocation, travelToRegion, updateTimeOfDay, updateMoneyDisplay, updateBadgeDisplay, fetchDropConfig, processMonsterDrop, updatePlayerLocation } from '../ui/location.js';
 import { renderTeamGrid, initProfileEvents, initProfileUXEvents } from '../ui/profile.js';
 import { updateInventoryDisplay, initInventoryEvents } from '../ui/inventory.js';
 import { initShopEvents, initSellTab } from '../ui/shop.js';
@@ -210,6 +210,15 @@ import { API_BASE } from './config.js';
     store.setState(state);
 
     try { renderLocation(state.currentLocationId); } catch(e) { console.error('renderLocation failed:', e); showToast('Ошибка загрузки локации. Нажмите кнопку сброса.', true); }
+
+    // Сейв загрузился только что, поэтому currentLocationId и currentRegion теперь
+    // настоящие. renderTrainerCard() выше отработал раньше, когда ещё стояли
+    // значения по умолчанию, и список тренеров ушёл в запрос по goldenrodCity.
+    // Обновляем колонку локации на сервере и перерисовываем карточку уже с
+    // реальной локацией.
+    updatePlayerLocation();
+    renderTrainerCard();
+
     renderTeamGrid();
     updateInventoryDisplay();
     updateMoneyDisplay();

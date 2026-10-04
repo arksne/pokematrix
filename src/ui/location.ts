@@ -245,11 +245,16 @@ export let renderLocation = function(locId: any) {
     state.lastLocation = state.currentLocationId;
   }
   state.currentLocationId = locId;           // Устанавливаем текущую локацию
-  updatePlayerLocation();                     // Синхронизируем с сервером
 
   const loc = getLocation(locId);             // Получаем данные локации
   if (!loc) return;                           // Если локация не найдена — выходим
   state.currentRegion = getRegionOfLocation(locId);  // Определяем регион
+
+  // Порядок важен: updatePlayerLocation() отправляет на сервер currentLocationId
+  // вместе с currentRegion. Раньше вызов стоял между присваиванием локации и
+  // региона, поэтому сервер получал новую локацию со старым регионом — в базе
+  // копился region: johto при currentRegion: kanto в save_data.
+  updatePlayerLocation();
 
   // ── Обновляем заголовок интерфейса ──
   const headerTitle = document.getElementById('header-title');

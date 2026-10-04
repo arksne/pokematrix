@@ -60,7 +60,7 @@ export async function loadAllTrainers() {
 
   try {
     // Запрашиваем список тренеров с сервера
-    const res = await apiFetch('/api/profile/trainers/all');
+    const res = await apiFetch('/profile/trainers/all');
     const data = await res.json();
     trainersAllData = data.users || [];  // Сохраняем в локальное состояние
 
