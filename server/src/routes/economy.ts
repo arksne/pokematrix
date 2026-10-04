@@ -102,7 +102,7 @@ router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
 
     // Транзакция: read → check → write атомарно
     const result = await db.transaction(async (tx) => {
-      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).for('update').limit(1))[0];
       if (!user) throw new Error('User not found');
       const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
@@ -149,7 +149,7 @@ router.post('/sell', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user!.userId;
 
     const result = await db.transaction(async (tx) => {
-      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).for('update').limit(1))[0];
       if (!user) throw new Error('User not found');
       const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
@@ -203,7 +203,7 @@ router.post('/craft', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user!.userId;
 
     const inventory = await db.transaction(async (tx) => {
-      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).for('update').limit(1))[0];
       if (!user) throw new Error('User not found');
       const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
@@ -251,7 +251,7 @@ router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user!.userId;
 
     const result = await db.transaction(async (tx) => {
-      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).for('update').limit(1))[0];
       if (!user) throw new Error('User not found');
       const saveData = parseSaveStrict(user.save_data, user.id)
       if (!saveData.inventory) saveData.inventory = {};
@@ -338,7 +338,7 @@ router.post('/badge-reward', authMiddleware, async (req: Request, res: Response)
     const db = getDb();
 
     const result = await db.transaction(async (tx) => {
-      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+      const user = (await tx.select().from(users).where(eq(users.id, userId)).for('update').limit(1))[0];
       if (!user) throw new Error('User not found');
 
       const saveData = parseSaveStrict(user.save_data, user.id)

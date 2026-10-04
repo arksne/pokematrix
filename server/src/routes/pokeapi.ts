@@ -43,9 +43,16 @@ router.get('*', async (req: Request, res: Response) => {
     }
 
     // ── Валидация пути (SSRF-защита) ──
+    // Проверки по списку префиксов было недостаточно: «pokemon/../../x» проходит
+    // через startsWith('pokemon/') и после нормализации уходит на другой путь
+    // PokeAPI. Поэтому дополнительно режем всё, что не похоже на имя ресурса.
     const allowed = ALLOWED_PREFIXES.some(p => pokePath.startsWith(p));
     if (!allowed) {
       res.status(403).json({ error: `Path not allowed: ${pokePath}. Allowed prefixes: ${ALLOWED_PREFIXES.join(', ')}` });
+      return;
+    }
+    if (pokePath.includes('..') || !/^[a-z0-9\-/_]+$/.test(pokePath) || pokePath.length > 120) {
+      res.status(400).json({ error: 'Malformed PokeAPI path' });
       return;
     }
 

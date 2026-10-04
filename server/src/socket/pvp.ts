@@ -16,7 +16,7 @@ import { parseSaveStrict } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
 import { getDb } from '../db/index.js';
 import { users, battleRatings } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 /** Ограничивает число целым значением в диапазоне [min, max]. */
 function clampInt(value: unknown, min: number, max: number): number {
@@ -228,27 +228,36 @@ export function initPvP(io: Server, socket: Socket) {
 
         // ── Server-authoritative награда (+500 победителю) ──
         if (senderWon) {
-          // Через DB update добавляем 500 кредитов напрямую в save_data.inventory.credit
-          const userRow = (await db.select({ save_data: users.save_data })
-            .from(users)
-            .where(eq(users.id, senderUserId))
-            .limit(1))[0];
+          // Раньше чтение и запись save_data шли без транзакции: два
+          // одновременных pvp_end перечитывали один и тот же сейв, и вторая
+          // запись затирала первую вместе с её кредитами. Строка пользователя
+          // теперь блокируется на всё время транзакции, и economy делает то же
+          // самое, поэтому клиентский POST /save между чтением и записью тоже
+          // не может потеряться.
+          await db.transaction(async (tx) => {
+            const userRow = (await tx.select({ id: users.id, save_data: users.save_data })
+              .from(users)
+              .where(eq(users.id, senderUserId))
+              .for('update')
+              .limit(1))[0];
 
-          if (userRow) {
-            const sd: any = parseSaveStrict(userRow.save_data, senderUserId)
+            if (!userRow) return;
+
+            const sd: any = parseSaveStrict(userRow.save_data, senderUserId);
             if (!sd.inventory) sd.inventory = {};
             sd.inventory.credit = (sd.inventory.credit || 0) + 500;
 
-            await db.update(users)
+            await tx.update(users)
               .set({
                 save_data: JSON.stringify(sd),
                 money: sd.inventory.credit || 0,
+                save_version: sql`${users.save_version} + 1`,
               })
               .where(eq(users.id, senderUserId));
 
             // Уведомляем победителя о награде
             socket.emit('pvp_reward', { money: 500 });
-          }
+          });
         }
       }
     } catch (e) {

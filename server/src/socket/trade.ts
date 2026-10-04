@@ -459,9 +459,9 @@ async function executeTradeSwap(
     await db.transaction(async (tx) => {
       const [p1, p2] = await Promise.all([
         tx.select({ save_data: users.save_data, money: users.money })
-          .from(users).where(eq(users.tg_id, session.initiatorUserId)).limit(1),
+          .from(users).where(eq(users.tg_id, session.initiatorUserId)).for('update').limit(1),
         tx.select({ save_data: users.save_data, money: users.money })
-          .from(users).where(eq(users.tg_id, session.partnerUserId)).limit(1),
+          .from(users).where(eq(users.tg_id, session.partnerUserId)).for('update').limit(1),
       ]);
 
       if (!p1[0] || !p2[0]) throw new Error('Trade failed: user not found');

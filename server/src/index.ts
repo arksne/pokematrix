@@ -160,6 +160,17 @@ async function main() {
     legacyHeaders: false,
     message: { error: 'Too many error reports' },
   });
+  // Прокси к PokeAPI анонимный и на каждый новый путь делает внешний запрос и
+  // запись в pokemon_cache. Без лимита anyone could перебрать pokemon/1..100000,
+  // раздуть таблицу и нагрузить PokeAPI. Лимит заметно выше игрового: за сессию
+  // клиент спрашивает десятки видов и покемонов.
+  const proxyLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: envInt('RATE_LIMIT_PROXY', 120),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many proxy requests, slow down' },
+  });
 
   app.use('/api/auth/tg', authLimiter);
   app.use('/api/auth/register', authLimiter);
@@ -167,6 +178,7 @@ async function main() {
   app.use('/api/save', writeLimiter);
   app.use('/api/economy', writeLimiter);
   app.use('/api/chat/send', writeLimiter);
+  app.use('/api/pokeapi', proxyLimiter);
   app.use('/api/log-client-error', errorReportLimiter);
 
   app.use('/api/auth', authRoutes);
