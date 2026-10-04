@@ -56,10 +56,6 @@ export function getDb() {
   return db;
 }
 
-export function getPool() {
-  if (!pool) throw new Error('Database not connected. Call connectDb() first.');
-  return pool;
-}
 
 /**
  * Запуск миграций (вызывается при старте сервера).

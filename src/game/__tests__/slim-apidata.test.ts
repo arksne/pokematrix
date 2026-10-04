@@ -125,7 +125,8 @@ describe('slimApiData — сжатие apiData для сейва', () => {
     // проверки вида `if (mon.apiData.moves[i])` истинны для {}, и следующее
     // чтение .move.name упало бы с TypeError
     const api = makeFullPokeApi(6);
-    api.moves[2] = {};
+    // пустой слот, как его создаёт profile.ts:363 (apiData.moves[slot] = {})
+    (api.moves as any[])[2] = {};
     const slim = slimApiData(api);
     expect(slim.moves[2]).toBeNull();
     expect(slim.moves[3]).not.toBeNull();

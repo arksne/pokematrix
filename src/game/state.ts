@@ -145,15 +145,3 @@ export function hasItem(itemId: string): boolean {
   return getItemQty(itemId) > 0;
 }
 
-// Изменить количество предмета (положить/убрать)
-// delta: +1 = добавить, -1 = убрать
-// credit (деньги) нельзя менять через эту функцию
-// Использует per-category лимиты из store.ts
-export function toggleBagItem(itemId: string, delta: number): void {
-  if (itemId === 'credit') return; // credit управляется отдельно
-  const qty = getItemQty(itemId) + delta;
-  if (qty <= 0) { delete state.inventory[itemId]; return; }
-  const maxStack = store.getMaxStack(itemId);
-  if (qty > maxStack) { state.inventory[itemId] = maxStack; return; }
-  state.inventory[itemId] = qty;
-}

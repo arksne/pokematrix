@@ -34,9 +34,6 @@ export function getCloudAuthHeaders() {
  * @param {number} [retries] — ignored (apiFetch handles retry internally)
  * @returns {Promise<Response>}
  */
-export async function fetchWithAuth(url, options = {}, retries = 1) {
-  return apiFetch(url, options);
-}
 
 export function getLeaderboardData() {
   const badgesCount = state.badges ? state.badges.length : 0;

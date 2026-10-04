@@ -67,11 +67,14 @@ pokematrix/league17/
 │   │   └── socket.ts         # Socket.IO клиент
 │   └── data/                 # (доп. файлы данных)
 ├── index.html                # HTML точка входа
-├── vite.config.ts            # Vite конфиг
-├── tsconfig.json             # TypeScript конфиг
-├── railway.json              # Railway деплой конфиг
-├── package.json              # Зависимости
-├── ARCHITECTURE.md           # Диаграмма связей файлов
+├── vite.config.js            # Конфигурация Vite (dev-прокси к API)
+├── tsconfig.json             # Конфигурация TypeScript (клиент)
+├── vitest.config.js          # Конфигурация тестов
+├── render.yaml               # Blueprint деплоя на Render
+├── server/                   # Node-сервер (Express + socket.io + Drizzle + PostgreSQL)
+├── e2e/                      # Playwright-сценарии
+├── package.json              # Скрипты и зависимости
+├── ARCHITECTURE.md           # Архитектура и слои
 └── DOCUMENTATION.md          # Этот файл
 ```
 
