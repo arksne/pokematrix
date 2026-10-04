@@ -123,7 +123,7 @@ export function showSelectionModal(title, items, callback, allowCancel?) {
   modal.style.display = 'flex';
   const itemsHTML = items.map((item, i) => `
     <button class="selection-item-btn" data-index="${i}">
-      ${item.label}
+      ${escHtml(String(item.label))}
       ${item.subtitle ? `<span class="item-subtitle">${escHtml(item.subtitle)}</span>` : ''}
     </button>
   `).join('');

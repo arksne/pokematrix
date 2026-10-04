@@ -129,7 +129,8 @@ export function offerLearnMove(pokemon, move) {
     const url = move.url || `https://pokeapi.co/api/v2/move/${moveName}/`;
 
     // ── Авто-изучение если есть пустой слот ──
-    const emptySlot = (pokemon.apiData.moves || []).findIndex(m => !m);
+    // Ищем пустой слот только среди первых четырёх — бой читает лишь moves[0..3]
+    const emptySlot = (pokemon.apiData.moves || []).slice(0, 4).findIndex(m => !m?.move);
     if (emptySlot >= 0) {
       if (!pokemon.apiData.moves[emptySlot]) {
         pokemon.apiData.moves[emptySlot] = { move: { name: moveName, url } };

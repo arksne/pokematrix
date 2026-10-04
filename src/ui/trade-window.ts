@@ -291,7 +291,7 @@ export function renderTradeOffers() {
       }
       if (o.type === 'item') {
         const it = o.data;
-        return `<div class="trade-offer-entry"><div>${getItemSpriteImg(it.id, 32)}</div><div class="trade-offer-name">${it.name}</div><div class="trade-offer-level">x${it.qty || 1}</div></div>`;
+        return `<div class="trade-offer-entry"><div>${getItemSpriteImg(it.id, 32)}</div><div class="trade-offer-name">${escHtml(String(it.name ?? ''))}</div><div class="trade-offer-level">x${Number(it.qty) || 1}</div></div>`;
       }
       return '';
     }).join('');

@@ -628,7 +628,9 @@ export function processMonsterDrop(pokemonName: string) {
   const speciesTable = monsterTable[pokemonName] || [];
 
   // 🔧 DEBUG: pokematrix_drop_100 — все дропы падают с 100% шансом
-  const drop100 = typeof localStorage !== 'undefined' && localStorage.getItem('pokematrix_drop_100') === '1';
+  const drop100 = import.meta.env.DEV
+    && typeof localStorage !== 'undefined'
+    && localStorage.getItem('pokematrix_drop_100') === '1';
 
   // Проверяем дропы с покемона
   for (const entry of speciesTable) {

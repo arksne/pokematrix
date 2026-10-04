@@ -1,4 +1,4 @@
-﻿// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 // core.ts — ДВИЖОК БОЯ (2927 строк)
 // ─────────────────────────────────────────────────────────────
 // Это самый большой файл проекта. Он содержит ВСЮ логику боя:
@@ -253,7 +253,7 @@ async function restoreBattleState() {
 
   // ── Восстановление gym/elite/champion данных ──
   // Если бой с лидером зала — восстанавливаем индекс, ключ, данные команды
-  if ((S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'GS.champion') && state.gymTeamData) {
+  if ((S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'champion') && state.gymTeamData) {
     S.gymLeaderKey = state.gymLeaderKey || null;
     S.gymTeamIndex = state.gymTeamIndex || 0;
     S.gymTeamIndexInMember = state.gymTeamIndexInMember || 0;
@@ -337,7 +337,7 @@ async function restoreBattleState() {
   }
 
   // ── Восстановление GYM/ELITE/CHAMPION боя ──
-  if ((S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'GS.champion') && S.gymTeamData && state.wildPkmName) {
+  if ((S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'champion') && S.gymTeamData && state.wildPkmName) {
     try {
       S.activeWild = await fetchPokeAPI(`pokemon/${state.wildPkmName.toLowerCase()}`);
       S.wildLvl = state.wildLvl;
@@ -2345,7 +2345,7 @@ async function handleWildFaintRewards(isWild: boolean) {
     setTimeout(() => {
       if (S.battleType === 'gym') startGymNextPokemon();
       else if (S.battleType === 'elite') startEliteNextPokemon();
-      else if (S.battleType === 'GS.champion') startChampionNextPokemon();
+      else if (S.battleType === 'champion') startChampionNextPokemon();
     }, 1000);
   }
 }
@@ -2714,7 +2714,8 @@ async function useMove(moveIndex) {
 
       // Secondary status per hit (подавляется Sheer Force)
       if (S.wildCurHP > 0 && !playerSheerForce && move.meta?.ailment && move.meta.ailment.name !== 'none' && move.meta.ailment.name !== 'unknown') {
-        const chance = move.meta.ailment_chance || 10;
+        // ailment_chance === 0 — валидное значение («эффект есть, но шанс 0»), поэтому ?? а не ||
+        const chance = move.meta.ailment_chance ?? 0;
         if (Math.random() * 100 < chance) {
           const sm = { 'poison': 'psn', 'badly-poison': 'psn', 'burn': 'brn', 'paralysis': 'par', 'sleep': 'slp', 'freeze': 'frz' };
           const ts = sm[move.meta.ailment.name];
@@ -2937,7 +2938,47 @@ function showPlayerMenu() {
  *   initEncounterEvents() — при попытке побега (неудачно)
  *   capture (пойман) — враг вырвался
  */
+/**
+ * Тик длительностей эффектов в конце хода противника.
+ *
+ * Раньше декремент стоял в самом конце enemyTurn(), до которого не доходили ранние
+ * `return` (сон/паралич/флинч/заряд/промах/статус-атака/Protect/HP<=0). Из-за этого
+ * Reflect/Light Screen игрока накапливались бесконечно, а enemyReflectTurns и
+ * enemyLightScreenTurns вообще не декрементировались.
+ */
+function tickEnemyTurnDurations() {
+  if (S.playerReflectTurns > 0) {
+    S.playerReflectTurns--;
+    if (S.playerReflectTurns === 0) appendToLog('Reflect исчез!', false, 'system');
+  }
+  if (S.playerLightScreenTurns > 0) {
+    S.playerLightScreenTurns--;
+    if (S.playerLightScreenTurns === 0) appendToLog('Light Screen исчез!', false, 'system');
+  }
+  // Барьеры и щиты противника раньше не гасились никогда — держались до конца боя.
+  if (S.enemyReflectTurns > 0) {
+    S.enemyReflectTurns--;
+    if (S.enemyReflectTurns === 0) appendToLog('Reflect противника исчез!', false, 'system');
+  }
+  if (S.enemyLightScreenTurns > 0) {
+    S.enemyLightScreenTurns--;
+    if (S.enemyLightScreenTurns === 0) appendToLog('Light Screen противника исчез!', false, 'system');
+  }
+  S.protectActive = false; // Protect действует один ход
+}
+
 async function enemyTurn() {
+  battle.transition(BattlePhase.ENEMY_TURN);
+  // Тик длительностей вынесен в finally: ход противника считается потраченным
+  // на любом выходе, включая ранние return внутри тела хода.
+  try {
+    await runEnemyTurnBody();
+  } finally {
+    tickEnemyTurnDurations();
+  }
+}
+
+async function runEnemyTurnBody() {
   battle.transition(BattlePhase.ENEMY_TURN);
 
   // ═══ 1. УРОН ОТ СТАТУСА (начало хода) ═══
@@ -3208,7 +3249,7 @@ async function enemyTurn() {
 
     // ── Secondary status от атак врага (Sheer Force) ──
     if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.meta && chosenMove.meta.ailment && chosenMove.meta.ailment.name !== 'none' && chosenMove.meta.ailment.name !== 'unknown') {
-      const chance = chosenMove.meta.ailment_chance || 10;
+      const chance = chosenMove.meta.ailment_chance ?? 0;
       if (Math.random() * 100 < chance) {
         const statusMap = {
           'poison': 'psn', 'badly-poison': 'psn',
@@ -3267,9 +3308,8 @@ async function enemyTurn() {
   }
 
   // ═══ 9. УМЕНЬШЕНИЕ БАРЬЕРОВ ═══
-  if (S.playerReflectTurns > 0) { S.playerReflectTurns--; if (S.playerReflectTurns === 0) appendToLog('Защита рассеялась!', false, 'system'); }
-  if (S.playerLightScreenTurns > 0) { S.playerLightScreenTurns--; if (S.playerLightScreenTurns === 0) appendToLog('Световой Экран рассеялся!', false, 'system'); }
-  S.protectActive = false; // Protect сбрасывается в конце хода противника
+  // Перенесено в tickEnemyTurnDurations(), которая вызывается из finally хода
+  // противника: ранние return ниже доходили сюда не всегда, и барьеры копились.
 
   // ═══ 9b. WEATHER CHIP (для игрока) ═══
   if (S.activePlayerMon.currentHp > 0) {
@@ -3355,7 +3395,7 @@ function initEncounterEvents() {
 
   // ═══ 15b: СМЕНА ПОКЕМОНА ═══
   document.getElementById('btn-switch').addEventListener('click', () => {
-    if (S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'GS.champion') {
+    if (S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'champion') {
       showToast('Нельзя сменить покемона в бою с лидером!', true);
       return;
     }
@@ -4138,7 +4178,7 @@ function openEliteModal() {
   });
 
   const championDiv = document.createElement('div');
-  championDiv.className = 'elite-member-card GS.champion';
+  championDiv.className = 'elite-member-card champion';
   championDiv.innerHTML = `
     <strong>${GS.champion.name}</strong> — ${GS.champion.title}
     <span style="font-size:0.75rem;color:#666;">Команда: ${GS.champion.team.map(t => t.name).join(', ')}</span>
@@ -4185,7 +4225,7 @@ async function startEliteBattle() {
 
 async function startEliteNextMember() {
   if (S.gymTeamIndex >= GS.eliteFour.length) {
-    S.battleType = 'GS.champion';
+    S.battleType = 'champion';
     await championBattle();
     return;
   }
@@ -4276,7 +4316,7 @@ async function startEliteNextPokemon() {
 /**
  * championBattle — начать финальный бой с Чемпионом.
  * Вызывается после победы над всей Элитной Четвёркой (startEliteNextMember).
- * Устанавливает battleType = 'GS.champion', загружает команду чемпиона.
+ * Устанавливает battleType = 'champion', загружает команду чемпиона.
  *
  * ПОБЕДА НАД ЧЕМПИОНОМ:
  *   - Денежная награда (GS.champion.moneyReward)
@@ -4289,7 +4329,7 @@ async function championBattle() {
   S.battleRound = 0;
   S.gymTeamData = JSON.parse(JSON.stringify(GS.champion.team)); // Клонируем команду чемпиона
   S.gymTeamIndexInMember = 0;
-  S.battleType = 'GS.champion';
+  S.battleType = 'champion';
   appendToLog(`--- ${GS.champion.name} вызывает вас! ---`);
   await startChampionNextPokemon();
 }

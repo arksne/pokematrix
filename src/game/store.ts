@@ -140,7 +140,9 @@ class GameStore {
     const bagRoom = bagLimit - totalBefore;
     const slotLimit = this.getMaxStack(itemId);
     // 🔧 DEBUG: drop100 — игнорируем лимиты рюкзака
-    const drop100 = typeof localStorage !== 'undefined' && localStorage.getItem('pokematrix_drop_100') === '1';
+    const drop100 = import.meta.env.DEV
+      && typeof localStorage !== 'undefined'
+      && localStorage.getItem('pokematrix_drop_100') === '1';
     const effectiveBagRoom = drop100 ? 9999 : bagRoom;
     const effectiveSlotLimit = drop100 ? 9999 : slotLimit;
     const limit = Math.min(effectiveSlotLimit, current + effectiveBagRoom);

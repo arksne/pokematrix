@@ -347,22 +347,26 @@ export function refreshProfileUI() {
           const move = mon.learnableMoves[idx];
 
           // Показываем выбор: в какой слот поместить атаку
-          const slotItems = (mon.apiData.moves || []).map((m, i) => ({
+          // Выбираем слот только среди первых четырёх: бой читает лишь moves[0..3]
+          // (battle/core.ts loadMoveButtons), поэтому предложение слотов 5+ приводило
+          // к записи атаки в неиспользуемый слот и её удалению из learnableMoves.
+          const usableSlots = (mon.apiData.moves || []).slice(0, 4);
+          const slotItems = usableSlots.map((m, i) => ({
             label: m ? m.move.name : '(пусто)',
             subtitle: `Слот ${i + 1}`
           }));
 
           showSelectionModal(
-            `Выучить ${move.name} (⚡${move.power}) в какой слот?`,
+            `Заменить ${move.name} (?${move.power}) каким?`,
             slotItems,
             (slotPick) => {
-              // Если слот пуст — инициализируем
               if (!mon.apiData.moves[slotPick]) mon.apiData.moves[slotPick] = {};
-              // Записываем атаку в слот
+              // Заменяем атаку - сбрасываем PP
               mon.apiData.moves[slotPick].move = { name: move.name, url: move.url };
-              // Инициализируем PP для новой атаки
+              // Сбрасываем PP под новую атаку
               if (!mon.movesPP) mon.movesPP = [];
-              mon.movesPP[slotPick] = { current: 30, max: 30 };
+              const maxPp = move.pp || 30;
+              mon.movesPP[slotPick] = { current: maxPp, max: maxPp };
               mon.learnableMoves.splice(idx, 1);  // Убираем из резерва
               refreshProfileUI();                    // Обновляем UI
               showToast(`${move.name} выучено в слот ${slotPick + 1}!`, false);
