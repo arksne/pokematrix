@@ -14,32 +14,9 @@ import { users, saveHistory } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { validateSaveData } from '../validation/save-data.js';
 
+import { parseSaveStrict, SaveParseError, countSavePokemon } from '../db/save-json.js';
+
 const router = Router();
-
-/**
- * Сколько всего покемонов в сейве: команда + ПК + питомник + яйца.
- * Пустой сейв при непустом хранилище — это почти всегда потеря данных, а не
- * начало новой игры, поэтому сервер такие запросы отклоняет.
- */
-function countPokemon(d: any): number {
-  if (!d || typeof d !== 'object') return 0;
-  const pc = Array.isArray(d.pcBoxes) ? d.pcBoxes.reduce((a: number, b: unknown[]) => a + (Array.isArray(b) ? b.length : 0), 0) : 0;
-  return (Array.isArray(d.myTeam) ? d.myTeam.length : 0)
-    + pc
-    + (Array.isArray(d.daycareMons) ? d.daycareMons.length : 0)
-    + (Array.isArray(d.eggs) ? d.eggs.length : 0);
-}
-
-/** Разбор сохранённого JSON. Молчаливый подстанов пустого объекта тут опасен:
- *  один непарсимый байт приводил к записи состояния по умолчанию. */
-function parseSave(raw: string | null | undefined): { data: any; broken: boolean } {
-  if (!raw) return { data: {}, broken: false };
-  try {
-    return { data: JSON.parse(raw), broken: false };
-  } catch {
-    return { data: {}, broken: true };
-  }
-}
 
 /** Сколько копий сейва хранить на пользователя. */
 const HISTORY_LIMIT = 10;
@@ -72,9 +49,22 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    // Повреждённый сейв должен быть виден, а не выглядеть как его отсутствие.
+    // Раньше здесь мягкий разбор подставлял {} и отдавал 200: клиент получал
+    // «сейва нет», init.ts считал это плохим сейвом и уводил игрока в giveStarter.
     let saveData;
-    const parsed = parseSave(user.save_data);
-    saveData = parsed.data;
+    try {
+      saveData = parseSaveStrict(user.save_data, user.id);
+    } catch (e) {
+      if (e instanceof SaveParseError) {
+        res.status(500).json({
+          error: 'Stored save is corrupt and cannot be parsed',
+          hint: 'restore it from save_history via the admin API',
+        });
+        return;
+      }
+      throw e;
+    }
 
     res.json({ saveData });
   } catch (err: any) {
@@ -148,9 +138,9 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     // покемона, а в базе команда есть — это не «новая игра», а потеря данных:
     // именно так клиент с незагруженным состоянием затирал реальный сейв при
     // старте. Сброс игры идёт отдельным флагом reset.
-    const stored = parseSave(currentUser.save_data);
-    const storedCount = countPokemon(stored.data);
-    const incomingCount = countPokemon(body.saveData);
+    const stored = parseSaveStrict(currentUser.save_data, userId);
+    const storedCount = countSavePokemon(stored);
+    const incomingCount = countSavePokemon(body.saveData);
 
     if (incomingCount === 0 && storedCount > 0 && !body.reset) {
       console.warn(
@@ -166,15 +156,21 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // ── Бэкап прежнего сейва ──
-    // Делается до записи, поэтому восстановление возможно даже после того,
-    // как сломанный клиент прислал пустое состояние.
-    if (stored.data && Object.keys(stored.data).length > 0) {
+    // Копия делается не на каждом сохранении, а только когда она может
+    // понадобиться: при откате по числу покемонов, при намеренном сбросе и при
+    // административных правках. Раньше архивировалось каждое автосохранение, и
+    // при HISTORY_LIMIT = 10 хорошая копия вытеснялась за десять сохранений —
+    // то есть за минуты обычной игры. Хранилище, из которого нельзя
+    // восстановиться, бесполезно.
+    const isRegression = incomingCount < storedCount;
+    const worthArchiving = body.reset || isRegression;
+    if (worthArchiving && currentUser.save_data) {
       try {
         await db.insert(saveHistory).values({
           user_id: userId,
-          save_data: currentUser.save_data ?? null,
+          save_data: currentUser.save_data,
           save_version: serverVersion,
-          reason: body.reset ? 'reset' : 'overwrite',
+          reason: body.reset ? 'reset' : (isRegression ? 'regression' : 'overwrite'),
           created_at: new Date().toISOString(),
         });
         // Подрезаем историю, чтобы она не росла бесконечно.
@@ -212,7 +208,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     const money = Number.isFinite(moneyFromSave)
       ? Math.min(Math.max(Math.trunc(moneyFromSave), 0), 2_000_000_000)
       : currentUser.money ?? 0;
-    const pokemonCount = countPokemon(validation.data);
+    const pokemonCount = countSavePokemon(validation.data);
 
     const updateData: any = {
       save_data: JSON.stringify(body.saveData),

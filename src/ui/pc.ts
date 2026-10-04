@@ -329,6 +329,13 @@ function renderPCSlots(view: string) {
           box.splice(i, 1);
           if (box.length === 0) { state.pcBoxes.splice(boxIdx, 1); }
           openPC();
+          // Сохранение обязательно. Раньше здесь его не было, и если игрок
+          // отпускал последнего покемона, в сейв попадала пустая команда без
+          // starterGiven — при следующей загрузке клиент считал игру незагруженной
+          // и выдавал нового случайного стартовика, перебрасывая IV, натуру и
+          // блеск. Повторялось это при каждом перезаходе.
+          store.emit('team:render');
+          store.emit('save');
         });
       };
       container.appendChild(div);

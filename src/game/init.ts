@@ -175,9 +175,17 @@ import { API_BASE } from './config.js';
     // Если нигде нет — giveStarter() (новая игра).
     const localLoaded = await loadGame();
     let gameLoaded = false;
+    // Намеренный сброс админом или db:wipe помечает облачный сейв меткой
+    // _resetAt. Локальный сейв при этом цел, и без проверки ветка «локальный
+    // новее — выложить» возвращала прогресс обратно, отменяя сброс сам собой.
+    let resetAt = 0;
     if (state.tgToken) {
       const cloudData = await cloudLoad();
       if (cloudData) {
+        if (cloudData._resetAt) {
+          const parsed = Date.parse(cloudData._resetAt);
+          if (!Number.isNaN(parsed)) resetAt = parsed;
+        }
         // Сколько покемонов было в облаке — запоминаем ДО применения, чтобы
         // знать, что именно нельзя затирать пустым состоянием.
         state.lastCloudHadTeam = totalPokemonCountOf(cloudData) > 0;
@@ -206,8 +214,22 @@ import { API_BASE } from './config.js';
       }
     }
     if (!gameLoaded) {
+      // Локальный сейв уступает, если сброс был свежее его записи.
+      const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+      if (resetAt && resetAt > localTs) {
+        localStorage.removeItem(lsKey('save'));
+        localStorage.setItem(lsKey('save_ts'), '0');
+        console.log('[save] локальный сейв старше намеренного сброса — не восстанавливаем его');
+      }
+    }
+    if (!gameLoaded) {
       if (localLoaded && state.myTeam.length > 0) {
         gameLoaded = true;
+        // Сначала снимаем гейт, потом сохраняем. Раньше cloudSave() стоял выше
+        // и уходил в ранний return по флагу state.gameLoaded, то есть выгрузка
+        // локального прогресса поверх пустого облака молча терялась на весь
+        // сеанс — и восстанавливалась только если позже срабатывал другой путь.
+        state.gameLoaded = true;
         if (state.tgToken) cloudSave();
       }
     }

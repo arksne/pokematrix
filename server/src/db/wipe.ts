@@ -49,9 +49,13 @@ async function resetAll() {
   console.log(`[reset] Дамп save_data сохранён в ${dumpPath}`);
 
   console.log('[reset] Сбрасываю save_data всем пользователям...');
+  // _resetAt — метка намеренного сброса. Клиент после перезагрузки видит её в
+  // облачном сейве и не восстанавливает локальное состояние из localStorage,
+  // иначе сброс отменялся бы сам собой на следующем же запуске.
+  const resetAt = new Date().toISOString();
   for (const row of rows) {
     await db.update(users).set({
-      save_data: '{}',
+      save_data: JSON.stringify({ _ts: Date.now(), _resetAt: resetAt, starterGiven: false, myTeam: [], pcBoxes: [[]], badges: [], inventory: { credit: 500 } }),
       save_version: 0,
       registered: 0,
       nickname: '',

@@ -12,7 +12,7 @@
  *   A/B -> pvp_end → завершение
  */
 import type { Server, Socket } from 'socket.io';
-import { parseSaveStrict } from '../db/save-json.js';
+import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
 import { getDb } from '../db/index.js';
 import { users, battleRatings } from '../db/schema.js';
@@ -249,7 +249,7 @@ export function initPvP(io: Server, socket: Socket) {
 
             await tx.update(users)
               .set({
-                save_data: JSON.stringify(sd),
+                save_data: JSON.stringify(stampSave(sd)),
                 money: sd.inventory.credit || 0,
                 save_version: sql`${users.save_version} + 1`,
               })

@@ -8,7 +8,7 @@
  * save_data.inventory — { itemId: quantity, ... }
  * Инвентарь хранится в JSON-колонке users.save_data.
  */
-import { parseSaveStrict } from '../db/save-json.js';
+import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
@@ -118,7 +118,7 @@ router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
       saveData.inventory[itemId] = (saveData.inventory[itemId] || 0) + qty;
 
       await tx.update(users).set({
-        save_data: JSON.stringify(saveData),
+        save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
       }).where(eq(users.id, userId));
 
@@ -167,7 +167,7 @@ router.post('/sell', authMiddleware, async (req: Request, res: Response) => {
       saveData.inventory['credit'] = (saveData.inventory['credit'] || 0) + totalEarned;
 
       await tx.update(users).set({
-        save_data: JSON.stringify(saveData),
+        save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
       }).where(eq(users.id, userId));
 
@@ -226,7 +226,7 @@ router.post('/craft', authMiddleware, async (req: Request, res: Response) => {
       saveData.inventory[recipe.result] = (saveData.inventory[recipe.result] || 0) + recipe.qty;
 
       await tx.update(users).set({
-        save_data: JSON.stringify(saveData),
+        save_data: JSON.stringify(stampSave(saveData)),
       }).where(eq(users.id, userId));
 
       return saveData.inventory;
@@ -277,7 +277,7 @@ router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
       }
 
       await tx.update(users).set({
-        save_data: JSON.stringify(saveData),
+        save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
         last_reward_at: now,
       }).where(eq(users.id, userId));
@@ -359,7 +359,7 @@ router.post('/badge-reward', authMiddleware, async (req: Request, res: Response)
       }
 
       await tx.update(users).set({
-        save_data: JSON.stringify(saveData),
+        save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
         badges_count: saveData.badges.length,
       }).where(eq(users.id, userId));

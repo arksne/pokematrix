@@ -70,12 +70,37 @@ let token = null;
     m ? Number(m[1]) === 500 : true, m ? `money=${m[1]}` : 'поле не найдено');
 }
 
-// ── R6: неизвестный itemId отклоняется (whitelist предметов)
+// ── R6: форма itemId проверяется, а предмет — нет
+//
+// Раньше здесь стояла проверка, что «неизвестный itemId отклоняется», и она
+// опиралась на z.enum(VALID_ITEM_IDS) — 88 записей при 1288 предметах в игре.
+// Список разошёлся с клиентом, и как только в инвентаре оказывался любой
+// «новый» предмет, все облачные сохранения начинали возвращать 422 навсегда.
+//
+// Перечисление id и не было защитой: деньги берутся из save_data.inventory.credit,
+// то есть сам сейв пишет клиент, и он может записать себе любую сумму без
+// всяких злоупотреблений предметами. Что реально проверяется — форма ключа.
 {
-  const bad = testSave();
-  bad.saveData.inventory.totallyFakeItem = 999999;
-  const r = await api('/api/save', { method: 'POST', token, body: bad });
-  check('R6', 'неизвестный itemId отклоняется (whitelist)', r.status === 422, `HTTP ${r.status}`);
+  const malformed = testSave();
+  // Пробелы, точка и кириллица в id — не формат ключа инвентаря.
+  malformed.saveData.inventory['bad id!Покемон'] = 1;
+  const rBad = await api('/api/save', { method: 'POST', token, body: malformed });
+  check('R6a', 'itemId неверной формы отклоняется', rBad.status === 422, `HTTP ${rBad.status}`);
+
+  // Настоящий игровой предмет, которого не было в старом списке.
+  const legit = testSave();
+  legit.saveData.inventory.superDarkBall = 10;
+  legit.saveData.inventory.suspiciousEgg = 1;
+  legit.saveData.inventory.beastBall = 3;
+  const rLegit = await api('/api/save', { method: 'POST', token, body: legit });
+  check('R6b', 'реальные предметы вне старого списка сохраняются', rLegit.status === 200, `HTTP ${rLegit.status}`);
+
+  // Экономика обязана отвергнуть предмет, которого нет в её собственном
+  // каталоге, независимо от того, что написано в сейве.
+  const rSell = await api('/api/economy/sell', {
+    method: 'POST', token, body: { itemId: 'ultraBall', qty: 999999 },
+  });
+  check('R6c', 'продажа предмета, которого нет в инвентаре, отклоняется', rSell.status >= 400, `HTTP ${rSell.status}`);
 }
 
 // ── R7: money = 1e300 из тела не ломает сохранение

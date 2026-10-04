@@ -132,11 +132,16 @@ export function getFullSaveData() {
   return {
     _v: state.saveVersion,
     _ts: Date.now(),
-    // Флаг «стартовик выдан» выводится из состояния, а не выдумывается.
-    // Раньше здесь стояла константа true, и полупустой сейв, снятый до
-    // загрузки игры, был на проводе неотличим от настоящего — именно на этот
-    // флаг смотрит init.ts, решая, применять облачный сейв или нет.
-    starterGiven: totalPokemonCount() > 0 || state.starterGiven === true,
+    // Флаг «стартовик выдан» — явный и сохраняемый, а не вычисляемый из
+    // количества покемонов. Раньше здесь стояла константа true, потом я
+    // заменил её на totalPokemonCount() > 0 — и обе версии были неверны: первая
+    // делала полупустой сейв неотличимым от настоящего, вторая делала
+    // непредставимым состояние «стартовик выдан, команда пуста». Из-за второго
+    // игрок, выпустивший последнего покемона в ПК, при следующей загрузке
+    // получал нового случайного стартовика, и так бесконечно, с перебросом IV,
+    // натуры и блеска. Именно на этот флаг смотрит init.ts, решая, применять
+    // ли облачный сейв.
+    starterGiven: state.starterGiven === true,
     currentLocationId: state.currentLocationId, currentRegion: state.currentRegion,
     inventory: { ...state.inventory },
     money: state.inventory['credit'] || 0, badges: state.badges, trainerNickname: state.trainerNickname,
@@ -543,6 +548,9 @@ export async function applyCloudSave(data) {
   if (cloudCredit) state.inventory['credit'] = cloudCredit;
   state.badges = data.badges || state.badges;
   state.trainerNickname = data.trainerNickname || state.trainerNickname;
+  // Флаг восстанавливается из сейва, иначе после перезагрузки он забывался бы
+  // и игрок с пустой командой получил бы нового стартовика.
+  if (typeof data.starterGiven === 'boolean') state.starterGiven = data.starterGiven;
   state.myTeam = data.myTeam || state.myTeam;
   state.myTeam.forEach(m => {
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };

@@ -12,12 +12,11 @@
  *   A/B -> trade_cancel / disconnect -> trade_cancelled
  */
 import type { Server, Socket } from 'socket.io';
-import { parseSaveStrict } from '../db/save-json.js';
+import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { VALID_ITEM_ID_SET } from '../validation/save-data.js';
 
 interface TradeSession {
   tradeId: string;
@@ -86,7 +85,15 @@ function normalizeOffers(raw: unknown): { offers: CanonicalOffer[]; error?: stri
 
     if (o.type === 'item') {
       const id = typeof data.id === 'string' ? data.id : '';
-      if (!VALID_ITEM_ID_SET.has(id)) return { offers: [], error: `unknown item id: ${id || '(empty)'}` };
+      // Проверяем форму id, а не принадлежность к перечню. Перечень
+      // VALID_ITEM_IDS содержал 88 записей при 1288 предметах в игре, поэтому
+      // отсекал 1207 легальных предметов — перевести можно было почти
+      // ничего. Настоящий контроль владения ниже, в checkOffers: предмет
+      // списывается из реального save_data отправителя, поэтому подсунуть
+      // несуществующий id нельзя и не нужно.
+      if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(id)) {
+        return { offers: [], error: `unknown item id: ${id || '(empty)'}` };
+      }
       const qty = data.qty === undefined ? 1 : data.qty;
       if (!Number.isInteger(qty) || qty <= 0 || qty > 999) {
         return { offers: [], error: `invalid qty for ${id}` };
@@ -272,7 +279,7 @@ export function initTrade(io: Server, socket: Socket) {
         return;
       }
 
-      const saveData: any = parseSaveStrict(user.save_data, userId)
+      const saveData: any = parseSaveStrict(user.save_data, userId)  // userId здесь tg_id
       const inv = saveData.inventory || {};
       const team: any[] = Array.isArray(saveData.myTeam) ? saveData.myTeam : [];
       const boxes: any[][] = Array.isArray(saveData.pcBoxes) ? saveData.pcBoxes : [];
@@ -458,9 +465,9 @@ async function executeTradeSwap(
 
     await db.transaction(async (tx) => {
       const [p1, p2] = await Promise.all([
-        tx.select({ save_data: users.save_data, money: users.money })
+        tx.select({ id: users.id, save_data: users.save_data, money: users.money })
           .from(users).where(eq(users.tg_id, session.initiatorUserId)).for('update').limit(1),
-        tx.select({ save_data: users.save_data, money: users.money })
+        tx.select({ id: users.id, save_data: users.save_data, money: users.money })
           .from(users).where(eq(users.tg_id, session.partnerUserId)).for('update').limit(1),
       ]);
 
@@ -468,8 +475,8 @@ async function executeTradeSwap(
 
         // Строгий разбор: если сейв битый, лучше прервать трейд, чем записать
         // поверх прогресса состояние по умолчанию.
-        const sd1 = parseSaveStrict(p1[0].save_data, session.initiatorUserId);
-        const sd2 = parseSaveStrict(p2[0].save_data, session.partnerUserId);
+        const sd1 = parseSaveStrict(p1[0].save_data, p1[0].id);
+        const sd2 = parseSaveStrict(p2[0].save_data, p2[0].id);
         if (!sd1.inventory) sd1.inventory = {};
         if (!sd2.inventory) sd2.inventory = {};
 
@@ -535,12 +542,12 @@ async function executeTradeSwap(
 
       await Promise.all([
         tx.update(users).set({
-          save_data: JSON.stringify(sd1),
+          save_data: JSON.stringify(stampSave(sd1)),
           pokemon_count: countMons(sd1),
           money: credit1,
         }).where(eq(users.tg_id, session.initiatorUserId)),
         tx.update(users).set({
-          save_data: JSON.stringify(sd2),
+          save_data: JSON.stringify(stampSave(sd2)),
           pokemon_count: countMons(sd2),
           money: credit2,
         }).where(eq(users.tg_id, session.partnerUserId)),

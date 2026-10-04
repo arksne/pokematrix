@@ -8,9 +8,9 @@
  *
  * Все команды работают с save_data целевого пользователя.
  */
-import { parseSaveStrict, countSavePokemon } from '../db/save-json.js';
+import { parseSaveStrict, countSavePokemon, stampSave } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { users, serverFeatures, saveHistory } from '../db/schema.js';
@@ -56,7 +56,7 @@ async function saveUserData(tgId: number, saveData: any, reason = 'admin') {
   }
 
   await db.update(users).set({
-    save_data: JSON.stringify(saveData),
+    save_data: JSON.stringify(stampSave(saveData)),
     money: inv['credit'] || 0,
     badges_count: Array.isArray(saveData.badges) ? saveData.badges.length : 0,
     pokemon_count: countSavePokemon(saveData),
@@ -193,12 +193,19 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
           res.status(400).json({ status: 'error', error: 'user required' });
           return;
         }
-        await db.update(users).set({
-          save_data: '{}',
-          money: 500,
-          badges_count: 0,
-          pokemon_count: 0,
-        }).where(eq(users.tg_id, tgId));
+          // Метка _resetAt: без неё клиент после перезагрузки брал свой
+          // локальный сейв (localStorage цел) и выкладывал его обратно, отменяя
+          // сброс. Клиент сверяется с этой меткой и не восстанавливает локальное
+          // состояние, если reset свежее.
+          const resetAt = new Date().toISOString();
+          await db.update(users).set({
+            save_data: JSON.stringify({ _ts: Date.now(), _resetAt: resetAt, starterGiven: false, myTeam: [], pcBoxes: [[]], badges: [], inventory: { credit: 500 } }),
+            money: 500,
+            badges_count: 0,
+            pokemon_count: 0,
+            save_version: 0,
+          }).where(eq(users.tg_id, tgId));
+
         try {
           const io = (req.app as any).get('io');
           if (io) io.emit('save_reset', { userId: tgId });
@@ -407,6 +414,119 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
           location_id: locationUpdate,
         }).where(eq(users.tg_id, tgId));
         res.json({ status: 'ok' });
+        break;
+      }
+
+      // ── save_history: список и восстановление копий ──
+      // Бэкап бесполезен, если его нельзя вернуть. save_history наполняется
+      // автоматически перед каждой перезаписью save_data.
+      case 'save_history': {
+        if (!tgId) {
+          res.status(400).json({ status: 'error', error: 'user required' });
+          return;
+        }
+        const target = (await db.select({ id: users.id })
+          .from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
+        if (!target) {
+          res.status(404).json({ status: 'error', error: 'User not found' });
+          return;
+        }
+        const copies = (await db.select({
+          id: saveHistory.id,
+          save_version: saveHistory.save_version,
+          reason: saveHistory.reason,
+          created_at: saveHistory.created_at,
+          save_data: saveHistory.save_data,
+        })
+          .from(saveHistory)
+          .where(eq(saveHistory.user_id, target.id))
+          .orderBy(desc(saveHistory.id))
+          .limit(20));
+
+        const currentRaw = (await db.select({ save_data: users.save_data })
+          .from(users).where(eq(users.id, target.id)).limit(1))[0]?.save_data;
+        // Текущий сейв может быть битым — и это ровно тот случай, когда список
+        // копий нужнее всего. Поэтому здесь не strict: считаем что в нём есть,
+        // и показываем пометку вместо того, чтобы упасть с ошибкой.
+        let currentPokemon = 0;
+        let currentBroken = false;
+        try {
+          currentPokemon = countSavePokemon(parseSaveStrict(currentRaw, target.id));
+        } catch {
+          currentBroken = true;
+        }
+        res.json({
+          status: 'ok',
+          currentPokemon,
+          currentBroken,
+          copies: copies.map((c: any) => ({
+            id: c.id,
+            saveVersion: c.save_version,
+            reason: c.reason,
+            createdAt: c.created_at,
+            // Считаем через parseSaveStrict, чтобы битая копия не молча
+            // показывалась как пустая.
+            pokemon: (() => {
+              try { return countSavePokemon(parseSaveStrict(c.save_data, target.id)); }
+              catch { return -1; }
+            })(),
+          })),
+        });
+        break;
+      }
+
+      // ── restore_save: вернуть сохранение из save_history ──
+      case 'restore_save': {
+        if (!tgId || !val) {
+          res.status(400).json({ status: 'error', error: 'user and historyId required' });
+          return;
+        }
+        const historyId = parseInt(String(val), 10);
+        if (!Number.isInteger(historyId)) {
+          res.status(400).json({ status: 'error', error: 'historyId must be an integer' });
+          return;
+        }
+        const target = (await db.select({ id: users.id })
+          .from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
+        if (!target) {
+          res.status(404).json({ status: 'error', error: 'User not found' });
+          return;
+        }
+        const copy = (await db.select()
+          .from(saveHistory)
+          .where(and(eq(saveHistory.id, historyId), eq(saveHistory.user_id, target.id)))
+          .limit(1))[0];
+        if (!copy) {
+          res.status(404).json({ status: 'error', error: 'History entry not found for this user' });
+          return;
+        }
+
+        const restored = parseSaveStrict(copy.save_data, target.id);
+        const pokemon = countSavePokemon(restored);
+
+        // Тот же анти-затирающий барьер, что и в edit_trainer: восстановление
+        // не должно молча обнулить прогресс игрока. История наполняется при
+        // откатах, поэтому среди копий легко найти пустую, и её восстановление
+        // выглядело бы как успех.
+        const currentRaw = (await db.select({ save_data: users.save_data })
+          .from(users).where(eq(users.id, target.id)).limit(1))[0]?.save_data;
+        let currentCount = 0;
+        try { currentCount = countSavePokemon(parseSaveStrict(currentRaw, target.id)); } catch { /* битый */ }
+        if (pokemon === 0 && currentCount > 0) {
+          res.status(422).json({
+            status: 'error',
+            error: 'Refusing to restore a copy with no pokemon over existing progress',
+            storedPokemon: currentCount,
+            hint: 'pick another history id',
+          });
+          return;
+        }
+
+        // Текущий сейв тоже сохраняем в историю, чтобы восстановление
+        // можно было отменить.
+        await saveUserData(tgId, restored, 'restore_rollback');
+        console.warn(`[admin] restore_save: tg ${tgId}, копия ${historyId}, покемонов ${pokemon}`);
+        res.json({ status: 'ok', restoredPokemon: pokemon });
         break;
       }
 
