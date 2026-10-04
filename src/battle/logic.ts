@@ -244,12 +244,50 @@ export function calculateDamage({
   defenderAbilityName = null,
   attackerAbilityName = null,
   naturesList = [],
-  alwaysCrit = false,
-  critRateStage = 0,  // 0 = 6.25%, 1 = 12.5% (Slash, Stone Edge), 2 = 25%, 3 = 33%, 4+ = 50%
-}) {
+alwaysCrit = false,
+    critRateStage = 0,  // 0 = 6.25%, 1 = 12.5% (Slash, Stone Edge), 2 = 25%, 3 = 33%, 4+ = 50%
+    // Текущее HP защитника. Передаётся отдельно, потому что у дикого покемона HP
+    // живёт в S.wildCurHP и в объекте покемона не синхронизировано — без этого
+    // Super Fang и OHKO считали бы урон по мусору.
+    defenderCurrentHp = undefined,
+  }) {
   const parts = [];
   const power = move.power;
+
+  // Атаки с фиксированным уроном ─
+  // Seismic Toss (урон = уровень атакующего), Night Shade и Sonic Boom (20),
+  // Dragon Rage (40). У них power === null, и раньше calculateDamage возвращал
+  // 0 — то есть атака попадала в «ничего не произошло» и не наносила урона вовсе.
+  // Super Fang — половина текущего HP цели, считается отдельно.
+  const targetHp = defenderCurrentHp !== undefined ? defenderCurrentHp : defender?.currentHp;
+  const fixed = move.meta?.damage;
+  if (fixed !== undefined && fixed !== null && !power) {
+    if (fixed === 0) {
+      // Super Fang: meta.damage === 0, урон равен половине текущего HP цели
+      const dmg = Math.max(1, Math.floor((targetHp || 1) / 2));
+      parts.push(`Фиксированный урон ${dmg}`);
+      return { damage: dmg, isCrit: false, messageParts: parts, isFixed: true };
+    }
+    const dmg = Math.max(1, Math.floor(fixed));
+    parts.push(`Фиксированный урон ${dmg}`);
+    return { damage: dmg, isCrit: false, messageParts: parts, isFixed: true };
+  }
+
   if (!power) return { damage: 0, isCrit: false, messageParts: [] };
+
+  // Атаки мгновенного убийства ─
+  // Fissure, Horn Drill, Guillotine, Sheer Cold: meta.ohko === true. Раньше они
+  // считались обычной атакой без power, то есть тоже ничего не делали.
+  if (move.meta?.ohko) {
+    if (defenderAbilityName === 'battle-armor' || defenderAbilityName === 'shell-armor') {
+      parts.push(`${defender?.name || 'Противник'} защищён бронёй`);
+      return { damage: 0, isCrit: false, messageParts: parts, ohkoBlocked: true };
+    }
+    if (typeof targetHp === 'number' && targetHp > 0) {
+      parts.push('Мгновенное убийство');
+      return { damage: targetHp, isCrit: false, messageParts: parts, isOHKO: true };
+    }
+  }
 
   const isPhysical = move.damage_class?.name === 'physical';
   const attackStatName = isPhysical ? 'attack' : 'special-attack';
