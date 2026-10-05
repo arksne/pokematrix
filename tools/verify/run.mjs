@@ -453,11 +453,12 @@ async function main() {
     ['[12] аудит боевых механик', 'battle-mechanics.test.mjs'],
     ['[13] аудит графа импортов клиента', 'import-audit.test.mjs'],
     ['[14] аудит DOM-контракта', 'dom-audit.test.mjs'],
+    ['[15] боевой цикл и сохранение боя', 'battle-flow.test.mjs'],
   ]) {
     log(`\n${title}`);
     const r = await runSuite(title, file);
     for (const l of r.out.split('\n')) {
-      if (/\[(?:R|S|E|T|D|TR|DR|W|C|M|H|B|P|G)\d+\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ|МИР РЕНДЕРИТСЯ|ОБМЕН ДОСТИЖИМ|Боевые механики/.test(l)) log('  ' + l.trimEnd());
+      if (/\[(?:R|S|E|T|D|TR|DR|W|C|M|H|B|P|G|F)\d+\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ|МИР РЕНДЕРИТСЯ|ОБМЕН ДОСТИЖИМ|Боевые механики|БОЕВОЙ ЦИКЛ/.test(l)) log('  ' + l.trimEnd());
     }
     if (r.code !== 0) {
       if (!/ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ/.test(r.out)) log('  вывод: ' + r.out.slice(-500));

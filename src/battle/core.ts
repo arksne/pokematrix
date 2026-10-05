@@ -136,7 +136,12 @@ function initBattleRefs() { _gsCache = state; }
  */
 function saveBattleState() {
   const s = battle.state;
-  if (!s.battleType || s.battleType === 'none') return;     // Не сохраняем если бой не начат
+  if (!s.battleType || s.battleType === 'none') {
+    // Раньше этот случай просто пропускался молча, из-за чего «бой не
+    // сохраняется» выглядело как загадка. Теперь видно, что именно не так.
+    console.warn(`[battle] saveBattleState: battleType не задан (${s.battleType}) — состояние не пишется`);
+    return;
+  }
   const state: Record<string, any> = {};
   state.battleType = s.battleType;                           // Тип боя: 'wild' | 'gym' | 'elite' | 'champion' | 'pvp'
   state.locationId = GS.currentLocationId;                   // Локация (без неё restore не сработает — защита от загрузки сохранения на другой локации)
@@ -172,7 +177,20 @@ function saveBattleState() {
     state.gymTeamIndexInMember = s.gymTeamIndexInMember; // Индекс внутри Элитного члена
     state.gymTeamData = s.gymTeamData;             // Клонированная команда лидера
   }
-  try { localStorage.setItem(store.lsKey('battle_state'), JSON.stringify(state)); } catch(e) {} // JSON.stringify может выбросить при циклических ссылках — игнорируем
+  // Раньше здесь стоял пустой `catch`, из-за которого любая ошибка записи
+  // выглядела как «бой просто не сохраняется»: ни записи в консоли, ни
+  // последствий. Самая вероятная причина — QuotaExceededError: состояние боя
+  // вместе с wildMovesDetailed весит заметно больше обычного сейва, и при
+  // заполненном localStorage setItem бросает исключение.
+  try {
+    localStorage.setItem(store.lsKey('battle_state'), JSON.stringify(state));
+  } catch (e: any) {
+    const quota = e?.name === 'QuotaExceededError' || e?.code === 22;
+    console.warn(
+      `[battle] не удалось сохранить состояние боя: ${e?.name || e}` +
+      (quota ? ' — localStorage переполнен. Бой пропадёт при перезагрузке.' : ''),
+    );
+  }
 }
 
 /**
@@ -2567,14 +2585,39 @@ async function useMove(moveIndex) {
     let enemyAlreadyMoved = false;
 
     /**
-     * Завершение хода. Если враг уже отработал первым, второй раз его не зовём —
-     * просто возвращаем меню выбора, иначе ход удваивался бы.
+     * Завершение хода игрока.
+     *
+     * Если враг уже отработал (был быстрее и сходил до нас) — второй раз его не
+     * зовём, просто возвращаем меню выбора. Иначе отдаём ход врагу.
+     *
+     * Здесь раньше стояло `endTurn()` в ветке else, то есть функция вызывала
+     * саму себя: бесконечная рекурсия, бой намертво зависал на первой же атаке,
+     * а переполнение стека уходило в console.error без внятного сообщения.
+     * Ветка else просто никогда не приводила к ходу врага — она приводила к
+     * падению.
      */
-    const endTurn = () => {
+    const endTurn = async () => {
       if (enemyAlreadyMoved) {
-        setTimeout(() => { document.getElementById('battle-main-menu').style.display = 'flex'; }, 1000);
-      } else {
-         endTurn();
+        showPlayerMenuAfterDelay();
+        return;
+      }
+      // Враг ещё не ходил в этом раунде: отдаём ему ход. runEnemyTurnBody
+      // самодостаточен — он и доводит ход до конца, и возвращает меню через
+      // showPlayerMenuAfterDelay, поэтому дополнительно звать enemyTurn()
+      // нельзя, иначе ход удвоится.
+      if (S.wildCurHP <= 0 || S.activePlayerMon.currentHp <= 0) {
+        saveBattleState();
+        return;
+      }
+      await runEnemyTurnBody();
+      // Если бой не закончился и ход противника не отдал меню сам — отдаём
+      // явно. Иначе меню останется скрытым, а фаза — в ENEMY_TURN.
+      const phase = battle.phase;
+      if (phase === BattlePhase.ENEMY_TURN
+        && S.wildCurHP > 0
+        && S.activePlayerMon.currentHp > 0) {
+        saveBattleState();
+        showPlayerMenuAfterDelay();
       }
     };
 
@@ -3043,6 +3086,30 @@ function showPlayerMenu() {
   battle.transition(BattlePhase.PLAYER_TURN);
 }
 
+/**
+ * showPlayerMenuAfterDelay — отдать ход игроку с той же задержкой, с какой раньше
+ * показывалось меню.
+ *
+ * Задержка нужна, чтобы игрок успел увидеть результат хода противника в логе и на
+ * спрайтах. Раньше эти места делали `setTimeout(() => battle-main-menu... = 'flex')`
+ * напрямую и забывали про фазу: бой оставался в ENEMY_TURN, а useMove()
+ * проверяет canTransition и отвечает «Подождите... битва ещё не готова». Меню при
+ * этом было видно и нажималось, поэтому выглядело как зависание боя на атаках —
+ * ровно то, что было описано.
+ *
+ * Через showPlayerMenu() фаза всегда возвращается в PLAYER_TURN.
+ */
+function showPlayerMenuAfterDelay(ms = 1000) {
+  setTimeout(() => {
+    // Если бой закончился (победа/поражение) или уже показан экран конца боя,
+    // фазу трогать нельзя: PLAYER_TURN из VICTORY/DEFEAT не разрешён, и
+    // transition() вернёт false с предупреждением в консоль.
+    const phase = battle.phase;
+    if (phase === BattlePhase.VICTORY || phase === BattlePhase.DEFEAT || phase === BattlePhase.IDLE) return;
+    showPlayerMenu();
+  }, ms);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // СЕКЦИЯ 14: ХОД ПРОТИВНИКА (enemyTurn)
 // ═══════════════════════════════════════════════════════════════
@@ -3147,10 +3214,10 @@ async function runEnemyTurnBody() {
   if (!wildCanAct) {
     S.battleRound++;
     saveBattleState();
-    setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex'; // Ход игрока
-    }, 1000);
-    return;
+    showPlayerMenuAfterDelay(); // ход игроку
+
+
+
   }
 
   // ═══ 2b. FLINCH CHECK ═══
@@ -3159,10 +3226,10 @@ async function runEnemyTurnBody() {
     appendToLog(`${S.activeWild.name} дрогнул и не может атаковать!`, false, 'system');
     S.battleRound++;
     saveBattleState();
-    setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex';
-    }, 1000);
-    return;
+    showPlayerMenuAfterDelay(); // ход игроку
+
+
+
   }
 
   // ═══ 2c. TWO-TURN MOVE RELEASE ═══
@@ -3201,10 +3268,10 @@ async function runEnemyTurnBody() {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} заряжает ${enemyMoveName}!`);
     S.battleRound++;
     saveBattleState();
-    setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex';
-    }, 1000);
-    return;
+    showPlayerMenuAfterDelay(); // ход игроку
+
+
+
   }
 
   // ═══ 4. ACCURACY CHECK ═══
@@ -3220,10 +3287,10 @@ async function runEnemyTurnBody() {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}, но ${enemyAcc.message?.toLowerCase() || 'промахнулся'}!`);
     S.battleRound++;
     saveBattleState();
-    setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex';
-    }, 1000);
-    return;
+    showPlayerMenuAfterDelay(); // ход игроку
+
+
+
   }
   const power = chosenMove.power;
 
@@ -3233,10 +3300,10 @@ async function runEnemyTurnBody() {
     handleEnemyStatusEffects(chosenMove); // Лечение, барьеры, статы, статусы
     S.battleRound++;
     saveBattleState();
-    setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex';
-    }, 1000);
-    return;
+    showPlayerMenuAfterDelay(); // ход игроку
+
+
+
   }
 
   // ═══ 6. PROTECT CHECK (игрок защищается) ═══
@@ -3245,10 +3312,10 @@ async function runEnemyTurnBody() {
     S.protectActive = false;
     S.battleRound++;
     saveBattleState();
-    setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex';
-    }, 1000);
-    return;
+    showPlayerMenuAfterDelay(); // ход игроку
+
+
+
   }
 
   // ═══ 7. РАСЧЁТ УРОНА (multi-hit) ═══
