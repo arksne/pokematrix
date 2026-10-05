@@ -449,12 +449,13 @@ async function main() {
     ['[8] схема против настоящего сейва', 'schema-real-save.test.mjs'],
     ['[9] сохранения: конфликт версий и целостность', 'save-conflict.test.mjs'],
     ['[10] рендер мира', 'world-render.test.mjs'],
-    ['[10] достижимость обмена', 'trade-reach.test.mjs'],
+    ['[11] достижимость обмена', 'trade-reach.test.mjs'],
+    ['[12] аудит боевых механик', 'battle-mechanics.test.mjs'],
   ]) {
     log(`\n${title}`);
     const r = await runSuite(title, file);
     for (const l of r.out.split('\n')) {
-      if (/\[(?:R|S|E|T|D|TR|DR|W)\d+\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ|МИР РЕНДЕРИТСЯ/.test(l)) log('  ' + l.trimEnd());
+      if (/\[(?:R|S|E|T|D|TR|DR|W|C|M|H|B|P)\d+\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ|МИР РЕНДЕРИТСЯ|ОБМЕН ДОСТИЖИМ|Боевые механики/.test(l)) log('  ' + l.trimEnd());
     }
     if (r.code !== 0) {
       if (!/ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ/.test(r.out)) log('  вывод: ' + r.out.slice(-500));
