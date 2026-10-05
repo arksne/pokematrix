@@ -447,7 +447,8 @@ async function main() {
     ['[6] проверки безопасности', 'security.test.mjs'],
     ['[7] проверки экономики', 'economy.test.mjs'],
     ['[8] схема против настоящего сейва', 'schema-real-save.test.mjs'],
-    ['[9] рендер мира', 'world-render.test.mjs'],
+    ['[9] сохранения: конфликт версий и целостность', 'save-conflict.test.mjs'],
+    ['[10] рендер мира', 'world-render.test.mjs'],
     ['[10] достижимость обмена', 'trade-reach.test.mjs'],
   ]) {
     log(`\n${title}`);

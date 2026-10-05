@@ -453,6 +453,84 @@ function isDegenerateState(): boolean {
   return totalPokemonCount() === 0;
 }
 
+/**
+ * Разрешает конфликт версий облачного сейва.
+ *
+ * Сервер отвечает 409, когда в базе уже лежит сейв с большей версией. Два
+ * устройства, открытые одновременно, дают этот конфликт штатно, и раньше он
+ * превращался в три бессмысленных повтора с задержками 5/15/30 секунд.
+ *
+ * Стратегия: спросить облако, и если оно новее локального — принять его, но
+ * только если игрок не начал новую игру и у него в команде есть чему теряться.
+ * Если локальный сейв новее (значит сервер отстал из-за своей ошибки или чужого
+ * сброса) — пробуем записать заново с обновлённой версией.
+ *
+ * Молчаливый выбор любой стороны здесь недопустим: игрок либо теряет прогресс,
+ * либо видит чужое состояние вместо своего. Поэтому оба случая логируются, а
+ * игрок получает сообщение.
+ */
+async function resolveSaveConflict(conflict: any): Promise<void> {
+  const btnSync = document.getElementById('btn-cloud-sync');
+  if (btnSync) { btnSync.textContent = '☁️⚠'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 6000); }
+
+  try {
+    const serverSave = await cloudLoad();
+    if (!serverSave) {
+      // Сервер ответил конфликтом, но не отдаёт содержимое — разрешить на
+      // клиенте нечем. Не трогаем локальные данные, оставляем игроку выбор.
+      console.warn('[save] конфликт версий, но облако не отдало сейв — оставляю локальный');
+      showToast('Облако занято другой версией сейва. Перезагрузите игру.', true);
+      return;
+    }
+
+    const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
+    const serverTs = parseInt(serverSave._ts || '0');
+
+    if (serverTs > localTs) {
+      // Облако новее — принимаем его. Но только если локально есть что терять:
+      // пустая локальная команда означает новую игру, и принимать чужие данные
+      // тут нельзя.
+      if (totalPokemonCount() > 0 || totalPokemonCountOf(serverSave) > 0) {
+        await applyCloudSave(serverSave);
+        console.log(
+          `[save] конфликт разрешён в пользу облака: облако ${serverTs} > локально ${localTs}`
+        );
+        showToast('Загружена более новая версия сохранения с другого устройства', false);
+      } else {
+        console.warn('[save] облако новее, но обе стороны без покемонов — оставляю как есть');
+      }
+      return;
+    }
+
+    // Локальный сейв новее значит сервер отстал: повторяем запись с той же
+    // версией. Если сервер снова ответит 409, это уже не гонка, а реальное
+    // расхождение — повторять бессмысленно, поэтому ограничиваемся одной попыткой.
+    console.warn(
+      `[save] конфликт при локальном ${localTs} > облачном ${serverTs}: сервер отстал, повторяю запись`
+    );
+    state.saveVersion = (conflict?.serverVersion || state.saveVersion) + 1;
+    const res = await apiFetch('/save', {
+      method: 'POST',
+      body: JSON.stringify({
+        saveData: getFullSaveData(),
+        ...getLeaderboardData(),
+        saveVersion: state.saveVersion,
+      }),
+    });
+    if (res.ok) {
+      state.lastCloudSync = Date.now();
+      localStorage.setItem(lsKey('save_sync'), String(state.lastCloudSync));
+      console.log('[save] конфликт разрешён: локальная версия записана поверх серверной');
+    } else {
+      console.warn(`[save] повторная запись не удалась: HTTP ${res.status}`);
+      showToast('Не удалось сохранить в облако. Попробуйте позже.', true);
+    }
+  } catch (e: any) {
+    console.error('[save] не удалось разрешить конфликт версий:', e);
+    showToast('Конфликт сохранений. Перезагрузите игру.', true);
+  }
+}
+
 export async function doCloudSave(attempt = 0) {
   if (state.saveInProgress) return; // already saving, coalesced call will pick it up
   state.saveInProgress = true;
@@ -475,8 +553,33 @@ export async function doCloudSave(attempt = 0) {
       if (btnSync) { btnSync.textContent = '☁️✗'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 5000); }
       return null;
     }
+
+    // 409 = конфликт версий: в облаке лежит другой, более новый сейв (например,
+    // прогресс залит с телефона, а ноутбук пытается записать своё). Раньше такой
+    // ответ попадал в catch как обычная ошибка и уходил в общий ретрай — то есть
+    // клиент ещё три раза долбился тем же устаревшим сейвом с интервалами
+    // 5/15/30 секунд, не разрушая конфликт, а только оттягивая его разрешение.
+    // Повторная отправка того же состояния результата не изменит: версия на
+    // сервере не станет старше сама.
+    //
+    // Разрешение — взять облачный сейв и наложить на него локальную дельту по
+    // времени: свежее побеждает, но игрок не теряет ни то, ни другое молча.
+    if (res.status === 409) {
+      console.warn('Cloud save conflict (409) — сервер держит более новую версию');
+      const conflict = await res.json().catch(() => null);
+      await resolveSaveConflict(conflict);
+      return null;
+    }
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     result = await res.json();
+    // Версию назначает сервер: клиентский счётчик тикал на каждом локальном
+    // сохранении и разъезжался с серверным, из-за чего блокировка версий
+    // срабатывала по произвольным числам. Теперь ответ сервера — источник истины.
+    if (typeof result?.saveVersion === 'number') {
+      state.saveVersion = result.saveVersion;
+      try { localStorage.setItem(lsKey('save_v'), String(state.saveVersion)); } catch { /* квота не критична */ }
+    }
     state.lastCloudSync = Date.now();
     state.saveRetryCount = 0;
     localStorage.setItem(lsKey('save_sync'), String(state.lastCloudSync));
