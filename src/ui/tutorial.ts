@@ -24,7 +24,8 @@
 
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
-import { REGIONS } from '../data/regions.js';  // Все регионы (для статистики исследования)
+import { REGIONS } from '../data/regions.js';
+import { lsKey } from '../utils/state.js';
 
 // ── ИНТЕРФЕЙСЫ ───────────────────────────────────────────
 export interface TutorialStep {
@@ -119,9 +120,17 @@ const TUTORIAL_LESSONS: TutorialLesson[] = [
   }
 ];  // 6 уроков, всего ~20 шагов
 
-// ── КОНСТАНТЫ ────────────────────────────────────────────
-const TUTORIAL_KEY = 'league17_tutorial';      // Ключ localStorage для статуса туториала
-const HELP_SEEN_KEY = 'league17_help_seen';    // Ключ для флага "справка просмотрена"
+
+// ── КЛЮЧИ ОБУЧЕНИЯ: per-trainer, как и ключи сейва ──
+//
+// Раньше здесь стояли голые 'league17_tutorial' и 'league17_help_seen' без
+// идентификатора тренера, в отличие от сейвов (league17_save_<tg_id>). Из-за
+// этого обучение проходился один раз на всё устройство: смена Telegram-аккаунта
+// давала новому аккаунту старт без обучения, потому что метка уже стояла от
+// предыдущего. Обратное тоже возможно: после сброса localStorage обучение
+// начиналось заново, хотя аккаунт его уже проходил.
+const TUTORIAL_KEY = 'tutorial';
+const HELP_SEEN_KEY = 'help_seen';
 
 // ── СОСТОЯНИЕ МОДУЛЯ ─────────────────────────────────────
 let currentSteps: TutorialStep[] = [];          // Текущий список шагов
@@ -131,12 +140,14 @@ let highlightEl: HTMLElement | null = null;     // Элемент подсвет
 
 // ── isTutorialComplete: проверка завершения туториала ──
 export function isTutorialComplete(): boolean {
-  return localStorage.getItem(TUTORIAL_KEY) === 'complete';
+  // lsKey добавляет идентификатор тренера, поэтому метка принадлежит
+  // конкретному аккаунту, а не устройству.
+  return localStorage.getItem(lsKey(TUTORIAL_KEY)) === 'complete';
 }
 
 // ── markTutorialComplete: отметить туториал как завершённый ──
 export function markTutorialComplete() {
-  localStorage.setItem(TUTORIAL_KEY, 'complete');
+  localStorage.setItem(lsKey(TUTORIAL_KEY), 'complete');
 }
 
 // ── startLesson: запуск урока по ID ─────────────────────
@@ -378,12 +389,12 @@ export function openHelp() {
   document.getElementById('help-close')?.addEventListener('click', () => modal.remove());
 
   // Отмечаем, что справка была открыта
-  localStorage.setItem(HELP_SEEN_KEY, 'true');
+  localStorage.setItem(lsKey(HELP_SEEN_KEY), 'true');
 }
 
 // ── isHelpSeen: проверка, открывал ли игрок справку ────
 export function isHelpSeen(): boolean {
-  return localStorage.getItem(HELP_SEEN_KEY) === 'true';
+  return localStorage.getItem(lsKey(HELP_SEEN_KEY)) === 'true';
 }
 
 // ── ПРОГРЕСС ИССЛЕДОВАНИЯ ───────────────────────────────

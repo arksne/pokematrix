@@ -49,7 +49,7 @@ import { giveStarter } from '../ui/starter.js';
 import { startBreedingCheck } from '../ui/daycare.js';
 import { openMap, setTravelCallback, setExploredLocs } from '../ui/map.js';
 import { setBeforeRenderLocation } from '../ui/location.js';
-import { startOnboarding, markLocationExplored, getExploredLocations, openHelp } from '../ui/tutorial.js';
+import { startOnboarding, markLocationExplored, getExploredLocations, openHelp, isTutorialComplete } from '../ui/tutorial.js';
 import { openQuestPanel } from '../ui/quests.js';
 import { openAchievements } from '../ui/achievements.js';
 import { showToast } from '../utils/dom.js';
@@ -319,7 +319,7 @@ initGymEvents();
 
     // ── Запуск туториала (после загрузки сохранения и рендера UI) ──
     setTimeout(() => {
-      const tutorialDone = localStorage.getItem('league17_tutorial') === 'complete';
+      const tutorialDone = isTutorialComplete();
       if (!tutorialDone && state.myTeam && state.myTeam.length > 0) {
         startOnboarding();
       }
