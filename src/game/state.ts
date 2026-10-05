@@ -61,6 +61,19 @@ export const state: Record<string, any> = {
   eggs: [] as Array<any>,         // Яйца у игрока
   hatching: false,                // Флаг: идёт вылупление
 
+  // ── Прочие прогрессируемые поля ──────────────────────────
+  // Раньше эти два поля отсутствовали в объекте state и появлялись только
+  // лениво: dropLog — при первом обращении из ui/drop-log.js, expShareActive —
+  // при первом переключении. Из-за этого getFullSaveData() писал
+  // `dropLog: undefined` и `expShareActive: undefined`, JSON.stringify выбрасывал
+  // эти ключи, и в сейве их просто не было. Поведение случайно оставалось верным
+  // (оба читаются как falsy), но types/index.d.ts объявляет expShareActive как
+  // boolean — то есть контракт «тип boolean, рантайм undefined» рассогласован.
+  // Состояние объявлено единственным источником истины, поэтому поля должны
+  // существовать с первого момента, а не после первого клика.
+  dropLog: [] as Array<any>,      // Журнал выпавших предметов
+  expShareActive: false,          // Глобальный Exp. Share вкл/выкл
+
   // ── Квесты и туториал ────────────────────────────────────
   quests: [] as Array<any>,            // Активные квесты
   questProgress: {} as Record<string, any>, // Прогресс по квестам

@@ -356,6 +356,12 @@ export async function loadGame() {
     state.breedingPairs = data.breedingPairs || [];
     state.eggs = data.eggs || [];
     state.notifications = data.notifications || [];
+    // Журнал дропа писался в сейв, но обратно не читался: applyCloudSave его
+    // восстанавливал, а loadGame — нет. Итог — при загрузке без облака (или
+    // когда облако отброшено как более старое) весь журнал выпавших предметов
+    // молча исчезал, хотя сам сейв с ним лежал в localStorage. Симметрично с
+    // applyCloudSave: массив, ограничение по длине, иначе пустой.
+    state.dropLog = Array.isArray(data.dropLog) ? data.dropLog.slice(0, 60) : [];
 
     validateGameState();
     return true;

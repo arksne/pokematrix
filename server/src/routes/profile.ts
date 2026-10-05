@@ -145,6 +145,11 @@ router.get('/:userId', authMiddleware, async (req: Request, res: Response) => {
         id: user.tg_id,
         first_name: user.first_name || '',
         username: user.username || '',
+        // Аватар отдавался только в списках тренеров, а модалка профиля его
+        // рендерит по этому полю. Без него клиент не мог заполнить
+        // #modal-trainer-avatar, и в профиле тренера всё время висел
+        // статичный эмодзи-заглушка.
+        avatar: user.avatar || 'trainer_f',
         badges: user.badges_count,
         money: user.money,
         team,

@@ -121,6 +121,10 @@ export async function openTrainerProfile(userId) {
   document.getElementById('modal-trainer-name').innerText = 'Загрузка...';
   document.getElementById('modal-trainer-badges').innerText = '0';
   document.getElementById('modal-trainer-team').innerHTML = '<div class="trainer-team-empty">Загрузка...</div>';
+  // Сброс аватара на заглушку: профиль мог открыться повторно, и без сброса
+  // предыдущий тренер остался бы на месте, пока грузится новый.
+  const avatarEl = document.getElementById('modal-trainer-avatar');
+  if (avatarEl) avatarEl.innerHTML = '<span style="font-size:1.5rem;">👤</span>';
 
   try {
       // apiFetch добавляет Bearer и обновляет токен при 401.
@@ -144,6 +148,21 @@ export async function openTrainerProfile(userId) {
     const statusText = isOnline ? ' (В сети)' : ' (Не в сети)';
     document.getElementById('modal-trainer-name').innerHTML = onlineDot + escHtml(p.first_name || p.username || `Trainer#${p.id}`) + `<span style="font-size:0.7rem;color:${isOnline ? '#34c759' : '#888'};">${statusText}</span>`;
     document.getElementById('modal-trainer-badges').innerText = p.badges;
+
+    // Аватар тренера. Раньше #modal-trainer-avatar не заполнялся вообще — ни
+    // здесь, ни в разметке, — поэтому в модалке профиля всегда висел статичный
+    // 👤, хотя аватар выбирается при регистрации, хранится в users.avatar и уже
+    // корректно рисуется в списке тренеров. Здесь та же логика, что в ui/trainers.ts:
+    // путь принимается только строго по форме /avatars/<имя>.png, иначе в
+    // innerHTML попадает эмодзи. Без этой проверки строка вида
+    // '/avatars/x" onerror="...' из БД стала бы stored XSS.
+    if (avatarEl) {
+      const rawAvatar = typeof p.avatar === 'string' ? p.avatar : '';
+      const isAvatarPath = /^\/avatars\/[a-z0-9_-]+\.png$/.test(rawAvatar);
+      avatarEl.innerHTML = isAvatarPath
+        ? `<img src="${escHtml(rawAvatar)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+        : `<span style="font-size:1.5rem;">${escHtml(rawAvatar || '👤')}</span>`;
+    }
 
     const actionsDiv = document.getElementById('modal-trainer-actions');
     const onlinePlayer = state.onlinePlayersList.find(op => op.userId === userId);
