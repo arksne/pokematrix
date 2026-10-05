@@ -112,28 +112,22 @@ initGymEvents();
       });
     }
 
-    const infoView = document.getElementById('view-info');
-    if (infoView) {
-      const btnRow = document.createElement('div');
-      btnRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;';
-      btnRow.innerHTML = `
-        <button class="tma-btn nav-btn" id="btn-help-system">📖 Справка</button>
-        <button class="tma-btn nav-btn" id="btn-quests">📋 Квесты</button>
-        <button class="tma-btn nav-btn" id="btn-achievements">🏆 Достижения</button>
-        <button class="tma-btn nav-btn" id="btn-tutorial">🎓 Туториал</button>
-        <button class="tma-btn nav-btn" id="btn-pvp">⚡ PvP</button>
-      `;
-      infoView.insertBefore(btnRow, infoView.firstChild);
-
-      document.getElementById('btn-help-system')?.addEventListener('click', () => openHelp());
-      document.getElementById('btn-quests')?.addEventListener('click', () => openQuestPanel());
-      document.getElementById('btn-achievements')?.addEventListener('click', () => openAchievements());
-      document.getElementById('btn-tutorial')?.addEventListener('click', () => startOnboarding());
-      document.getElementById('btn-pvp')?.addEventListener('click', async () => {
-        const { showPvpPanel } = await import('../battle/pvp-core.js');
-        showPvpPanel();
-      });
-    }
+    // Кнопки Справка / Достижения / Туториал / PvP живут в шапке (index.html).
+    // Раньше они создавались здесь — внутри блока `if (infoView)`, где
+    // infoView = document.getElementById('view-info'), а такого элемента в
+    // разметке нет: info-modal оформлен как .modal-overlay, а не как app-view.
+    // Условие всегда было ложным, блок не выполнялся никогда, и кнопок
+    // «Достижения», «Туториал», «PvP» и «Справка» в игре просто не
+    // существовало — туториал было негде запустить вручную, а достижения и
+    // PvP были доступны только из консоли.
+    document.getElementById('btn-help-system')?.addEventListener('click', () => openHelp());
+    document.getElementById('btn-quests')?.addEventListener('click', () => openQuestPanel());
+    document.getElementById('btn-achievements')?.addEventListener('click', () => openAchievements());
+    document.getElementById('btn-tutorial')?.addEventListener('click', () => startOnboarding());
+    document.getElementById('btn-pvp')?.addEventListener('click', async () => {
+      const { showPvpPanel } = await import('../battle/pvp-core.js');
+      showPvpPanel();
+    });
 
     // ── 2. Авторизация ───────────────────────────────────────
     // Ждём пока пользователь залогинится через Telegram.

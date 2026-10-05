@@ -166,6 +166,75 @@ t('W13', 'после выхода из зоны мир отрисован', afte
 
 t('W14', 'нет ошибок в клиенте', errors.length === 0, errors.slice(0, 3).join(' | '));
 
+// ── Кнопки шапки должны существовать и открывать свои экраны ───────────
+// Кнопки Справка / Достижения / Туториал / PvP создавались внутри блока
+// `if (infoView)`, а элемента view-info в разметке нет, поэтому условие всегда
+// было ложным и этих кнопок в игре не существовало. Туториал было негде
+// запустить вручную. Здесь проверяем, что кнопки есть и что нажатие что-то
+// открывает.
+const HEADER_BUTTONS = [
+  { id: 'btn-achievements', modal: '.achievement-modal, #ach-close' },
+  { id: 'btn-quests', modal: '#quest-panel, #quest-list' },
+  // PvP открывает не арену, а торговый центр: арена появляется только после
+  // выбора реального соперника из списка онлайн (openPvPArena вызывается из
+  // обработчика кнопки «⚔»). Проверять надо то, что открывает кнопка.
+  { id: 'btn-pvp', modal: '#trade-center-modal, .trade-player-row, .trade-container' },
+];
+
+for (const [i, b] of HEADER_BUTTONS.entries()) {
+  const present = await page.locator(`#${b.id}`).count();
+  t(`H${i + 1}`, `кнопка ${b.id} есть в шапке`, present === 1, `найдено: ${present}`);
+}
+
+for (const [i, b] of HEADER_BUTTONS.entries()) {
+  await page.locator(`#${b.id}`).click({ timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(1500);
+  const opened = await page.evaluate((sel) => {
+    return [...document.querySelectorAll(sel)].some((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 10 && r.height > 10;
+    });
+  }, b.modal);
+  t(`H${HEADER_BUTTONS.length + i + 1}`, `нажатие ${b.id} открывает интерфейс`, opened);
+  // Закрываем по-настоящему, а не только .modal-overlay: модалка достижений
+  // имеет класс help-modal, и оставаясь в DOM, перекрывала шапку — следующие
+  // клики уходили в неё, а не в кнопку.
+  await page.evaluate(() => {
+    document.querySelectorAll('.modal-overlay, .help-modal, .trade-container, .achievement-modal')
+      .forEach((o) => o.remove());
+    document.querySelectorAll('[id^="pvp-modal"], #trade-center-modal').forEach((o) => o.remove());
+  });
+  await page.waitForTimeout(800);
+}
+
+// Туториал: проверяем и наличие кнопки, и что она открывает оверлей обучения.
+const tutorialBtn = await page.locator('#btn-tutorial').count();
+t('H7', 'кнопка обучения есть в шапке', tutorialBtn === 1, `найдено: ${tutorialBtn}`);
+
+if (tutorialBtn === 1) {
+  // Метка «обучение пройдено» ставится per-trainer, поэтому для свежего аккаунта
+  // startOnboarding() реально что-то покажет.
+  await page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) {
+      if (k.includes('_tutorial_') || k === 'league17_tutorial') localStorage.removeItem(k);
+    }
+  });
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(14000);
+
+  const tutorialBtn2 = await page.locator('#btn-tutorial').count();
+  if (tutorialBtn2 === 1) {
+    await page.locator('#btn-tutorial').click({ timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+    const tutorialOverlay = await page.locator('#tutorial-overlay').isVisible().catch(() => false);
+    t('H8', 'нажатие «Обучение» открывает пошаговый оверлей', tutorialOverlay);
+  } else {
+    t('H8', 'нажатие «Обучение» открывает пошаговый оверлей', false, 'кнопка пропала после перезагрузки');
+  }
+}
+
+t('W15', 'нет ошибок в клиенте после проверки шапки', errors.length === 0, errors.slice(0, 3).join(' | '));
+
 console.log(failed === 0 ? 'МИР РЕНДЕРИТСЯ КОРРЕКТНО' : `ПРОВАЛЕНО: ${failed}`);
 await browser.close();
 process.exit(failed === 0 ? 0 : 1);

@@ -51,16 +51,19 @@ export function setQuestStates(states: QuestState[]) {
 // Создаёт DOM-элемент панели квестов (если не существует)
 // и вставляет его после карты (map-section) в view-world
 export function openQuestPanel() {
-  // Проверяем, существует ли уже контейнер
-  const container = document.getElementById('quest-panel');
-  if (!container) return;
+  // Панели может ещё не быть — тогда создаём её. Раньше здесь стояло
+  // `if (!container) return;` ДО блока создания, то есть выход происходил на
+  // первом же вызове, а код, который создаёт панель, становился
+  // недостижимым: getElementById возвращает только элементы, уже вставленные в
+  // DOM, поэтому условие `!container.parentElement` ни разу не могло быть
+  // истинным. Кнопка «Задания» не открывала ничего.
+  let container = document.getElementById('quest-panel');
 
-  // Если контейнер не вставлен в DOM — создаём
-  if (!container.parentElement) {
+  // Создаём панель, если её нет либо она потеряла родителя
+  if (!container || !container.parentElement) {
     const worldView = document.getElementById('view-world');
     if (!worldView) return;
 
-    // Создаём панель с заголовком и списком
     const panel = document.createElement('div');
     panel.id = 'quest-panel';
     panel.className = 'quest-panel';
@@ -73,6 +76,7 @@ export function openQuestPanel() {
     } else {
       worldView.appendChild(panel);
     }
+    container = panel;
   }
 
   // Отрисовываем список квестов
