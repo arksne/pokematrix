@@ -447,11 +447,13 @@ async function main() {
     ['[6] проверки безопасности', 'security.test.mjs'],
     ['[7] проверки экономики', 'economy.test.mjs'],
     ['[8] схема против настоящего сейва', 'schema-real-save.test.mjs'],
+    ['[9] ДИАГНОСТИКА', '_diag.mjs'],
+    ['[10] достижимость обмена', 'trade-reach.test.mjs'],
   ]) {
     log(`\n${title}`);
     const r = await runSuite(title, file);
     for (const l of r.out.split('\n')) {
-      if (/\[(?:R|S|E|T|D)\d+\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ/.test(l)) log('  ' + l.trimEnd());
+      if (/\[(?:R|S|E|T|D|TR|DR|W)\d+\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ|МИР РЕНДЕРИТСЯ/.test(l)) log('  ' + l.trimEnd());
     }
     if (r.code !== 0) {
       if (!/ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ/.test(r.out)) log('  вывод: ' + r.out.slice(-500));

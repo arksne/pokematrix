@@ -164,8 +164,14 @@ export function giveStarter(): Promise<void> {
     const modal = document.getElementById('starter-modal');
     const grid = document.getElementById('starter-grid');
     if (!modal || !grid) {
-      // Если модалки нет — выдаём Bulbasaur (запасной вариант)
-      giveStarterMon('bulbasaur').then(() => resolve());
+      // Если модалки нет — выдаём Bulbasaur (запасной вариант). Промис резолвим
+      // сразу, а сама выдача идёт отдельной цепочкой: иначе сетевая ошибка в
+      // PokeAPI оставляла бы вызывающий код ждать навсегда.
+      resolve();
+      giveStarterMon('bulbasaur').catch((e) => {
+        console.error('Не удалось выдать стартовика', e);
+        showToast('Не удалось выдать стартовика. Обновите игру.', true);
+      });
       return;
     }
 
@@ -179,15 +185,25 @@ export function giveStarter(): Promise<void> {
       if (settled) return;
       settled = true;
       modal.style.display = 'none';
-      giveStarterMon(chosen).then(() => {
-        showToast(
-          viaFallback
-            ? `Стартовик выдан по умолчанию: ${chosen.toUpperCase()}`
-            : `Вам выпал покемон: ${chosen.toUpperCase()}!`,
-          false
-        );
-        resolve();
-      });
+      // Раньше промис резолвился только в then(), то есть если giveStarterMon()
+      // упадёт или зависнет на сети, промис остаётся pending навсегда. Уже не
+      // критично для инициализации (выбор стартовика больше не блокирует рендер),
+      // но сам игрок остался бы без покемона и без единого сообщения. Резолвим
+      // сразу, а выдачу показываем отдельным уведомлением по её исходу.
+      resolve();
+      giveStarterMon(chosen)
+        .then(() => {
+          showToast(
+            viaFallback
+              ? `Стартовик выдан по умолчанию: ${chosen.toUpperCase()}`
+              : `Вам выпал покемон: ${chosen.toUpperCase()}!`,
+            false
+          );
+        })
+        .catch((e) => {
+          console.error('Не удалось выдать стартовика', chosen, e);
+          showToast('Не удалось выдать стартовика. Обновите игру.', true);
+        });
     };
     document.addEventListener('starter-modal:dismissed', () => finish('bulbasaur', true), { once: true });
 
@@ -199,7 +215,7 @@ export function giveStarter(): Promise<void> {
     grid.innerHTML = '';
     // Устанавливаем заголовок
     const title = document.querySelector('#starter-modal h2');
-    if (title) title.innerText = 'Выберите карту (Поколения 1-9)';
+    if (title) (title as HTMLElement).innerText = 'Выберите карту (Поколения 1-9)';
 
     // GEN_STARTERS — массив поколений, каждое поколение = массив имён
     GEN_STARTERS.forEach((gen: string[], idx: number) => {

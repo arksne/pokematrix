@@ -69,11 +69,18 @@ async function getProfileModule() {
   return profileModule;
 }
 
-// main.ts глобально регистрирует openTradeCenter
-let mainModule: any = null;
-async function getMainModule() {
-  if (!mainModule) mainModule = await import('../../main.js');
-  return mainModule;
+// Модули, которые нельзя импортировать статически: trade-center тянет за собой
+// network/socket, а тот — обратно location. Цикл разрешается ESM, но полагаться
+// на него не стоит, поэтому оба подключаются лениво и уже в момент клика.
+//
+// Раньше здесь стоял вызов main.js: якобы «main.ts глобально регистрирует
+// openTradeCenter». Экспортов у main.ts нет вообще, поэтому mm.openTradeCenter
+// был undefined, и кнопка обмена молча не делала ничего — обмен нельзя было
+// начать ни из одного места.
+let tradeCenterModule: any = null;
+async function getTradeCenterModule() {
+  if (!tradeCenterModule) tradeCenterModule = await import('./trade-center.js');
+  return tradeCenterModule;
 }
 
 // battle/core.ts — для openGymModal, openEliteModal, checkQuestProgress
@@ -197,7 +204,7 @@ export function healTeam() {
 
   // Обновляем UI: перерисовываем сетку команды и профиль
   getProfileModule().then(pm => pm.renderTeamGrid());
-  getMainModule().then(mm => mm.refreshProfileUI());
+  getProfileModule().then(pm => pm.refreshProfileUI());
 }
 
 // ── updateTimeOfDay: обновление времени суток ──────────
@@ -230,11 +237,24 @@ export function setBeforeRenderLocation(fn: (locId: string) => void) {
 // Принимает locId — ID локации
 export let renderLocation = function(locId: any) {
   // ── Гейт: тренировочная зона только для новичков ──
+  //
+  // Раньше здесь стоял просто `return`. Из-за этого игрок, чей покемон дорог
+  // 15 уровня, оказывался заперт: последняя сохранённая локация была
+  // тренировочной зоной, renderLocation выходил до отрисовки всего — и карта,
+  // навигация и кнопки оставались статической заглушкой из index.html
+  // («Вермилион»). Выйти было нечем: все переходы тоже ведут в renderLocation,
+  // то есть снова в этот return. Только ручная правка сейва.
+  //
+  // Теперь гейт отправляет игрока в обычную локацию и говорит почему.
+  // Проверяется настоящий уровень (baseLevel), а не уровень с конфетами:
+  // конфеты — это не опыт, и прибавлять их к уровню означало выкидывать
+  // новичка из зоны за обычное кормление.
   if (locId === 'goldenrodCity_trainingGrounds' && state.myTeam.length > 0) {
-    const maxLvl = Math.max(...state.myTeam.map((m: any) => (m.baseLevel || 0) + (m.candiesEaten || 0)));
+    const maxLvl = Math.max(...state.myTeam.map((m: any) => m.baseLevel || 0));
     if (maxLvl > 15) {
-      showToast('Тренировочная зона только для новичков (покемоны до 15 уровня)!', true);
-      return;
+      state.currentLocationId = 'goldenrodCity';
+      locId = 'goldenrodCity';
+      showToast('Тренировочная зона только для новичков (покемоны до 15 уровня) — вы в Голденроде', true);
     }
   }
 
@@ -333,7 +353,11 @@ export let renderLocation = function(locId: any) {
     btnTrade.className = 'btn-use';
     btnTrade.style.backgroundColor = '#007aff';
     btnTrade.innerText = '🤝 Обменник (Игроки)';
-    btnTrade.onclick = () => getMainModule().then(mm => mm.openTradeCenter());
+    btnTrade.onclick = () => {
+    getTradeCenterModule()
+      .then(tc => tc.openTradeCenter())
+      .catch((e) => console.error('[trade] торговый центр не открылся', e));
+  };
     actionsContainer.appendChild(btnTrade);
 
     // Кнопка "Вылечить команду"
