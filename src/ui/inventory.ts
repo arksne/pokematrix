@@ -408,7 +408,7 @@ export function renderInventory() {
     <div class="inv-item" style="cursor: default;">
       <div class="inv-item-icon"><img src="assets/items/credit_coin.png" style="width:32px;height:32px;image-rendering:auto;" alt="¥"></div>
       <div class="inv-item-name">Кредиты</div>
-      <div class="inv-item-qty">x${getInvState().money}</div>
+      <div class="inv-item-qty">x${escapeHtml(String(getInvState().money))}</div>
     </div>
   `;
   container.appendChild(moneyGrid);
@@ -1184,4 +1184,10 @@ export function openHeldItemPicker(monIndex) {
     },
     true  // showCancel=true — кнопка "Отмена"
   );
+}
+
+function escapeHtml(str: string): string {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
 }

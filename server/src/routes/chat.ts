@@ -68,11 +68,18 @@ router.post('/send', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    const sanitized = text.trim().slice(0, 500)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+
     const db = getDb();
     const now = new Date().toISOString();
     const result = await db.insert(chatMessages).values({
       user_id: req.user!.tgId,
-      text: text.trim().slice(0, 500),
+      text: sanitized,
       created_at: now,
     }).returning();
 

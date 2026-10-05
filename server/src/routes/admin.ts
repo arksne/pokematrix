@@ -83,8 +83,13 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
     let isAuthorized = false;
 
     // Вариант 1: ADMIN_PASS (обратная совместимость)
-    if (token === config.adminPass) {
-      isAuthorized = true;
+    if (token.length === config.adminPass.length) {
+      const crypto = await import('crypto');
+      const a = Buffer.from(token);
+      const b = Buffer.from(config.adminPass);
+      if (crypto.timingSafeEqual(a, b)) {
+        isAuthorized = true;
+      }
     }
 
     // Вариант 2: JWT с is_admin
@@ -246,9 +251,16 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
         const trainingStage = monData.trainingStage || 0;
         const target = monData.target || 'team';
 
+        if (!/^[a-z0-9-]+$/i.test(species)) {
+          res.status(400).json({ status: 'error', error: 'Invalid species name' });
+          return;
+        }
         let pokeData: any;
         try {
-          const pokeRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${species}`);
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
+          const pokeRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${species}`, { signal: controller.signal });
+          clearTimeout(timeout);
           if (!pokeRes.ok) { res.status(400).json({ status: 'error', error: `PokeAPI: ${species} not found` }); return; }
           pokeData = await pokeRes.json();
         } catch (e) {
@@ -265,7 +277,7 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
         const exp = Math.pow(level, 3);
         const expToNext = Math.pow(level + 1, 3);
         const baseHp = pokeData.stats[0].base_stat;
-        const iv = maxIV ? 31 : Math.floor(Math.random() * 16) + 15;
+        const iv = maxIV ? 31 : Math.floor(Math.random() * 32);
         const maxHp = Math.floor(0.01 * (2 * baseHp + iv) * level) + level + 10;
 
         const newMon: any = {

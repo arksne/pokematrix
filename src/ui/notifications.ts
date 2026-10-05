@@ -75,8 +75,8 @@ export function openNotifications() {
     ? '<div class="text-center text-muted" class="p-20">Нет уведомлений</div>'
     : state.notifications.map((n: any) => `
       <div class="notif-item ${n.read ? '' : 'unread'}" data-id="${n.id}">
-        <b>${n.title}</b>           <!-- Заголовок жирным -->
-        <p>${n.text}</p>             <!-- Текст -->
+        <b>${escapeHtml(n.title)}</b>           <!-- Заголовок жирным -->
+        <p>${escapeHtml(n.text)}</p>             <!-- Текст -->
         <small>${new Date(n.time).toLocaleString('ru')}</small>  <!-- Дата по-русски -->
       </div>
     `).join('');
@@ -87,4 +87,10 @@ export function openNotifications() {
 
   // Показываем модалку
   modal.style.display = 'flex';
+}
+
+function escapeHtml(str: string): string {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
 }

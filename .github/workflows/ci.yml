@@ -25,6 +25,8 @@ jobs:
           node-version: 22.12
           cache: npm
       - run: npm ci
+      - name: Типизация клиента
+        run: npx tsc --noEmit
       - name: Тесты клиента
         run: npm run test:vitest
 

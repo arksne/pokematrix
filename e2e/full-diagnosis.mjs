@@ -65,7 +65,6 @@ async function main() {
     return {
       title: document.title,
       url: location.href,
-      viewInfoExists: !!document.getElementById('view-info'),
       btnHelpSystem: !!document.getElementById('btn-help-system'),
       btnQuests: !!document.getElementById('btn-quests'),
       btnPvp: !!document.getElementById('btn-pvp'),

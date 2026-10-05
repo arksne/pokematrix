@@ -279,7 +279,7 @@ export function initAdminPanel() {
       if (data.profile) {
         const p = data.profile;
         const pName = (p.first_name || p.username || '?').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        targetInfo.innerHTML = '👤 ' + pName + ' | 🏅' + p.badges + ' | 💰' + (p.money ?? '?') + ' | 🐾' + (p.team?.length || 0);
+        targetInfo.innerHTML = '👤 ' + pName + ' | 🏅' + escapeHtml(String(p.badges)) + ' | 💰' + (p.money ?? '?') + ' | 🐾' + (p.team?.length || 0);
         targetInfo.setAttribute('data-found', id);
       } else {
         targetInfo.textContent = 'Not found'; targetInfo.removeAttribute('data-found');
@@ -408,4 +408,10 @@ export function initAdminPanel() {
 
   document.getElementById('btn-admin-close')!.addEventListener('click', () => { modal.style.display = 'none'; });
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+}
+
+function escapeHtml(str: string): string {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
 }

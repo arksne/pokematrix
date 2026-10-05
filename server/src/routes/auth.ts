@@ -287,7 +287,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
     }
 
     // Создать новую пару
-    const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin };
+    const tokenPayload = { userId: user.id, tgId: user.tg_id, isAdmin: !!user.is_admin, username: user.username || '', firstName: user.first_name || '' };
     const newToken = generateAccessToken(tokenPayload);
     const newRefreshToken = generateRefreshToken();
 

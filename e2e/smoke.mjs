@@ -72,7 +72,7 @@ async function main() {
     { id: 'view-team', label: 'Команда Покемонов' },
     { id: 'view-chat', label: 'Чат' },
     { id: 'view-trainers', label: 'Тренеры' },
-    { id: 'view-info', label: 'Инфо' },
+    { id: 'view-drop', label: 'Сброс' },
   ];
 
   for (const target of navTargets) {
@@ -123,15 +123,6 @@ async function main() {
   await check(page, 'Team grid has pokemon', async () => {
     const mons = await page.locator('.team-mon, .mon-card, #team-grid > *').count();
     if (mons === 0) throw new Error('No pokemon in team');
-  });
-
-  // Info tab
-  await page.locator('.nav-item[data-target="view-info"]').click();
-  await page.waitForTimeout(500);
-  await check(page, 'Info tab has help/quest/pvp buttons', async () => {
-    await page.waitForSelector('#btn-help-system', { timeout: 3000 });
-    await page.waitForSelector('#btn-quests', { timeout: 3000 });
-    await page.waitForSelector('#btn-pvp', { timeout: 3000 });
   });
 
   // ====== 4. SCREENSHOT ======

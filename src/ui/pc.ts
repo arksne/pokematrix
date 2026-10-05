@@ -80,13 +80,13 @@ function showPCInfoModal(mon: any) {
   modal.innerHTML = `
     <div class="selection-modal-card text-center">
       <img src="${sprite}" class="sprite-pixel" style="width:96px;height:96px;" onerror="this.style.display='none'">
-      <h3 class="m-8-0">${mon.nickname || mon.apiData?.name || '???'} <span class="text-muted">Lv.${curLvl}</span></h3>
-      <p class="text-muted" class="m-4-0">Тип: ${types} | Способность: ${ability}</p>
+      <h3 class="m-8-0">${escapeHtml(mon.nickname || mon.apiData?.name || '???')} <span class="text-muted">Lv.${curLvl}</span></h3>
+      <p class="text-muted" class="m-4-0">Тип: ${escapeHtml(types)} | Способность: ${escapeHtml(ability)}</p>
       <p class="m-4-0">HP: ${mon.currentHp}/${mon.maxHp} | Статус: ${getStatusIcon(mon.status) || 'нет'}</p>
       <div class="text-muted fs-08 m-8-0">
         <b>IV:</b> HP:${ivs.hp||0} АТК:${ivs.atk||0} ЗАЩ:${ivs.def||0} СП.АТК:${ivs.spa||0} СП.ЗАЩ:${ivs.spd||0} СКОР:${ivs.spe||0}
       </div>
-      <p class="text-muted" class="fs-08">Атаки: ${moves}</p>
+      <p class="text-muted" class="fs-08">Атаки: ${escapeHtml(moves)}</p>
       ${mon.trainingStage > 0 ? `<p style="font-size:0.8rem;color:${trainingStages[mon.trainingStage].color};">Тренировка: ${trainingStages[mon.trainingStage].name} (+${trainingStages[mon.trainingStage].pct}%)</p>` : ''}
       <button class="tma-btn w-full mt-12" id="btn-pc-info-close">Закрыть</button>
     </div>
@@ -203,7 +203,7 @@ function renderPCSlots(view: string) {
       div.innerHTML = `
         <img src="${spriteUrl}" width="40" height="40" onerror="this.style.display='none'">
         <div class="pc-slot-info">
-          <b>Lv.${mon.baseLevel + mon.candiesEaten} ${mon.name || mon.apiData?.name}</b>
+          <b>Lv.${mon.baseLevel + mon.candiesEaten} ${escapeHtml(mon.name || mon.apiData?.name)}</b>
           <span>HP: ${mon.currentHp}/${mon.maxHp}</span>
         </div>
         <button class="btn-use" class="btn-use-pc">В PC</button>
@@ -271,7 +271,7 @@ function renderPCSlots(view: string) {
       div.innerHTML = `
         <img src="assets/egg.png" width="32" height="32" class="sprite-pixel">
         <div class="pc-slot-info">
-          <b>Яйцо ${egg.species ? `(${egg.species})` : ''}</b>
+          <b>Яйцо ${egg.species ? `(${escapeHtml(egg.species)})` : ''}</b>
           <span style="color:${eggColor};font-size:0.75rem;">${geneStr}</span>
           <span style="color:#ffd700;font-size:0.7rem;">${ready ? 'Готово!' : `~${remaining} дн`}</span>
         </div>
@@ -302,9 +302,9 @@ function renderPCSlots(view: string) {
       div.innerHTML = `
         <img src="${spriteUrl}" width="40" height="40" onerror="this.style.display='none'">
         <div class="pc-slot-info">
-          <b>Lv.${mon.baseLevel + mon.candiesEaten} ${mon.name || mon.apiData?.name}</b>
+          <b>Lv.${mon.baseLevel + mon.candiesEaten} ${escapeHtml(mon.name || mon.apiData?.name)}</b>
           <span>HP: ${mon.currentHp}/${mon.maxHp}</span>
-          <span class="text-muted" class="fs-07">${mon.apiData?.types?.map((t: any) => t.type.name).join('/') || ''}</span>
+          <span class="text-muted" class="fs-07">${escapeHtml(mon.apiData?.types?.map((t: any) => t.type.name).join('/') || '')}</span>
         </div>
         <div class="pc-slot-actions">
           <button class="btn-use" class="btn-use-info" title="Инфо">ℹ</button>
@@ -341,4 +341,10 @@ function renderPCSlots(view: string) {
       container.appendChild(div);
     });
   }
+}
+
+function escapeHtml(str: string): string {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
 }

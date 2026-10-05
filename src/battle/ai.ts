@@ -43,6 +43,13 @@ export function selectEnemyMove({
   defender,
   isTrainer,
   getTypeMultiplier,
+}: {
+  moves: any[];
+  movesPP: any[];
+  attacker: any;
+  defender: any;
+  isTrainer: boolean;
+  getTypeMultiplier: (type: string, defenderTypes: any[]) => number;
 }) {
   if (!moves || moves.length === 0) return null; // Нет атак — возвращаем null
 

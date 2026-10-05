@@ -121,7 +121,7 @@ async function main() {
 
   // Try clicking nav tabs
   console.log('\n🗂️ Testing navigation clicks...');
-  for (const target of ['view-world', 'view-backpack', 'view-team', 'view-chat', 'view-trainers', 'view-info']) {
+  for (const target of ['view-world', 'view-backpack', 'view-team', 'view-chat', 'view-trainers', 'view-drop']) {
     const item = page.locator(`.nav-item[data-target="${target}"]`);
     const count = await item.count();
     if (count > 0) {

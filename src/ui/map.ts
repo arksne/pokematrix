@@ -89,21 +89,21 @@ export function showLocationInfo(locId: string) {
   modal.innerHTML = `
     <div style="background:var(--tma-bg,#1a1a2e);border:1px solid var(--tma-border,rgba(255,255,255,0.1));border-radius:16px;max-width:380px;width:90%;max-height:85vh;overflow-y:auto;padding:0;box-shadow:0 8px 40px rgba(0,0,0,0.5);">
       ${imgPath
-        ? `<img src="${imgPath}" alt="${loc.name}" style="width:100%;height:160px;object-fit:cover;border-radius:16px 16px 0 0;display:block;" onerror="this.style.display='none'">`
+        ? `<img src="${imgPath}" alt="${escapeHtml(loc.name)}" style="width:100%;height:160px;object-fit:cover;border-radius:16px 16px 0 0;display:block;" onerror="this.style.display='none'">`
         : ''
       }
       <div style="padding:16px 18px 14px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-          <h3 style="margin:0;font-size:1.1rem;color:#fff;">${loc.name}</h3>
+          <h3 style="margin:0;font-size:1.1rem;color:#fff;">${escapeHtml(loc.name)}</h3>
           <button id="map-info-close" style="background:none;border:none;color:#999;font-size:1.4rem;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
         </div>
-        <p style="margin:0 0 12px;font-size:0.85rem;color:#bbb;line-height:1.5;">${loc.desc || 'Нет описания.'}</p>
+        <p style="margin:0 0 12px;font-size:0.85rem;color:#bbb;line-height:1.5;">${escapeHtml(loc.desc || 'Нет описания.')}</p>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
           <span style="background:rgba(74,158,255,0.15);color:#4a9eff;padding:3px 10px;border-radius:20px;font-size:0.7rem;">👾 ${(loc.encounters?.length || 0)} видов</span>
           ${loc.hasHeal ? '<span style="background:rgba(52,199,89,0.15);color:#34c759;padding:3px 10px;border-radius:20px;font-size:0.7rem;">✅ Покецентр</span>' : ''}
           ${loc.hasWater ? '<span style="background:rgba(90,200,250,0.15);color:#5ac8fa;padding:3px 10px;border-radius:20px;font-size:0.7rem;">🌊 Вода</span>' : ''}
         </div>
-        ${linkNames ? `<div style="font-size:0.75rem;color:#888;"><span style="color:#666;">🔗 Связано с:</span> ${linkNames}</div>` : ''}
+        ${linkNames ? `<div style="font-size:0.75rem;color:#888;"><span style="color:#666;">🔗 Связано с:</span> ${escapeHtml(linkNames)}</div>` : ''}
       </div>
     </div>
   `;
@@ -189,7 +189,7 @@ export function updateLocList(regionKey: string) {
       `<div class="map-loc-item ${exploredLocs.has(id) ? 'explored' : ''} ${selectedLoc === id ? 'active' : ''}"
             data-loc="${id}">
         <span style="color:${exploredLocs.has(id) ? '#4a9eff' : 'rgba(255,255,255,0.4)'}">
-          ${exploredLocs.has(id) ? '📍' : '❓'} ${loc.name}
+          ${exploredLocs.has(id) ? '📍' : '❓'} ${escapeHtml(loc.name)}
         </span>
       </div>`
     ).join('');
@@ -576,4 +576,10 @@ export function openMap() {
 export function closeMap() {
   const c = document.getElementById('map-container');
   if (c) c.style.display = 'none';
+}
+
+function escapeHtml(str: string): string {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
 }
