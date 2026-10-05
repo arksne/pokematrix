@@ -116,7 +116,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
   document.getElementById('pvp-opp-lvl').textContent = '';              // Уровень — пока неизвестен
   document.getElementById('pvp-opp-hp').textContent = '?/?';            // HP — пока неизвестно
   document.getElementById('pvp-opp-hp-fill').style.width = '100%';     // HP бар — полный
-  document.getElementById('pvp-opp-sprite').src = '';                  // Спрайт — пока пусто
+  (document.getElementById('pvp-opp-sprite') as HTMLImageElement).src = ''; // Спрайт — пока пусто
   document.getElementById('pvp-log').innerHTML = '';
   updatePvPUI();                                                        // UI своего покемона
   modal.style.display = 'flex';
@@ -157,7 +157,7 @@ export async function updatePvPUI() {
   document.getElementById('pvp-my-hp').textContent = `${mon.currentHp}/${mon.maxHp}`;
   document.getElementById('pvp-my-hp-fill').style.width = `${Math.max(0, (mon.currentHp / mon.maxHp) * 100)}%`;
   const sprite = getSpriteUrl(mon);
-  document.getElementById('pvp-my-sprite').src = sprite;
+  (document.getElementById('pvp-my-sprite') as HTMLImageElement).src = sprite;
 
   // ── Индикатор хода ──
   document.getElementById('pvp-turn-indicator').textContent = state.pvpMyTurn ? '🎯 Ваш ход!' : '⏳ Ожидание хода соперника...';

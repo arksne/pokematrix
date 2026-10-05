@@ -76,7 +76,7 @@ vi.mock('../../battle/core.js', () => ({
 }));
 
 vi.mock('../../data/shops.js', () => ({
-  SHOP_STOCK: { goldenrod: [{ item: 'pokeball', price: 200 }] },
+  SHOP_STOCK: { goldenrod_supermarket: ['pokeball', 'potion'] },
 }));
 
 vi.mock('../../data/items.js', () => ({
@@ -215,7 +215,7 @@ describe('getShopState', () => {
     expect(result.money).toBe(1000);
     expect(result.inventory).toBe(mockState.inventory);
     expect(result.locationShopStock).toBeDefined();
-    expect(result.locationShopStock.goldenrod).toBeDefined();
+    expect(result.locationShopStock.goldenrod_supermarket).toBeDefined();
   });
 });
 

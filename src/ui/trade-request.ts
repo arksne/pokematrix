@@ -50,7 +50,7 @@ export function showTradeRequestModal(fromUsername, fromId) {
   }
 
   // Сначала очищаем старые обработчики (чтобы избежать дубликатов при повторных вызовах)
-  if (rm._cleanup) rm._cleanup();
+  if ((rm as any)._cleanup) (rm as any)._cleanup();
 
   // Устанавливаем имя отправителя
   document.getElementById('trade-req-username').textContent = fromUsername || 'Тренер';
@@ -75,7 +75,7 @@ export function showTradeRequestModal(fromUsername, fromId) {
     document.getElementById('btn-trade-accept').removeEventListener('click', accept);
     document.getElementById('btn-trade-reject').removeEventListener('click', reject);
     rm.removeEventListener('click', overlayClick);
-    rm._cleanup = null;
+    (rm as any)._cleanup = null;
   };
 
   // ── Закрытие по клику на фон = отклонить ──
@@ -84,7 +84,7 @@ export function showTradeRequestModal(fromUsername, fromId) {
   };
 
   // Сохраняем cleanup для следующего вызова
-  rm._cleanup = cleanup;
+  (rm as any)._cleanup = cleanup;
 
   // Регистрируем обработчики
   document.getElementById('btn-trade-accept').addEventListener('click', accept);

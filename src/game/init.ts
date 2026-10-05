@@ -27,7 +27,7 @@
  * ============================================================
  */
 
-import { state, lsKey } from './state.js';
+import { state, lsKey, generateUID } from './state.js';
 import { store } from './store.js';
 import { REGIONS } from '../data/regions.js';
 import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress } from '../battle/core.js';
@@ -362,8 +362,8 @@ initGymEvents();
       tab.addEventListener('click', () => {
         document.querySelectorAll('.loc-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        document.querySelectorAll('.loc-tab-content').forEach(c => c.style.display = 'none');
-        const target = document.getElementById('loc-tab-' + tab.dataset.tab);
+        document.querySelectorAll('.loc-tab-content').forEach(c => (c as HTMLElement).style.display = 'none');
+        const target = document.getElementById('loc-tab-' + (tab as HTMLElement).dataset.tab);
         if (target) target.style.display = 'block';
       });
     });
@@ -524,3 +524,30 @@ export { renderTeamGrid } from '../ui/profile.js';
 export { updateInventoryDisplay } from '../ui/inventory.js';
 export { updateBadgeDisplay } from '../ui/location.js';
 export { getTrainerId } from './state.js';
+
+export function makeMon(apiData: any, trainerId: string, level: number): any {
+  const baseHp = apiData.stats?.[0]?.base_stat ?? 50;
+  const maxHp = Math.floor(0.01 * (2 * baseHp + 30) * level) + level + 10;
+  return {
+    uid: generateUID(),
+    originalTrainer: trainerId,
+    createdAt: Date.now(),
+    apiData,
+    maxHp,
+    currentHp: maxHp,
+    ivs: { hp: 31, attack: 31, defense: 31, spa: 31, spd: 31, spe: 31 },
+    evs: { hp: 0, attack: 0, defense: 0, spa: 0, spd: 0, spe: 0 },
+    baseLevel: level,
+    exp: Math.pow(level, 3),
+    expToNext: Math.pow(level + 1, 3),
+    movesPP: [],
+    statStages: { attack: 0, defense: 0, spa: 0, spd: 0, spe: 0 },
+    learnableMoves: [],
+    berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
+    status: null,
+    gender: 'male',
+    natureIdx: 0,
+    happiness: 0,
+    heldItem: null,
+  };
+}

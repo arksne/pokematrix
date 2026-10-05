@@ -257,7 +257,7 @@ export function initTradeSocket() {
       const oppLvlEl = document.getElementById('pvp-opp-lvl');
       const oppHpEl = document.getElementById('pvp-opp-hp');
       const oppHpFill = document.getElementById('pvp-opp-hp-fill');
-      const oppSprite = document.getElementById('pvp-opp-sprite');
+      const oppSprite = document.getElementById('pvp-opp-sprite') as HTMLImageElement;
       if (oppNameEl) oppNameEl.textContent = action.name;
       if (oppLvlEl) oppLvlEl.textContent = `Lv${action.lvl}`;
       if (oppHpEl) oppHpEl.textContent = `${action.hp}/${action.maxHp}`;

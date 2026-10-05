@@ -22,6 +22,8 @@
 // ── Legacy type augmentations ──────────────────────────────
 // HTMLElement: свойства, которые добавляются из HTML атрибутов.
 // Window: dev-команды (см. ниже).
+export {};
+
 declare global {
   interface HTMLElement {
     value: string;

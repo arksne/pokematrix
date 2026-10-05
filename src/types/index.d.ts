@@ -44,6 +44,8 @@ export interface LocationDef {
   region: string;
   shopStock?: string[];
   shopType?: string;
+  wildMinLvl?: number;
+  wildMaxLvl?: number;
 }
 
 /** Регион */

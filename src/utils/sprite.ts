@@ -205,7 +205,6 @@ const ITEM_SPRITE_MAP = {
   sachet: 'sachet.png',
   // Battle items
   expShare: 'exp-share.png',
-  luckyEgg: 'lucky-egg.png',
   sootheBell: 'soothe-bell.png',
   amuletCoin: 'amulet-coin.png',
   // Berries (additional)

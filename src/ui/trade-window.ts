@@ -106,7 +106,7 @@ export function openTradeWindow(partnerName) {
       state.socket.emit('trade_confirm', state.activeTradeId);  // Отправляем подтверждение
       // Блокируем кнопку
       document.getElementById('btn-trade-confirm').textContent = '✓ Ожидание партнёра...';
-      document.getElementById('btn-trade-confirm').disabled = true;
+      (document.getElementById('btn-trade-confirm') as HTMLButtonElement).disabled = true;
       document.getElementById('btn-trade-confirm').style.opacity = '0.5';
     });
 
@@ -119,7 +119,7 @@ export function openTradeWindow(partnerName) {
       renderTradeItemGrid();
       const conf = document.getElementById('btn-trade-confirm');
       conf.textContent = '✅ Подтвердить обмен';
-      conf.disabled = false;
+      (conf as HTMLButtonElement).disabled = false;
       conf.style.opacity = '1';
     });
 
@@ -142,7 +142,7 @@ export function openTradeWindow(partnerName) {
   document.getElementById('trade-partner-status').textContent = '⏳ Ожидание';
   document.getElementById('trade-partner-status').className = 'trade-status waiting';
   document.getElementById('btn-trade-confirm').textContent = '✅ Подтвердить обмен';
-  document.getElementById('btn-trade-confirm').disabled = false;
+  (document.getElementById('btn-trade-confirm') as HTMLButtonElement).disabled = false;
   document.getElementById('btn-trade-confirm').style.opacity = '1';
 
   // Отрисовываем всё
@@ -335,7 +335,7 @@ export function updateTradeConfirmUI(status) {
   if (myConfirmed) {
     const btn = document.getElementById('btn-trade-confirm');
     btn.textContent = '✓ Ожидание партнёра...';
-    btn.disabled = true;
+    (btn as HTMLButtonElement).disabled = true;
     btn.style.opacity = '0.5';
   }
 }
