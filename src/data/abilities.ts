@@ -256,7 +256,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   mummy: {
     id: 'mummy', nameRu: 'Мумия',
     short: 'При контакте меняет способность атакующего на Мумию.',
-    triggers: ['onAfterHit'], implemented: false,
+    triggers: ['onAfterHit'], implemented: true,
   },
 
   // ── Погодные способности ──────────────────────────────────────────
@@ -320,22 +320,22 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'download': {
     id: 'download', nameRu: 'Загрузка',
     short: 'При выходе повышает атаку или сп. атаку в зависимости от защиты противника.',
-    triggers: ['onSwitchIn'], implemented: false,
+    triggers: ['onSwitchIn'], implemented: true,
   },
   trace: {
     id: 'trace', nameRu: 'Слежение',
     short: 'При выходе копирует способность противника.',
-    triggers: ['onSwitchIn'], implemented: false,
+    triggers: ['onSwitchIn'], implemented: true,
   },
   'pressure': {
     id: 'pressure', nameRu: 'Давление',
     short: 'Противник тратит вдвое больше PP за каждую атаку.',
-    triggers: ['onSwitchIn'], implemented: false,
+    triggers: ['onSwitchIn'], implemented: true,
   },
   'frisk': {
     id: 'frisk', nameRu: 'Проницательность',
     short: 'При выходе показывает удерживаемые предметы противника.',
-    triggers: ['onSwitchIn'], implemented: false,
+    triggers: ['onSwitchIn'], implemented: true,
   },
 
   // ── Пассивные способности ─────────────────────────────────────────
@@ -372,17 +372,17 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'magic-guard': {
     id: 'magic-guard', nameRu: 'Магическая защита',
     short: 'Получает урон только от прямых атак.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'neutralizing-gas': {
     id: 'neutralizing-gas', nameRu: 'Нейтрализующий газ',
     short: 'Пока покемон в бою, все способности подавлены.',
-    triggers: ['onSwitchIn'], implemented: false,
+    triggers: ['onSwitchIn'], implemented: true,
   },
   'unaware': {
     id: 'unaware', nameRu: 'Незнание',
     short: 'Игнорирует изменения статов противника и свои.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'infiltrator': {
     id: 'infiltrator', nameRu: 'Проникновение',
@@ -412,12 +412,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'natural-cure': {
     id: 'natural-cure', nameRu: 'Природное лечение',
     short: 'При уходе с поля снимает свои статусы.',
-    triggers: ['onSwitchIn'], implemented: false,
+    triggers: ['onSwitchIn'], implemented: true,
   },
   'regenerator': {
     id: 'regenerator', nameRu: 'Регенерация',
     short: 'При уходе с поля восстанавливает треть максимального HP.',
-    triggers: ['onSwitchIn'], implemented: false,
+    triggers: ['onSwitchIn'], implemented: true,
   },
   'rock-head': {
     id: 'rock-head', nameRu: 'Каменная голова',
@@ -442,7 +442,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'serene-grace': {
     id: 'serene-grace', nameRu: 'Безмятежность',
     short: 'Шанс побочного эффекта атак удваивается.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'compound-eyes': {
     id: 'compound-eyes', nameRu: 'Фасеточные глаза',
@@ -487,12 +487,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'truant': {
     id: 'truant', nameRu: 'Лентяй',
     short: 'Покемон действует через ход: после каждой атаки пропускает следующую.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'slow-start': {
     id: 'slow-start', nameRu: 'Медленный старт',
     short: 'Первые 5 ходов атака и скорость вдвое ниже.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'defeatist': {
     id: 'defeatist', nameRu: 'Пессимизм',
@@ -522,27 +522,27 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'queenly-majesty': {
     id: 'queenly-majesty', nameRu: 'Королевское величие',
     short: 'Противник не может использовать приоритетные атаки.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'dazzling': {
     id: 'dazzling', nameRu: 'Ослепление',
     short: 'Противник не может использовать приоритетные атаки.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'prankster': {
     id: 'prankster', nameRu: 'Шалун',
     short: 'Статус-атаки получают +1 к приоритету.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'gale-wings': {
     id: 'gale-wings', nameRu: 'Буревестник',
     short: 'Летящие атаки получают +1 к приоритету при полном HP.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'triage': {
     id: 'triage', nameRu: 'Сортировка',
     short: 'Лечащие атаки получают +3 к приоритету.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
 };
 

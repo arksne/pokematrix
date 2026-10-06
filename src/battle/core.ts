@@ -497,7 +497,7 @@ function getEffectiveSpeed(pokemon, isWild): number {
   // вдвое, то есть паралич работал вдвойне — и тормозил, и пропускал ходы.
   // Скорость больше не трогаем.
 
-  const ability = getAbilityName(pokemon, isWild);
+  const ability = abilityOf(pokemon, isWild);
   // Нормализуем имя способности: PokeAPI отдаёт kebab-case ('swift-swim'),
   // а сравнения ниже написаны слитно ('swiftswim'). Без нормализации Swift Swim,
   // Rain Dish и Solar Power не срабатывали НИКОГДА — сравнение всегда было
@@ -505,6 +505,8 @@ function getEffectiveSpeed(pokemon, isWild): number {
   const abilN = ability ? String(ability).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 
   if (pokemon?.heldItem === 'choiceScarf') speed *= 1.5;
+  // Slow Start: первые пять ходов скорость вдвое ниже.
+  if (abilN === 'slowstart' && (pokemon.slowStartTurns || 0) < 5) speed *= 0.5;
   // Погодные способности скорости. Каждая работает только в свою погоду:
   //   Swift Swim / Rain Dish — дождь
   //   Chlorophyll / Solar Power — солнце
@@ -522,9 +524,30 @@ function getEffectiveSpeed(pokemon, isWild): number {
  * Кто ходит первым. Приоритет атаки важнее скорости; при равном приоритете
  * решает скорость, при полном равенстве — игрок, как в основной игре.
  */
+/**
+ * getEffectivePriority — приоритет атаки с учётом способностей владельца.
+ *
+ *   Prankster   +1 к статус-атакам (атаки без power)
+ *   Gale Wings  +1 к летящим атакам, пока владелец при полном HP
+ *   Triage      +3 к лечащим атакам
+ */
+function getEffectivePriority(move, mon, isWild) {
+  let prio = move?.priority ?? 0;
+  if (!move || !mon) return prio;
+  const name = String(getAbilityName(mon, isWild) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (name === 'prankster' && !move.power) prio += 1;
+  if (name === 'gale-wings' && move.type?.name === 'flying') {
+    const cur = isWild ? S.wildCurHP : mon.currentHp;
+    const max = isWild ? S.wildMaxHP : mon.maxHp;
+    if (max > 0 && cur >= max) prio += 1;
+  }
+  if (name === 'triage' && move.meta?.healing) prio += 3;
+  return prio;
+}
+
 function playerMovesFirst(playerMove, enemyMove): boolean {
-  const pPrio = playerMove?.priority ?? 0;
-  const ePrio = enemyMove?.priority ?? 0;
+  const pPrio = getEffectivePriority(playerMove, S.activePlayerMon, false);
+  const ePrio = getEffectivePriority(enemyMove, S.activeWild, true);
   if (pPrio !== ePrio) return pPrio > ePrio;
 
   const pSpe = getEffectiveSpeed(S.activePlayerMon, false);
@@ -555,7 +578,38 @@ function getMultiHitCount(move) {
  * sandstorm: non-Rock/Ground/Steel
  * hail: non-Ice
  */
+/**
+ * abilityOf — имя способности покемона с учётом Нейтрализующего газа.
+ *
+ * Если на поле есть покемон с Нейтрализующим газом, способности ОБЕИХ сторон
+ * не действуют — включая ту, что стоит у второго покемона. Сам газ продолжает
+ * «работать» и по-прежнему показывается в интерфейсе.
+ *
+ * Эту функцию используют все боевые проверки способностей; getAbilityName
+ * остаётся сырым чтением для интерфейса и справочника.
+ */
+function abilityOf(mon, isWild) {
+  const norm = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const own = getAbilityName(mon, isWild);
+  if (norm(own) === 'neutralizinggas') return own;
+  const gasOnField = norm(abilityOf(S.activeWild, true)) === 'neutralizinggas'
+    || norm(abilityOf(S.activePlayerMon, false)) === 'neutralizinggas';
+  return gasOnField ? null : own;
+}
+
+/**
+ * Magic Guard: способность полностью блокирует НЕпрямой урон — от статусов
+ * (яд, ожог, токсин), от Семени Ужаса, от погоды и от отдачи своих атак.
+ * Прямой урон от атак проходит как обычно.
+ */
+function hasMagicGuard(mon, isWild) {
+  return String(getAbilityName(mon, isWild) || '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '') === 'magicguard';
+}
+
 function applyWeatherChip(pokemon, maxHp, isPlayer) {
+  // Magic Guard полностью блокирует погодный урон.
+  if (hasMagicGuard(pokemon, !isPlayer)) return;
   if (!pokemon || pokemon.currentHp <= 0) return;
   const weather = S.currentWeather;
   if (weather === 'sandstorm') {
@@ -822,6 +876,9 @@ function isGrassType(pokemon): boolean {
  * Вызывается в конце хода с обеих сторон.
  */
 function applyLeechSeedTick(seededIsPlayer: boolean) {
+  // Magic Guard блокирует урон от Семени Ужаса.
+  if (seededIsPlayer && hasMagicGuard(S.activePlayerMon, false)) return;
+  if (!seededIsPlayer && hasMagicGuard(S.activeWild, true)) return;
   if (seededIsPlayer) {
     if (!S.seedPlayer || S.activePlayerMon.currentHp <= 0) return;
     const dmg = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 8));
@@ -1487,6 +1544,9 @@ function checkStatusTurn(target, isPlayer) {
  */
 function applyStatusEndOfTurn(target, isPlayer) {
   if (!target.status) return;
+  // Magic Guard блокирует урон от статусов (яд, токсин, ожог).
+  // Poison Heal — исключение: это лечение, оно проходит.
+  if (hasMagicGuard(target, !isPlayer)) return;
 
   if (target.status === 'psn') {
     // Poison Heal: способность превращает урон от яда в лечение того же размера.
@@ -1589,6 +1649,9 @@ function switchPokemon() {
   showSelectionModal('Выберите покемона', items, (idx) => {
     const newActive = aliveMons[idx];
     const oldActive = S.activePlayerMon;
+
+    // Способности ухода с поля срабатывают ДО фактической смены.
+    applySwitchOutAbilities(oldActive);
 
     // Меняем активного покемона (порядок в команде не меняется)
     S.activePlayerMon = newActive;
@@ -2139,6 +2202,8 @@ async function startHunt(encountersArray) {
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
     applyWeatherAbility(wildAbility, S.activeWild.name);
+    // Остальные способности выхода: Download, Trace, Frisk.
+    applySwitchInAbilities(S.activeWild, true, S.activePlayerMon);
 
     S.playerMovesDetailed = [];
     loadMoveButtons(S.activePlayerMon, useMove);
@@ -2333,13 +2398,94 @@ function applyWeatherAbility(abilityId, displayName) {
   return true;
 }
 
+/**
+ * applySwitchOutAbilities — способности, срабатывающие при уходе с поля.
+ *
+ *   Natural Cure — снимает свои статусы
+ *   Regenerator  — восстанавливает треть максимального HP
+ *
+ * ВЫЗЫВАЕТСЯ перед сменой покемона по кнопке. В сценарии нокаута покемон
+ * уже с нулевым HP, поэтому Regenerator там ничего не делает — это правильно.
+ */
+function applySwitchOutAbilities(mon) {
+  if (!mon) return;
+  const abilityId = getAbilityName(mon, false);
+  if (!abilityId) return;
+  const name = String(abilityId).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const label = mon.apiData?.name || mon.name || 'Покемон';
+
+  if (name === 'naturalcure' && mon.status) {
+    const had = mon.status;
+    cureStatus(mon);
+    appendToLog(`${label}: Природное лечение снимает статус (${STATUS_NAMES[had] || had}) при уходе с поля.`, false, 'heal');
+  }
+
+  if (name === 'regenerator' && mon.currentHp > 0 && mon.currentHp < mon.maxHp) {
+    const heal = Math.max(1, Math.floor(mon.maxHp / 3));
+    mon.currentHp = Math.min(mon.maxHp, mon.currentHp + heal);
+    appendToLog(`${label}: Регенерация восстанавливает ${heal} HP при уходе с поля.`, false, 'heal');
+  }
+}
+
+/**
+ * applySwitchInAbilities — способности выхода на поле, кроме погодных.
+ *
+ * ВЫЗЫВАЕТСЯ там же, где applyWeatherAbility: в момент появления покемона
+ * (дикий — в начале боя и на аренах, свой — при смене и после нокаута).
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   Download — повышает атаку или сп. атаку, смотря по более слабой защите
+ *   Trace    — копирует способность противника
+ *   Frisk    — показывает удерживаемый предмет противника
+ *
+ * ВАЖНО: способности, меняющие статы СВОЕМУ владельцу, вызываются с
+ * fromOpponent = false — иначе Clear Body блокировал бы собственный бафф.
+ */
+function applySwitchInAbilities(mon, isWild, opponent) {
+  if (!mon || !opponent) return;
+  const abilityId = getAbilityName(mon, isWild);
+  if (!abilityId) return;
+  const name = String(abilityId).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const label = mon.apiData?.name || mon.name || 'Покемон';
+
+  if (name === 'download') {
+    const oppDef = calculateStat(opponent, 'defense', { isWild: !isWild });
+    const oppSpd = calculateStat(opponent, 'special-defense', { isWild: !isWild });
+    if (oppDef <= oppSpd) {
+      statStageModify(mon, 'atk', 1, false);
+      appendToLog(`${label}: Загрузка повышает атаку!`, false, 'system');
+    } else {
+      statStageModify(mon, 'spa', 1, false);
+      appendToLog(`${label}: Загрузка повышает сп. атаку!`, false, 'system');
+    }
+  }
+
+  if (name === 'trace') {
+    const oppAbilityId = getAbilityName(opponent, !isWild);
+    if (oppAbilityId && oppAbilityId !== abilityId) {
+      mon.abilityName = oppAbilityId;
+      updateAbilityDisplay();
+      appendToLog(`${label}: Слежение копирует способность — ${getAbilityNameRu(oppAbilityId)}!`, false, 'system');
+    }
+  }
+
+  if (name === 'frisk') {
+    appendToLog(
+      opponent.heldItem
+        ? `${label}: Проницательность видит предмет противника — ${getHeldItemName(opponent.heldItem)}.`
+        : `${label}: Проницательность не видит у противника предмета.`,
+      false, 'system',
+    );
+  }
+}
+
 function updateAbilityDisplay() {
   // Название показываем по-русски из справочника (data/abilities.ts), а не
   // сырым англоязычным id из PokeAPI. Если способности нет в справочнике —
   // getAbilityNameRu вернёт сам id, и в бою всё равно будет видно, что за
   // способность активна.
   if (S.activePlayerMon) {
-    const abilityId = getAbilityName(S.activePlayerMon, false);
+    const abilityId = abilityOf(S.activePlayerMon, false);
     document.getElementById('player-ability').innerText = abilityId ? `【${getAbilityNameRu(abilityId)}】` : '';
   }
   if (S.activeWild) {
@@ -2694,6 +2840,23 @@ async function useMove(moveIndex) {
     return;
   }
 
+  // ═══ 2b. TRUANT ═══
+  // Лентяй: покемон действует через ход. Флаг переключается на каждом ходу,
+  // поэтому пропускается ровно каждый второй.
+  const playerTruant = String(abilityOf(S.activePlayerMon, false) || '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '') === 'truant';
+  if (playerTruant) {
+    if (S.activePlayerMon.truantSkip) {
+      S.activePlayerMon.truantSkip = false;
+      appendToLog(`${S.activePlayerMon.apiData.name} ленится и ничего не делает!`, false, 'system');
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
+    S.activePlayerMon.truantSkip = true;
+  }
+
   // ═══ 3. ASSAULT VEST ═══
   // Не позволяет использовать статус-атаки (без power)
   const power = move.power;
@@ -2790,6 +2953,22 @@ async function useMove(moveIndex) {
     };
 
     if (S.wildCurHP > 0 && S.activePlayerMon.currentHp > 0) {
+      // ═══ ЗАПРЕТ ПРИОРИТЕТНЫХ АТАК ═══
+      // Queenly Majesty / Dazzling у противника полностью запрещают атаки с
+      // приоритетом выше нуля (Quick Attack, Sucker Punch и подобные).
+      // Проверка стоит здесь, а не у фазы, потому что endTurn() объявлен выше
+      // именно в этой ветке.
+      const wildGuardAbil = String(abilityOf(S.activeWild, true) || '')
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+      if ((wildGuardAbil === 'queenlymajesty' || wildGuardAbil === 'dazzling')
+        && ((move as any).priority ?? 0) > 0) {
+        appendToLog(`${S.activeWild.name} запрещает приоритетные атаки!`, false, 'system');
+        document.getElementById('battle-main-menu').style.display = 'none';
+        saveBattleState();
+        endTurn();
+        return;
+      }
+
       let enemyMoveForOrder: any = null;
       if (S.enemyChargedMove) {
         enemyMoveForOrder = S.enemyChargedMove;
@@ -2816,7 +2995,10 @@ async function useMove(moveIndex) {
 
     // ═══ 6. DECREMENT PP ═══
   if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[moveIndex]) {
-    S.activePlayerMon.movesPP[moveIndex].current--;
+    // Pressure у противника: каждая атака тратит вдвое больше PP.
+    const wildPress = String(abilityOf(S.activeWild, true) || '')
+      .toLowerCase().replace(/[^a-z0-9]/g, '');
+    S.activePlayerMon.movesPP[moveIndex].current -= wildPress === 'pressure' ? 2 : 1;
   }
 
   // ═══ 7. CHOICE ITEM LOCK (after successful use) ═══
@@ -2829,12 +3011,15 @@ async function useMove(moveIndex) {
   // Проверяем попала ли атака (учитывает accuracy атаки и evasion цели)
   let accResult = checkAccuracy(
     move,
-    getAbilityName(S.activePlayerMon, false),
-    getAbilityName(S.activeWild, true),
+    abilityOf(S.activePlayerMon, false),
+    abilityOf(S.activeWild, true),
     S.currentWeather,
   );
   // Hustle: 20% additional miss chance for physical moves
-  const playerAbilityName = getAbilityName(S.activePlayerMon, false);
+  const playerAbilityName = abilityOf(S.activePlayerMon, false);
+  // Serene Grace удваивает шанс побочных эффектов своих атак (статус, статы,
+  // флинч). Множитель применяется ко всем трём проверкам ниже.
+  const playerSereneGrace = String(playerAbilityName || '').toLowerCase().replace(/[^a-z0-9]/g, '') === 'serenegrace' ? 2 : 1;
   if (accResult.hit && playerAbilityName === 'hustle' && power && move.damage_class?.name === 'physical') {
     if (Math.random() * 100 < 20) {
       accResult = { hit: false, message: 'Атака промахнулась из-за Hustle!' };
@@ -3001,12 +3186,15 @@ async function useMove(moveIndex) {
         defenderHeldItem: S.activeWild.heldItem,
         naturesList: natures,
         critRateStage,
-        defenderAbilityName: getAbilityName(S.activeWild, true),
-        attackerAbilityName: getAbilityName(S.activePlayerMon, false),
+        defenderAbilityName: abilityOf(S.activeWild, true),
+        attackerAbilityName: abilityOf(S.activePlayerMon, false),
           defenderCurrentHp: S.wildCurHP,
           defenderMaxHp: S.wildMaxHP,
           attackerCurrentHp: S.activePlayerMon.currentHp,
           attackerMaxHp: S.activePlayerMon.maxHp,
+          attackerSlowStart: String(abilityOf(S.activePlayerMon, false) || '')
+            .toLowerCase().replace(/[^a-z0-9]/g, '') === 'slowstart'
+            && (S.activePlayerMon.slowStartTurns || 0) < 5,
       });
       let hitDmg = dmgResult.damage;
       const bMod = applyBarrierMod(1, move, false, dmgResult.isCrit);
@@ -3052,7 +3240,7 @@ async function useMove(moveIndex) {
           }
         } else {
           // Rock Head: способность полностью снимает отдачу от своих атак.
-          const rhAbil = String(getAbilityName(S.activePlayerMon, false) || '')
+          const rhAbil = String(abilityOf(S.activePlayerMon, false) || '')
             .toLowerCase().replace(/[^a-z0-9]/g, '');
           if (rhAbil !== 'rockhead') {
             const rPct = Math.abs(move.meta.drain) / 100;
@@ -3074,7 +3262,7 @@ async function useMove(moveIndex) {
       // Secondary status per hit (подавляется Sheer Force)
       if (S.wildCurHP > 0 && !playerSheerForce && move.meta?.ailment && move.meta.ailment.name !== 'none' && move.meta.ailment.name !== 'unknown') {
         // ailment_chance === 0 — валидное значение («эффект есть, но шанс 0»), поэтому ?? а не ||
-        const chance = move.meta.ailment_chance ?? 0;
+        const chance = Math.min(100, (move.meta.ailment_chance ?? 0) * playerSereneGrace);
         if (Math.random() * 100 < chance) {
           const sm = { 'poison': 'psn', 'badly-poison': 'tox', 'burn': 'brn', 'paralysis': 'par', 'sleep': 'slp', 'freeze': 'frz' };
           const ts = sm[move.meta.ailment.name];
@@ -3120,6 +3308,16 @@ async function useMove(moveIndex) {
         appendToLog(`${S.activeWild.name} очаровывает ${S.activePlayerMon.apiData.name}! Атака снижена.`);
       }
 
+      // Mummy: при контакте способность атакующего заменяется на Мумию.
+      if (power && isPhysical && wcAbil === 'mummy') {
+        const atkAbilNow = abilityOf(S.activePlayerMon, false);
+        if (atkAbilNow && atkAbilNow !== 'mummy') {
+          S.activePlayerMon.abilityName = 'mummy';
+          updateAbilityDisplay();
+          appendToLog(`${S.activePlayerMon.apiData.name} теряет способность ${getAbilityNameRu(atkAbilNow)} — теперь Мумия!`, false, 'system');
+        }
+      }
+
       // Rough Skin / Iron Barbs per physical hit
       if (power && isPhysical && ['rough-skin', 'iron-barbs'].includes(wcAbil)) {
         const recoil = Math.max(1, Math.floor(hitDmg / 8));
@@ -3130,7 +3328,7 @@ async function useMove(moveIndex) {
 
       // Stat changes per hit (with stat_chance probability, подавляется Sheer Force)
       if (S.wildCurHP > 0 && !playerSheerForce && move.stat_changes && move.stat_changes.length > 0) {
-        const scChance = move.meta?.stat_chance ?? 100;
+        const scChance = Math.min(100, (move.meta?.stat_chance ?? 100) * playerSereneGrace);
         if (Math.random() * 100 < scChance) {
           const tm = { 'user': S.activePlayerMon, 'selected-pokemon': S.activeWild, 'all-opponents': S.activeWild, 'all-other-pokemon': S.activeWild };
           const mt = move.target?.name || 'selected-pokemon';
@@ -3155,7 +3353,8 @@ async function useMove(moveIndex) {
       }
 
       // Flinch per hit (подавляется Sheer Force)
-      if (S.wildCurHP > 0 && !playerSheerForce && move.meta?.flinch_chance && Math.random() * 100 < move.meta.flinch_chance) {
+      if (S.wildCurHP > 0 && !playerSheerForce && move.meta?.flinch_chance
+        && Math.random() * 100 < Math.min(100, move.meta.flinch_chance * playerSereneGrace)) {
         S.activeWild.flinch = true;
       }
     }
@@ -3266,6 +3465,8 @@ function handlePlayerFaint() {
     // ── Есть живой запасной ──
     S.activePlayerMon = nextMon;
     S.activePlayerMon.choiceLockedMove = undefined; // Сбрасываем Choice-блокировку
+    // Способности выхода на поле у нового покемона (Download, Trace, Frisk).
+    applySwitchInAbilities(S.activePlayerMon, false, S.activeWild);
     S.playerChargedMove = null; // Заряд атаки утерян при смене покемона
     appendToLog(`${S.activePlayerMon.apiData.name}, вперёд!`);
     // Обновляем UI
@@ -3458,7 +3659,15 @@ async function enemyTurn() {
  */
 function applyEndTurnAbilities(mon, isWild) {
   if (!mon) return;
-  const ability = getAbilityName(mon, isWild);
+  // Slow Start отсчитывает ходы независимо от того, есть ли у покемона другие
+  // способности конца хода: счётчик нужен для спада эффекта через 5 ходов.
+  if (typeof mon.slowStartTurns === 'number' && mon.slowStartTurns < 5) {
+    mon.slowStartTurns += 1;
+    if (mon.slowStartTurns === 5) {
+      appendToLog(`${mon.apiData?.name || mon.name || 'Покемон'}: Медленный старт закончился, статы вернулись в норму.`, false, 'system');
+    }
+  }
+  const ability = abilityOf(mon, isWild);
   if (!ability) return;
   const name = String(ability).toLowerCase().replace(/[^a-z0-9-]/g, '');
   const label = mon.apiData?.name || mon.name || 'Покемон';
@@ -3569,6 +3778,19 @@ async function runEnemyTurnBody() {
     return;
   }
 
+  // ═══ 2d. TRUANT (враг) ═══
+  const wildTruant = String(abilityOf(S.activeWild, true) || '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '') === 'truant';
+  if (wildTruant) {
+    if (S.activeWild.truantSkip) {
+      S.activeWild.truantSkip = false;
+      appendToLog(`${S.activeWild.name} ленится и ничего не делает!`, false, 'system');
+      await finishEnemyTurn();
+      return;
+    }
+    S.activeWild.truantSkip = true;
+  }
+
   // ═══ 2c. TWO-TURN MOVE RELEASE ═══
   // Если у врага есть заряженная атака — выпускаем её вместо выбора AI
   const isChargeRelease = !!S.enemyChargedMove;
@@ -3595,7 +3817,10 @@ async function runEnemyTurnBody() {
   S.enemyChosenMove = chosenMove; // Сохраняем для Sucker Punch проверки
   const enemyMoveName = chosenMove.name || 'Атака';
   if (!isChargeRelease && chosenIdx >= 0 && S.wildMovesPP && S.wildMovesPP[chosenIdx]) {
-    S.wildMovesPP[chosenIdx].current--;
+    // Pressure у игрока: противник тоже тратит вдвое больше PP.
+    const playerPress = String(abilityOf(S.activePlayerMon, false) || '')
+      .toLowerCase().replace(/[^a-z0-9]/g, '');
+    S.wildMovesPP[chosenIdx].current -= playerPress === 'pressure' ? 2 : 1;
   }
 
   // ═══ 3b. TWO-TURN MOVE CHARGE ═══
@@ -3610,12 +3835,12 @@ async function runEnemyTurnBody() {
   // ═══ 4. ACCURACY CHECK ═══
   let enemyAcc = checkAccuracy(
     chosenMove,
-    getAbilityName(S.activeWild, true),
-    getAbilityName(S.activePlayerMon, false),
+    abilityOf(S.activeWild, true),
+    abilityOf(S.activePlayerMon, false),
     S.currentWeather,
   );
   // Hustle: 20% additional miss chance for physical moves
-  const wildAbilityName = getAbilityName(S.activeWild, true);
+  const wildAbilityName = abilityOf(S.activeWild, true);
   if (enemyAcc.hit && wildAbilityName === 'hustle' && chosenMove.damage_class?.name === 'physical') {
     if (Math.random() * 100 < 20) {
       enemyAcc = { hit: false, message: 'Атака промахнулась из-за Hustle!' };
@@ -3680,12 +3905,15 @@ async function runEnemyTurnBody() {
       defenderHeldItem: S.activePlayerMon.heldItem,
       naturesList: natures,
       critRateStage: chosenMove.meta?.crit_rate || 0,
-      defenderAbilityName: getAbilityName(S.activePlayerMon, false),
-      attackerAbilityName: getAbilityName(S.activeWild, true),
+      defenderAbilityName: abilityOf(S.activePlayerMon, false),
+      attackerAbilityName: abilityOf(S.activeWild, true),
         defenderCurrentHp: S.activePlayerMon.currentHp,
         defenderMaxHp: S.activePlayerMon.maxHp,
         attackerCurrentHp: S.wildCurHP,
         attackerMaxHp: S.wildMaxHP,
+        attackerSlowStart: String(abilityOf(S.activeWild, true) || '')
+          .toLowerCase().replace(/[^a-z0-9]/g, '') === 'slowstart'
+          && (S.activeWild.slowStartTurns || 0) < 5,
     });
     let hitDmg = dmgResult.damage;
     const bMod = applyBarrierMod(1, chosenMove, true, dmgResult.isCrit); // Барьеры игрока
@@ -3787,7 +4015,7 @@ async function runEnemyTurnBody() {
     }
 
     // Rough Skin / Iron Barbs per physical hit (способность игрока)
-    const playerAbility = getAbilityName(S.activePlayerMon, false);
+    const playerAbility = abilityOf(S.activePlayerMon, false);
     if (power && isPhysical && ['rough-skin', 'iron-barbs'].includes(playerAbility)) {
       const recoil = Math.max(1, Math.floor(hitDmg / 8));
       S.wildCurHP -= recoil;
@@ -4690,6 +4918,8 @@ async function startGymNextPokemon() {
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
     applyWeatherAbility(wildAbility, S.activeWild.name);
+    // Остальные способности выхода: Download, Trace, Frisk.
+    applySwitchInAbilities(S.activeWild, true, S.activePlayerMon);
 
     // Set up player moves
     loadMoveButtons(S.activePlayerMon, useMove);
@@ -4870,6 +5100,8 @@ async function startEliteNextPokemon() {
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
     applyWeatherAbility(wildAbility, S.activeWild.name);
+    // Остальные способности выхода: Download, Trace, Frisk.
+    applySwitchInAbilities(S.activeWild, true, S.activePlayerMon);
 
     // Set up player moves for elite battle
     loadMoveButtons(S.activePlayerMon, useMove);
@@ -4975,6 +5207,8 @@ async function startChampionNextPokemon() {
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
     applyWeatherAbility(wildAbility, S.activeWild.name);
+    // Остальные способности выхода: Download, Trace, Frisk.
+    applySwitchInAbilities(S.activeWild, true, S.activePlayerMon);
 
     // Set up player moves for GS.champion battle
     loadMoveButtons(S.activePlayerMon, useMove);

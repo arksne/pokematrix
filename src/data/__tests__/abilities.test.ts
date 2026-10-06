@@ -67,10 +67,18 @@ describe('abilities.ts — справочник способностей', () =>
   it('isAbilityImplemented отражает флаг implemented', () => {
     expect(isAbilityImplemented('levitate')).toBe(true);
     expect(isAbilityImplemented('wonder-guard')).toBe(true);
-    // Не реализованные помечены явно, а не молчат в бою.
-    expect(isAbilityImplemented('truant')).toBe(false);
-    expect(isAbilityImplemented('magic-guard')).toBe(false);
+    // Неизвестная способность — не реализована по определению.
     expect(isAbilityImplemented('nonexistent')).toBe(false);
+  });
+
+  // После круга 8 механики реализованы у ВСЕХ способностей справочника.
+  // Если у какой-то флаг снова станет false — это осознанное отступление,
+  // и тест должен упасть, чтобы оно не прошло незамеченным.
+  it('в справочнике не осталось нереализованных механик', () => {
+    const notImplemented = Object.values(ABILITIES)
+      .filter((a) => !a.implemented)
+      .map((a) => a.id);
+    expect(notImplemented).toEqual([]);
   });
 
   it('все способности, которые уже работают в бою, помечены implemented: true', () => {

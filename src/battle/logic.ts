@@ -313,6 +313,9 @@ alwaysCrit = false,
     // атака и сп. атака вдвое слабее).
     attackerCurrentHp = undefined,
     attackerMaxHp = undefined,
+    // Slow Start: первые пять ходов атака вдвое ниже. Флаг считает движок,
+    // потому что счётчик ходов живёт в бою, а не в данных покемона.
+    attackerSlowStart = false,
   }) {
   const parts = [];
   const power = move.power;
@@ -356,15 +359,26 @@ alwaysCrit = false,
   const attackStatName = isPhysical ? 'attack' : 'special-attack';
   const defenseStatName = isPhysical ? 'defense' : 'special-defense';
 
-  // Build temp pokemon objects for stat calc
+  // Нормализованные имена способностей сторон. Объявлены здесь, до первого
+  // использования: ниже на них смотрят Unaware, крит и модификаторы урона.
+  const normAtkAbil = (attackerAbilityName || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const normDefAbil = (defenderAbilityName || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+
+  // Build temp pokemon objects for stat calc.
+  // Unaware: владелец игнорирует стадии ПРОТИВНИКА. Если Unaware у защитника,
+  // атакующий считается так, будто стадии защитника нулевые, и наоборот.
   const attackerPkm = {
     ...attacker,
-    statStages: attackerStatStages || attacker.statStages || null,
+    statStages: normDefAbil === 'unaware'
+      ? null
+      : (attackerStatStages || attacker.statStages || null),
     heldItem: attackerHeldItem || attacker.heldItem || null,
   };
   const defenderPkm = {
     ...defender,
-    statStages: defenderStatStages || defender.statStages || null,
+    statStages: normAtkAbil === 'unaware'
+      ? null
+      : (defenderStatStages || defender.statStages || null),
     heldItem: defenderHeldItem || defender.heldItem || null,
   };
 
@@ -408,8 +422,6 @@ alwaysCrit = false,
   // Способности, влияющие на крит:
   //   Super Luck  — атакующему +1 ступень (крит в полтора раза чаще)
   //   Battle Armor / Shell Armor — по владельцу криты невозможны вообще
-  const normAtkAbil = (attackerAbilityName || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
-  const normDefAbil = (defenderAbilityName || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
   let effectiveCritStage = critRateStage;
   if (normAtkAbil === 'superluck') effectiveCritStage += 1;
   const critBlocked = normDefAbil === 'battlearmor' || normDefAbil === 'shellarmor';
@@ -537,6 +549,8 @@ alwaysCrit = false,
       && attackerMaxHp > 0 && attackerCurrentHp * 2 <= attackerMaxHp) {
       abilityMult *= 0.5;
     }
+    // Slow Start: первые пять ходов атака вдвое ниже.
+    if (attackerSlowStart) abilityMult *= 0.5;
   }
 
   // Held items
