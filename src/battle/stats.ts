@@ -81,27 +81,41 @@ interface StatOptions {
  * @param statName имя стата в терминах PokeAPI ('hp' | 'attack' | ...)
  * @param opts     isWild, level, ivs, evs, ignoreBattleOnly
  */
-export function calculateStat(pokemon: any, statName: string, opts: StatOptions = {}): number {
-  const isWild = opts.isWild || false;
+export function calculateStat(pokemon: any, statName: string, opts: StatOptions | boolean = {}): number {
+  // ИСТОРИЧЕСКАЯ ОШИБКА, исправлена здесь. В это место годами передавали
+  // булево значение (`calculateStat(S.activeWild, 'hp', true)`), а функция
+  // ждала объект и читала `opts.isWild`. У булева значения поля `isWild` нет,
+  // поэтому isWild всегда был false, база бралась из `pokemon.apiData.stats`
+  // — а у дикого покемона такого поля нет вовсе: S.activeWild это сырой ответ
+  // PokeAPI со `stats` прямо на объекте.
+  //
+  // Следствие было тяжёлым: у ВСЕХ диких покемонов базовый стат падал до
+  // запасных 50, то есть HP, скорость, атака и урон не зависели от вида.
+  // Дикая Блисси отвечала тем же HP, что и дикий Червячок.
+  //
+  // Поддерживаем оба вида аргумента, чтобы починить все существующие вызовы
+  // разом и не ломать новые.
+  const o: StatOptions = typeof opts === 'boolean' ? { isWild: opts } : (opts || {});
+  const isWild = o.isWild || false;
   const baseStats = isWild ? pokemon?.stats : pokemon?.apiData?.stats;
   const statObj = Array.isArray(baseStats)
     ? baseStats.find((s: any) => s?.stat?.name === statName)
     : undefined;
   const base = statObj ? statObj.base_stat : 50;
 
-  const level = opts.level ?? (isWild ? 50 : (pokemon?.baseLevel ?? 1) + (pokemon?.candiesEaten || 0));
+  const level = o.level ?? (isWild ? 50 : (pokemon?.baseLevel ?? 1) + (pokemon?.candiesEaten || 0));
   const short = (STAT_MAP as any)[statName] || 'hp';
 
   const iv = isWild
-    ? (pokemon?.wildIVs?.[short] ?? opts.ivs?.[short] ?? 15)
-    : (opts.ivs?.[short] ?? pokemon?.ivs?.[short] ?? 15);
-  const ev = isWild ? 0 : (opts.evs?.[short] ?? pokemon?.evs?.[short] ?? 0);
+    ? (pokemon?.wildIVs?.[short] ?? o.ivs?.[short] ?? 15)
+    : (o.ivs?.[short] ?? pokemon?.ivs?.[short] ?? 15);
+  const ev = isWild ? 0 : (o.evs?.[short] ?? pokemon?.evs?.[short] ?? 0);
 
   let result: number;
   if (statName === 'hp') {
     result = Math.floor(0.01 * (2 * base + iv + Math.floor(0.25 * ev)) * level) + level + 10;
   } else {
-    const natureMod = isWild ? 1 : natureModifier(pokemon?.natureIdx, short, opts.natures);
+    const natureMod = isWild ? 1 : natureModifier(pokemon?.natureIdx, short, o.natures);
     result = Math.floor((Math.floor((2 * base + iv + Math.floor(0.25 * ev)) * level / 100) + 5) * natureMod);
     // Тренировка: единственный источник этого бонуса, применяется везде,
     // где считается стат, — и в бою, и в профиле.
@@ -109,13 +123,13 @@ export function calculateStat(pokemon: any, statName: string, opts: StatOptions 
   }
 
   // Показанные в бою стадии (Swords Dance, Growl и т.п.)
-  if (!opts.ignoreBattleOnly && pokemon?.statStages && statName !== 'hp') {
+  if (!o.ignoreBattleOnly && pokemon?.statStages && statName !== 'hp') {
     const stage = pokemon.statStages[short];
     if (stage) result = Math.floor(result * stageMultiplier(stage));
   }
 
   // Предметы и способности, влияющие на статы
-  if (!opts.ignoreBattleOnly && !isWild && pokemon?.heldItem) {
+  if (!o.ignoreBattleOnly && !isWild && pokemon?.heldItem) {
     const item = pokemon.heldItem;
     const choiceMap: Record<string, string> = {
       choiceBand: 'attack',

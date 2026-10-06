@@ -133,3 +133,65 @@ describe('вспомогательные множители', () => {
     expect(stageMultiplier(-1)).toBeCloseTo(2 / 3);
   });
 });
+
+// ======================================================================
+// calculateStat — аргумент isWild булевым значением
+// ======================================================================
+// Регрессия на настоящий баг: в calculateStat передавали `true` вместо
+// `{ isWild: true }`. У булева значения нет поля isWild, поэтому isWild всегда
+// был false, и база бралась из `pokemon.apiData.stats` — а у дикого покемона
+// такого поля нет (S.activeWild это сырой ответ PokeAPI со `stats` на объекте).
+// В результате у ВСЕХ диких покемонов базовый стат падал до запасных 50:
+// HP, скорость и урон не зависели от вида.
+describe('calculateStat — boolean вместо { isWild }', () => {
+  const wild = {
+    name: 'blissey',
+    stats: [
+      { base_stat: 255, stat: { name: 'hp' } },
+      { base_stat: 10, stat: { name: 'attack' } },
+      { base_stat: 10, stat: { name: 'defense' } },
+      { base_stat: 75, stat: { name: 'special-attack' } },
+      { base_stat: 135, stat: { name: 'special-defense' } },
+      { base_stat: 55, stat: { name: 'speed' } },
+    ],
+    wildIVs: { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 },
+  };
+
+  it('boolean true считается как дикий (статы вида, а не запасные 50)', () => {
+    // HP = floor(0.01 * (2*255 + 31) * 50) + 50 + 10 = 330
+    const hp = calculateStat(wild, 'hp', true);
+    expect(hp).toBe(330);
+  });
+
+  it('старое поведение (запасные 50) больше не возвращается', () => {
+    // С запасной базой 50 и iv 15 вышло бы floor(0.01*(2*50+15)*50)+60 = 117.
+    expect(calculateStat(wild, 'hp', true)).not.toBe(117);
+  });
+
+  it('boolean true и { isWild: true } дают одно и то же', () => {
+    for (const stat of ['hp', 'attack', 'defense', 'special-attack', 'speed']) {
+      expect(calculateStat(wild, stat, true)).toBe(calculateStat(wild, stat, { isWild: true }));
+    }
+  });
+
+  it('атака дикого считается по своему виду (10), а не по 50', () => {
+    // floor((floor((2*10 + 31) * 50 / 100) + 5) * 1) = floor(25.5 + 5) = 30
+    expect(calculateStat(wild, 'attack', true)).toBe(30);
+  });
+
+  it('свой покемон по-прежнему берёт статы из apiData.stats', () => {
+    const own = {
+      apiData: {
+        stats: [
+          { base_stat: 255, stat: { name: 'hp' } },
+          { base_stat: 10, stat: { name: 'attack' } },
+        ],
+      },
+      baseLevel: 50,
+      ivs: { hp: 31, atk: 31 },
+      evs: { hp: 0, atk: 0 },
+    };
+    expect(calculateStat(own, 'hp', false)).toBe(330);
+    expect(calculateStat(own, 'hp', { isWild: false })).toBe(330);
+  });
+});
