@@ -29,7 +29,6 @@
  *   - initTelegram()       — Telegram.WebApp.ready()
  *   - setupSocketAuthEvents() — обработчик auth_expired
  *   - TRAINER_AVATARS      — массив ID спрайтов
- *   - STARTER_POKEMON      — массив стартовых покемонов
  * ============================================================
  */
 
@@ -52,16 +51,10 @@ export const TRAINER_AVATARS = [
 export type TrainerAvatar = (typeof TRAINER_AVATARS)[number];
 
 // ── Valid starter Pokemon ────────────────────────────────────────────────
-export const STARTER_POKEMON = [
-  { id: 'bulbasaur', name: 'Bulbasaur', type: 'Grass/Poison', emoji: '🌱' },
-  { id: 'charmander', name: 'Charmander', type: 'Fire', emoji: '🔥' },
-  { id: 'squirtle', name: 'Squirtle', type: 'Water', emoji: '💧' },
-  { id: 'chikorita', name: 'Chikorita', type: 'Grass', emoji: '🌿' },
-  { id: 'cyndaquil', name: 'Cyndaquil', type: 'Fire', emoji: '🔥' },
-  { id: 'totodile', name: 'Totodile', type: 'Water', emoji: '🐊' },
-  { id: 'pikachu', name: 'Pikachu', type: 'Electric', emoji: '⚡' },
-  { id: 'eevee', name: 'Eevee', type: 'Normal', emoji: '🦊' },
-] as const;
+// Раньше здесь жил массив STARTER_POKEMON из 8 покемонов. Он ни разу не
+// использовался: выбор стартовика идёт по GEN_STARTERS из data/starters.ts,
+// где девять поколений. Два источника истины расходились, и правку можно было
+// внести не туда — дубль удалён, единственный источник — data/starters.ts.
 
 // ── CSS for login/register overlays (injected once) ──────────────────────
 const OVERLAY_STYLES = `

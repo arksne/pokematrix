@@ -50,8 +50,6 @@
  *   LEGENDARY_NAMES   — Set<string> — имена легендарок для звёзд редкости
  *   eliteFour         — Member[]     — Элитная Четвёрка Канто (команды + награды)
  *   champion          — Member       — Чемпион Канто
- *   johtoEliteFour    — Member[]     — Элитная Четвёрка Джото
- *   johtoChampion     — Member       — Чемпион Джото
  *   generateUID       — () => string — уникальный идентификатор
  *   getTrainerId      — (tgUser?) => string — ID текущего тренера
  *   lsKey             — (name, tgUser?) => string — ключ localStorage с префиксом
@@ -68,6 +66,10 @@ import { gymLeaders } from '../data/gyms.js';
 import { ITEMS } from '../data/items.js';
 import { trainingStages } from '../data/training.js';
 import { QUEST_CONFIGS } from '../data/quests.js';
+// baseStatTotal — единственная реализация подсчёта суммы базовых статов. Раньше
+// тот же reduce был продублирован прямо в getPowerStars(), и две копии рано или
+// поздно разошлись бы. battle/stats.ts не импортирует utils, поэтому цикла нет.
+import { baseStatTotal } from '../battle/stats.js';
 
 // === DATA CONSTANTS ===
 export const LEGENDARY_SET = new Set([
@@ -151,67 +153,6 @@ export const champion = {
   moneyReward: 15000
 };
 
-// Johto elite four and champion
-export const johtoEliteFour = [
-  {
-    name: 'Уилл', title: 'Элитная Четверка Джото — Экстрасенс', type: 'psychic',
-    team: [
-      { name: 'xatu', level: 50, move1: 'psychic', move2: 'confuse-ray' },
-      { name: 'exeggutor', level: 52, move1: 'psychic', move2: 'solar-beam' },
-      { name: 'slowbro', level: 52, move1: 'surf', move2: 'psychic' },
-      { name: 'jynx', level: 53, move1: 'ice-punch', move2: 'psychic' },
-      { name: 'espeon', level: 55, move1: 'psychic', move2: 'morning-sun' }
-    ],
-    moneyReward: 7000
-  },
-  {
-    name: 'Кога', title: 'Элитная Четверка Джото — Яд', type: 'poison',
-    team: [
-      { name: 'ariados', level: 51, move1: 'sludge-bomb', move2: 'spider-web' },
-      { name: 'venomoth', level: 52, move1: 'psychic', move2: 'sludge-bomb' },
-      { name: 'muk', level: 54, move1: 'sludge', move2: 'minimize' },
-      { name: 'weezing', level: 55, move1: 'sludge-bomb', move2: 'explosion' },
-      { name: 'crobat', level: 56, move1: 'wing-attack', move2: 'poison-fang' }
-    ],
-    moneyReward: 8000
-  },
-  {
-    name: 'Бруно', title: 'Элитная Четверка Джото — Бой', type: 'fighting',
-    team: [
-      { name: 'hitmontop', level: 54, move1: 'rolling-kick', move2: 'quick-attack' },
-      { name: 'hitmonlee', level: 55, move1: 'jump-kick', move2: 'rolling-kick' },
-      { name: 'hitmonchan', level: 55, move1: 'ice-punch', move2: 'fire-punch' },
-      { name: 'machamp', level: 57, move1: 'cross-chop', move2: 'rock-slide' },
-      { name: 'machamp', level: 59, move1: 'dynamic-punch', move2: 'strength' }
-    ],
-    moneyReward: 9000
-  },
-  {
-    name: 'Карен', title: 'Элитная Четверка Джото — Тьма', type: 'dark',
-    team: [
-      { name: 'umbreon', level: 56, move1: 'faint-attack', move2: 'confuse-ray' },
-      { name: 'vileplume', level: 55, move1: 'petal-dance', move2: 'sludge-bomb' },
-      { name: 'murkrow', level: 57, move1: 'shadow-ball', move2: 'drill-peck' },
-      { name: 'gengar', level: 58, move1: 'shadow-ball', move2: 'destiny-bond' },
-      { name: 'houndoom', level: 60, move1: 'crunch', move2: 'flamethrower' }
-    ],
-    moneyReward: 10000
-  }
-];
-
-export const johtoChampion = {
-  name: 'Лэнс (Чемпион Джото)', title: 'Чемпион Лиги Джото', type: 'dragon',
-  team: [
-    { name: 'gyarados', level: 58, move1: 'hydro-pump', move2: 'dragon-rage' },
-    { name: 'dragonite', level: 60, move1: 'hyper-beam', move2: 'dragon-rage' },
-    { name: 'charizard', level: 59, move1: 'flamethrower', move2: 'fly' },
-    { name: 'aerodactyl', level: 60, move1: 'hyper-beam', move2: 'ancient-power' },
-    { name: 'dragonite', level: 62, move1: 'hyper-beam', move2: 'outrage' },
-    { name: 'dragonite', level: 64, move1: 'hyper-beam', move2: 'thunder' }
-  ],
-  moneyReward: 15000
-};
-
 // === UID ===
 let uidCounter = Date.now();
 export function generateUID() { return (++uidCounter).toString(36) + Math.random().toString(36).substr(2, 6); }
@@ -221,7 +162,7 @@ export function lsKey(name, tgUser?) { return `league17_${name}_${getTrainerId(t
 // === STAR RATINGS — pure functions, no mutable state dependency ===
 export function getPowerStars(mon) {
   if (!mon.apiData?.stats) return 1;
-  const bst = mon.apiData.stats.reduce((sum, s) => sum + s.base_stat, 0);
+  const bst = baseStatTotal(mon);
   if (bst >= 650) return 10;
   if (bst >= 600) return 9;
   if (bst >= 550) return 8;
