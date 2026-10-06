@@ -4,6 +4,12 @@
  *   node tools/verify/run.mjs            полный прогон
  *   node tools/verify/run.mjs --keep-pg  не пересоздавать БД
  *   node tools/verify/run.mjs --serve    только поднять и ждать (ручная отладка)
+ *   node tools/verify/run.mjs --only=12,15  только эти сьюты из [5]..[15]
+ *   node tools/verify/run.mjs --skip=10     все сьюты, кроме перечисленных
+ *
+ * Для быстрой петли при правках хватает `npx tsc --noEmit` и
+ * `npm run test:vitest` (около 30 секунд вместе). Полный прогон нужен перед
+ * пушем; --only/--skip позволяют прогнать только затронутые сьюты.
  *
  * Что происходит:
  *   1. поднимается настоящий PostgreSQL (PGlite в режиме pg-wire сервера);
@@ -35,6 +41,26 @@ const KEEP_PG = process.argv.includes('--keep-pg');
 const SERVE_ONLY = process.argv.includes('--serve');
 const SKIP_BUILD = process.argv.includes('--skip-build') || existsSync(path.join(DIST_DIR, 'index.html'))
   && existsSync(path.join(SERVER_DIR, 'dist', 'index.js'));
+
+/**
+ * Выборочный прогон сьютов — чтобы не ждать полные 6+ минут при каждой правке.
+ *
+ *   --only=12,15     выполнить только эти сьюты из списка [5]..[15]
+ *   --skip=4,10      выполнить все, кроме перечисленных
+ *
+ * Подготовка (миграции, PGlite, сборка, сервер, сценарии в браузере) идёт
+ * всегда: без неё сьютам не к чему подключаться. Экономия — на самих сьютах,
+ * каждый из которых поднимает свой процесс и браузер.
+ */
+function parseIdList(flag) {
+  const arg = process.argv.find((x) => x.startsWith(`--${flag}=`));
+  if (!arg) return null;
+  const ids = arg.slice(flag.length + 3).split(',').map((s) => s.trim()).filter(Boolean);
+  return ids.length ? new Set(ids) : null;
+}
+const ONLY = parseIdList('only');
+const SKIP = parseIdList('skip');
+const selected = (id) => (ONLY ? ONLY.has(id) : SKIP ? !SKIP.has(id) : true);
 
 const log = (...a) => console.log(...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -442,19 +468,23 @@ async function main() {
   // Отдельными процессами: PGlite обслуживает одно соединение, поэтому
   // синхронный запуск (spawnSync) заблокировал бы event loop и БД перестала бы
   // отвечать. spawn + ожидание оставляет цикл событий свободным.
-  for (const [title, file] of [
-    ['[5] проверки данных', 'data.test.mjs'],
-    ['[6] проверки безопасности', 'security.test.mjs'],
-    ['[7] проверки экономики', 'economy.test.mjs'],
-    ['[8] схема против настоящего сейва', 'schema-real-save.test.mjs'],
-    ['[9] сохранения: конфликт версий и целостность', 'save-conflict.test.mjs'],
-    ['[10] рендер мира', 'world-render.test.mjs'],
-    ['[11] достижимость обмена', 'trade-reach.test.mjs'],
-    ['[12] аудит боевых механик', 'battle-mechanics.test.mjs'],
-    ['[13] аудит графа импортов клиента', 'import-audit.test.mjs'],
-    ['[14] аудит DOM-контракта', 'dom-audit.test.mjs'],
-    ['[15] боевой цикл и сохранение боя', 'battle-flow.test.mjs'],
+  for (const [id, title, file] of [
+    ['5', '[5] проверки данных', 'data.test.mjs'],
+    ['6', '[6] проверки безопасности', 'security.test.mjs'],
+    ['7', '[7] проверки экономики', 'economy.test.mjs'],
+    ['8', '[8] схема против настоящего сейва', 'schema-real-save.test.mjs'],
+    ['9', '[9] сохранения: конфликт версий и целостность', 'save-conflict.test.mjs'],
+    ['10', '[10] рендер мира', 'world-render.test.mjs'],
+    ['11', '[11] достижимость обмена', 'trade-reach.test.mjs'],
+    ['12', '[12] аудит боевых механик', 'battle-mechanics.test.mjs'],
+    ['13', '[13] аудит графа импортов клиента', 'import-audit.test.mjs'],
+    ['14', '[14] аудит DOM-контракта', 'dom-audit.test.mjs'],
+    ['15', '[15] боевой цикл и сохранение боя', 'battle-flow.test.mjs'],
   ]) {
+    if (!selected(id)) {
+      log(`\n${title} — пропущен (--only/--skip)`);
+      continue;
+    }
     log(`\n${title}`);
     const r = await runSuite(title, file);
     for (const l of r.out.split('\n')) {
