@@ -45,6 +45,7 @@ import { apiFetch } from '../game/apiClient.js';                        // apiFe
 import { checkEvolution, triggerEvolution } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
 import { natures } from '../data/natures.js';                            // Массив характеров (nature) с buff/nerf модификаторами
 import { ITEMS } from '../data/items.js';                                // Массив всех предметов игры (ItemDef[])
+import { getAbilityNameRu } from '../data/abilities.js';                 // Русские названия способностей для UI
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy } from './logic.js';
@@ -2232,13 +2233,17 @@ function updateMoveButtonUIs() {
  * Для дикого: из S.activeWild.abilities[0].ability.name
  */
 function updateAbilityDisplay() {
+  // Название показываем по-русски из справочника (data/abilities.ts), а не
+  // сырым англоязычным id из PokeAPI. Если способности нет в справочнике —
+  // getAbilityNameRu вернёт сам id, и в бою всё равно будет видно, что за
+  // способность активна.
   if (S.activePlayerMon) {
-    const abilityName = getAbilityName(S.activePlayerMon, false);
-    document.getElementById('player-ability').innerText = abilityName ? `【${abilityName}】` : '';
+    const abilityId = getAbilityName(S.activePlayerMon, false);
+    document.getElementById('player-ability').innerText = abilityId ? `【${getAbilityNameRu(abilityId)}】` : '';
   }
   if (S.activeWild) {
-    const wildAbility = S.activeWild.abilities?.[0]?.ability?.name || '';
-    document.getElementById('wild-ability').innerText = wildAbility ? `【${wildAbility}】` : '';
+    const wildAbilityId = S.activeWild.abilities?.[0]?.ability?.name || '';
+    document.getElementById('wild-ability').innerText = wildAbilityId ? `【${getAbilityNameRu(wildAbilityId)}】` : '';
   }
 }
 
@@ -2275,7 +2280,7 @@ function updatePlayerHpUI() {
   if (pct <= 20) bar.classList.add('hp-low');
   else if (pct <= 50) bar.classList.add('hp-medium');
 
-  // EXP bar — формула опыта (кубическая)
+  // EXP bar — формула опыта: канонная medium-fast (n³), спека 3.1 / раунд 4
   const expToCurrent = Math.pow(S.activePlayerMon.baseLevel, 3);   // EXP на текущем уровне
   const expToNext = S.activePlayerMon.expToNext || Math.pow(S.activePlayerMon.baseLevel + 1, 3); // EXP на след. уровне
   let expPct = ((S.activePlayerMon.exp - expToCurrent) / (expToNext - expToCurrent)) * 100;

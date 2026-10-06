@@ -1,7 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 // starter.ts — ВЫБОР СТАРТОВОГО ПОКЕМОНА
 // ─────────────────────────────────────────────────────────────
-// При начале игры предлагает выбрать стартового покемона из 3 генераций.
+// При начале игры предлагает вытянуть стартового покемона: 9 карт-сюрпризов
+// (по одной на поколение), но выпадает случайный из всех 27 (спека 3.22).
 // Загружает данные из PokeAPI, создаёт объект покемона и добавляет в команду.
 //
 // ЗАВИСИМОСТИ:
@@ -29,6 +30,15 @@ import { natures } from '../data/natures.js';         // Массив харак
 //   ...                                              // и т.д. до 9
 // ]
 import { GEN_STARTERS } from '../data/starters.js';
+
+// ── randomStarter: случайный стартовик из ВСЕХ 27 ──
+// Спека 3.22: стартовик — случайный из всех 27, без привязки к выбранной карте.
+// Карты поколений в модалке остаются (9 карт-сюрпризов), но любая карта тянет
+// из общего пула, а не из своего поколения.
+const ALL_STARTERS: string[] = GEN_STARTERS.flat();
+export function randomStarter(): string {
+  return ALL_STARTERS[Math.floor(Math.random() * ALL_STARTERS.length)];
+}
 
 // ── giveStarterMon: создать и выдать стартового покемона ──
 // Принимает pokemonName — имя покемона (например, 'charmander')
@@ -66,7 +76,7 @@ export async function giveStarterMon(pokemonName: string) {
     starterData.moves = learnedMoves;
 
     // ── 3. Расчёт базовых характеристик ──
-    // EXP = уровень³ (формула из Pokémon)
+    // EXP = уровень³ — это и есть канонная medium-fast (раунд 4: 1/125k/1M)
     const exp = Math.pow(baseLevel, 3);
     const expToNext = Math.pow(baseLevel + 1, 3);  // EXP до следующего уровня
     const baseHp = starterData.stats[0].base_stat;  // Базовый HP из PokeAPI
@@ -154,21 +164,21 @@ export async function giveStarterMon(pokemonName: string) {
 }
 
 // ── giveStarter: показать интерфейс выбора стартового покемона ──
-// Показывает модалку с N картами (по одной на поколение)
-// При клике на карту — случайный покемон из этого поколения
+// Показывает модалку с 9 картами (по одной на поколение)
+// При клике на любую карту — случайный покемон из всех 27 (спека 3.22)
 // Возвращает Promise, который резолвится когда пользователь выбрал покемона
-// Если модалка не найдена — выдаёт Bulbasaur по умолчанию
+// Если модалка не найдена — выдаёт случайного из 27 по умолчанию
 export function giveStarter(): Promise<void> {
   return new Promise((resolve) => {
     // Находим модалку и сетку (DOM-элементы)
     const modal = document.getElementById('starter-modal');
     const grid = document.getElementById('starter-grid');
     if (!modal || !grid) {
-      // Если модалки нет — выдаём Bulbasaur (запасной вариант). Промис резолвим
+      // Если модалки нет — выдаём случайного из 27 (запасной вариант). Промис резолвим
       // сразу, а сама выдача идёт отдельной цепочкой: иначе сетевая ошибка в
       // PokeAPI оставляла бы вызывающий код ждать навсегда.
       resolve();
-      giveStarterMon('bulbasaur').catch((e) => {
+      giveStarterMon(randomStarter()).catch((e) => {
         console.error('Не удалось выдать стартовика', e);
         showToast('Не удалось выдать стартовика. Обновите игру.', true);
       });
@@ -205,11 +215,11 @@ export function giveStarter(): Promise<void> {
           showToast('Не удалось выдать стартовика. Обновите игру.', true);
         });
     };
-    document.addEventListener('starter-modal:dismissed', () => finish('bulbasaur', true), { once: true });
+    document.addEventListener('starter-modal:dismissed', () => finish(randomStarter(), true), { once: true });
 
     // Страховка на случай, если модалка исчезла иначе (например, скрыта скриптом):
-    // через 90 секунд отдаём стартовика, чтобы init не остался висеть навсегда.
-    setTimeout(() => finish('bulbasaur', true), 90_000);
+    // через 90 секунд отдаём случайного из 27, чтобы init не остался висеть навсегда.
+    setTimeout(() => finish(randomStarter(), true), 90_000);
 
     // Очищаем сетку
     grid.innerHTML = '';
@@ -217,8 +227,8 @@ export function giveStarter(): Promise<void> {
     const title = document.querySelector('#starter-modal h2');
     if (title) (title as HTMLElement).innerText = 'Выберите карту (Поколения 1-9)';
 
-    // GEN_STARTERS — массив поколений, каждое поколение = массив имён
-    GEN_STARTERS.forEach((gen: string[], idx: number) => {
+    // GEN_STARTERS — 9 поколений, но тянем из общего пула ALL_STARTERS (спека 3.22)
+    GEN_STARTERS.forEach(() => {
       // Создаём карту для поколения
       const div = document.createElement('div');
       div.className = 'starter-option';
@@ -241,8 +251,8 @@ export function giveStarter(): Promise<void> {
       div.addEventListener('mouseenter', () => div.style.transform = 'scale(1.05)');
       div.addEventListener('mouseleave', () => div.style.transform = 'scale(1)');
 
-      // При клике — выбираем случайного покемона из этого поколения
-      div.addEventListener('click', () => finish(gen[Math.floor(Math.random() * gen.length)], false));
+      // При клике — случайный покемон из ВСЕХ 27 (спека 3.22), не из поколения карты
+      div.addEventListener('click', () => finish(randomStarter(), false));
       grid.appendChild(div);
     });
 

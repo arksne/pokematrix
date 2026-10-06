@@ -25,6 +25,7 @@
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
 import { gymLeaders } from '../data/gyms.js';      // Данные лидеров залов
+import { natures } from '../data/natures.js';          // Характеры (для случайного)
 import { state, getTrainerId } from '../game/state.js';  // Глобальное состояние
 import { showSelectionModal, showToast } from '../utils/dom.js';  // UI модалки/тосты
 import { addItem } from '../game/actions.js';          // Добавление предметов
@@ -32,42 +33,15 @@ import { itemDef } from '../game/state.js';            // Название пр�
 import { autoSave } from '../game/save.js';              // Автосохранение
 import { renderTeamGrid } from './profile.js';          // Обновление сетки команды
 
-// ── getBestNatureIdx: определить лучший характер для покемона ──
-// Анализирует базовые статы и выбирает характер, который усиливает
-// самый высокий стат и ослабляет самый низкий
-function getBestNatureIdx(pokeData) {
-  const stats = pokeData.stats;
-  // Извлекаем базовые значения статов
-  const atk = stats.find(s => s.stat.name === 'attack')?.base_stat || 50;
-  const def = stats.find(s => s.stat.name === 'defense')?.base_stat || 50;
-  const spa = stats.find(s => s.stat.name === 'special-attack')?.base_stat || 50;
-  const spd = stats.find(s => s.stat.name === 'special-defense')?.base_stat || 50;
-  const spe = stats.find(s => s.stat.name === 'speed')?.base_stat || 50;
-
-  // Сортируем статы по убыванию
-  const entries = [['atk', atk], ['def', def], ['spa', spa], ['spd', spd], ['spe', spe]];
-  entries.sort((a, b) => b[1] - a[1]);
-  const best = entries[0][0];  // Самый высокий стат
-
-  // Маппинг названий статов → индексы характеров в массиве natures
-  // Индексы выбраны так, чтобы buff был на лучший стат
-  const natureMap: Record<string, number> = {
-    atk: 3,   // Adamant (+Atk -SpA)
-    def: 8,   // Impish (+Def -SpA)
-    spe: 13,  // Jolly (+Spe -SpA)
-    spa: 15,  // Modest (+SpA -Atk)
-    spd: 24,  // Careful (+SpD -SpA)
-  };
-  return natureMap[best] || 0;  // Default: Hardy (нейтральный)
-}
-
 // ── createAndGivePokemon: создать покемона через PokeAPI ────
 // Принимает:
 //   pokemonName — имя вида (например, 'charizard')
 //   level — уровень (по умолчанию 1)
 //   opts — { isShiny, natureIdx }
-// Загружает данные из PokeAPI, создаёт объект покемона с идеальными IV (31),
-// добавляет в команду, возвращает созданный объект или null при ошибке
+// Загружает данные из PokeAPI, создаёт объект покемона с ПОВЫШЕННЫМИ IV
+// (24-31, но никогда не все 31 — спека 2.3) и СЛУЧАЙНЫМ характером,
+// добавляет в команду (или в PC при полной команде), возвращает созданный
+// объект или null при ошибке
 export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {}) {
   try {
     // Загружаем данные покемона из PokeAPI
@@ -76,11 +50,18 @@ export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {
     const pokeData = await res.json();
 
     const baseHp = pokeData.stats[0].base_stat;
-    const ivs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };  // Идеальные IV
+    // Повышенные IV (спека 2.3): 24-31 каждый, но никогда не все 31 —
+    // идеальные гены гриндятся в природе, а не выдаются за зал.
+    const rollBoosted = () => 24 + Math.floor(Math.random() * 8);
+    const ivs = { hp: rollBoosted(), atk: rollBoosted(), def: rollBoosted(), spa: rollBoosted(), spd: rollBoosted(), spe: rollBoosted() };
+    if (Object.values(ivs).every(v => v === 31)) {
+      const keys = Object.keys(ivs);
+      ivs[keys[Math.floor(Math.random() * keys.length)]] = 30;
+    }
     const maxHp = Math.floor(0.01 * (2 * baseHp + ivs.hp) * level) + level + 10;
 
-    // Определяем индекс характера: из opts или вычисляем лучший
-    const natureIdx = opts.natureIdx !== undefined ? opts.natureIdx : getBestNatureIdx(pokeData);
+    // Характер: случайный (спека 2.3), из opts — только явный оверрайд
+    const natureIdx = opts.natureIdx !== undefined ? opts.natureIdx : Math.floor(Math.random() * natures.length);
 
     const pokemon = {
       uid: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),  // Уникальный ID
@@ -107,6 +88,13 @@ export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {
     };
 
     state.myTeam.push(pokemon);  // Добавляем в команду
+    if (state.myTeam.length > 6) {
+      // Команда была полна: лишний уходит в PC, иначе сервер отклонит сейв
+      // (myTeam max 6) и награда потеряется при следующей синхронизации
+      const extra = state.myTeam.splice(6);
+      if (state.pcBoxes.length === 0) state.pcBoxes.push([]);
+      state.pcBoxes[0].push(...extra);
+    }
     renderTeamGrid();             // Обновляем отображение
     return pokemon;
   } catch (e) {
@@ -127,7 +115,7 @@ export function showGymRewardSelection(locId) {
   // Формируем список выбора: все покемоны лидера
   const choices = leader.team.map(m => ({
     label: `🔑 Lv.1 ${m.name}`,
-    subtitle: `Тот же покемон, что был в бою — Lv.1, шини, идеальные гены`,
+    subtitle: `Тот же покемон, что был в бою — Lv.1, шини, повышенные гены`,
     value: m.name
   }));
 
