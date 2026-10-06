@@ -2260,7 +2260,10 @@ function updateWildHpUI() {
  * updatePlayerHpUI — обновить HP бар + EXP бар игрока.
  * HP бар: зелёный/жёлтый/красный (как у дикого).
  * EXP бар: показ прогресса до следующего уровня.
- * EXP считается по формуле: baseLevel^3 — expToNext
+ * EXP считается по формуле baseLevel^3 — это канонная medium-fast кривая
+ * Gen V+. На уровне 1 — 1 EXP, на 50 — 125 000, на 100 — 1 000 000.
+ * Альтернативы (Erratic=кубическая×2 на 1-50, Fast=0.8n³, Slow=1.25n³) сейчас не
+ * используются — интервью выбрало medium-fast как базовый темп.
  */
 function updatePlayerHpUI() {
   if (!S.activePlayerMon) return;
