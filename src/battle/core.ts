@@ -2938,6 +2938,7 @@ async function useMove(moveIndex) {
         defenderAbilityName: getAbilityName(S.activeWild, true),
         attackerAbilityName: getAbilityName(S.activePlayerMon, false),
           defenderCurrentHp: S.wildCurHP,
+          defenderMaxHp: S.wildMaxHP,
       });
       let hitDmg = dmgResult.damage;
       const bMod = applyBarrierMod(1, move, false, dmgResult.isCrit);
@@ -3522,6 +3523,7 @@ async function runEnemyTurnBody() {
       defenderAbilityName: getAbilityName(S.activePlayerMon, false),
       attackerAbilityName: getAbilityName(S.activeWild, true),
         defenderCurrentHp: S.activePlayerMon.currentHp,
+        defenderMaxHp: S.activePlayerMon.maxHp,
     });
     let hitDmg = dmgResult.damage;
     const bMod = applyBarrierMod(1, chosenMove, true, dmgResult.isCrit); // Барьеры игрока

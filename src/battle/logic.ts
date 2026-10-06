@@ -247,6 +247,19 @@ export function isStatusImmune(ailment, target, checkAbilities = true) {
  * Pure damage calculation. Returns { damage, isCrit, messageParts[] }.
  * Does NOT mutate anything.
  */
+/**
+ * SOUND_MOVES — звуковые атаки. Нужны способности Punk Rock: она ослабляет
+ * получаемый звук вдвое и усиливает свой на 30%. Список конечный, потому что
+ * PokeAPI не помечает звуковые атаки отдельным флагом.
+ */
+export const SOUND_MOVES = new Set([
+  'boomburst', 'bug-buzz', 'chatter', 'confide', 'disarming-voice', 'echoed-voice',
+  'grass-whistle', 'growl', 'heal-bell', 'howl', 'hyper-voice', 'metal-sound',
+  'noble-roar', 'overdrive', 'parting-shot', 'perish-song', 'relic-song',
+  'roar', 'round', 'screech', 'shadow-pan', 'sing', 'snarl', 'snore',
+  'sonic-boom', 'sparkling-aria', 'supersonic', 'uproar',
+]);
+
 export function calculateDamage({
   move,                // PokeAPI move data
   attacker,            // pokemon-like obj with apiData.stats / .stats
@@ -269,6 +282,9 @@ alwaysCrit = false,
     // живёт в S.wildCurHP и в объекте покемона не синхронизировано — без этого
     // Super Fang и OHKO считали бы урон по мусору.
     defenderCurrentHp = undefined,
+    // Максимальное HP защитника. Нужно способностям, которые смотрят на
+    // «полное HP» (Multiscale, Shadow Shield).
+    defenderMaxHp = undefined,
   }) {
   const parts = [];
   const power = move.power;
@@ -347,6 +363,10 @@ alwaysCrit = false,
     const tn = t.type?.name || t;
     if (tn === move.type?.name) stab = 1.5;
   });
+  // Adaptability: бонус за совпадение типа выше — 2× вместо 1.5×.
+  if (stab > 1 && (attackerAbilityName || '').toLowerCase().replace(/[^a-z0-9-]/g, '') === 'adaptability') {
+    stab = 2.0;
+  }
 
   const typeMult = getTypeMultiplier(move.type?.name, defender.apiData?.types || defender.types || []);
   const weatherMult = getWeatherMultiplier(move.type?.name, weather);
@@ -356,7 +376,17 @@ alwaysCrit = false,
   // Раньше здесь стояла таблица Gen II–V с базой 1/16, то есть криты случались
   // в полтора раза чаще задуманного.
   const CRIT_RATES = [1 / 24, 1 / 8, 1 / 2, 1, 1];
-  const critRate = alwaysCrit ? 1.0 : CRIT_RATES[Math.min(critRateStage, CRIT_RATES.length - 1)];
+
+  // Способности, влияющие на крит:
+  //   Super Luck  — атакующему +1 ступень (крит в полтора раза чаще)
+  //   Battle Armor / Shell Armor — по владельцу криты невозможны вообще
+  const normAtkAbil = (attackerAbilityName || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const normDefAbil = (defenderAbilityName || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  let effectiveCritStage = critRateStage;
+  if (normAtkAbil === 'superluck') effectiveCritStage += 1;
+  const critBlocked = normDefAbil === 'battlearmor' || normDefAbil === 'shellarmor';
+  const critRate = critBlocked ? 0
+    : (alwaysCrit ? 1.0 : CRIT_RATES[Math.min(effectiveCritStage, CRIT_RATES.length - 1)]);
   const isCrit = Math.random() < critRate;
   const critMult = isCrit ? 1.5 : 1.0;
 
@@ -398,6 +428,27 @@ alwaysCrit = false,
     if (defAbil === 'thick-fat' && (moveType === 'fire' || moveType === 'ice')) effectiveTypeMult *= 0.5;
     if (defAbil === 'dry-skin' && moveType === 'fire') effectiveTypeMult *= 1.25;
     if ((defAbil === 'filter' || defAbil === 'solid-rock') && effectiveTypeMult > 1) effectiveTypeMult *= 0.75;
+    // Multiscale / Shadow Shield: при полном HP защитник получает вдвое меньше.
+    // Проверка «полное HP» — по переданному defenderCurrentHp, а если его нет
+    // (тесты, вызовы без контекста), способность не срабатывает.
+    if ((defAbil === 'multiscale' || defAbil === 'shadow-shield')
+      && typeof defenderCurrentHp === 'number' && typeof defenderMaxHp === 'number'
+      && defenderMaxHp > 0 && defenderCurrentHp >= defenderMaxHp) {
+      effectiveTypeMult *= 0.5;
+    }
+    // Fluffy: физический урон вдвое меньше, огонь вдвое больше.
+    if (defAbil === 'fluffy') {
+      if (isPhysical) effectiveTypeMult *= 0.5;
+      if (moveType === 'fire') effectiveTypeMult *= 2;
+    }
+    // Punk Rock: звуковые атаки наносят вдвое меньше.
+    if (defAbil === 'punk-rock' && SOUND_MOVES.has(move.name)) effectiveTypeMult *= 0.5;
+  }
+
+  // Scrappy: обычные и боевые атаки попадают по призракам (снимает иммунитет).
+  if (normAtkAbil === 'scrappy' && effectiveTypeMult === 0
+    && (moveType === 'normal' || moveType === 'fighting')) {
+    effectiveTypeMult = 1;
   }
   // Guts: раньше давал 1.5x Atk сгоревшему покемону, компенсируя штраф ожога.
   // По решению из спецификации ожог больше не снижает атаку — поэтому и Guts
@@ -411,16 +462,36 @@ alwaysCrit = false,
     if (atkAbil === 'sniper') sniperCritMult = 2.25;
   }
 
-  // Ability power modifier (Sheer Force 1.3x, Hustle 1.5x physical)
+  // Ability power modifier — способности, усиливающие свои атаки.
   let abilityMult = 1.0;
-  if (attackerAbilityName) {
-    const atkAbil = attackerAbilityName.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    if (atkAbil === 'sheer-force') {
+  if (normAtkAbil) {
+    if (normAtkAbil === 'sheerforce') {
       const hasSecondary = !!(move.meta?.ailment_chance || move.meta?.flinch_chance || move.meta?.stat_chance || (move.stat_changes?.length > 0));
       if (hasSecondary) abilityMult = 1.3;
     }
-    if (atkAbil === 'hustle' && isPhysical) {
+    if (normAtkAbil === 'hustle' && isPhysical) {
       abilityMult *= 1.5;
+    }
+    // Huge Power / Pure Power: физическая атака удваивается.
+    // Множитель на урон эквивалентен удвоению атаки в формуле.
+    if ((normAtkAbil === 'hugepower' || normAtkAbil === 'purepower') && isPhysical) {
+      abilityMult *= 2;
+    }
+    // Technician: слабые атаки (сила ≤ 60) на 50% сильнее.
+    if (normAtkAbil === 'technician' && power > 0 && power <= 60) {
+      abilityMult *= 1.5;
+    }
+    // Reckless: атаки с отдачей на 20% сильнее.
+    if (normAtkAbil === 'reckless' && move.meta?.drain && move.meta.drain < 0) {
+      abilityMult *= 1.2;
+    }
+    // Tinted Lens: неэффективные атаки наносят вдвое больше.
+    if (normAtkAbil === 'tintedlens' && effectiveTypeMult > 0 && effectiveTypeMult < 1) {
+      abilityMult *= 2;
+    }
+    // Punk Rock: свои звуковые атаки на 30% сильнее.
+    if (normAtkAbil === 'punkrock' && SOUND_MOVES.has(move.name)) {
+      abilityMult *= 1.3;
     }
   }
 
