@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Три экрана боя — выбор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0d0f1a;
+    --bg-card: #161a2e;
+    --bg-card-2: #1f2440;
+    --line: #2a3055;
+    --text: #e8ecf5;
+    --text-dim: #8a92b8;
+    --player: #4ade80; --player-bg: #06441e; --player-line: #1f8a4a;
+    --wild:   #ff5b6b; --wild-bg:   #4a0f1b; --wild-line:   #a83058;
+    --water:  #5bb6ff;
+    --electric: #ffe14d;
+    --fire:   #ff7849;
+    --normal: #c4c8d4;
+    --rocky:  #b88560;
+    --psychic:#ff87d8;
+    --grass:  #5ed27a;
+    --poison: #b87adc;
+    --shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { font-variant-numeric: tabular-nums; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+    padding: 32px 24px max(32px, env(safe-area-inset-bottom, 32px));
+    padding-top: max(24px, env(safe-area-inset-top, 24px));
+  }
+
+  .header {
+    max-width: 1200px;
+    margin: 0 auto 32px;
+    text-align: center;
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-weight: 800;
+    font-size: clamp(28px, 4vw, 42px);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin-bottom: 16px;
+    background: linear-gradient(120deg, var(--player) 0%, var(--electric) 50%, var(--wild) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .lede {
+    max-width: 600px;
+    margin: 0 auto;
+    color: var(--text-dim);
+  }
+
+  /* Selection: three variants */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .phone-frame {
+    background: #0a0d18;
+    border-bottom: 1px solid var(--line);
+    padding: 16px;
+    aspect-ratio: 9 / 19.5;
+    max-height: 620px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card-meta {
+    padding: 18px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+  }
+  .variant-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .variant-name {
+    font-weight: 700;
+    font-size: 20px;
+    text-wrap: balance;
+  }
+  .variant-sub {
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .pro-con {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+  .pro-con div::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: 1px;
+  }
+  .pro::before { background: var(--player); }
+  .con::before { background: var(--wild); }
+  .vote {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+  }
+  .vote button {
+    flex: 1;
+    background: var(--bg-card-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .vote button:hover {
+    background: var(--player-bg);
+    border-color: var(--player);
+  }
+  .vote button.count-con:hover {
+    background: var(--wild-bg);
+    border-color: var(--wild);
+  }
+
+  /* ──── VARIANT IIIA: FRONT ──── */
+  .v-a { padding: 12px; }
+  .v-a .opp {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 8px;
+    background: linear-gradient(180deg, #0d1126 0%, transparent 100%);
+    border-radius: 10px;
+  }
+  .v-a .opp-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .v-a .opp-lvl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .v-a .opp-hp {
+    height: 6px;
+    background: var(--wild-bg);
+    margin-top: 4px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .v-a .opp-hp > div {
+    height: 100%;
+    width: 74%;
+    background: linear-gradient(90deg, var(--wild) 0%, #ff8a9b 100%);
+  }
+  .v-a .opp-stats {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .v-a .opp-stats b {
+    color: var(--text);
+    font-weight: 700;
+  }
+  .v-a .arena {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #1a2340 0%, transparent 70%);
+    position: relative;
+    min-height: 140px;
+  }
+  .v-a .arena::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M0 20 L20 0 L40 20' stroke='%231f2440' stroke-width='1' fill='none' opacity='.3'/></svg>");
+    background-size: 40px 40px;
+    opacity: .4;
+  }
+  .v-a .sprite {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--wild) 0%, transparent 60%);
+    display: grid;
+    place-items: center;
+    font-size: 44px;
+    filter: drop-shadow(0 4px 12px rgba(255,91,107,.4));
+  }
+  .v-a .player {
+    background: linear-gradient(180deg, transparent 0%, #161a2e 100%);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .v-a .player-name {
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .v-a .player-lvl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    display: inline-block;
+    margin-left: 6px;
+  }
+  .v-a .player-bar {
+    height: 8px;
+    background: rgba(255,255,255,.08);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .v-a .player-bar > div {
+    height: 100%;
+    width: 68%;
+    background: linear-gradient(90deg, var(--player) 0%, #82eec8 100%);
+  }
+  .v-a .exp-bar {
+    height: 4px;
+    background: rgba(255,255,255,.06);
+    border-radius: 2px;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+  .v-a .exp-bar > div {
+    height: 100%;
+    width: 42%;
+    background: var(--electric);
+  }
+  .v-a .moves {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .v-a .mv {
+    background: var(--bg-card-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .v-a .mv b { font-size: 11px; }
+  .v-a .mv .pp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .v-a .type-water { color: var(--water); }
+  .v-a .type-electric { color: var(--electric); }
+  .v-a .weather {
+    text-align: center;
+    font-size: 12px;
+    color: var(--water);
+    padding: 4px;
+  }
+
+  /* ──── VARIANT IIIB: SIDE-BY-SIDE ──── */
+  .v-b { padding: 8px; gap: 8px; }
+  .v-b .header-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    padding: 4px 6px;
+  }
+  .v-b .grid-arena {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    gap: 6px;
+    align-items: center;
+    flex: 1;
+    min-height: 130px;
+  }
+  .v-b .panel {
+    background: var(--bg-card);
+    border-radius: 10px;
+    padding: 8px;
+    border: 1px solid var(--line);
+  }
+  .v-b .panel.wild { border-color: var(--wild-line); }
+  .v-b .panel.player { border-color: var(--player-line); }
+  .v-b .name {
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .v-b .lvl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .v-b .hpbar {
+    height: 5px;
+    background: rgba(255,255,255,.08);
+    border-radius: 2px;
+    margin: 4px 0;
+    overflow: hidden;
+  }
+  .v-b .hpbar > div {
+    height: 100%;
+  }
+  .v-b .panel.wild .hpbar > div {
+    width: 74%;
+    background: var(--wild);
+  }
+  .v-b .panel.player .hpbar > div {
+    width: 68%;
+    background: var(--player);
+  }
+  .v-b .sprite {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    margin: 8px auto 0;
+    display: grid;
+    place-items: center;
+    font-size: 30px;
+  }
+  .v-b .panel.wild .sprite { background: radial-gradient(circle, var(--wild) 0%, transparent 60%); }
+  .v-b .panel.player .sprite { background: radial-gradient(circle, var(--player) 0%, transparent 60%); }
+  .v-b .versus {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--text-dim);
+  }
+  .v-b .moves {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .v-b .mv {
+    background: var(--bg-card-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .v-b .mv b { font-size: 10px; }
+  .v-b .type-electric { color: var(--electric); }
+  .v-b .type-water { color: var(--water); }
+  .v-b .status-pill {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 8px;
+    background: var(--player-bg);
+    color: var(--player);
+    font-size: 9px;
+    margin-top: 4px;
+  }
+
+  /* ──── VARIANT IIIC: ENCOUNTER (split-corner) ──── */
+  .v-c { padding: 10px; gap: 6px; }
+  .v-c .opp {
+    align-self: flex-end;
+    width: 65%;
+    background: var(--bg-card);
+    border: 1px solid var(--wild-line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+  }
+  .v-c .opp-name {
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .v-c .opp-lvl { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .v-c .opp-hp {
+    height: 5px;
+    background: rgba(255,255,255,.08);
+    border-radius: 3px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .v-c .opp-hp > div { height: 100%; width: 74%; background: var(--wild); }
+  .v-c .opp-sprite {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    margin: 8px auto 0;
+    display: grid;
+    place-items: center;
+    font-size: 32px;
+    background: radial-gradient(circle, var(--wild) 0%, transparent 60%);
+  }
+  .v-c .arena {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
+    min-height: 100px;
+  }
+  .v-c .log {
+    background: rgba(0,0,0,.3);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    grid-column: span 2;
+    margin-top: 8px;
+  }
+  .v-c .log b { color: var(--text); }
+  .v-c .player {
+    background: linear-gradient(180deg, transparent 0%, var(--bg-card-2) 100%);
+    border-radius: 10px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--player-line);
+  }
+  .v-c .player-name { font-weight: 700; font-size: 14px; }
+  .v-c .player-lvl { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+  .v-c .player-hp {
+    height: 6px;
+    background: rgba(255,255,255,.08);
+    border-radius: 3px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .v-c .player-hp > div { height: 100%; width: 68%; background: var(--player); }
+  .v-c .player-exp {
+    height: 3px;
+    background: rgba(255,255,255,.06);
+    border-radius: 2px;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+  .v-c .player-exp > div { height: 100%; width: 42%; background: var(--electric); }
+  .v-c .moves {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .v-c .mv {
+    background: var(--bg-card-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  .v-c .mv b { display: block; font-size: 11px; }
+  .v-c .mv .pp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .v-c .type-electric { color: var(--electric); }
+  .v-c .type-water { color: var(--water); }
+
+  /* Mobile: stack to one column with smaller phones */
+  @media (max-width: 520px) {
+    body { padding: 24px 16px; }
+    .grid { grid-template-columns: 1fr; }
+    .phone-frame { aspect-ratio: 9 / 18; max-height: 560px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="eyebrow">Выбор экрана боя · 6 октября 2026</div>
+  <h1>Три экрана боя</h1>
+  <p class="lede">Необходимо выбрать один из трёх макетов. Все три используют один и тот же сценарий: дикий Cyndaquil 12-го уровня на дожде против Pikachu 14-го уровня с Reflect. Открывается кнопками выбора — выбранное станет ответом в задаче <code style="color:var(--electric);font-family:'JetBrains Mono',monospace">Round 6 · Экран</code>.</p>
+</header>
+
+<section class="grid">
+
+  <!-- IIIA: FRONT (stacked, wild top / player bottom) -->
+  <article class="card">
+    <div class="phone-frame v-a">
+      <div class="opp">
+        <div>
+          <div class="opp-name">Cyndaquil</div>
+          <div class="opp-hp"><div></div></div>
+          <div class="opp-lvl">♀ ур. 12</div>
+        </div>
+        <div class="opp-stats">
+          <b>37</b>/50
+        </div>
+      </div>
+
+      <div class="weather">🌧 Дождь (5 ходов)</div>
+
+      <div class="arena">
+        <div class="sprite" aria-hidden="true">🔥</div>
+      </div>
+
+      <div class="player">
+        <div>
+          <span class="player-name">Pikachu</span>
+          <span class="player-lvl">♂ ур. 14</span>
+        </div>
+        <div class="player-bar"><div></div></div>
+        <div class="opp-stats" style="text-align:left;margin-top:-2px"><b>51</b>/75</div>
+        <div class="exp-bar"><div></div></div>
+        <div class="opp-stats" style="text-align:left"><b>4 920</b>/11 800</div>
+        <div class="moves">
+          <div class="mv"><b>Thunder</b><span class="pp type-electric">15/15</span></div>
+          <div class="mv"><b>Surf</b><span class="pp type-water">15/15</span></div>
+          <div class="mv"><b>Agility</b><span class="pp">20/20</span></div>
+          <div class="mv"><b>Protect</b><span class="pp">10/10</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-meta">
+      <div class="variant-tag">Variant IIIA</div>
+      <div class="variant-name">Front — стопка</div>
+      <div class="variant-sub">Дикий сверху, игрок снизу. Самый знакомый фанатам формат: спрайты стопкой, атмосферная арена с лёгким узором, кнопки атак под шкалами.</div>
+      <div class="pro-con">
+        <div class="pro">Привычно, читается сразу</div>
+        <div class="pro">Узор арены задаёт глубину</div>
+        <div class="con">Шкала HP игрока уезжает ниже — на маленьком экране может тесниться</div>
+      </div>
+      <div class="vote">
+        <button onclick="this.textContent='✓ этот'; this.disabled=true;">Выбрать IIIA</button>
+        <button class="count-con" onclick="this.textContent='✗ отклонить'; this.disabled=true;">Отклонить</button>
+      </div>
+    </div>
+  </article>
+
+  <!-- IIIB: SIDE-BY-SIDE -->
+  <article class="card">
+    <div class="phone-frame v-b">
+      <div class="header-row">
+        <span>Раунд 3 · Дождь</span>
+        <span>👁 зритель</span>
+      </div>
+      <div class="grid-arena">
+        <div class="panel wild">
+          <div style="display:flex;justify-content:space-between">
+            <span class="name">Cyndaquil</span>
+            <span class="lvl">12 ♀</span>
+          </div>
+          <div class="hpbar"><div></div></div>
+          <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim)">
+            <b style="color:var(--text)">37</b>/50</div>
+          <div class="sprite">🔥</div>
+        </div>
+        <div class="versus">⚡</div>
+        <div class="panel player">
+          <span class="name">Pikachu</span>
+          <span class="lvl">14 ♂</span>
+          <div class="hpbar"><div></div></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim)">
+            <b style="color:var(--text)">51</b>/75</div>
+          <div class="sprite">⚡</div>
+          <div class="status-pill">Reflect +1</div>
+        </div>
+      </div>
+      <div class="moves">
+        <div class="mv"><b>Thunder</b><span class="pp type-electric">15/15</span></div>
+        <div class="mv"><b>Surf</b><span class="pp type-water">15/15</span></div>
+        <div class="mv"><b>Agility</b><span class="pp">20/20</span></div>
+        <div class="mv"><b>Protect</b><span class="pp">10/10</span></div>
+      </div>
+    </div>
+    <div class="card-meta">
+      <div class="variant-tag">Variant IIIB</div>
+      <div class="variant-name">Side-by-Side — симметрия</div>
+      <div class="variant-sub">Оба покемона по бокам, лицом друг к другу. Шкалы здоровья тонкие, спрайты крупные, кнопки атак отдельной строкой снизу.</div>
+      <div class="pro-con">
+        <div class="pro">Симметрично — оба покемона равноправны</div>
+        <div class="pro">Большие спрайты — фокус на персонажах</div>
+        <div class="con">Узкие колонки режут длинные имена и типы</div>
+        <div class="con">Меньше места под лог боя</div>
+      </div>
+      <div class="vote">
+        <button onclick="this.textContent='✓ этот'; this.disabled=true;">Выбрать IIIB</button>
+        <button class="count-con" onclick="this.textContent='✗ отклонить'; this.disabled=true;">Отклонить</button>
+      </div>
+    </div>
+  </article>
+
+  <!-- IIIC: ENCOUNTER (wild top-right corner, player bottom-left) -->
+  <article class="card">
+    <div class="phone-frame v-c">
+      <div class="opp">
+        <div class="opp-name">
+          Cyndaquil
+          <span class="opp-lvl">♀ ур. 12</span>
+        </div>
+        <div class="opp-hp"><div></div></div>
+        <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:2px">
+          <span>🔥 огонь</span>
+          <span><b style="color:var(--text)">37</b>/50</span>
+        </div>
+      </div>
+      <div class="opp-sprite">🔥</div>
+      <div class="arena">
+        <div class="log">
+          <b>Pikachu</b> использовал Reflect. <b>Сила +1.</b>
+        </div>
+      </div>
+      <div class="player">
+        <div>
+          <span class="player-name">Pikachu</span>
+          <span class="player-lvl">⚡ ур. 14</span>
+        </div>
+        <div class="player-hp"><div></div></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:2px"><b style="color:var(--text)">51</b>/75</div>
+        <div class="player-exp"><div></div></div>
+        <div class="moves">
+          <div class="mv"><b>Thunder</b><span class="pp type-electric">15/15</span></div>
+          <div class="mv"><b>Surf</b><span class="pp type-water">15/15</span></div>
+          <div class="mv"><b>Agility</b><span class="pp">20/20</span></div>
+          <div class="mv"><b>Protect</b><span class="pp">10/10</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-meta">
+      <div class="variant-tag">Variant IIIC</div>
+      <div class="variant-name">Encounter — угловой</div>
+      <div class="variant-sub">Дикий в правом верхнем углу, игрок слева внизу. Между ними лог боя. Ощущение стелс-встречи: хищник заметил тебя первым.</div>
+      <div class="pro-con">
+        <div class="pro">Атмосферно — передаёт напряжение встречи</div>
+        <div class="pro">Большой спрайт игрока снизу — лицо резонансное</div>
+        <div class="con">Спрайт дикого маленький — теряется</div>
+        <div class="con">Лог посередине съедает вертикальное место</div>
+      </div>
+      <div class="vote">
+        <button onclick="this.textContent='✓ этот'; this.disabled=true;">Выбрать IIIC</button>
+        <button class="count-con" onclick="this.textContent='✗ отклонить'; this.disabled=true;">Отклонить</button>
+      </div>
+    </div>
+  </article>
+
+</section>
+
+<p style="max-width:760px;margin:36px auto 0;text-align:center;color:var(--text-dim);font-size:13px;line-height:1.6">
+  <b style="color:var(--text)">Что выбрано в спеке</b>: без анимаций, без звука, нижнее меню на 4 пункта + «Ещё», тёмный стиль с сохранением палитры.
+  В каждом макете нижнее меню боя не показано, чтобы не перегружать экран — здесь только само поле боя.
+  Все три варианта можно перебрать и на десктопе, и на телефоне (на узком экране карточки выстраиваются в один столбец).
+  Выбор фиксируется в <code style="font-family:'JetBrains Mono',monospace;color:var(--electric)">docs/BATTLE-WORK.md</code> в круге 6.
+</p>
+
+<script>
+  // Всё декоративно — кнопки только подтверждают визуально. Клик фиксирует локально,
+  // реальный выбор делается в чате и записывается в docs/BATTLE-WORK.md.
+  document.querySelectorAll('.vote button').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const card = btn.closest('.card');
+      card.style.outline = '2px solid var(--player)';
+      card.style.outlineOffset = '4px';
+      card.querySelectorAll('.vote button').forEach(b => b.style.opacity = '0.5');
+      btn.style.opacity = '1';
+    });
+  });
+</script>
+
+</body>
+</html>
