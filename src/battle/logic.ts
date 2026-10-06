@@ -178,6 +178,15 @@ export function applyStatusEndOfTurn(target, maxHp) {
     return { damage: dmg };
   }
 
+  // Токсин: растущий урон 1/16, 2/16, 3/16… за каждый тик.
+  // Счётчик хранится на самом объекте (toxCounter). Урон 0 не возвращаем
+  // (вызов бессмысленный), но для единообразия с psn/brn считаем от 1.
+  if (target.status === 'tox') {
+    const c = target.toxCounter || 1;
+    const dmg = Math.max(1, Math.floor(maxHp * c / 16));
+    return { damage: dmg };
+  }
+
   return { damage: 0 };
 }
 

@@ -950,3 +950,97 @@ describe('getStatusIcon', () => {
     expect(getStatusIcon('')).toBe('');
   });
 });
+
+// ======================================================================
+// 9. ROUND-2 REGRESSION — спецификация 6 октября 2026
+// Чистые тесты без DOM, закрепляющие правки круга 2 в logic.ts.
+// ======================================================================
+describe('Round-2 regression — spec changes (pure logic)', () => {
+  it('STATUS_NAMES includes tox with Токсин label', () => {
+    expect(STATUS_NAMES.tox).toBe('Токсин');
+  });
+
+  it('applyStatusEffect initializes freezeTurns and toxCounter', () => {
+    const mon = { status: null, sleepTurns: 7, freezeTurns: 9, toxCounter: 9 };
+    applyStatusEffect(mon, 'slp');
+    expect(mon.freezeTurns).toBe(0);
+    expect(mon.toxCounter).toBe(0);
+    expect(mon.sleepTurns).toBeGreaterThan(0); // перетряхнули
+  });
+
+  it('applyStatusEffect over tox resets toxCounter', () => {
+    const mon = { status: null, toxCounter: 5 };
+    applyStatusEffect(mon, 'tox');
+    expect(mon.toxCounter).toBe(0);
+    expect(mon.status).toBe('tox');
+  });
+
+  it('cureStatus resets freezeTurns and toxCounter', () => {
+    const mon = { status: 'frz', sleepTurns: 1, freezeTurns: 2, toxCounter: 3 };
+    cureStatus(mon);
+    expect(mon.status).toBeNull();
+    expect(mon.freezeTurns).toBe(0);
+    expect(mon.toxCounter).toBe(0);
+  });
+
+  it('checkStatusTurn — freeze thaws after 3 turns even on a failed 20% roll', () => {
+    // Спецификация: максимум 3 хода заморозки, дальше — гарантированное оттаивание.
+    // Mock Math.random=1: 1<0.2 = false → "не оттаял" по 20-процентному проценту.
+    // Без предохранителя заморозка длилась бы бесконечно.
+    const mon = { status: 'frz', freezeTurns: 0 };
+    vi.spyOn(Math, 'random').mockReturnValue(1);
+    try {
+      const r1 = checkStatusTurn(mon);
+      expect(mon.status).toBe('frz');
+      expect(mon.freezeTurns).toBe(1);
+      expect(r1.canAct).toBe(false);
+      expect(r1.message).toBe('заморожен!');
+
+      const r2 = checkStatusTurn(mon);
+      expect(mon.status).toBe('frz');
+      expect(mon.freezeTurns).toBe(2);
+      expect(r2.canAct).toBe(false);
+
+      // Третий тик: freezeTurns становится 3, срабатывает предохранитель
+      // (>= 3) и мороз снимается несмотря на провал 20-процентного броска.
+      const r3 = checkStatusTurn(mon);
+      expect(mon.status).toBeNull();
+      expect(mon.freezeTurns).toBe(0);
+      expect(r3.canAct).toBe(true);
+      expect(r3.message).toBe('оттаял!');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('checkStatusTurn — freeze before counter 3 stays frozen on a failed 20% roll', () => {
+    const mon = { status: 'frz', freezeTurns: 0 };
+    vi.spyOn(Math, 'random').mockReturnValue(1); // 20% thaw не проходит
+    try {
+      const r = checkStatusTurn(mon);
+      expect(mon.status).toBe('frz'); // ещё заморожен
+      expect(mon.freezeTurns).toBe(1);
+      expect(r.canAct).toBe(false);
+      expect(r.message).toBe('заморожен!');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('applyStatusEndOfTurn — toxic damage escalates each turn (pure logic)', () => {
+    // applyStatusEndOfTurn в logic.ts — чистая функция {damage}. Яд (psn)
+    // даёт 1/8 макс HP, токсин — растущий 1/16·N, ожог — 1/16. Проверяем
+    // формулу, не делая live-мутации HP (это делает core.ts).
+    const mon = { status: 'tox', toxCounter: 0, sleepTurns: 0, freezeTurns: 0 };
+    expect(applyStatusEndOfTurn(mon, 160)).toEqual({ damage: 10 }); // 1/16·160
+    mon.toxCounter = 2;
+    expect(applyStatusEndOfTurn(mon, 160)).toEqual({ damage: 20 }); // 2/16·160
+    mon.toxCounter = 5;
+    expect(applyStatusEndOfTurn(mon, 160)).toEqual({ damage: 50 }); // 5/16·160
+  });
+
+  it('applyStatusEndOfTurn — poison is flat 1/8, not escalating', () => {
+    const mon = { status: 'psn' };
+    expect(applyStatusEndOfTurn(mon, 160)).toEqual({ damage: 20 }); // 1/8·160
+  });
+});
