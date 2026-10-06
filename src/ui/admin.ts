@@ -1,6 +1,13 @@
 import { getIsAdmin, getTgUser } from '../game/getters.js';
 import { showToast } from '../utils/dom.js';
 import { apiFetch } from '../game/apiClient.js';
+import { state, generateUID, lsKey } from '../game/state.js';
+import { store } from '../game/store.js';
+import { autoSave } from '../game/save.js';
+import { GEN_STARTERS } from '../data/starters.js';
+import { checkBreeding, hatchEgg } from './daycare.js';
+import { setUnlockedAchievements } from './achievements.js';
+import { addNotification } from './notifications.js';
 
 export function initAdminPanel() {
   if (!getIsAdmin()) return;
@@ -27,6 +34,8 @@ export function initAdminPanel() {
     '    <button class="tma-btn admin-tab-btn active" data-tab="tab-editor" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">✏️ Editor</button>',
     '    <button class="tma-btn admin-tab-btn" data-tab="tab-players" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">⚡ Commands</button>',
     '    <button class="tma-btn admin-tab-btn" data-tab="tab-server" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">🌐 Server</button>',
+    '    <button class="tma-btn admin-tab-btn" data-tab="tab-saves" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">💾 Saves</button>',
+    '    <button class="tma-btn admin-tab-btn" data-tab="tab-test" style="flex:1;font-size:0.75rem;padding:6px 2px;margin:0;">🧪 Tests</button>',
     '  </div>',
     '  <div id="tab-editor" class="admin-tab-content" style="display:flex;flex-direction:column;gap:4px;">',
     '    <div style="display:flex;gap:4px;align-items:center;">',
@@ -53,7 +62,7 @@ export function initAdminPanel() {
     '          <option value="pewterCity">Pewter City</option><option value="ceruleanCity">Cerulean City</option>',
     '          <option value="vermilionCity">Vermilion City</option><option value="celadonCity">Celadon City</option>',
     '          <option value="lavenderTown">Lavender Town</option><option value="saffronCity">Saffron City</option>',
-    '          <option value="fuschiaCity">Fuschia City</option><option value="cinnabarIsland">Cinnabar Island</option>',
+    '          <option value="fuchsiaCity">Fuschia City</option><option value="cinnabarIsland">Cinnabar Island</option>',
     '          <option value="goldenrodCity">Goldenrod City</option><option value="ecruteakCity">Ecruteak City</option>',
     '          <option value="olivineCity">Olivine City</option><option value="cianwoodCity">Cianwood City</option>',
     '          <option value="azaleaTown">Azalea Town</option><option value="violetCity">Violet City</option>',
@@ -96,7 +105,7 @@ export function initAdminPanel() {
     '          <option value="pewterCity">Pewter City</option><option value="ceruleanCity">Cerulean City</option>',
     '          <option value="vermilionCity">Vermilion City</option><option value="celadonCity">Celadon City</option>',
     '          <option value="lavenderTown">Lavender Town</option><option value="saffronCity">Saffron City</option>',
-    '          <option value="fuschiaCity">Fuschia City</option><option value="cinnabarIsland">Cinnabar Island</option>',
+    '          <option value="fuchsiaCity">Fuschia City</option><option value="cinnabarIsland">Cinnabar Island</option>',
     '          <option value="goldenrodCity">Goldenrod City</option><option value="ecruteakCity">Ecruteak City</option>',
     '          <option value="olivineCity">Olivine City</option><option value="cianwoodCity">Cianwood City</option>',
     '          <option value="azaleaTown">Azalea Town</option><option value="violetCity">Violet City</option>',
@@ -149,6 +158,46 @@ export function initAdminPanel() {
     '        <button class="tma-btn admin-toggle-feature" data-feat="shiny_boost" style="font-size:0.7rem;padding:6px;margin:0;background:#34c759;">✨ Shiny Boost (x10)</button>',
     '        <button class="tma-btn admin-toggle-feature" data-feat="free_shop" style="font-size:0.7rem;padding:6px;margin:0;background:#ff3b30;">🛍️ Free Shop</button>',
     '      </div>',
+    '    </div>',
+    '  </div>',
+    '  <div id="tab-saves" class="admin-tab-content" style="display:none;flex-direction:column;gap:6px;">',
+    '    <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">💾 История сейвов (кнопка — вернуть копию):</span>',
+    '    <div id="admin-saves-list" style="display:flex;flex-direction:column;gap:4px;font-size:0.7rem;">Нажми «Обновить»</div>',
+    '    <button class="tma-btn" id="admin-saves-refresh" style="width:100%;padding:6px;font-size:0.75rem;background:#007aff;margin:0;">🔄 Обновить</button>',
+    '  </div>',
+    '  <div id="tab-test" class="admin-tab-content" style="display:none;flex-direction:column;gap:8px;">',
+    '    <div id="admin-test-status" style="font-size:0.7rem;color:var(--tma-text-muted);background:rgba(0,0,0,0.2);padding:5px 8px;border-radius:6px;min-height:22px;">Действует на СЕБЯ. Всё реально работает, не заглушки.</div>',
+    '    <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">🥚 Яйца / разведение:</span>',
+    '    <div style="display:flex;gap:4px;">',
+    '      <input id="admin-test-egg" type="text" placeholder="вид (пусто — стартер)" style="flex:1;padding:4px;font-size:0.68rem;border:1px solid var(--tma-border);border-radius:4px;background:var(--tma-bg);color:var(--tma-text);">',
+    '      <button class="tma-btn" id="admin-test-egg-btn" style="font-size:0.68rem;padding:4px 8px;background:#34c759;margin:0;">🥚 Готовое</button>',
+    '    </div>',
+    '    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">',
+    '      <button class="tma-btn" id="admin-test-breed-ready" style="font-size:0.68rem;padding:6px 2px;margin:0;">⏩ Всё готово</button>',
+    '      <button class="tma-btn" id="admin-test-breed-clear" style="font-size:0.68rem;padding:6px 2px;margin:0;">🧹 Пары+яйца</button>',
+    '      <button class="tma-btn" id="admin-test-hasbred" style="font-size:0.68rem;padding:6px 2px;margin:0;">🍼 hasBred сброс</button>',
+    '      <button class="tma-btn" id="admin-test-notif" style="font-size:0.68rem;padding:6px 2px;margin:0;">🔔 Тест-уведомл.</button>',
+    '    </div>',
+    '    <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">⚔️ Бой:</span>',
+    '    <div style="display:flex;gap:4px;">',
+    '      <input id="admin-test-wild" type="text" placeholder="дикий (пусто — рандом)" style="flex:1;padding:4px;font-size:0.68rem;border:1px solid var(--tma-border);border-radius:4px;background:var(--tma-bg);color:var(--tma-text);">',
+    '      <button class="tma-btn" id="admin-test-hunt-btn" style="font-size:0.68rem;padding:4px 8px;background:#ff9500;margin:0;">⚔️ Бой</button>',
+    '    </div>',
+    '    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">',
+    '      <button class="tma-btn" id="admin-test-heal" style="font-size:0.68rem;padding:6px 2px;margin:0;">❤️ Вылечить</button>',
+    '      <button class="tma-btn" id="admin-test-battle-clear" style="font-size:0.68rem;padding:6px 2px;margin:0;">🧹 Сброс боя</button>',
+    '    </div>',
+    '    <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">📈 Прогресс:</span>',
+    '    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">',
+    '      <button class="tma-btn" id="admin-test-lvl" style="font-size:0.68rem;padding:6px 2px;margin:0;">⭐ +5 уровней</button>',
+    '      <button class="tma-btn" id="admin-test-money" style="font-size:0.68rem;padding:6px 2px;margin:0;">💰 +100k</button>',
+    '      <button class="tma-btn" id="admin-test-ach" style="font-size:0.68rem;padding:6px 2px;margin:0;">🏆 Ачивки сброс</button>',
+    '      <button class="tma-btn" id="admin-test-tut" style="font-size:0.68rem;padding:6px 2px;margin:0;">🎓 Туториал сброс</button>',
+    '    </div>',
+    '    <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">☁️ Сейвы:</span>',
+    '    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">',
+    '      <button class="tma-btn" id="admin-test-sync" style="font-size:0.68rem;padding:6px 2px;margin:0;">☁️ Форс-синк</button>',
+    '      <button class="tma-btn" id="admin-test-savestate" style="font-size:0.68rem;padding:6px 2px;margin:0;">📊 Статус сейва</button>',
     '    </div>',
     '  </div>',
     '</div>',
@@ -408,6 +457,232 @@ export function initAdminPanel() {
 
   document.getElementById('btn-admin-close')!.addEventListener('click', () => { modal.style.display = 'none'; });
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+  // Вкладка Saves: список копий из save_history + восстановление.
+  // Серверные команды save_history/restore_save существовали без UI.
+  async function refreshSavesList() {
+    const list = document.getElementById('admin-saves-list')!;
+    const idRaw = (document.getElementById('admin-target-id') as HTMLInputElement).value.trim()
+      || (document.getElementById('admin-editor-id') as HTMLInputElement).value.trim();
+    const id = parseInt(idRaw);
+    if (!id) { list.textContent = 'Укажи ID тренера (вкладка Commands или Editor)'; return; }
+    list.textContent = 'Загрузка...';
+    try {
+      const res = await apiFetch('/admin/api', { method: 'POST', body: JSON.stringify({ cmd: 'save_history', user: id }) });
+      const data = await res.json();
+      if (data.status !== 'ok') { list.textContent = '❌ ' + (data.error || 'Error'); return; }
+      list.innerHTML = '';
+      const head = document.createElement('div');
+      head.style.cssText = 'opacity:0.7;';
+      head.textContent = `Сейчас: ${data.currentBroken ? 'БИТЫЙ' : data.currentPokemon + ' пок.'}`;
+      list.appendChild(head);
+      if (!data.copies || data.copies.length === 0) {
+        const empty = document.createElement('div');
+        empty.textContent = 'Копий нет';
+        list.appendChild(empty);
+        return;
+      }
+      data.copies.forEach((c: any) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:4px;align-items:center;background:rgba(0,0,0,0.2);padding:4px 6px;border-radius:6px;';
+        const label = document.createElement('span');
+        label.style.flex = '1';
+        const when = (c.createdAt || '').slice(0, 16).replace('T', ' ');
+        label.textContent = `#${c.id} ${c.pokemon < 0 ? 'битая' : c.pokemon + ' пок.'} · ${c.reason || ''} · ${when}`;
+        const btn = document.createElement('button');
+        btn.className = 'tma-btn';
+        btn.style.cssText = 'padding:4px 8px;font-size:0.68rem;background:#34c759;margin:0;';
+        btn.textContent = '⏪ Вернуть';
+        btn.onclick = async () => {
+          if (!confirm(`Вернуть копию #${c.id} (${c.pokemon} пок.) тренеру ${id}? Текущий сейв сохранится в историю.`)) return;
+          try {
+            const r = await apiFetch('/admin/api', { method: 'POST', body: JSON.stringify({ cmd: 'restore_save', user: id, val: String(c.id) }) });
+            const d = await r.json();
+            showToast(d.status === 'ok' ? `✅ Возвращено (${d.restoredPokemon} пок.)` : '❌ ' + (d.error || 'error'), d.status !== 'ok');
+            refreshSavesList();
+          } catch (e) { console.error('[admin] restore', e); showToast('API Error', true); }
+        };
+        row.appendChild(label);
+        row.appendChild(btn);
+        list.appendChild(row);
+      });
+    } catch (e) { console.error('[admin] saves', e); list.textContent = '❌ API Error'; }
+  }
+
+  document.getElementById('admin-saves-refresh')!.addEventListener('click', refreshSavesList);
+
+  // ── Test Lab: всё действует на СЕБЯ, всё реально работает ──
+  const testStatus = document.getElementById('admin-test-status')!;
+  const testSay = (msg: string, isErr = false) => {
+    testStatus.textContent = msg;
+    showToast(msg, isErr);
+  };
+  const selfId = (): number | null => {
+    const id = getTgUser()?.id;
+    if (!id) { testSay('Нет Telegram ID', true); return null; }
+    return id;
+  };
+  const rndIV = () => ({
+    hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
+    def: Math.floor(Math.random() * 32), spa: Math.floor(Math.random() * 32),
+    spd: Math.floor(Math.random() * 32), spe: Math.floor(Math.random() * 32),
+  });
+
+  // 🥚 Готовое яйцо: сразу идёт в вылупление реальным путём (hatchEgg → PokeAPI)
+  document.getElementById('admin-test-egg-btn')!.addEventListener('click', async () => {
+    const input = (document.getElementById('admin-test-egg') as HTMLInputElement).value.trim().toLowerCase();
+    const all = GEN_STARTERS.flat();
+    const species = input || all[Math.floor(Math.random() * all.length)];
+    const egg = {
+      uid: generateUID(), species,
+      types: [{ type: { name: 'normal' } }],
+      ivs: rndIV(), readyTime: Date.now(),
+    };
+    state.eggs.push(egg);
+    testSay(`🥚 Яйцо ${species} добавлено, вылупляю...`);
+    try {
+      await hatchEgg(egg);
+      testSay(`🥚 ${species} вылуплен (или яйцо в очереди)`);
+    } catch (e) { testSay('❌ Ошибка вылупления', true); }
+    autoSave();
+  });
+
+  // ⏩ Всё готово: пары и яйца созревают сейчас, прогон реального цикла
+  document.getElementById('admin-test-breed-ready')!.addEventListener('click', async () => {
+    const now = Date.now();
+    state.breedingPairs.forEach((p: any) => { p.readyTime = now; });
+    state.eggs.forEach((e: any) => { e.readyTime = now; });
+    await checkBreeding().catch(() => {});
+    autoSave();
+    testSay(`⏩ Готово: пар ${state.breedingPairs.length}, яиц ${state.eggs.length}`);
+  });
+
+  // 🧹 Очистить пары и яйца
+  document.getElementById('admin-test-breed-clear')!.addEventListener('click', () => {
+    state.breedingPairs = [];
+    state.eggs = state.eggs.filter((e: any) => e.boxIdx !== undefined);
+    autoSave();
+    testSay('🧹 Пары удалены, свободные яйца убраны');
+  });
+
+  // 🍼 hasBred сброс: команда + PC снова могут спариваться
+  document.getElementById('admin-test-hasbred')!.addEventListener('click', () => {
+    state.myTeam.forEach((m: any) => { m.hasBred = false; });
+    state.pcBoxes.forEach((b: any) => (b || []).forEach((m: any) => { m.hasBred = false; }));
+    autoSave();
+    testSay('🍼 hasBred сброшен у всех');
+  });
+
+  // 🔔 Тест-уведомление
+  document.getElementById('admin-test-notif')!.addEventListener('click', () => {
+    addNotification('🔔 Тест', 'Проверка уведомлений: ' + new Date().toLocaleTimeString('ru'));
+    testSay('🔔 Отправлено, смотри колокол');
+  });
+
+  // ⚔️ Дикий бой: вид из поля или случайный с локации
+  document.getElementById('admin-test-hunt-btn')!.addEventListener('click', async () => {
+    const input = (document.getElementById('admin-test-wild') as HTMLInputElement).value.trim().toLowerCase();
+    try {
+      const bc: any = await import('../battle/core.js');
+      let name = input;
+      if (!name) {
+        const enc = bc.getLocationEncounters();
+        if (!enc.length) { testSay('❌ На локации нет энкаунтеров', true); return; }
+        name = bc.pickWeightedEncounter(enc);
+      }
+      modal.style.display = 'none';
+      await bc.startHunt([name]);
+      testSay(`⚔️ Бой: ${name}`);
+    } catch (e) { testSay('❌ Не вышло начать бой', true); }
+  });
+
+  // ❤️ Вылечить команду полностью
+  document.getElementById('admin-test-heal')!.addEventListener('click', () => {
+    state.myTeam.forEach((m: any) => {
+      m.currentHp = m.maxHp;
+      m.status = null;
+      m.sleepTurns = 0;
+      m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+    });
+    store.emit('team:render');
+    autoSave();
+    testSay('❤️ Команда вылечена');
+  });
+
+  // 🧹 Сбросить бой: стейт + модалка
+  document.getElementById('admin-test-battle-clear')!.addEventListener('click', async () => {
+    try {
+      const bc: any = await import('../battle/core.js');
+      bc.clearBattleState();
+    } catch { /* ключ всё равно чистим ниже */ }
+    try { localStorage.removeItem(lsKey('battle_state')); } catch {}
+    const m = document.getElementById('encounter-modal');
+    if (m) m.style.display = 'none';
+    const e = document.getElementById('battle-end-menu');
+    if (e) e.style.display = 'none';
+    testSay('🧹 Бой сброшен');
+  });
+
+  // ⭐ +5 уровней команде (пересчёт HP по формуле)
+  document.getElementById('admin-test-lvl')!.addEventListener('click', async () => {
+    try {
+      const bc: any = await import('../battle/core.js');
+      state.myTeam.forEach((m: any) => {
+        m.baseLevel = Math.min(100, (m.baseLevel || 1) + 5);
+        m.exp = Math.pow(m.baseLevel, 3);
+        m.expToNext = Math.pow(m.baseLevel + 1, 3);
+        const oldMax = m.maxHp;
+        m.maxHp = bc.calculateStat(m, 'hp', false);
+        m.currentHp = Math.min(m.maxHp, m.currentHp + (m.maxHp - oldMax));
+      });
+      store.emit('team:render');
+      autoSave();
+      testSay('⭐ +5 уровней команде');
+    } catch (e) { testSay('❌ Ошибка прокачки', true); }
+  });
+
+  // 💰 +100k себе через сервер
+  document.getElementById('admin-test-money')!.addEventListener('click', async () => {
+    const id = selfId();
+    if (!id) return;
+    try {
+      const res = await apiFetch('/admin/api', { method: 'POST', body: JSON.stringify({ cmd: 'give_money', user: id }) });
+      const data = await res.json();
+      testSay(data.status === 'ok' ? '✅ +100k (синкнись: облако уже обновлено)' : '❌ ' + (data.error || 'error'), data.status !== 'ok');
+    } catch (e) { testSay('❌ API Error', true); }
+  });
+
+  // 🏆 Сброс ачивок
+  document.getElementById('admin-test-ach')!.addEventListener('click', () => {
+    setUnlockedAchievements([]);
+    autoSave();
+    testSay('🏆 Ачивки сброшены');
+  });
+
+  // 🎓 Сброс туториала (квесты проф. Оука заново)
+  document.getElementById('admin-test-tut')!.addEventListener('click', () => {
+    state.tutorialStep = 1;
+    state.completedNPCQuests = (state.completedNPCQuests || []).filter((q: string) => !q.startsWith('tutorial_'));
+    Object.keys(state.npcQuestProgress || {}).forEach((k) => {
+      if (k.startsWith('tutorial_')) delete state.npcQuestProgress[k];
+    });
+    autoSave();
+    testSay('🎓 Туториал сброшен на шаг 1');
+  });
+
+  // ☁️ Форс-синк в облако
+  document.getElementById('admin-test-sync')!.addEventListener('click', () => {
+    autoSave();
+    testSay('☁️ Синк запущен (смотри значок ☁️)');
+  });
+
+  // 📊 Статус сейва одной строкой
+  document.getElementById('admin-test-savestate')!.addEventListener('click', () => {
+    const pc = (state.pcBoxes || []).reduce((n: number, b: any) => n + (b?.length || 0), 0);
+    let battle = 'нет';
+    try { battle = localStorage.getItem(lsKey('battle_state')) ? 'есть' : 'нет'; } catch {}
+    testSay(`📊 v${state.saveVersion ?? '?'} sync=${state.lastCloudSync ? new Date(state.lastCloudSync).toLocaleTimeString('ru') : '—'} dirty=${!!state.saveDirty} | team ${state.myTeam.length} pc ${pc} | бой: ${battle} | ачивки: ${(state.achievements || []).length}`);
+  });
 }
 
 function escapeHtml(str: string): string {

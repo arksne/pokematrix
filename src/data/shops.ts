@@ -74,7 +74,7 @@ export const SHOP_STOCK = {
     'ether', 'elixir', 'maxElixir',
     'fireStone', 'waterStone', 'leafStone', 'thunderStone', 'moonStone', 'sunStone', 'evolutionStone',
     'hpUp', 'protein', 'iron', 'calcium', 'zinc', 'carbos', 'iodine',
-    'train', 'weaken',
+    'train', 'weaken', 'evBrace',
     'tm', 'craftersKit',
     'skiGear', 'waterSupply', 'bigWaterSupply',
   ],

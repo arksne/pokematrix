@@ -70,6 +70,8 @@ function getShopItems(locId) {
   const stockList = shopStock[locId];
 
   // Фильтруем ВСЕ предметы игры по трём условиям:
+  // free_shop (админка): витрина показывает ¥0 — сервер тоже не списывает
+  const freeShop = !!(state.serverFeatures as any)?.free_shop;
   return ITEMS
     .filter(item =>
       item.price > 0 &&                    // (1) предмет продаётся (цена > 0)
@@ -81,7 +83,7 @@ function getShopItems(locId) {
       id: item.id,                          // ID предмета (например, 'pokeball')
       icon: getItemSpriteImg(item.id, 28),  // HTML строкa с <img> спрайта 28×28
       name: item.nameRu,                     // Русское название предмета
-      price: item.price,                     // Цена в игровых кредитах (¥)
+      price: freeShop ? 0 : item.price,      // Цена в игровых кредитах (¥)
     }));
 }
 
@@ -165,8 +167,8 @@ export function initShopEvents() {
     // Берём значение из input, приводим к числу, ограничиваем мин 1, макс 99
     // Если значение невалидно (NaN), используем 1
     const qty = Math.max(1, Math.min(99, parseInt((qtyInput as HTMLInputElement)?.value) || 1));
-    // Считаем общую стоимость: цена × количество
-    const total = price * qty;
+    // Считаем общую стоимость: цена × количество (free_shop — бесплатно)
+    const total = ((state.serverFeatures as any)?.free_shop ? 0 : price * qty);
 
     // Проверяем, хватает ли денег у игрока
     if (getShopState().money < total) return showToast('Недостаточно кредитов!', true);

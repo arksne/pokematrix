@@ -12,8 +12,16 @@ import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
-import { users } from '../db/schema.js';
+import { users, serverFeatures } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
+
+/** Включена ли серверная фича (админка → toggle_feature). */
+async function isFeatureOn(db: any, name: string): Promise<boolean> {
+  try {
+    const row = (await db.select().from(serverFeatures).where(eq(serverFeatures.feature, name)).limit(1))[0];
+    return !!row?.enabled;
+  } catch { return false; }
+}
 
 const router = Router();
 
@@ -47,9 +55,14 @@ const ITEMS: ItemDef[] = [
   { id: 'craftersKit', price: 3000 }, { id: 'ether', price: 600 },
   { id: 'elixir', price: 1200 }, { id: 'ppUp', price: 6400 },
   { id: 'expShare', price: 0 }, { id: 'luckyEgg', price: 0 },
+  // Скоба (EV +1/уровень): очень дорого, точную цену — в баланс экономики
+  { id: 'evBrace', price: 25000 },
 ];
 
 const priceMap = new Map(ITEMS.map(i => [i.id, i.price]));
+
+/** Экспорт для теста паритета цен (vitest): клиент обязан совпадать. */
+export const SERVER_PRICE_MAP = priceMap;
 
 // ── Рецепты крафта (14 штук) ─────────────────────────────────
 interface Recipe {
@@ -108,7 +121,9 @@ router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
       if (!saveData.inventory) saveData.inventory = {};
 
       const currentMoney = saveData.inventory['credit'] || 0;
-      const total = price * qty;
+      // free_shop (админка): магазин бесплатный — деньги не проверяем и не списываем
+      const freeShop = await isFeatureOn(db, 'free_shop');
+      const total = freeShop ? 0 : price * qty;
 
       if (currentMoney < total) {
         throw new Error('Not enough credits');
@@ -117,7 +132,7 @@ router.post('/buy', authMiddleware, async (req: Request, res: Response) => {
       saveData.inventory['credit'] = currentMoney - total;
       saveData.inventory[itemId] = (saveData.inventory[itemId] || 0) + qty;
 
-      await tx.update(users).set({
+      await (tx.update(users) as any).set({
         save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
       }).where(eq(users.id, userId));
@@ -166,7 +181,7 @@ router.post('/sell', authMiddleware, async (req: Request, res: Response) => {
       if (saveData.inventory[itemId] <= 0) delete saveData.inventory[itemId];
       saveData.inventory['credit'] = (saveData.inventory['credit'] || 0) + totalEarned;
 
-      await tx.update(users).set({
+      await (tx.update(users) as any).set({
         save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
       }).where(eq(users.id, userId));
@@ -225,7 +240,7 @@ router.post('/craft', authMiddleware, async (req: Request, res: Response) => {
       // Выдать результат
       saveData.inventory[recipe.result] = (saveData.inventory[recipe.result] || 0) + recipe.qty;
 
-      await tx.update(users).set({
+      await (tx.update(users) as any).set({
         save_data: JSON.stringify(stampSave(saveData)),
       }).where(eq(users.id, userId));
 
@@ -276,7 +291,7 @@ router.post('/reward', authMiddleware, async (req: Request, res: Response) => {
         saveData.inventory[itemId] = (saveData.inventory[itemId] || 0) + qty;
       }
 
-      await tx.update(users).set({
+      await (tx.update(users) as any).set({
         save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
         last_reward_at: now,
@@ -358,7 +373,7 @@ router.post('/badge-reward', authMiddleware, async (req: Request, res: Response)
         saveData.inventory[leader.rewardItem] = (saveData.inventory[leader.rewardItem] || 0) + (leader.rewardQty || 1);
       }
 
-      await tx.update(users).set({
+      await (tx.update(users) as any).set({
         save_data: JSON.stringify(stampSave(saveData)),
         money: saveData.inventory['credit'],
         badges_count: saveData.badges.length,
