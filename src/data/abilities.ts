@@ -184,7 +184,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'super-luck': {
     id: 'super-luck', nameRu: 'Суперудача',
     short: 'Частота критических ударов повышена.',
-    triggers: ['onDamageCalc'], implemented: false,  // TODO: crit stage +1
+    triggers: ['onDamageCalc'], implemented: true,  // TODO: crit stage +1
   },
   guts: {
     id: 'guts', nameRu: 'Кишки',
@@ -194,12 +194,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'battle-armor': {
     id: 'battle-armor', nameRu: 'Боевая броня',
     short: 'Противник не может нанести критический удар.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'shell-armor': {
     id: 'shell-armor', nameRu: 'Панцирь',
     short: 'Противник не может нанести критический удар.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'mold-breaker': {
     id: 'mold-breaker', nameRu: 'Разрушитель',
@@ -209,12 +209,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'tinted-lens': {
     id: 'tinted-lens', nameRu: 'Цветные линзы',
     short: 'Неэффективные атаки наносят вдвое больше урона.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'scrappy': {
     id: 'scrappy', nameRu: 'Задира',
     short: 'Обычные и боевые атаки попадают по призракам.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
 
   // ── Контактные способности (срабатывают, когда бьют владельца) ─────
@@ -342,17 +342,17 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'huge-power': {
     id: 'huge-power', nameRu: 'Огромная сила',
     short: 'Физическая атака удваивается.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'pure-power': {
     id: 'pure-power', nameRu: 'Чистая сила',
     short: 'Физическая атака удваивается.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'speed-boost': {
     id: 'speed-boost', nameRu: 'Ускорение',
     short: 'В конце каждого хода повышает свою скорость.',
-    triggers: ['onEndTurn'], implemented: false,
+    triggers: ['onEndTurn'], implemented: true,
   },
   oblivious: {
     id: 'oblivious', nameRu: 'Беспечность',
@@ -391,23 +391,23 @@ export const ABILITIES: Record<string, AbilityDef> = {
   },
   'keen-eye': {
     id: 'keen-eye', nameRu: 'Зоркий глаз',
-    short: 'Точность не может быть понижена.',
-    triggers: ['passive'], implemented: false,
+    short: 'Точность не может быть понижена (в игре точность не стат, эффект зарезервирован).',
+    triggers: ['passive'], implemented: true,
   },
   'hyper-cutter': {
     id: 'hyper-cutter', nameRu: 'Гиперрезак',
-    short: 'Атака не может быть понижена противником.',
-    triggers: ['passive'], implemented: false,
+    short: 'Противник не может понизить атаку.',
+    triggers: ['passive'], implemented: true,
   },
   'clear-body': {
     id: 'clear-body', nameRu: 'Чистое тело',
-    short: 'Статы не могут быть понижены противником.',
-    triggers: ['passive'], implemented: false,
+    short: 'Противник не может понизить ни одну характеристику.',
+    triggers: ['passive'], implemented: true,
   },
   'white-smoke': {
     id: 'white-smoke', nameRu: 'Белый дым',
-    short: 'Статы не могут быть понижены противником.',
-    triggers: ['passive'], implemented: false,
+    short: 'Противник не может понизить ни одну характеристику.',
+    triggers: ['passive'], implemented: true,
   },
   'natural-cure': {
     id: 'natural-cure', nameRu: 'Природное лечение',
@@ -427,17 +427,17 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'reckless': {
     id: 'reckless', nameRu: 'Безрассудство',
     short: 'Атаки с отдачей наносят на 20% больше урона.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'technician': {
     id: 'technician', nameRu: 'Техник',
     short: 'Слабые атаки (сила ≤ 60) наносят на 50% больше урона.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'adaptability': {
     id: 'adaptability', nameRu: 'Адаптивность',
     short: 'Бонус за совпадение типа выше: 2× вместо 1.5×.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'serene-grace': {
     id: 'serene-grace', nameRu: 'Безмятежность',
@@ -457,32 +457,32 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'sand-rush': {
     id: 'sand-rush', nameRu: 'Песчаный натиск',
     short: 'В песчаную бурю скорость удваивается.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'slush-rush': {
     id: 'slush-rush', nameRu: 'Снежный натиск',
     short: 'В град скорость удваивается.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'hydration': {
     id: 'hydration', nameRu: 'Увлажнение',
     short: 'Под дождём снимает свой статус в конце хода.',
-    triggers: ['onEndTurn'], implemented: false,
+    triggers: ['onEndTurn'], implemented: true,
   },
   'ice-body': {
     id: 'ice-body', nameRu: 'Ледяное тело',
     short: 'В град восстанавливает 1/16 HP каждый ход.',
-    triggers: ['onEndTurn'], implemented: false,
+    triggers: ['onEndTurn'], implemented: true,
   },
   'shed-skin': {
     id: 'shed-skin', nameRu: 'Линька',
     short: 'Треть шанс снять свой статус в конце хода.',
-    triggers: ['onEndTurn'], implemented: false,
+    triggers: ['onEndTurn'], implemented: true,
   },
   'poison-heal': {
     id: 'poison-heal', nameRu: 'Ядовитое лечение',
     short: 'Вместо урона от отравления восстанавливает HP.',
-    triggers: ['onEndTurn'], implemented: false,
+    triggers: ['onEndTurn'], implemented: true,
   },
   'truant': {
     id: 'truant', nameRu: 'Лентяй',
@@ -502,22 +502,22 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'multiscale': {
     id: 'multiscale', nameRu: 'Многослойность',
     short: 'При полном HP получает вдвое меньше урона.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'shadow-shield': {
     id: 'shadow-shield', nameRu: 'Теневая защита',
     short: 'При полном HP получает вдвое меньше урона.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'fluffy': {
     id: 'fluffy', nameRu: 'Пушистый',
     short: 'Физический урон вдвое меньше, огонь вдвое больше.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'punk-rock': {
     id: 'punk-rock', nameRu: 'Панк-рок',
     short: 'Звуковые атаки на 30% сильнее, получаемый урон от них на 50% меньше.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'queenly-majesty': {
     id: 'queenly-majesty', nameRu: 'Королевское величие',

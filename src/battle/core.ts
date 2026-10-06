@@ -500,9 +500,15 @@ function getEffectiveSpeed(pokemon, isWild): number {
   const ability = getAbilityName(pokemon, isWild);
 
   if (pokemon?.heldItem === 'choiceScarf') speed *= 1.5;
-  // Swift Swim / Rain Dish — только под дождём, Chlorophyll / Solar Power — под солнцем
+  // Погодные способности скорости. Каждая работает только в свою погоду:
+  //   Swift Swim / Rain Dish — дождь
+  //   Chlorophyll / Solar Power — солнце
+  //   Sand Rush — песчаная буря
+  //   Slush Rush — град
   if (S.currentWeather === 'rain' && (ability === 'swiftswim' || ability === 'raindish')) speed *= 2;
   if (S.currentWeather === 'sun' && (ability === 'chlorophyll' || ability === 'solarpower')) speed *= 2;
+  if (S.currentWeather === 'sandstorm' && ability === 'sandrush') speed *= 2;
+  if (S.currentWeather === 'hail' && ability === 'slushrush') speed *= 2;
 
   return Math.max(1, speed);
 }
@@ -926,7 +932,7 @@ function handleEnemyStatusEffects(move) {
     move.stat_changes.forEach(sc => {
       const statKey = statNameMap[sc.stat.name];
       if (statKey) {
-        statStageModify(S.activeWild, statKey, sc.change); // Применяем изменение стата
+        statStageModify(S.activeWild, statKey, sc.change, true); // Навязано игроком
         const newStage = S.activeWild.statStages[statKey]; // Текущее значение после изменения
         const sign = newStage >= 0 ? '+' : '';
         const dir = sc.change > 0 ? 'повышена' : 'понижена';
@@ -996,13 +1002,42 @@ function getAbilityName(pokemon, isWild) {
  * Вызывается при: Swords Dance (+2 Atk), Growl (-1 Atk), Intimidate (-1 Atk) и т.д.
  * После изменения ОБЯЗАН обновить UI через updateStatBadges().
  */
-function statStageModify(pokemon, stat, delta) {
+/**
+ * Способности, запрещающие противнику понижать статы владельца.
+ * Ключ — id способности, значение — какие статы защищены ('*' = все).
+ * Свои собственные понижения (Overheat, Superpower, Draco Meteor) проходят:
+ * для этого у statStageModify есть флаг fromOpponent.
+ */
+const STAT_GUARD_ABILITIES: Record<string, string[] | '*'> = {
+  'clear-body': '*',
+  'white-smoke': '*',
+  'hyper-cutter': ['atk'],
+  'big-pecks': ['def'],
+  'keen-eye': [],          // точность в игре не стат — оставлено для полноты
+};
+
+function statStageModify(pokemon, stat, delta, fromOpponent = false) {
+  // Защита от понижения: способность блокирует ТОЛЬКО то, что навязал
+  // противник. Свои атаки (Overheat снижает свою сп. атаку) проходят.
+  if (fromOpponent && delta < 0 && pokemon) {
+    const abil = getAbilityName(pokemon, false);
+    const guard = abil ? STAT_GUARD_ABILITIES[abil] : undefined;
+    if (guard === '*' || (Array.isArray(guard) && guard.includes(stat))) {
+      appendToLog(`${getAbilityNameRu(abil)} не даёт понизить ${STAT_LABELS[stat] || stat} ${pokemon.apiData?.name || ''}!`, false, 'system');
+      return;
+    }
+  }
   // Если стат-стадии ещё нет — инициализируем нулями
   if (!pokemon.statStages) pokemon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
   // Клиппинг: не даём выйти за пределы [-6, +6]
   pokemon.statStages[stat] = Math.max(-6, Math.min(6, (pokemon.statStages[stat] || 0) + delta));
   updateStatBadges(); // Обновляем плашки в UI
 }
+
+/** Русские названия статов для логов. */
+const STAT_LABELS: Record<string, string> = {
+  atk: 'Атаку', def: 'Защиту', spa: 'Сп. Атаку', spd: 'Сп. Защиту', spe: 'Скорость',
+};
 
 /**
  * updateStatBadges — обновить отображение стат-стадий в UI.
@@ -1445,7 +1480,24 @@ function applyStatusEndOfTurn(target, isPlayer) {
   if (!target.status) return;
 
   if (target.status === 'psn') {
-    const dmg = Math.max(1, Math.floor((isPlayer ? S.activePlayerMon.maxHp : S.wildMaxHP) / 8));
+    // Poison Heal: способность превращает урон от яда в лечение того же размера.
+    const maxHp = isPlayer ? S.activePlayerMon.maxHp : S.wildMaxHP;
+    const phAbil = ((target.abilities?.[0]?.ability?.name) || target.abilityName || '')
+      .toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (phAbil === 'poisonheal') {
+      const heal = Math.max(1, Math.floor(maxHp / 8));
+      const label = isPlayer ? S.activePlayerMon.apiData.name : S.activeWild.name;
+      if (isPlayer) {
+        S.activePlayerMon.currentHp = Math.min(maxHp, S.activePlayerMon.currentHp + heal);
+        updatePlayerHpUI();
+      } else {
+        S.wildCurHP = Math.min(maxHp, S.wildCurHP + heal);
+        updateWildHpUI();
+      }
+      appendToLog(`${label} восстанавливает HP от Ядовитого лечения! (+${heal})`, false, 'heal');
+      return;
+    }
+    const dmg = Math.max(1, Math.floor(maxHp / 8));
     if (isPlayer) {
       S.activePlayerMon.currentHp -= dmg;
       if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
@@ -2072,7 +2124,7 @@ async function startHunt(encountersArray) {
     // Intimidate check
     const wildAbility = S.activeWild.abilities?.[0]?.ability?.name;
     if (wildAbility === 'intimidate') {
-      statStageModify(S.activePlayerMon, 'atk', -1);
+      statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
@@ -2854,7 +2906,7 @@ async function useMove(moveIndex) {
       move.stat_changes.forEach(sc => {
         const statKey = statNameMap[sc.stat.name];
         if (statKey) {
-          statStageModify(affectedMon, statKey, sc.change);
+          statStageModify(affectedMon, statKey, sc.change, affectedMon !== S.activePlayerMon);
           const newStage = affectedMon.statStages[statKey];
           const sign = newStage >= 0 ? '+' : '';
           const dir = sc.change > 0 ? 'повышена' : 'понижена';
@@ -3052,7 +3104,7 @@ async function useMove(moveIndex) {
               const os = am.statStages[sk] || 0;
               const nv = Math.max(-6, Math.min(6, os + sc.change));
               if (nv !== os) {
-                statStageModify(am, sk, sc.change);
+                statStageModify(am, sk, sc.change, am !== S.activePlayerMon);
                 const sign = nv >= 0 ? '+' : '';
                 const dir = sc.change > 0 ? 'повышена' : 'понижена';
                 const lbl = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
@@ -3132,6 +3184,8 @@ async function useMove(moveIndex) {
   // не тикал вообще, а при пропуске хода — тикал дважды.
   applyStatusEndOfTurn(S.activePlayerMon, true);
   if (S.activePlayerMon.currentHp > 0) applyLeechSeedTick(true);
+  // Способности конца хода — тот же набор, что и у противника.
+  if (S.activePlayerMon.currentHp > 0) applyEndTurnAbilities(S.activePlayerMon, false);
   if (S.activePlayerMon.currentHp <= 0) {
     appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
     handlePlayerFaint();
@@ -3346,6 +3400,66 @@ async function enemyTurn() {
  *   в конце раунда. Поэтому статус врага тикает здесь (после его хода), а статус
  *   игрока — в useMove() после хода игрока.
  */
+/**
+ * applyEndTurnAbilities — способности, срабатывающие в конце хода владельца.
+ *
+ * ВЫЗЫВАЕТСЯ:
+ *   finishEnemyTurn()  — для дикого противника
+ *   хвост useMove()    — для покемона игрока
+ *
+ * ЧТО ДЕЛАЕТ:
+ *   Speed Boost — повышает свою скорость на одну ступень
+ *   Ice Body    — в град восстанавливает 1/16 максимального HP
+ *   Hydration   — под дождём снимает свой статус
+ *   Shed Skin   — треть шанс снять свой статус
+ *
+ * Rain Dish (лечение под дождём) обрабатывается там же, где погодный чип —
+ * см. applyWeatherChip. Poison Heal меняет урон от яда на лечение —
+ * см. applyStatusEndOfTurn.
+ */
+function applyEndTurnAbilities(mon, isWild) {
+  if (!mon) return;
+  const ability = getAbilityName(mon, isWild);
+  if (!ability) return;
+  const name = String(ability).toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const label = mon.apiData?.name || mon.name || 'Покемон';
+
+  if (name === 'speed-boost') {
+    const before = mon.statStages?.spe || 0;
+    if (before < 6) {
+      statStageModify(mon, 'spe', 1);
+      appendToLog(`${label}: Ускорение повышает скорость!`, false, 'system');
+    }
+  }
+
+  if (name === 'ice-body' && S.currentWeather === 'hail') {
+    const maxHp = isWild ? S.wildMaxHP : mon.maxHp;
+    const cur = isWild ? S.wildCurHP : mon.currentHp;
+    if (cur > 0 && cur < maxHp) {
+      const heal = Math.max(1, Math.floor(maxHp / 16));
+      if (isWild) { S.wildCurHP = Math.min(maxHp, S.wildCurHP + heal); updateWildHpUI(); }
+      else { mon.currentHp = Math.min(maxHp, mon.currentHp + heal); updatePlayerHpUI(); }
+      appendToLog(`${label} восстанавливает HP от Ледяного тела! (+${heal})`, false, 'heal');
+    }
+  }
+
+  if (name === 'hydration' && S.currentWeather === 'rain' && mon.status) {
+    const had = mon.status;
+    cureStatus(mon);
+    if (isWild) S.wildStatus = null;
+    else document.getElementById('player-status-icon').innerText = '';
+    appendToLog(`${label}: Увлажнение снимает статус (${STATUS_NAMES[had]})!`, false, 'heal');
+  }
+
+  if (name === 'shed-skin' && mon.status && Math.random() < 0.33) {
+    const had = mon.status;
+    cureStatus(mon);
+    if (isWild) S.wildStatus = null;
+    else document.getElementById('player-status-icon').innerText = '';
+    appendToLog(`${label}: Линька снимает статус (${STATUS_NAMES[had]})!`, false, 'heal');
+  }
+}
+
 async function finishEnemyTurn() {
   // ── Сразу после действия врага ──
   if (S.wildCurHP > 0) {
@@ -3353,6 +3467,8 @@ async function finishEnemyTurn() {
     if (S.wildCurHP > 0) checkBerryAutoUse(S.activeWild, false);
     if (S.wildCurHP > 0) applyLeechSeedTick(false);
     if (S.wildCurHP > 0) applyWeatherChip(S.activeWild, S.wildMaxHP, false);
+    // Способности конца хода (Speed Boost, Ice Body, Hydration, Shed Skin)
+    if (S.wildCurHP > 0) applyEndTurnAbilities(S.activeWild, true);
   }
   if (S.wildCurHP <= 0) {
     await handleWildFaintRewards(S.battleType === 'wild');
@@ -3672,7 +3788,7 @@ async function runEnemyTurnBody() {
             const oldStage = affectedMon.statStages[statKey] || 0;
             const newVal = Math.max(-6, Math.min(6, oldStage + sc.change));
             if (newVal !== oldStage) {
-              statStageModify(affectedMon, statKey, sc.change);
+              statStageModify(affectedMon, statKey, sc.change, affectedMon !== S.activeWild);
               const sign = newVal >= 0 ? '+' : '';
               const dir = sc.change > 0 ? 'повышена' : 'понижена';
               const labels = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
@@ -4522,7 +4638,7 @@ async function startGymNextPokemon() {
     // Intimidate check
     const wildAbility = S.activeWild.abilities?.[0]?.ability?.name;
     if (wildAbility === 'intimidate') {
-      statStageModify(S.activePlayerMon, 'atk', -1);
+      statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
@@ -4702,7 +4818,7 @@ async function startEliteNextPokemon() {
     // Intimidate check
     const wildAbility = S.activeWild.abilities?.[0]?.ability?.name;
     if (wildAbility === 'intimidate') {
-      statStageModify(S.activePlayerMon, 'atk', -1);
+      statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
@@ -4807,7 +4923,7 @@ async function startChampionNextPokemon() {
     // Intimidate check
     const wildAbility = S.activeWild.abilities?.[0]?.ability?.name;
     if (wildAbility === 'intimidate') {
-      statStageModify(S.activePlayerMon, 'atk', -1);
+      statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —

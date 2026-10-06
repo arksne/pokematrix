@@ -76,6 +76,15 @@ describe('abilities.ts — справочник способностей', () =>
       'swift-swim', 'chlorophyll', 'rain-dish', 'solar-power',
       'intimidate',
       'drought', 'drizzle', 'sand-stream', 'snow-warning',
+      // Модификаторы урона (round 8, вторая партия)
+      'huge-power', 'pure-power', 'technician', 'adaptability', 'reckless',
+      'tinted-lens', 'scrappy', 'super-luck', 'battle-armor', 'shell-armor',
+      'multiscale', 'shadow-shield', 'fluffy', 'punk-rock',
+      // Защита статов и скорость по погоде
+      'clear-body', 'white-smoke', 'hyper-cutter', 'keen-eye',
+      'sand-rush', 'slush-rush',
+      // Конец хода и яд
+      'speed-boost', 'hydration', 'ice-body', 'shed-skin', 'poison-heal',
     ];
     for (const id of working) {
       expect(isAbilityImplemented(id), `${id} должна быть implemented`).toBe(true);

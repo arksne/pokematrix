@@ -168,6 +168,14 @@ export function checkStatusTurn(target) {
 export function applyStatusEndOfTurn(target, maxHp) {
   if (!target.status) return { damage: 0 };
 
+  // Poison Heal: вместо урона от отравления владелец восстанавливает 1/8.
+  // У дикого способность лежит в abilities[0], у покемона игрока — в abilityName.
+  const phAbil = ((target.abilities?.[0]?.ability?.name) || target.abilityName || '')
+    .toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (target.status === 'psn' && phAbil === 'poisonheal') {
+    return { damage: 0, heal: Math.max(1, Math.floor(maxHp / 8)) };
+  }
+
   if (target.status === 'psn') {
     const dmg = Math.max(1, Math.floor(maxHp / 8));
     return { damage: dmg };
