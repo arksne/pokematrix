@@ -292,23 +292,23 @@ export const ABILITIES: Record<string, AbilityDef> = {
   },
   drought: {
     id: 'drought', nameRu: 'Засуха',
-    short: 'При выходе вызывает солнечную погоду на 5 ходов.',
-    triggers: ['onSwitchIn'], implemented: false,
+    short: 'При выходе на поле устанавливает солнечную погоду на текущий бой.',
+    triggers: ['onSwitchIn'], implemented: true,
   },
   drizzle: {
     id: 'drizzle', nameRu: 'Морось',
-    short: 'При выходе вызывает дождь на 5 ходов.',
-    triggers: ['onSwitchIn'], implemented: false,
+    short: 'При выходе на поле устанавливает дождь на текущий бой.',
+    triggers: ['onSwitchIn'], implemented: true,
   },
   'sand-stream': {
     id: 'sand-stream', nameRu: 'Песчаный поток',
-    short: 'При выходе вызывает песчаную бурю на 5 ходов.',
-    triggers: ['onSwitchIn'], implemented: false,
+    short: 'При выходе на поле устанавливает песчаную бурю на текущий бой.',
+    triggers: ['onSwitchIn'], implemented: true,
   },
   'snow-warning': {
     id: 'snow-warning', nameRu: 'Снежное предупреждение',
-    short: 'При выходе вызывает град на 5 ходов.',
-    triggers: ['onSwitchIn'], implemented: false,
+    short: 'При выходе на поле устанавливает град на текущий бой.',
+    triggers: ['onSwitchIn'], implemented: true,
   },
 
   // ── Способности при выходе на поле ────────────────────────────────

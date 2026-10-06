@@ -57,7 +57,8 @@ describe('abilities.ts — справочник способностей', () =>
     expect(isAbilityImplemented('levitate')).toBe(true);
     expect(isAbilityImplemented('wonder-guard')).toBe(true);
     // Не реализованные помечены явно, а не молчат в бою.
-    expect(isAbilityImplemented('drought')).toBe(false);
+    expect(isAbilityImplemented('truant')).toBe(false);
+    expect(isAbilityImplemented('magic-guard')).toBe(false);
     expect(isAbilityImplemented('nonexistent')).toBe(false);
   });
 
@@ -74,6 +75,7 @@ describe('abilities.ts — справочник способностей', () =>
       'static', 'flame-body', 'poison-point', 'rough-skin', 'iron-barbs',
       'swift-swim', 'chlorophyll', 'rain-dish', 'solar-power',
       'intimidate',
+      'drought', 'drizzle', 'sand-stream', 'snow-warning',
     ];
     for (const id of working) {
       expect(isAbilityImplemented(id), `${id} должна быть implemented`).toBe(true);

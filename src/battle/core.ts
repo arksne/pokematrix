@@ -2075,6 +2075,9 @@ async function startHunt(encountersArray) {
       statStageModify(S.activePlayerMon, 'atk', -1);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
+    // Погодные способности срабатывают в тот же момент, что и Intimidate —
+    // при выходе на поле. Раньше здесь был только Intimidate.
+    applyWeatherAbility(wildAbility, S.activeWild.name);
 
     S.playerMovesDetailed = [];
     loadMoveButtons(S.activePlayerMon, useMove);
@@ -2232,6 +2235,43 @@ function updateMoveButtonUIs() {
  * Для игрока: из S.activePlayerMon.abilityName
  * Для дикого: из S.activeWild.abilities[0].ability.name
  */
+/**
+ * WEATHER_ABILITY_MAP — способности, вызывающие погоду при выходе на поле.
+ * Значения совпадают с ключами WEATHER_NAMES (data/weather.ts).
+ */
+const WEATHER_ABILITY_MAP: Record<string, string> = {
+  drought: 'sun',
+  drizzle: 'rain',
+  'sand-stream': 'sandstorm',
+  'snow-warning': 'hail',
+};
+
+/**
+ * applyWeatherAbility — применить погодную способность при выходе на поле.
+ *
+ * ПОЧЕМУ ОТДЕЛЬНАЯ ФУНКЦИЯ:
+ *   Способности выхода на поле (Intimidate, Drought, Drizzle, Sand Stream,
+ *   Snow Warning) срабатывают в одной точке — в момент появления покемона.
+ *   Раньше здесь был только Intimidate, четырьмя одинаковыми копиями, а четыре
+ *   погодные способности лежали в справочнике неподключёнными.
+ *
+ * ПРО ДЛИТЕЛЬНОСТЬ:
+ *   Погода в игре пока не пошаговая: она берётся из getDailyWeather() для
+ *   локации и держится до конца боя. Поэтому канонные «5 ходов» здесь не
+ *   реализованы — способность выставляет погоду на текущий бой.
+ */
+function applyWeatherAbility(abilityId, displayName) {
+  const weather = WEATHER_ABILITY_MAP[abilityId];
+  if (!weather) return false;
+  if (weather === S.currentWeather) return false;
+  S.currentWeather = weather;
+  appendToLog(
+    `${displayName} меняет погоду: ${WEATHER_ICONS[weather]} ${WEATHER_NAMES[weather]}!`,
+    false, 'system',
+  );
+  return true;
+}
+
 function updateAbilityDisplay() {
   // Название показываем по-русски из справочника (data/abilities.ts), а не
   // сырым англоязычным id из PokeAPI. Если способности нет в справочнике —
@@ -4483,6 +4523,9 @@ async function startGymNextPokemon() {
       statStageModify(S.activePlayerMon, 'atk', -1);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
+    // Погодные способности срабатывают в тот же момент, что и Intimidate —
+    // при выходе на поле. Раньше здесь был только Intimidate.
+    applyWeatherAbility(wildAbility, S.activeWild.name);
 
     // Set up player moves
     loadMoveButtons(S.activePlayerMon, useMove);
@@ -4660,6 +4703,9 @@ async function startEliteNextPokemon() {
       statStageModify(S.activePlayerMon, 'atk', -1);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
+    // Погодные способности срабатывают в тот же момент, что и Intimidate —
+    // при выходе на поле. Раньше здесь был только Intimidate.
+    applyWeatherAbility(wildAbility, S.activeWild.name);
 
     // Set up player moves for elite battle
     loadMoveButtons(S.activePlayerMon, useMove);
@@ -4762,6 +4808,9 @@ async function startChampionNextPokemon() {
       statStageModify(S.activePlayerMon, 'atk', -1);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
     }
+    // Погодные способности срабатывают в тот же момент, что и Intimidate —
+    // при выходе на поле. Раньше здесь был только Intimidate.
+    applyWeatherAbility(wildAbility, S.activeWild.name);
 
     // Set up player moves for GS.champion battle
     loadMoveButtons(S.activePlayerMon, useMove);
