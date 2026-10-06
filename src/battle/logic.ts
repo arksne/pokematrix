@@ -309,6 +309,10 @@ alwaysCrit = false,
     // Максимальное HP защитника. Нужно способностям, которые смотрят на
     // «полное HP» (Multiscale, Shadow Shield).
     defenderMaxHp = undefined,
+    // Текущее и максимальное HP атакующего — для Defeatist (ниже половины HP
+    // атака и сп. атака вдвое слабее).
+    attackerCurrentHp = undefined,
+    attackerMaxHp = undefined,
   }) {
   const parts = [];
   const power = move.power;
@@ -432,9 +436,13 @@ alwaysCrit = false,
   let effectiveTypeMult = typeMult;
   if (defenderHeldItem === 'airBalloon' && move.type?.name === 'ground') effectiveTypeMult = 0;
 
-  // Ability interactions with type effectiveness
   const moveType = move.type?.name;
-  if (defenderAbilityName) {
+
+  // Mold Breaker: атакующий полностью игнорирует защитную способность цели.
+  const defenderAbilityBlocked = normAtkAbil === 'moldbreaker';
+
+  // Ability interactions with type effectiveness
+  if (defenderAbilityName && !defenderAbilityBlocked) {
     const defAbil = defenderAbilityName.toLowerCase().replace(/[^a-z0-9-]/g, '');
     // Immunities
     if (defAbil === 'levitate' && moveType === 'ground') effectiveTypeMult = 0;
@@ -516,6 +524,18 @@ alwaysCrit = false,
     // Punk Rock: свои звуковые атаки на 30% сильнее.
     if (normAtkAbil === 'punkrock' && SOUND_MOVES.has(move.name)) {
       abilityMult *= 1.3;
+    }
+    // Guts: пока покемон под статусом, его физическая атака на 50% выше.
+    // Раньше способность компенсировала штраф ожога; теперь ожог атаку не
+    // снижает, поэтому Guts — просто бонус за игру под статусом.
+    if (normAtkAbil === 'guts' && isPhysical && attacker.status) {
+      abilityMult *= 1.5;
+    }
+    // Defeatist: ниже половины HP атака и сп. атака вдвое слабее.
+    if (normAtkAbil === 'defeatist'
+      && typeof attackerCurrentHp === 'number' && typeof attackerMaxHp === 'number'
+      && attackerMaxHp > 0 && attackerCurrentHp * 2 <= attackerMaxHp) {
+      abilityMult *= 0.5;
     }
   }
 

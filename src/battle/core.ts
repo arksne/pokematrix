@@ -674,6 +674,10 @@ function modifyScreenTurns(screen, delta, isPlayer) {
  */
 function applyBarrierMod(damage, move, defenderIsPlayer, ignoreBarrier = false) {
   if (ignoreBarrier) return 1; // Crits ignore Reflect/Light Screen
+  // Infiltrator: атакующий игнорирует барьеры противника.
+  const atkAbil = String(getAbilityName(defenderIsPlayer ? S.activeWild : S.activePlayerMon,
+    defenderIsPlayer ? true : false) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (atkAbil === 'infiltrator') return 1;
   const isPhysical = move.damage_class?.name === 'physical'; // physical или special?
   if (defenderIsPlayer) {
     if (S.playerReflectTurns > 0 && isPhysical) return 0.5;       // Reflect игрока от физ. атак
@@ -3001,6 +3005,8 @@ async function useMove(moveIndex) {
         attackerAbilityName: getAbilityName(S.activePlayerMon, false),
           defenderCurrentHp: S.wildCurHP,
           defenderMaxHp: S.wildMaxHP,
+          attackerCurrentHp: S.activePlayerMon.currentHp,
+          attackerMaxHp: S.activePlayerMon.maxHp,
       });
       let hitDmg = dmgResult.damage;
       const bMod = applyBarrierMod(1, move, false, dmgResult.isCrit);
@@ -3094,6 +3100,24 @@ async function useMove(moveIndex) {
             appendToLog(`${S.activePlayerMon.apiData.name} получил ${STATUS_NAMES[st]} от способности ${S.activeWild.name}!`);
           }
         }
+      }
+
+      // Effect Spore: 30% шанс наложить случайный статус на атакующего.
+      if (power && isPhysical && wcAbil === 'effect-spore'
+        && !S.activePlayerMon.status && Math.random() < 0.3) {
+        const pool = ['par', 'psn', 'slp'];
+        const st = pool[Math.floor(Math.random() * pool.length)];
+        const an = { par: 'paralysis', psn: 'poison', slp: 'sleep' }[st];
+        if (!isStatusImmune(an, S.activePlayerMon) && applyStatusEffect(S.activePlayerMon, st)) {
+          document.getElementById('player-status-icon').innerText = getStatusIcon(st);
+          appendToLog(`${S.activePlayerMon.apiData.name} получил ${STATUS_NAMES[st]} от спор ${S.activeWild.name}!`);
+        }
+      }
+
+      // Cute Charm: 30% шанс понизить атаку атакующего при контакте.
+      if (power && isPhysical && wcAbil === 'cute-charm' && Math.random() < 0.3) {
+        statStageModify(S.activePlayerMon, 'atk', -1, true);
+        appendToLog(`${S.activeWild.name} очаровывает ${S.activePlayerMon.apiData.name}! Атака снижена.`);
       }
 
       // Rough Skin / Iron Barbs per physical hit
@@ -3660,6 +3684,8 @@ async function runEnemyTurnBody() {
       attackerAbilityName: getAbilityName(S.activeWild, true),
         defenderCurrentHp: S.activePlayerMon.currentHp,
         defenderMaxHp: S.activePlayerMon.maxHp,
+        attackerCurrentHp: S.wildCurHP,
+        attackerMaxHp: S.wildMaxHP,
     });
     let hitDmg = dmgResult.damage;
     const bMod = applyBarrierMod(1, chosenMove, true, dmgResult.isCrit); // Барьеры игрока

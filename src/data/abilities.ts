@@ -189,7 +189,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   guts: {
     id: 'guts', nameRu: 'Кишки',
     short: 'Атака выше на 50%, пока покемон под статусом.',
-    triggers: ['onDamageCalc'], implemented: false,  // TODO: ожог больше не снижает атаку, надо переосмыслить
+    triggers: ['onDamageCalc'], implemented: true,  // TODO: ожог больше не снижает атаку, надо переосмыслить
   },
   'battle-armor': {
     id: 'battle-armor', nameRu: 'Боевая броня',
@@ -204,7 +204,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'mold-breaker': {
     id: 'mold-breaker', nameRu: 'Разрушитель',
     short: 'Игнорирует защитные способности противника.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'tinted-lens': {
     id: 'tinted-lens', nameRu: 'Цветные линзы',
@@ -246,12 +246,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'effect-spore': {
     id: 'effect-spore', nameRu: 'Спора',
     short: '30% шанс наложить случайный статус на атакующего при контакте.',
-    triggers: ['onAfterHit'], implemented: false,
+    triggers: ['onAfterHit'], implemented: true,
   },
   'cute-charm': {
     id: 'cute-charm', nameRu: 'Милая приманка',
     short: '30% шанс понизить атаку атакующего при контакте.',
-    triggers: ['onAfterHit'], implemented: false,
+    triggers: ['onAfterHit'], implemented: true,
   },
   mummy: {
     id: 'mummy', nameRu: 'Мумия',
@@ -357,17 +357,17 @@ export const ABILITIES: Record<string, AbilityDef> = {
   oblivious: {
     id: 'oblivious', nameRu: 'Беспечность',
     short: 'Иммунитет к привлекающим и запрещающим атакам.',
-    triggers: ['onStatusAttempt'], implemented: false,
+    triggers: ['onStatusAttempt'], implemented: true,
   },
   'own-tempo': {
     id: 'own-tempo', nameRu: 'Свой ритм',
     short: 'Иммунитет к замешательству.',
-    triggers: ['onStatusAttempt'], implemented: false,
+    triggers: ['onStatusAttempt'], implemented: true,
   },
   'tangled-feet': {
     id: 'tangled-feet', nameRu: 'Запутанные ноги',
     short: 'В замешательстве уклонение повышено.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'magic-guard': {
     id: 'magic-guard', nameRu: 'Магическая защита',
@@ -387,7 +387,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'infiltrator': {
     id: 'infiltrator', nameRu: 'Проникновение',
     short: 'Игнорирует барьеры противника и Заменитель.',
-    triggers: ['onDamageCalc'], implemented: false,
+    triggers: ['onDamageCalc'], implemented: true,
   },
   'keen-eye': {
     id: 'keen-eye', nameRu: 'Зоркий глаз',
@@ -497,7 +497,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'defeatist': {
     id: 'defeatist', nameRu: 'Пессимизм',
     short: 'При половине HP атака и сп. атака вдвое ниже.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'multiscale': {
     id: 'multiscale', nameRu: 'Многослойность',
