@@ -2046,8 +2046,27 @@ async function startHunt(encountersArray) {
     battle.transition(BattlePhase.WILD_START);
     battle.transition(BattlePhase.PLAYER_TURN);
 
-  } catch (e) {
-    battleLog.innerText = 'Ошибка загрузки...';
+    // Persist the encounter the moment it exists. Without this the battle was
+    // only written to battle_state after the player's first action, so any
+    // reload between the wild Pokemon appearing and the first click lost the
+    // encounter completely — the Pokemon vanished and the hunt simply restarted.
+    saveBattleState();
+  } catch (e: any) {
+    // Раньше здесь стояли только две строки: battleLog.innerText = 'Ошибка боя...'
+    // и скрытие модалки. Ошибка при этом полностью исчезала — ни в консоли, ни в
+    // отчётности клиента. Из-за этого невозможно было отличить «бой не
+    // начался из-за сбоя» от «бой начался и закончился»: и то и другое выглядело
+    // как пустой экран. Теперь причина попадает в консоль и в клиентский
+    // отчётчик, а в лог боя добавляется текст ошибки.
+    console.error('[battle] startHunt failed:', e);
+    try {
+      navigator.sendBeacon?.('/api/log-client-error', JSON.stringify({
+        msg: 'startHunt failed: ' + (e?.message || String(e)),
+        stack: e?.stack || '',
+        time: Date.now(),
+      }));
+    } catch (_) {}
+    battleLog.innerText = `Ошибка боя: ${e?.message || e}`;
     setTimeout(() => { modal.style.display = 'none'; }, 1000);
   } finally {
     huntPending = false;
@@ -4347,6 +4366,10 @@ async function startGymNextPokemon() {
     // Set phase so player can attack
     battle.transition(BattlePhase.PLAYER_TURN);
 
+    // Бой с залом тоже должен переживать перезагрузку до первого действия игрока:
+    // иначе теряется не только встреча, но и прогресс по лидеру (gymTeamIndex).
+    saveBattleState();
+
   } catch (e) {
     appendToLog('Ошибка загрузки покемона лидера...');
   }
@@ -4518,6 +4541,10 @@ async function startEliteNextPokemon() {
     loadMoveButtons(S.activePlayerMon, useMove);
     battle.transition(BattlePhase.PLAYER_TURN);
 
+    // Элитная четвёрка: та же причина, что и у зала — состояние боя обязано
+    // пережить перезагрузку до первого хода игрока.
+    saveBattleState();
+
     // Player UI refresh
     document.getElementById('player-name').innerText = S.activePlayerMon.nickname || S.activePlayerMon.apiData.name;
     document.getElementById('player-lvl').innerText = `Lv${S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten}`;
@@ -4615,6 +4642,9 @@ async function startChampionNextPokemon() {
     // Set up player moves for GS.champion battle
     loadMoveButtons(S.activePlayerMon, useMove);
     battle.transition(BattlePhase.PLAYER_TURN);
+
+    // Бой с чемпионом — последний в цепочке, терять его из-за F5 дороже всего.
+    saveBattleState();
 
     // Player UI refresh
     document.getElementById('player-name').innerText = S.activePlayerMon.nickname || S.activePlayerMon.apiData.name;
