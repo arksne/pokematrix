@@ -212,11 +212,27 @@ export function statStageModify(stages, stat, delta) {
  * move.accuracy from PokeAPI: null = never misses, number = percentage.
  * Always-hitting moves: accuracy is null, or the move has "guaranteed" meta.
  */
-export function checkAccuracy(move) {
+export function checkAccuracy(move, attackerAbility = null, defenderAbility = null, weather = 'clear') {
+  const norm = (a) => (a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const atkAbil = norm(attackerAbility);
+  const defAbil = norm(defenderAbility);
+
+  // No Guard — у любой из сторон: все атаки в бою попадают всегда.
+  if (atkAbil === 'noguard' || defAbil === 'noguard') return { hit: true, message: null };
+
   // null accuracy = never misses (e.g. Swift, Aerial Ace, Shock Wave)
   if (move.accuracy == null) return { hit: true, message: null };
-  const acc = Number(move.accuracy);
-  if (isNaN(acc) || acc >= 100) return { hit: true, message: null };
+  let acc = Number(move.accuracy);
+  if (isNaN(acc)) return { hit: true, message: null };
+
+  // Compound Eyes — точность атакующего выше на 30%.
+  if (atkAbil === 'compoundeyes') acc = Math.min(100, acc * 1.3);
+
+  // Sand Veil / Snow Cloak — уклонение защитника выше в свою погоду (−20% точности).
+  if (defAbil === 'sandveil' && weather === 'sandstorm') acc *= 0.8;
+  if (defAbil === 'snowcloak' && weather === 'hail') acc *= 0.8;
+
+  if (acc >= 100) return { hit: true, message: null };
   if (Math.random() * 100 < acc) return { hit: true, message: null };
   return { hit: false, message: 'Атака промахнулась!' };
 }

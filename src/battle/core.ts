@@ -498,6 +498,11 @@ function getEffectiveSpeed(pokemon, isWild): number {
   // Скорость больше не трогаем.
 
   const ability = getAbilityName(pokemon, isWild);
+  // Нормализуем имя способности: PokeAPI отдаёт kebab-case ('swift-swim'),
+  // а сравнения ниже написаны слитно ('swiftswim'). Без нормализации Swift Swim,
+  // Rain Dish и Solar Power не срабатывали НИКОГДА — сравнение всегда было
+  // ложным. Chlorophyll работал случайно: в его имени нет дефиса.
+  const abilN = ability ? String(ability).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 
   if (pokemon?.heldItem === 'choiceScarf') speed *= 1.5;
   // Погодные способности скорости. Каждая работает только в свою погоду:
@@ -505,10 +510,10 @@ function getEffectiveSpeed(pokemon, isWild): number {
   //   Chlorophyll / Solar Power — солнце
   //   Sand Rush — песчаная буря
   //   Slush Rush — град
-  if (S.currentWeather === 'rain' && (ability === 'swiftswim' || ability === 'raindish')) speed *= 2;
-  if (S.currentWeather === 'sun' && (ability === 'chlorophyll' || ability === 'solarpower')) speed *= 2;
-  if (S.currentWeather === 'sandstorm' && ability === 'sandrush') speed *= 2;
-  if (S.currentWeather === 'hail' && ability === 'slushrush') speed *= 2;
+  if (S.currentWeather === 'rain' && (abilN === 'swiftswim' || abilN === 'raindish')) speed *= 2;
+  if (S.currentWeather === 'sun' && (abilN === 'chlorophyll' || abilN === 'solarpower')) speed *= 2;
+  if (S.currentWeather === 'sandstorm' && abilN === 'sandrush') speed *= 2;
+  if (S.currentWeather === 'hail' && abilN === 'slushrush') speed *= 2;
 
   return Math.max(1, speed);
 }
@@ -2818,7 +2823,12 @@ async function useMove(moveIndex) {
 
   // ═══ 8. ACCURACY CHECK ═══
   // Проверяем попала ли атака (учитывает accuracy атаки и evasion цели)
-  let accResult = checkAccuracy(move);
+  let accResult = checkAccuracy(
+    move,
+    getAbilityName(S.activePlayerMon, false),
+    getAbilityName(S.activeWild, true),
+    S.currentWeather,
+  );
   // Hustle: 20% additional miss chance for physical moves
   const playerAbilityName = getAbilityName(S.activePlayerMon, false);
   if (accResult.hit && playerAbilityName === 'hustle' && power && move.damage_class?.name === 'physical') {
@@ -3035,11 +3045,16 @@ async function useMove(moveIndex) {
             updatePlayerHpUI();
           }
         } else {
-          const rPct = Math.abs(move.meta.drain) / 100;
-          let rd = Math.max(1, Math.floor(hitDmg * rPct));
-          S.activePlayerMon.currentHp -= rd;
-          if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
-          updatePlayerHpUI();
+          // Rock Head: способность полностью снимает отдачу от своих атак.
+          const rhAbil = String(getAbilityName(S.activePlayerMon, false) || '')
+            .toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (rhAbil !== 'rockhead') {
+            const rPct = Math.abs(move.meta.drain) / 100;
+            const rd = Math.max(1, Math.floor(hitDmg * rPct));
+            S.activePlayerMon.currentHp -= rd;
+            if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
+            updatePlayerHpUI();
+          }
         }
       }
 
@@ -3569,7 +3584,12 @@ async function runEnemyTurnBody() {
   }
 
   // ═══ 4. ACCURACY CHECK ═══
-  let enemyAcc = checkAccuracy(chosenMove);
+  let enemyAcc = checkAccuracy(
+    chosenMove,
+    getAbilityName(S.activeWild, true),
+    getAbilityName(S.activePlayerMon, false),
+    S.currentWeather,
+  );
   // Hustle: 20% additional miss chance for physical moves
   const wildAbilityName = getAbilityName(S.activeWild, true);
   if (enemyAcc.hit && wildAbilityName === 'hustle' && chosenMove.damage_class?.name === 'physical') {

@@ -273,12 +273,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'sand-veil': {
     id: 'sand-veil', nameRu: 'Песчаная завеса',
     short: 'В песчаную бурю уклонение повышено.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'snow-cloak': {
     id: 'snow-cloak', nameRu: 'Снежный плащ',
     short: 'В град уклонение повышено.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'rain-dish': {
     id: 'rain-dish', nameRu: 'Блюдо дождя',
@@ -422,7 +422,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'rock-head': {
     id: 'rock-head', nameRu: 'Каменная голова',
     short: 'Не получает урон от отдачи своих атак.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'reckless': {
     id: 'reckless', nameRu: 'Безрассудство',
@@ -447,12 +447,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   'compound-eyes': {
     id: 'compound-eyes', nameRu: 'Фасеточные глаза',
     short: 'Точность повышена на 30%.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'no-guard': {
     id: 'no-guard', nameRu: 'Без защиты',
     short: 'Все атаки обеих сторон всегда попадают.',
-    triggers: ['passive'], implemented: false,
+    triggers: ['passive'], implemented: true,
   },
   'sand-rush': {
     id: 'sand-rush', nameRu: 'Песчаный натиск',
