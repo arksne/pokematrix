@@ -42,3 +42,6 @@ console.log*
 # Артефакты проверки работоспособности
 tools/verify/.state/
 .neon
+
+# Экспорты переписки (не часть проекта)
+conversation-*.txt
