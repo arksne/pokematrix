@@ -13,6 +13,17 @@ describe('abilities.ts — справочник способностей', () =>
     expect(ABILITY_COUNT).toBeGreaterThan(50);
   });
 
+  // Этот тест появился после того, как в отчёте разошлись числа: я написал
+  // «71 из 118», хотя записей 95, а реализованных было 77. Цифры в отчётах
+  // должны проверяться, а не браться по памяти.
+  it('итоги сходятся: всего = реализованные + нереализованные', () => {
+    const all = Object.values(ABILITIES);
+    expect(all.length).toBe(ABILITY_COUNT);
+    const implemented = all.filter((a) => a.implemented).length;
+    const notImplemented = all.length - implemented;
+    expect(implemented + notImplemented).toBe(ABILITY_COUNT);
+  });
+
   it('у каждой способности есть id, nameRu, short и triggers', () => {
     for (const [key, def] of Object.entries(ABILITIES)) {
       expect(def.id, `${key}.id`).toBe(key);
