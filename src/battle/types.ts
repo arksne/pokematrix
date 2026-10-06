@@ -67,7 +67,7 @@ export const BATTLE_TRANSITIONS: Record<BattlePhase, BattlePhase[]> = {
     BattlePhase.ENEMY_TURN, BattlePhase.SWITCHING,
     BattlePhase.ITEM_USE, BattlePhase.CAPTURE,
     BattlePhase.FAINTED, BattlePhase.DEFEAT,
-    BattlePhase.VICTORY,
+    BattlePhase.VICTORY, BattlePhase.IDLE,
   ],
   [BattlePhase.ENEMY_TURN]: [
     BattlePhase.PLAYER_TURN, BattlePhase.FAINTED,

@@ -97,10 +97,14 @@ describe('BattleStateMachine — невалидные переходы', () => {
     expect(sm.transition(BattlePhase.VICTORY)).toBe(false);
   });
 
-  it('PLAYER_TURN → IDLE запрещён', () => {
+  // Раньше этот переход был запрещён, и побег/выход из боя оставляли фазу в
+  // PLAYER_TURN: battle_state не чистился, а следующий бой не мог перейти в
+  // WILD_START из этой фазы. По спецификации побег и выход из боя завершают бой,
+  // поэтому PLAYER_TURN → IDLE разрешён.
+  it('PLAYER_TURN → IDLE разрешён (побег и выход из боя)', () => {
     sm.transition(BattlePhase.WILD_START);
     sm.transition(BattlePhase.PLAYER_TURN);
-    expect(sm.transition(BattlePhase.IDLE)).toBe(false);
+    expect(sm.transition(BattlePhase.IDLE)).toBe(true);
   });
 
   it('canTransition проверяет без выполнения', () => {
@@ -269,10 +273,14 @@ describe('BattleStateMachine — BATTLE_TRANSITIONS конфигурация', (
     }
   });
 
-  it('IDLE достижим только из VICTORY и DEFEAT', () => {
+  // PLAYER_TURN добавлен намеренно: побег и выход из боя завершают бой из фазы
+  // хода игрока, минуя VICTORY/DEFEAT.
+  it('IDLE достижим из VICTORY, DEFEAT и PLAYER_TURN', () => {
     const canReachIdle = Object.entries(BATTLE_TRANSITIONS)
       .filter(([, targets]) => targets.includes(BattlePhase.IDLE))
       .map(([phase]) => phase);
-    expect(canReachIdle.sort()).toEqual([BattlePhase.DEFEAT, BattlePhase.VICTORY].sort());
+    expect(canReachIdle.sort()).toEqual(
+      [BattlePhase.DEFEAT, BattlePhase.PLAYER_TURN, BattlePhase.VICTORY].sort(),
+    );
   });
 });

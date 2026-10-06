@@ -800,8 +800,11 @@ function applyLeechSeedTick(seededIsPlayer: boolean) {
     updatePlayerHpUI();
     appendToLog(`Семя Ужаса отнимает у ${S.activePlayerMon.apiData.name} ${dmg} HP!`, false, 'dmg');
     const heal = Math.max(1, Math.floor(dmg / 2));
-    if (S.wildCurHP > 0 && S.activeWild.currentHp < S.wildMaxHP) {
-      S.activeWild.currentHp = Math.min(S.wildMaxHP, S.activeWild.currentHp + heal);
+    // HP дикого живёт в S.wildCurHP, а не в S.activeWild.currentHp. Раньше
+    // лечение уходило в поле, которое никто не читает, — враг не лечился,
+    // хотя урон с него снимался.
+    if (S.wildCurHP > 0 && S.wildCurHP < S.wildMaxHP) {
+      S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
       updateWildHpUI();
       appendToLog(`${S.activeWild.name} восстановил ${heal} HP за счёт Семени.`, false, 'heal');
     }
@@ -2396,9 +2399,14 @@ async function handleWildFaintRewards(isWild: boolean) {
 
   // ═══ Финальный UI ═══
   if (isWild) {
-    // Победа над диким — показываем меню завершения боя
+    // Победа над диким — показываем меню завершения боя.
+    // Фаза доводится до IDLE: раньше она оставалась в PLAYER_TURN/ENEMY_TURN,
+    // и следующий бой не мог перейти в WILD_START — такого перехода нет в
+    // таблице, поэтому фазовый автомат молча оставался в старой фазе.
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
+    battle.transition(BattlePhase.VICTORY);
+    battle.transition(BattlePhase.IDLE);
     clearBattleState();                               // Удаляем сохранение боя
     store.updateInventoryDisplay();
     store.updateMoneyDisplay();
@@ -2856,11 +2864,11 @@ async function useMove(moveIndex) {
       if (bMod !== 1) hitDmg = Math.floor(hitDmg * bMod);
       lastCrit = dmgResult.isCrit;
 
-      if (hi === 0) {
-        for (const msg of dmgResult.messages) appendToLog(msg, false, 'dmg');
-      } else if (dmgResult.isCrit) {
-        appendToLog('Критический удар!', false, 'dmg');
-      }
+      // Модификаторы («Критический удар!», «Суперэффективно!»…) печатаем в одной
+      // строке с уроном — ниже, когда урон уже применён.
+      const hitMods = dmgResult.messages
+        .map(m => m.replace(/[!.]+$/, '').toLowerCase())
+        .join(', ');
 
       if (S.enemySubstituteHP > 0) {
         const subDmg = Math.min(S.enemySubstituteHP, hitDmg);
@@ -2868,7 +2876,10 @@ async function useMove(moveIndex) {
         hitDmg -= subDmg;
         if (S.enemySubstituteHP <= 0) { appendToLog('Заменитель разрушен!'); S.enemySubstituteHP = 0; }
       }
-      if (hitDmg <= 0) continue;
+      if (hitDmg <= 0) {
+        appendToLog(`0 урона${hitMods ? ` — ${hitMods}` : ''}`, false, 'dmg');
+        continue;
+      }
 
       // Type-resist berry for wild (Occa, Passho, etc.)
       if (hi === 0) hitDmg = applyTypeResistBerry(S.activeWild, move.type?.name, hitDmg, false);
@@ -2877,6 +2888,8 @@ async function useMove(moveIndex) {
       if (S.wildCurHP < 0) S.wildCurHP = 0;
       totalDmg += hitDmg;
       hitsLanded++;
+      // Одна строка на удар: урон и модификаторы вместе
+      appendToLog(`−${hitDmg} HP${hitMods ? ` — ${hitMods}` : ''}`, false, 'dmg');
 
       // Drain / Recoil per hit
       if (move.meta?.drain) {
@@ -3004,12 +3017,10 @@ async function useMove(moveIndex) {
 
     updateWildHpUI();
 
-    // Summary message
+    // Итог по многоударной атаке. Для одиночного удара строка уже напечатана
+    // в цикле — дублировать не нужно.
     if (numHits > 1) {
-      appendToLog(`Атака попала ${hitsLanded} раз(а)! Нанесено ${totalDmg} урона!`, false, 'dmg');
-      if (lastCrit) appendToLog('Критический удар!', false, 'dmg');
-    } else if (totalDmg > 0) {
-      appendToLog(`Нанесено ${totalDmg} урона!`, false, 'dmg');
+      appendToLog(`Попал ${hitsLanded} раз(а), всего ${totalDmg} урона!`, false, 'dmg');
     }
 
     // Berry auto-use after all hits
@@ -3026,9 +3037,23 @@ async function useMove(moveIndex) {
 
   if (S.wildCurHP === 0) {
     await handleWildFaintRewards(S.battleType === 'wild');
-  } else {
-     endTurn();
+    return;
   }
+
+  // ═══ УРОН СТАТУСОВ ИГРОКА — СРАЗУ ПОСЛЕ ЕГО ДЕЙСТВИЯ ═══
+  // По спецификации яд/ожог/токсин и Семя Ужаса срабатывают сразу после
+  // действия владельца, а не в конце раунда. Раньше этот блок стоял в конце
+  // хода ВРАГА: если враг был медленнее и не успевал сходить, статус игрока
+  // не тикал вообще, а при пропуске хода — тикал дважды.
+  applyStatusEndOfTurn(S.activePlayerMon, true);
+  if (S.activePlayerMon.currentHp > 0) applyLeechSeedTick(true);
+  if (S.activePlayerMon.currentHp <= 0) {
+    appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
+    handlePlayerFaint();
+    return;
+  }
+
+  endTurn();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3090,6 +3115,10 @@ function handlePlayerFaint() {
     }
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex'; // Экран "Поражение"
+    // Доводим фазу до IDLE — иначе следующий бой начинался из фазы, переход
+    // из которой в WILD_START/GYM_START не разрешён.
+    battle.transition(BattlePhase.DEFEAT);
+    battle.transition(BattlePhase.IDLE);
     clearBattleState();                                             // Удаляем сохранение
     store.autoSave();
   }
@@ -3206,49 +3235,95 @@ async function enemyTurn() {
   }
 }
 
-async function runEnemyTurnBody() {
-  battle.transition(BattlePhase.ENEMY_TURN);
-
-  // ═══ 1. УРОН ОТ СТАТУСА (начало хода) ═══
-  // Применяется раз в раунд в начале хода врага
-  applyStatusEndOfTurn(S.activeWild, false);
-  // Berry auto-use для врага после урона от статуса (Lum/Sitrus/Oran)
-  if (S.wildCurHP > 0) checkBerryAutoUse(S.activeWild, false);
+/**
+ * finishEnemyTurn — завершение хода противника.
+ *
+ * ЧТО ДЕЛАЕТ (по порядку):
+ *   1. Урон от статусов врага (яд/ожог/токсин) — сразу после его действия
+ *   2. Ягоды врага, Семя Ужаса на враге, погодный чип
+ *   3. Если враг погиб — награды и выход
+ *   4. Погодный чип и ягоды игрока, проверка нокаута игрока
+ *   5. Объедки обеих сторон
+ *   6. Сохранение боя и возврат меню игроку (фаза PLAYER_TURN)
+ *
+ * ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ:
+ *   Раньше каждая ветка хода врага (сон, флинч, заряд, промах, статус-атака,
+ *   Protect) сама вызывала showPlayerMenuAfterDelay(), но БЕЗ return. Выполнение
+ *   продолжалось дальше — враг атаковал, будучи спящим, а меню показывалось по
+ *   таймеру поверх незавершённого хода. Теперь один выход на все случаи, и
+ *   каждая ветка обязана сделать `await finishEnemyTurn(); return;`.
+ *
+ * ПОРЯДОК СТАТУСОВ (решение из спецификации):
+ *   Урон статусов и Семя Ужаса срабатывают сразу после действия владельца, а не
+ *   в конце раунда. Поэтому статус врага тикает здесь (после его хода), а статус
+ *   игрока — в useMove() после хода игрока.
+ */
+async function finishEnemyTurn() {
+  // ── Сразу после действия врага ──
+  if (S.wildCurHP > 0) {
+    applyStatusEndOfTurn(S.activeWild, false);
+    if (S.wildCurHP > 0) checkBerryAutoUse(S.activeWild, false);
+    if (S.wildCurHP > 0) applyLeechSeedTick(false);
+    if (S.wildCurHP > 0) applyWeatherChip(S.activeWild, S.wildMaxHP, false);
+  }
   if (S.wildCurHP <= 0) {
-    await handleWildFaintRewards(S.battleType === 'wild'); // Статус добил врага
+    await handleWildFaintRewards(S.battleType === 'wild');
     return;
   }
 
-  // ═══ 1b. WEATHER CHIP (для дикого) ═══
-  if (S.wildCurHP > 0) {
-    applyWeatherChip(S.activeWild, S.wildMaxHP, false);
-    if (S.wildCurHP <= 0) {
-      await handleWildFaintRewards(S.battleType === 'wild');
-      return;
-    }
+  // ── Сторона игрока ──
+  if (S.activePlayerMon.currentHp > 0) {
+    applyWeatherChip(S.activePlayerMon, S.activePlayerMon.maxHp, true);
   }
+  if (S.activePlayerMon.currentHp > 0) checkBerryAutoUse(S.activePlayerMon, true);
+
+  if (S.activePlayerMon.currentHp === 0) {
+    appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
+    handlePlayerFaint();
+    return;
+  }
+
+  S.battleRound++;
+
+  // Объедки — пассивное восстановление 1/16 максимального HP
+  if (S.activePlayerMon.heldItem === 'leftovers' && S.activePlayerMon.currentHp > 0 && S.activePlayerMon.currentHp < S.activePlayerMon.maxHp) {
+    const heal = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 16));
+    S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
+    updatePlayerHpUI();
+    appendToLog(`${S.activePlayerMon.apiData.name} восстанавливает HP от Объедков! (+${heal})`);
+  }
+  if (S.activeWild.heldItem === 'leftovers' && S.wildCurHP > 0 && S.wildCurHP < S.wildMaxHP) {
+    const heal = Math.max(1, Math.floor(S.wildMaxHP / 16));
+    S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
+    updateWildHpUI();
+    appendToLog(`${S.activeWild.name} восстанавливает HP от Объедков! (+${heal})`);
+  }
+
+  saveBattleState();
+  showPlayerMenuAfterDelay();
+}
+
+async function runEnemyTurnBody() {
+  battle.transition(BattlePhase.ENEMY_TURN);
+
+  // Урон от статуса и погодный чип врага переехали в finishEnemyTurn():
+  // по спецификации они срабатывают ПОСЛЕ его действия, а не в начале хода.
+  // В начале хода они означали, что атакующий враг не получал урон вовсе,
+  // а получивший статус в этом же раунде — получал его дважды.
 
   // ═══ 2. ПРОВЕРКА СТАТУСА ═══
   const wildCanAct = checkStatusTurn(S.activeWild, false);
   if (!wildCanAct) {
-    S.battleRound++;
-    saveBattleState();
-    showPlayerMenuAfterDelay(); // ход игроку
-
-
-
+    await finishEnemyTurn();
+    return;
   }
 
   // ═══ 2b. FLINCH CHECK ═══
   if (S.activeWild.flinch) {
     S.activeWild.flinch = false;
     appendToLog(`${S.activeWild.name} дрогнул и не может атаковать!`, false, 'system');
-    S.battleRound++;
-    saveBattleState();
-    showPlayerMenuAfterDelay(); // ход игроку
-
-
-
+    await finishEnemyTurn();
+    return;
   }
 
   // ═══ 2c. TWO-TURN MOVE RELEASE ═══
@@ -3285,12 +3360,8 @@ async function runEnemyTurnBody() {
   if (!isChargeRelease && chosenMove.meta?.category?.name === 'charge') {
     S.enemyChargedMove = chosenMove;
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} заряжает ${enemyMoveName}!`);
-    S.battleRound++;
-    saveBattleState();
-    showPlayerMenuAfterDelay(); // ход игроку
-
-
-
+    await finishEnemyTurn();
+    return;
   }
 
   // ═══ 4. ACCURACY CHECK ═══
@@ -3304,12 +3375,8 @@ async function runEnemyTurnBody() {
   }
   if (!enemyAcc.hit) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}, но ${enemyAcc.message?.toLowerCase() || 'промахнулся'}!`);
-    S.battleRound++;
-    saveBattleState();
-    showPlayerMenuAfterDelay(); // ход игроку
-
-
-
+    await finishEnemyTurn();
+    return;
   }
   const power = chosenMove.power;
 
@@ -3317,24 +3384,16 @@ async function runEnemyTurnBody() {
   if (!power) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}!`);
     handleEnemyStatusEffects(chosenMove); // Лечение, барьеры, статы, статусы
-    S.battleRound++;
-    saveBattleState();
-    showPlayerMenuAfterDelay(); // ход игроку
-
-
-
+    await finishEnemyTurn();
+    return;
   }
 
   // ═══ 6. PROTECT CHECK (игрок защищается) ═══
   if (S.protectActive && power) {
     appendToLog(`${S.activePlayerMon.apiData.name} защитился от атаки!`);
     S.protectActive = false;
-    S.battleRound++;
-    saveBattleState();
-    showPlayerMenuAfterDelay(); // ход игроку
-
-
-
+    await finishEnemyTurn();
+    return;
   }
 
   // ═══ 7. РАСЧЁТ УРОНА (multi-hit) ═══
@@ -3344,6 +3403,12 @@ async function runEnemyTurnBody() {
   // Sheer Force: убирает вторичные эффекты атак, даёт 1.3x урон (в calculateDamage)
   const enemySheerForce = wildAbilityName === 'sheer-force' &&
     !!(chosenMove.meta?.ailment_chance || chosenMove.meta?.flinch_chance || chosenMove.meta?.stat_chance || (chosenMove.stat_changes?.length > 0));
+
+  // Сообщение об атаке — ДО урона.
+  // Раньше строка «использует X!» появлялась только в итоге, после всех ударов,
+  // и лог читался задом наперёд: сначала «Суперэффективно!», потом «−18 HP»,
+  // и лишь затем сама атака.
+  appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}!`);
 
   // ═══ MULTI-HIT LOOP (enemy) ═══
   let totalDmg = 0, hitsLanded = 0, lastCrit = false;
@@ -3376,13 +3441,11 @@ async function runEnemyTurnBody() {
     if (bMod !== 1) hitDmg = Math.floor(hitDmg * bMod);
     lastCrit = dmgResult.isCrit;
 
-    if (hi === 0) {
-      for (const msg of dmgResult.messages) {
-        appendToLog(msg, false, 'dmg');
-      }
-    } else if (dmgResult.isCrit) {
-      appendToLog('Критический удар!', false, 'dmg');
-    }
+    // Модификаторы («Критический удар!», «Суперэффективно!»…) печатаем в одной
+    // строке с уроном — ниже, когда урон уже посчитан и применён.
+    const hitMods = dmgResult.messages
+      .map(m => m.replace(/[!.]+$/, '').toLowerCase())
+      .join(', ');
 
     // Focus Sash: игрок выживает с 1 HP (предмет расходуется)
     if (S.activePlayerMon.heldItem === 'focusSash' && S.activePlayerMon.currentHp === S.activePlayerMon.maxHp && hitDmg >= S.activePlayerMon.currentHp) {
@@ -3403,7 +3466,10 @@ async function runEnemyTurnBody() {
       }
     }
 
-    if (hitDmg <= 0) continue;
+    if (hitDmg <= 0) {
+      appendToLog(`0 урона${hitMods ? ` — ${hitMods}` : ''}`, false, 'dmg');
+      continue;
+    }
 
     // Type-resist berry for player (Occa, Passho, etc.)
     if (hi === 0) hitDmg = applyTypeResistBerry(S.activePlayerMon, chosenMove.type?.name, hitDmg, true);
@@ -3418,6 +3484,8 @@ async function runEnemyTurnBody() {
     totalDmg += hitDmg;
     hitsLanded++;
     updatePlayerHpUI();
+    // Одна строка на удар: урон и модификаторы вместе
+    appendToLog(`−${hitDmg} HP${hitMods ? ` — ${hitMods}` : ''}`, false, 'dmg');
 
     // Drain / Recoil per hit
     if (chosenMove.meta?.drain) {
@@ -3538,58 +3606,31 @@ async function runEnemyTurnBody() {
       }
     }
 
-    // Summary message
+    // Итог по многоударной атаке. Для одиночного удара строка уже напечатана
+    // выше — дублировать её не нужно.
   if (numHits > 1) {
-    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}! (${hitsLanded} ударов, нанесено ${totalDmg} урона!)`, false, 'dmg');
-    if (lastCrit) appendToLog('Критический удар!', false, 'dmg');
-  } else if (totalDmg > 0) {
-    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}! (-${totalDmg} HP)`, false, 'dmg');
+    appendToLog(`Попал ${hitsLanded} раз(а), всего ${totalDmg} урона!`, false, 'dmg');
   }
 
   // ═══ 9. УМЕНЬШЕНИЕ БАРЬЕРОВ ═══
   // Перенесено в tickEnemyTurnDurations(), которая вызывается из finally хода
   // противника: ранние return ниже доходили сюда не всегда, и барьеры копились.
 
-  // ═══ 9b. WEATHER CHIP (для игрока) ═══
-  if (S.activePlayerMon.currentHp > 0) {
-    applyWeatherChip(S.activePlayerMon, S.activePlayerMon.maxHp, true);
-  }
-
-  // ═══ 10. BERRY AUTO-USE ДЛЯ ИГРОКА ═══
-  if (S.activePlayerMon.currentHp > 0) checkBerryAutoUse(S.activePlayerMon, true);
-
-  // ═══ 11. ПРОВЕРКА FAINTED ═══
-  if (S.activePlayerMon.currentHp === 0) {
-    appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
-    handlePlayerFaint();
+  // ═══ 8. НОКАУТ ВРАГА ОТ ОТКАТА ═══
+  // Rocky Helmet, Rough Skin / Iron Barbs, Struggle и отдача Life Orb уменьшают
+  // HP врага прямо в цикле выше. Раньше после цикла проверялся только нокаут
+  // ИГРОКА, поэтому враг мог остаться в бою с нулевым HP и продолжать получать
+  // удары. Проверяем это до всего остального.
+  if (S.wildCurHP <= 0) {
+    await handleWildFaintRewards(S.battleType === 'wild');
     return;
-  } else {
-    // Урон от статуса в конце хода (яд/ожог игрока)
-    applyStatusEndOfTurn(S.activePlayerMon, true);
-    if (S.activePlayerMon.currentHp <= 0) {
-      handlePlayerFaint();
-      return;
-    }
-    S.battleRound++;
-    // Leftovers healing (игрок) — пассивное восстановление 1/16 макс HP
-    if (S.activePlayerMon.heldItem === 'leftovers' && S.activePlayerMon.currentHp > 0 && S.activePlayerMon.currentHp < S.activePlayerMon.maxHp) {
-      const heal = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 16));
-      S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
-      updatePlayerHpUI();
-      appendToLog(`${S.activePlayerMon.apiData.name} восстанавливает HP от Объедков! (+${heal})`);
-    }
-    // Leftovers healing (дикий/гим)
-    if (S.activeWild.heldItem === 'leftovers' && S.wildCurHP > 0 && S.wildCurHP < S.wildMaxHP) {
-      const heal = Math.max(1, Math.floor(S.wildMaxHP / 16));
-      S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
-      updateWildHpUI();
-      appendToLog(`${S.activeWild.name} восстанавливает HP от Объедков! (+${heal})`);
-    }
-    saveBattleState();
-    setTimeout(() => {
-      document.getElementById('battle-main-menu').style.display = 'flex'; // Ход игрока
-    }, 1000);
   }
+
+  // Остальной конец хода — статусы и Семя Ужаса врага, погода, ягоды, Объедки,
+  // нокаут игрока и возврат меню — живёт в finishEnemyTurn(). Там же фаза
+  // возвращается в PLAYER_TURN: раньше здесь стоял голый setTimeout, который
+  // только показывал меню, а фазу оставлял в ENEMY_TURN.
+  await finishEnemyTurn();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3608,34 +3649,55 @@ async function runEnemyTurnBody() {
 function initEncounterEvents() {
 
   // ═══ 15a: ПОБЕГ ═══
+  //
+  // По спецификации побег ВСЕГДА удачен, но стоит покемону всех HP: активный
+  // покемон падает в нокаут. Если он был последним живым — это сразу поражение.
+  //
+  // Раньше побег был вероятностным (формула от скорости), ничего не стоил, а
+  // при удаче НЕ чистил battle_state и не переводил фазу в IDLE: после
+  // перезагрузки восстанавливался бой, который игрок уже покинул.
   document.getElementById('btn-run').addEventListener('click', () => {
     if (S.battleType !== 'wild') {
-      appendToLog('Нельзя сбежать от лидера!'); // Gym/elite — побег невозможен
+      appendToLog('Нельзя сбежать от лидера!');
       return;
     }
-    S.escapeAttempts++; // Каждая неудачная попытка увеличивает шанс
-    const playerSpeed = calculateStat(S.activePlayerMon, 'speed', false);
-    const wildSpeed = calculateStat(S.activeWild, 'speed', true);
-
-    // Формула побега: (playerSpeed * 128 / wildSpeed) + 30 * attempts
-    // Если результат > 255 — гарантированный побег
-    // Иначе — шанс F/256
-    let F = Math.floor((playerSpeed * 128 / wildSpeed) + 30 * S.escapeAttempts);
-
-    if (F > 255 || Math.floor(Math.random() * 256) < F) {
-      appendToLog('Вам удалось сбежать!');
-      setTimeout(() => { document.getElementById('encounter-modal').style.display = 'none'; }, 1000);
-    } else {
-      document.getElementById('battle-main-menu').style.display = 'none';
-      appendToLog('Не удалось сбежать!');
-      setTimeout(() => { enemyTurn(); }, 1500); // Противник атакует
+    // Действовать можно только в свой ход — иначе побег во время хода врага
+    // накладывался на его атаку.
+    if (battle.phase !== BattlePhase.PLAYER_TURN) {
+      showToast('Подождите... идёт ход противника.', true);
+      return;
     }
+
+    const mon = S.activePlayerMon;
+    const aliveBefore = GS.myTeam.filter(m => m.currentHp > 0).length;
+
+    document.getElementById('battle-main-menu').style.display = 'none';
+    appendToLog('Вам удалось сбежать!');
+    appendToLog(`${mon.apiData.name} выложился до конца и потерял сознание.`, false, 'faint');
+    mon.currentHp = 0;
+    updatePlayerHpUI();
+
+    battle.transition(BattlePhase.IDLE);
+    clearBattleState();
+    S.escapeAttempts = 0;
+
+    setTimeout(() => {
+      document.getElementById('encounter-modal').style.display = 'none';
+      if (aliveBefore <= 1) {
+        // Бежал последним живым — команда пуста, это поражение
+        appendToLog('Вся команда потеряла сознание... Вы проиграли.');
+        document.getElementById('battle-end-menu').style.display = 'flex';
+      }
+      store.autoSave();
+    }, 1000);
   });
 
   // ═══ 15b: СМЕНА ПОКЕМОНА ═══
+  // По спецификации смена разрешена и в бою с лидером зала. Раньше здесь стоял
+  // запрет для gym/elite/champion — он противоречил решению из интервью.
   document.getElementById('btn-switch').addEventListener('click', () => {
-    if (S.battleType === 'gym' || S.battleType === 'elite' || S.battleType === 'champion') {
-      showToast('Нельзя сменить покемона в бою с лидером!', true);
+    if (battle.phase !== BattlePhase.PLAYER_TURN) {
+      showToast('Подождите... идёт ход противника.', true);
       return;
     }
     switchPokemon();
@@ -3652,6 +3714,13 @@ function initEncounterEvents() {
   //   - Камни эволюции (Evolution Stone, Fire Stone...)
   //   - TM-совместимость
   document.getElementById('btn-use-item').addEventListener('click', () => {
+    // Действовать можно только в свой ход. Без этой проверки предмет,
+    // использованный во время хода врага, запускал ещё один enemyTurn() —
+    // два хода противника подряд и удвоенный урон.
+    if (battle.phase !== BattlePhase.PLAYER_TURN) {
+      showToast('Подождите... идёт ход противника.', true);
+      return;
+    }
     // Читаем выбранный предмет из выпадающего списка
     const item = (document.getElementById('battle-item-select') as HTMLInputElement).value;
 
@@ -3790,6 +3859,14 @@ function initEncounterEvents() {
 
           document.getElementById('battle-main-menu').style.display = 'none';
           document.getElementById('battle-end-menu').style.display = 'flex';
+          // Поимка завершает бой так же, как победа. Раньше здесь не было
+          // clearBattleState(), поэтому состояние боя оставалось в localStorage
+          // и после перезагрузки восстанавливался бой с покемоном, которого
+          // игрок уже поймал.
+          battle.transition(BattlePhase.CAPTURE);
+          battle.transition(BattlePhase.VICTORY);
+          battle.transition(BattlePhase.IDLE);
+          clearBattleState();
           store.autoSave();
         } else {
           appendToLog(`${S.activeWild.name.toUpperCase()} вырвался!`);
