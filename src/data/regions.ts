@@ -1766,10 +1766,10 @@ export const REGIONS: Record<string, RegionDef> = {
         region: 'johto',
       },
       pokemart: {
-        name: 'Поке-Март',
-        desc: 'Маленький магазинчик с белыми стенами и прилавком за стеклом. Полки со зельями и покеболами, за кассой — приветливый продавец, на улице — синяя крыша с буквой M.',
+        name: 'Поке-маркет',
+        desc: 'Закрытое помещение с полками стендов и терминалом. Слева витрина с расходниками, по центру — прилавок продавца, за ним — ряды коробок с наклейкой M.',
         image: '/assets/map/johto/pokemart.png',
-        links: [],
+        links: ['goldenrodCity'],
         encounters: [],
         hasHeal: false,
         hasWater: false,

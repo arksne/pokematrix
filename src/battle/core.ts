@@ -589,12 +589,23 @@ function getMultiHitCount(move) {
  * остаётся сырым чтением для интерфейса и справочника.
  */
 function abilityOf(mon, isWild) {
+  if (!mon) return null;
   const norm = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const own = getAbilityName(mon, isWild);
   if (norm(own) === 'neutralizinggas') return own;
-  const gasOnField = norm(abilityOf(S.activeWild, true)) === 'neutralizinggas'
-    || norm(abilityOf(S.activePlayerMon, false)) === 'neutralizinggas';
-  return gasOnField ? null : own;
+  // Нейтрализующий газ на ЛЮБОЙ стороне поля глушит все остальные способности.
+  // ВАЖНО: сосед читается через getAbilityName напрямую. Вызов abilityOf здесь
+  // уходил в бесконечную рекурсию (каждый вызов перепроверял поле заново) и
+  // ронял бой с Maximum call stack size exceeded — коммит 81e10f8.
+  const other = mon === S.activeWild ? S.activePlayerMon : S.activeWild;
+  const otherRaw = other ? getAbilityName(other, other === S.activeWild) : null;
+  if (norm(otherRaw) === 'neutralizinggas') return null;
+  if (mon !== S.activeWild && mon !== S.activePlayerMon) {
+    const w = S.activeWild ? getAbilityName(S.activeWild, true) : null;
+    const p = S.activePlayerMon ? getAbilityName(S.activePlayerMon, false) : null;
+    if (norm(w) === 'neutralizinggas' || norm(p) === 'neutralizinggas') return null;
+  }
+  return own;
 }
 
 /**
@@ -4297,7 +4308,7 @@ function initEncounterEvents() {
             sleepTurns: S.wildSleepTurns || 0,
             movesPP: S.wildMovesPP ? S.wildMovesPP.map(pp => ({ current: pp.max, max: pp.max })) : [],
             statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-            abilityName: S.activeWild.abilities[0]?.ability?.name || null,
+            abilityName: S.activeWild.abilities?.[0]?.ability?.name || null,
             heldItem: null,
             berries: S.activeWild.berries || { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
             learnableMoves: []

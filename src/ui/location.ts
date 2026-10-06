@@ -335,6 +335,7 @@ export let renderLocation = function(locId: any) {
   // ── Кнопка магазина ──
   // Если локация заканчивается на _pokemarket, _supermarket или _shop
   if (locId.endsWith('_pokemarket') || locId === 'pokemarket' ||
+      locId.endsWith('_pokemart') || locId === 'pokemart' ||
       locId.endsWith('_supermarket') || locId.endsWith('_shop')) {
     const btnShop = document.createElement('button');
     btnShop.className = 'btn-use';

@@ -30,6 +30,14 @@ export const SHOP_STOCK = {
     'oranBerry', 'chestoBerry', 'rawstBerry',
     'xAttack', 'xDefense',
   ],
+  // Стартовый магазин у Goldenrod: шары и база. Без этой записи витрина
+  // показывала бы все ~100 ценников, а кнопки «Магазин» тут не было вовсе.
+  'pokemart': [
+    'pokeBall', 'greatBall', 'ultraBall',
+    'potion', 'superPotion',
+    'antidote', 'paralyzeHeal', 'awakening', 'burnHeal',
+    'oranBerry', 'chestoBerry', 'rawstBerry', 'sitrusBerry',
+  ],
   'lavender_pokemarket': [
     'pokeBall', 'greatBall', 'ultraBall', 'potion', 'superPotion', 'fullRestore',
     'antidote', 'paralyzeHeal', 'awakening', 'burnHeal', 'antiSputin',
