@@ -54,6 +54,10 @@ export const state: Record<string, any> = {
   // ── Уведомления ──────────────────────────────────────────
   notifications: [] as Array<any>, // Массив уведомлений (показываются в UI)
 
+  // ── Достижения и счётчики ────────────────────────────────
+  achievements: [] as Array<string>, // ID разблокированных достижений
+  battleWins: 0,                     // Побед в боях (ачивка trainer_100)
+
   // ── Daycare / Breeding ───────────────────────────────────
   daycareMons: [] as Array<any>,  // Покемоны в питомнике
   daycareEgg: null,               // Яйцо в питомнике (если есть)

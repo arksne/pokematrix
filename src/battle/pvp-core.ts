@@ -31,6 +31,7 @@ import { showToast } from '../utils/dom.js';
 import { getSpriteUrl } from '../utils/sprite.js';
 import { autoSave } from '../game/save.js';
 import { updateMoneyDisplay } from '../ui/location.js';
+import { checkAchievement } from '../ui/achievements.js';
 import { openTradeCenter } from '../ui/trade-center.js';
 
 /**
@@ -291,6 +292,7 @@ export function doPvPAttack(moveIdx) {
  */
 export function endPvP(won) {
   showToast(won ? '🏆 Победа в PvP!' : '💀 Поражение в PvP...', !won);
+  if (won) checkAchievement('pvp_win');
   // Награда теперь выдается сервером (слушаем pvp_reward)
   document.getElementById('pvp-modal').style.display = 'none';
   state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: won ? 'win' : 'lose' } });

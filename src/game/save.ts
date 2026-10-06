@@ -158,15 +158,17 @@ export function getFullSaveData() {
       exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
       vitaminsEaten: m.vitaminsEaten, training: m.training, trainingStage: m.trainingStage,
       trainingStat: m.trainingStat, happiness: m.happiness, natureIdx: m.natureIdx,
-      breedLetter: m.breedLetter, gender: m.gender, status: m.status, sleepTurns: m.sleepTurns,
+      breedLetter: m.breedLetter, gender: m.gender,       status: m.status, sleepTurns: m.sleepTurns,
       movesPP: m.movesPP, statStages: m.statStages, abilityName: m.abilityName,
       heldItem: m.heldItem, berries: m.berries, learnableMoves: m.learnableMoves,
-      lastMoveCheckLevel: m.lastMoveCheckLevel,
+      lastMoveCheckLevel: m.lastMoveCheckLevel, hasBred: !!m.hasBred,
+      evPool: m.evPool || 0,
     })),
     currentPokemonIndex: state.currentPokemonIndex,
     pokedexSeen: Array.from(state.pokedexSeen),
     pokedexCaught: Array.from(state.pokedexCaught),
     quests: state.quests, questProgress: state.questProgress, completedQuests: state.completedQuests, npcQuestProgress: state.npcQuestProgress, completedNPCQuests: state.completedNPCQuests, tutorialStep: state.tutorialStep,
+    achievements: state.achievements || [], battleWins: state.battleWins || 0,
     visitedLocations: Array.from(state.visitedLocations), itemsUsedInBattle: state.itemsUsedInBattle, itemHistory: state.itemHistory,
     pcBoxes: state.pcBoxes.map(box => box.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
@@ -178,7 +180,8 @@ export function getFullSaveData() {
       status: m.status, sleepTurns: m.sleepTurns, movesPP: m.movesPP,
       statStages: m.statStages, abilityName: m.abilityName, heldItem: m.heldItem,
       berries: m.berries, learnableMoves: m.learnableMoves,
-      lastMoveCheckLevel: m.lastMoveCheckLevel,
+      lastMoveCheckLevel: m.lastMoveCheckLevel, hasBred: !!m.hasBred,
+      evPool: m.evPool || 0,
     }))),
     daycareMons: state.daycareMons.map((d: any) => ({
       depositTime: d.depositTime,
@@ -223,41 +226,24 @@ export function validateGameState() {
 }
 
 export function saveGame() {
+  // Облако — единственный источник истины (спека 8.1): локальный снапшот игры
+  // больше не пишется. Именно расхождение «локально vs облако» давало молчаливые
+  // откаты (сервер штампует _ts при каждой своей правке, и stale-облако
+  // побеждало свежий локальный прогресс). Валидация остаётся: она чинит
+  // состояние в памяти перед каждой выгрузкой.
+  // Локально живут только: токены, тема, battle_state (эфемерный бой),
+  // hunt_active и прочая сессионка — не прогресс.
   validateGameState();
-  state.saveVersion++;
-  const saveData = getFullSaveData();
+}
 
-  const saveJson = JSON.stringify(saveData);
-  try {
-    // Ротация бэкапов: держим только один предыдущий сейв.
-    // Раньше их было два, то есть в localStorage лежало три полные копии save_data;
-    // при apiData каждого покемона квота в 5 МБ исчерпывалась, и сохранение
-    // начинало падать с QuotaExceeded. loadGame() по-прежнему проверяет bak1 и
-    // bak2, так что старые бэкапы используются как последний резерв.
-    const prev = localStorage.getItem(lsKey('save'));
-    if (prev) {
-      try { localStorage.setItem(lsKey('save_bak1'), prev); } catch(_) {}
-      try { localStorage.removeItem(lsKey('save_bak2')); } catch(_) {}
-    }
-    localStorage.setItem(lsKey('save'), saveJson);
-    localStorage.setItem(lsKey('save_ts'), String(Date.now()));
-    localStorage.setItem(lsKey('save_v'), String(state.saveVersion));
-  } catch (e) {
-    console.warn('localStorage save failed — freeing space', e);
-    try {
-      // Чистим только производные данные. Бэкапы сейвов и живое состояние боя
-      // раньше удалялись здесь же: игрок терял незавершённый бой и откатывался на
-      // предыдущий сейв, хотя освобождения это не давало (они и так пустые к моменту
-      // переполнения) — а battle_state весит около мегабайта и удалялся всегда.
-      ['quest_date', 'pokedex_seen', 'pokedex_caught', 'save_bak2', 'save_bak1'].forEach(k => {
-        try { localStorage.removeItem(lsKey(k)); } catch(_) {}
-      });
-      localStorage.setItem(lsKey('save'), saveJson);
-      console.warn('localStorage: сейв записан после освобождения места (бэкапы боя сохранены)');
-    } catch (e2) {
-      console.error('CRITICAL: Cannot save to localStorage', e2);
-    }
-  }
+/** Deprecated-ключи локального прогресса: после миграции в облако им тут не место.
+ *  Стираются при первом успешном синке и при применении облака на загрузке.
+ *  save_sync НЕ трогаем — это метка последнего успеха, нужна конфликтам.
+ *  Токены/тема/бой/флаги охоты — не трогаем, это не прогресс. */
+export function clearLocalGameKeys() {
+  ['save', 'save_bak1', 'save_bak2', 'save_v', 'save_ts', 'save_corrupted'].forEach((k) => {
+    try { localStorage.removeItem(lsKey(k)); } catch (_) {}
+  });
 }
 
 export async function loadGame() {
@@ -329,6 +315,8 @@ export async function loadGame() {
     state.completedQuests = data.completedQuests || [];
     state.npcQuestProgress = data.npcQuestProgress || {};
     state.completedNPCQuests = data.completedNPCQuests || [];
+    state.achievements = data.achievements || [];
+    state.battleWins = data.battleWins || 0;
     state.tutorialStep = data.tutorialStep || 0;
     state.visitedLocations = new Set(data.visitedLocations || []);
     state.itemsUsedInBattle = data.itemsUsedInBattle || 0;
@@ -392,6 +380,7 @@ export async function loadGame() {
 
 export function autoSave() {
   validateGameState();
+  state.saveDirty = true;
   saveGame();
   cloudSave();
 }
@@ -452,6 +441,41 @@ export function totalPokemonCountOf(data: any): number {
   if (!data) return 0;
   const pc = Array.isArray(data.pcBoxes) ? data.pcBoxes.reduce((n, b) => n + (b?.length || 0), 0) : 0;
   return (data.myTeam?.length || 0) + pc + (data.daycareMons?.length || 0) + (data.eggs?.length || 0);
+}
+
+/**
+ * Слияние списков покемонов по uid при наложении облачного сейва.
+ * Контекст: сервер штампует `_ts` при КАЖДОЙ своей правке (покупка, крафт,
+ * награда — stampSave), поэтому облако может быть «новее по времени», но
+ * СТАРЕЕ по составу: мон, пойманный локально после серверной правки, в облаке
+ * отсутствует. Прямая замена (`state.myTeam = data.myTeam`) такой случай
+ * молча удаляла прогресс при следующем рефреше.
+ * Правило: общий uid — побеждает облачная версия (сервер авторитетен,
+ * спека 8.2); uid только локально — сохраняется; uid только в облаке —
+ * забирается. Единственное исключение — намеренный сброс (пустое облако +
+ * starterGiven false): там брать как есть, иначе сброс не применится.
+ * Побочный эффект: локально выпущенный (release) мон воскреснет, если облако
+ * устарело и его ещё содержит — цена вопроса один клик, в отличие от потери
+ * прокачанной команды. Релиз почти всегда успевает синкнуться до рефреша.
+ */
+export function mergeMonLists<T>(localList: T[], cloudList: T[] | undefined, key: (m: T) => string): T[] {
+  const L = Array.isArray(localList) ? localList : [];
+  if (!Array.isArray(cloudList)) return L;
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const m of cloudList) {
+    const k = m ? key(m) : '';
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(m);
+  }
+  for (const m of L) {
+    const k = m ? key(m) : '';
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(m);
+  }
+  return out;
 }
 
 /** Состояние без единого покемона — почти всегда потеря данных, а не новая игра. */
@@ -588,6 +612,10 @@ export async function doCloudSave(attempt = 0) {
     }
     state.lastCloudSync = Date.now();
     state.saveRetryCount = 0;
+    state.saveDirty = false;
+    // Прогресс ушёл наверх: deprecated-локалка больше не нужна. Именно её
+    // наличие включало старые пути сверки «локально vs облако» и откаты.
+    clearLocalGameKeys();
     localStorage.setItem(lsKey('save_sync'), String(state.lastCloudSync));
     const btnSync = document.getElementById('btn-cloud-sync');
     if (btnSync) { btnSync.textContent = '☁️✓'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 1500); }
@@ -599,8 +627,11 @@ export async function doCloudSave(attempt = 0) {
       state.cloudSaveTimer = setTimeout(() => doCloudSave(attempt + 1), delay);
     } else {
       state.saveRetryCount = MAX_RETRIES;
+      // Облако — единственный источник (спека 8.1): провал виден, пока не
+      // починится. Раньше значок через 3с возвращался в «Авто», и игрок думал,
+      // что всё сохранено, хотя прогресс жил только в памяти до рефреша.
       const btnSync = document.getElementById('btn-cloud-sync');
-      if (btnSync) { btnSync.textContent = '☁️✗'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 3000); }
+      if (btnSync) { btnSync.textContent = '☁️✗ НЕ СОХРАНЕНО'; }
     }
   } finally {
     // Флаг обязан сбрасываться на ЛЮБОМ выходе, включая успешный.
@@ -618,14 +649,26 @@ export async function doCloudSave(attempt = 0) {
   return result;
 }
 
+/** Версия на сервере (колонка save_version) из последнего cloudLoad.
+ *  Единственный надёжный якорь для optimistic locking: _v внутри save_data
+ *  отстаёт (штампуется ДО записи), а слать его — значит 409 на каждом буте. */
+export let cloudServerVersion: number | null = null;
+
+/** true, если последний cloudLoad упал по сети (а не «сейва нет»).
+ *  Нужно загрузке, чтобы отличить «новый игрок» ({}) от «оффлайна» (null). */
+export let cloudUnreachable = false;
+
 export async function cloudLoad() {
   if (!state.tgToken) return null;
+  cloudUnreachable = false;
   try {
     const res = await apiFetch('/save');
     if (!res.ok) return null;
     const data = await res.json();
+    if (typeof data.saveVersion === 'number') cloudServerVersion = data.saveVersion;
     return data.saveData;
   } catch (e) {
+    cloudUnreachable = true;
     console.warn('Cloud load failed', e);
     return null;
   }
@@ -634,14 +677,15 @@ export async function cloudLoad() {
 export async function applyCloudSave(data) {
   if (!data) return;
   if (!data.myTeam && !data.starterGiven) return;
-  // Сравниваем с временем последнего УСПЕШНОГО облачного сохранения, а не с
-  // временем последней локальной записи. Иначе saveGame(), вызванный сразу
-  // после applyCloudSave, делал настоящий облачный сейв «старым» навсегда.
-  if (data._ts) {
-    const lastSync = parseInt(localStorage.getItem(lsKey('save_sync')) || '0');
-    if (data._ts <= lastSync) return;
-    console.log(`[sync] Server ts ${data._ts} > last sync ${lastSync} — applying server data`);
-  } else {
+  // Свежесть по _ts здесь БОЛЬШЕ НЕ проверяется — сознательно (фикс отката):
+  // _ts ставится при сборке сейва, а save_sync — при подтверждении записи,
+  // поэтому data._ts <= save_sync выполнялось практически всегда и свежий
+  // бут НИКОГДА не применял облако (маскировалось локальным снапшотом, а в
+  // облако-онли мире давало пустую команду). Источник истины — облако
+  // (спека 8.1/8.2): свежесть на конфликтах проверяет resolveSaveConflict
+  // ДО вызова (serverTs vs localTs), а от потери несинкнутого локального
+  // защищает слияние по uid ниже. Без метки — применяем как авторитетное.
+  if (!data._ts) {
     console.log(`[sync] No timestamp on server data — applying as authoritative`);
   }
   state.currentLocationId = data.currentLocationId || state.currentLocationId;
@@ -653,7 +697,7 @@ export async function applyCloudSave(data) {
     state.currentRegion = 'johto';
   }
   if (data.inventory) {
-    // inventory: полностью заменяем локальное облачным, т.к. data._ts > localTs (проверено выше)
+    // inventory: полностью заменяем локальное облачным (облако — источник).
     // Math.max merge приводил к дублированию предметов при облачной синхронизации
     state.inventory = { ...data.inventory };
   }
@@ -667,7 +711,12 @@ export async function applyCloudSave(data) {
   if (typeof data.starterGiven === 'boolean') state.starterGiven = data.starterGiven;
   // Журнал дропа — часть прогресса, поэтому синхронизируется вместе с сейвом.
   state.dropLog = Array.isArray(data.dropLog) ? data.dropLog.slice(0, 60) : [];
-  state.myTeam = data.myTeam || state.myTeam;
+  // Намеренный сброс (reset:true с пустой командой): облако применяется целиком,
+  // без слияния — иначе сброс не сработает ни на одном устройстве
+  const wiped = totalPokemonCountOf(data) === 0 && data.starterGiven === false;
+  state.myTeam = wiped
+    ? (data.myTeam || [])
+    : mergeMonLists(state.myTeam, data.myTeam, (m: any) => m?.uid);
   state.myTeam.forEach(m => {
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     if (!m.learnableMoves) m.learnableMoves = [];
@@ -681,7 +730,21 @@ export async function applyCloudSave(data) {
   state.currentPokemonIndex = data.currentPokemonIndex ?? state.currentPokemonIndex;
   state.pokedexSeen = new Set(data.pokedexSeen || []);
   state.pokedexCaught = new Set(data.pokedexCaught || []);
-  state.pcBoxes = data.pcBoxes || state.pcBoxes;
+  if (wiped) {
+    state.pcBoxes = data.pcBoxes || [[]];
+  } else if (Array.isArray(data.pcBoxes)) {
+    // Боксы облака — основа; локальные-only докладываем в бокс 0, чтобы не
+    // потерять пойманных, которых облако не видело (тот же stale-cloud кейс).
+    const merged: any[][] = data.pcBoxes.map((b) => Array.isArray(b) ? [...b] : []);
+    if (merged.length === 0) merged.push([]);
+    const cloudUids = new Set(merged.flat().map((m) => m?.uid).filter(Boolean));
+    for (const box of (state.pcBoxes || [])) {
+      for (const m of (box || [])) {
+        if (m?.uid && !cloudUids.has(m.uid)) { merged[0].push(m); cloudUids.add(m.uid); }
+      }
+    }
+    state.pcBoxes = merged;
+  }
   state.pcBoxes.forEach(box => box.forEach(m => {
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     if (!m.learnableMoves) m.learnableMoves = [];
@@ -689,23 +752,34 @@ export async function applyCloudSave(data) {
     if (!m.berries) m.berries = { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 };
     if (!m.lastMoveCheckLevel) m.lastMoveCheckLevel = m.baseLevel || 1;
   }));
-  state.daycareMons = data.daycareMons || state.daycareMons;
+  state.daycareMons = wiped
+    ? (data.daycareMons || state.daycareMons)
+    : mergeMonLists(state.daycareMons, data.daycareMons, (d: any) => d?.mon?.uid);
   state.daycareEgg = data.daycareEgg || state.daycareEgg;
   state.lastLocation = data.lastLocation || state.lastLocation;
   state.expShareActive = data.expShareActive || state.expShareActive;
   state.breedingPairs = data.breedingPairs || state.breedingPairs;
-  state.eggs = data.eggs && data.eggs.length > 0 ? data.eggs : state.eggs;
+  state.eggs = wiped
+    ? (data.eggs || state.eggs)
+    : mergeMonLists(state.eggs, (data.eggs && data.eggs.length > 0 ? data.eggs : undefined), (e: any) => e?.uid);
   state.quests = data.quests || state.quests;
   state.questProgress = data.questProgress || state.questProgress;
   state.completedQuests = data.completedQuests || state.completedQuests;
   state.npcQuestProgress = data.npcQuestProgress || state.npcQuestProgress;
   state.completedNPCQuests = data.completedNPCQuests || state.completedNPCQuests;
+  state.achievements = data.achievements || state.achievements;
+  state.battleWins = data.battleWins || state.battleWins;
   state.tutorialStep = data.tutorialStep || state.tutorialStep;
   state.visitedLocations = new Set(data.visitedLocations || []);
   state.itemsUsedInBattle = data.itemsUsedInBattle || state.itemsUsedInBattle;
   state.itemHistory = data.itemHistory || state.itemHistory;
   const cloudV = data._v;
-  state.saveVersion = cloudV !== undefined ? cloudV : Date.now();
+  // Версию — из колонки сервера (cloudServerVersion, пришёл в том же GET),
+  // а НЕ из _v внутри сейва: _v штампуется ДО записи и всегда отстаёт на шаг,
+  // из-за чего каждый бут слал протухшую версию и получал 409 по кругу.
+  if (cloudServerVersion !== null) state.saveVersion = cloudServerVersion;
+  else if (cloudV !== undefined) state.saveVersion = cloudV;
+  else state.saveVersion = Date.now();
   validateGameState();
 
   // Save reconciled state locally

@@ -36,10 +36,10 @@
 // Каждый импорт — это внешний модуль, от которого зависит core.ts.
 // Все ui/* импорты — это DOM-манипуляции (кнопки, модалки).
 // Все data/* импорты — статические конфиги (погода, предметы).
-import { showToast, showSelectionModal } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
+import { showToast, showSelectionModal, showConfirmModal } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
-import { getSpriteUrl, updateBattleSpriteBgs } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
+import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
 import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
 import { checkEvolution, triggerEvolution } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
@@ -51,20 +51,25 @@ import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Пр
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy } from './logic.js';
 import { calculateStat as calculateStatShared } from './stats.js';
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
-import { store } from '../game/store.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
+import { store } from '../game/store.js';
+import { checkAchievement } from '../ui/achievements.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
 import { state } from '../game/state.js';                                 // state — глобальное состояние игры (инвентарь, команда, локация)
 import { generateUID, getTrainerId } from '../utils/state.js';           // generateUID — уникальный ID для пойманного покемона; getTrainerId — ID тренера
 import { itemCategory } from '../utils/items.js';                        // itemCategory(id) → категория предмета (healing, ball, statusCure...)
 import { getHeldItemName } from '../ui/inventory.js';                    // getHeldItemName — русское название предмета для сообщений
 import { WEATHER_ICONS, WEATHER_NAMES, getDailyWeather } from '../data/weather.js'; // Погода: конфиги, иконки, имена, дневная погода по локации, множитель урона
 import { QUEST_CONFIGS } from '../data/quests.js';                       // Все конфиги квестов (заданий)
+import { addNotification } from '../ui/notifications.js';                // Уведомления (реальный импорт: notifications зависит только от state/store, цикла нет)
 
-// ── ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (из main.ts) ─────────────────────
-// Эти переменные объявлены в main.ts через var/let и доступны во всех модулях.
-// TypeScript не знает о них — используем declare чтобы TS не ругался.
-declare const pcBoxes: any[];        // PC Boxes — хранилище покемонов (массив массивов), используется когда команда полна (6 покемонов)
-declare function addNotification(title: string, text: string): void;  // Добавить уведомление в UI (из main.ts)
-declare function updateBadgeDisplay(): void;                          // Обновить отображение значков залов в UI
+// ── УДАЛЁННЫЕ ФИКТИВНЫЕ ДЕКЛАРАЦИИ ─────────────────────
+// Здесь стояли `declare const pcBoxes` / `declare function addNotification` /
+// `declare function updateBadgeDisplay` с комментом «глобалы из main.ts».
+// main.ts их не определяет — это были type-only декларации без рантайм-привязки:
+// первое же обращение бросало ReferenceError. Симптомы: зависание поимки 7-го
+// покемона (pcBoxes.length) и зависание победы в зале (updateBadgeDisplay).
+// pcBoxes берётся из GS, addNotification импортирован выше, updateBadgeDisplay
+// подтягивается динамическим импортом в местах вызова (location.js тянет core
+// только динамически — статика сюда дала бы цикл).
 
 // ── СОЗДАНИЕ КОНЕЧНОГО АВТОМАТА ────────────────────────────
 // BattleStateMachine — класс из state-machine.ts, управляющий фазами боя.
@@ -202,6 +207,17 @@ function saveBattleState() {
 function clearBattleState() {
   try { localStorage.removeItem(store.lsKey('battle_state')); } catch(e) {}
   clearScreens(); // Сбросить все барьеры (Reflect, Light Screen, Protect, Substitute)
+  // Бой кончился по-настоящему (победа/поражение/побег/поимка/выход), а не переход
+  // между покемонами лидера (там clear не вызывается). Если автоохота была
+  // включена, поднимаем цикл заново: на обычной сессии тики идут всё время и
+  // сами подхватывают гринд, а после restore-на-загрузке старта охоты не было —
+  // без этого гринд вставал бы до ручного тумблера.
+  try {
+    if (localStorage.getItem(store.lsKey('hunt_active')) === '1' && !S.huntActive) {
+      const team = GS.myTeam || [];
+      if (team.some((m) => m && m.currentHp > 0)) startAutoHunt();
+    }
+  } catch (_) {}
 }
 
 /**
@@ -426,7 +442,7 @@ async function restoreBattleState() {
 /** renderBattleUI — полный рендер интерфейса боя */
 function renderBattleUI() {
   // ── Дикий покемон ──
-  document.getElementById('wild-name').innerText = S.activeWild.name;                         // Имя дикого
+  document.getElementById('wild-name').innerText = `${isShinyMon(S.activeWild) ? '✨' : ''}${S.activeWild.name}`;                         // Имя дикого
   document.getElementById('wild-lvl').innerText = `Lv${S.wildLvl}`;                            // Уровень
   const wildSpriteUrl = getSpriteUrl({ isShiny: S.activeWild.isShiny, apiData: S.activeWild }); // Спрайт (с учётом шайни)
   (document.getElementById('wild-sprite') as HTMLImageElement).src = wildSpriteUrl;            // Вставляем в DOM
@@ -2139,7 +2155,9 @@ async function startHunt(encountersArray) {
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.activeWild.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
-    S.activeWild.isShiny = (Math.random() < 1/4096);
+  // Шайни: базовый шанс 1/1024 (спека 1.5.1), shiny_boost (админка) — ×10
+  const shinyRate = (1 / 1024) * (GS.serverFeatures?.shiny_boost ? 10 : 1);
+  S.activeWild.isShiny = (Math.random() < shinyRate);
 
     // Fetch species data for catch rate & gender
     try {
@@ -2284,6 +2302,38 @@ async function startHunt(encountersArray) {
  *   startEliteNextPokemon — элитный бой
  *   startChampionNextPokemon — чемпионский бой
  */
+/**
+ * showMoveInfo — инфо об атаке (долгое нажатие / правый клик по кнопке).
+ * Показывает тип, класс, силу, точность, PP и эффект. Данные уже загружены
+ * в S.playerMovesDetailed, отдельного запроса нет.
+ */
+function showMoveInfo(moveData) {
+  if (!moveData) return;
+  const parts = [];
+  const type = moveData.type?.name;
+  const dmgClass = moveData.damage_class?.name;
+  if (type || dmgClass) parts.push(`Тип: ${type || '?'} / ${dmgClass || '?'}`);
+  if (moveData.power != null) parts.push(`Сила: ${moveData.power}`);
+  else parts.push('Сила: — (статусная)');
+  parts.push(`Точность: ${moveData.accuracy != null ? moveData.accuracy : '—'}`);
+  parts.push(`PP: ${moveData.pp ?? '—'}`);
+  const meta = moveData.meta || {};
+  if (meta.crit_rate > 0) parts.push('Повышенный шанс крита');
+  if (meta.drain && meta.drain !== 0) parts.push(`Лечение: ${Math.abs(meta.drain)}% урона`);
+  if (meta.healing && meta.healing !== 0) parts.push(`Лечение: ${Math.abs(meta.healing)}% макс HP`);
+  if (meta.min_hits && meta.max_hits && meta.max_hits > 1) parts.push(`Ударов: ${meta.min_hits}–${meta.max_hits}`);
+  if (meta.ailment && meta.ailment.name && meta.ailment.name !== 'none') {
+    parts.push(`Статус: ${meta.ailment.name}${moveData.effect_chance ? ` (${moveData.effect_chance}%)` : ''}`);
+  }
+  const eff = moveData.effect_entries?.find(e => e.language?.name === 'en')?.effect
+    || moveData.effect_entries?.[0]?.effect;
+  if (eff) {
+    const first = eff.split('. ')[0];
+    parts.push(first.length > 220 ? first.slice(0, 220) + '…' : first);
+  }
+  showConfirmModal(moveData.name || 'Атака', parts.join('\n'));
+}
+
 function loadMoveButtons(activeMon, clickHandler) {
   S.playerMovesDetailed = []; // Сбрасываем детальные данные атак
 
@@ -2316,6 +2366,9 @@ function loadMoveButtons(activeMon, clickHandler) {
           mBtn.innerText = d.name || moveEntry.move.name;  // Имя атаки (англ.)
           mBtn.classList.remove('disabled');                // Активируем кнопку
           mBtn.onclick = () => clickHandler(i);             // Назначаем обработчик
+          // Инфо: ховер на десктопе, долгое нажатие на телефоне
+          mBtn.title = `${d.name || ''} — долгое нажатие: инфо`;
+          mBtn.oncontextmenu = (e) => { e.preventDefault(); showMoveInfo(d); };
           updateMoveButtonUI(i, d);                          // Обновляем UI (цвет, PP)
         })
         .catch(() => {
@@ -2511,6 +2564,11 @@ function updateAbilityDisplay() {
  */
 function updateWildHpUI() {
   document.getElementById('wild-hp-text').innerText = `${S.wildCurHP}/${S.wildMaxHP}`;
+  // Шайни-маркер держим синхронно здесь: имена выставляются в 8 местах,
+  // а HP-апдейтер идёт на каждый удар — дешевле покрыть все потоки так
+  if (S.activeWild) {
+    document.getElementById('wild-name').innerText = `${isShinyMon(S.activeWild) ? '✨' : ''}${S.activeWild.name}`;
+  }
   const pct = Math.max(0, (S.wildCurHP / S.wildMaxHP) * 100);
   const bar = document.getElementById('wild-hp-fill');
   bar.style.width = `${pct}%`;
@@ -2531,6 +2589,7 @@ function updateWildHpUI() {
 function updatePlayerHpUI() {
   if (!S.activePlayerMon) return;
   document.getElementById('player-hp-text').innerText = `${S.activePlayerMon.currentHp}/${S.activePlayerMon.maxHp}`;
+  document.getElementById('player-name').innerText = `${isShinyMon(S.activePlayerMon) ? '✨' : ''}${S.activePlayerMon.nickname || S.activePlayerMon.apiData.name}`;
   const pct = Math.max(0, (S.activePlayerMon.currentHp / S.activePlayerMon.maxHp) * 100);
   const bar = document.getElementById('player-hp-fill');
   bar.style.width = `${pct}%`;
@@ -2609,6 +2668,9 @@ function getWildDropItems() {
 async function handleWildFaintRewards(isWild: boolean) {
   if (isWild) {
     appendToLog(`Дикий ${S.activeWild.name} побежден!`);
+    // Счётчик побед для ачивки trainer_100
+    GS.battleWins = (GS.battleWins || 0) + 1;
+    if (GS.battleWins >= 100) checkAchievement('trainer_100');
     checkQuestProgress('defeat_x');                          // Квест "победить N покемонов"
     const rItems = getWildDropItems();
     // Журнал дропа: строка лога исчезает вместе с боем, а выпавшее нужно помнить.
@@ -2628,6 +2690,7 @@ async function handleWildFaintRewards(isWild: boolean) {
   if (S.battleType !== 'gym') {
     const baseExp = S.activeWild.base_experience || 50;
     let expGain = Math.floor((baseExp * S.wildLvl) / 7);    // Базовая формула опыта
+    if (GS.serverFeatures?.double_exp) expGain *= 2;        // double_exp (админка)
     if (S.activePlayerMon.heldItem === 'luckyEgg') expGain = Math.floor(expGain * 1.5); // Lucky Egg ×1.5
     // Training Grounds: x10 EXP (новички быстро качаются)
     if (GS.currentLocationId?.includes('trainingGrounds')) expGain *= 10;
@@ -2662,9 +2725,9 @@ async function handleWildFaintRewards(isWild: boolean) {
             const newMax = calculateStat(mon, 'hp', false);
             mon.maxHp = newMax;
             mon.currentHp += (newMax - oldMax); // Восстанавливаем HP пропорционально новому макс
-            // EV за уровень — то же, что и для активного покемона
+            // EV за уровень — в пул на ручное распределение
             const ev = grantLevelUpEVs(mon);
-            if (ev) appendToLog(`${mon.apiData.name}: +1 EV в ${ev.key.toUpperCase()} (всего ${ev.total})`, false, 'system');
+            if (ev) appendToLog(`${mon.apiData.name}: +${ev.gain} EV в пул${ev.brace ? ' (скоба)' : ''} (всего ${ev.total})`, false, 'system');
           }
         }
       });
@@ -2680,10 +2743,9 @@ async function handleWildFaintRewards(isWild: boolean) {
       S.activePlayerMon.maxHp = newMax;
       S.activePlayerMon.currentHp += (newMax - oldMax);
       appendToLog(`${S.activePlayerMon.apiData.name} достиг ${S.activePlayerMon.baseLevel} уровня!`);
-      // EV за уровень. Раньше опыт копился, уровень рос, а evs оставались нулевыми,
-      // поэтому распределить их было нечем — бюджет считался только из конфет.
+      // EV за уровень — в пул, распределяет игрок в профиле
       const evGain = grantLevelUpEVs(S.activePlayerMon);
-      if (evGain) appendToLog(`Растёт: +1 EV в ${evGain.key.toUpperCase()} (всего ${evGain.total})`, false, 'system');
+      if (evGain) appendToLog(`Растёт: +${evGain.gain} EV в пул${evGain.brace ? ' (скоба)' : ''} (всего ${evGain.total})`, false, 'system');
       await checkNewMovesOnLevelUp(S.activePlayerMon, S.activePlayerMon.baseLevel); // Новые атаки
     }
 
@@ -2775,59 +2837,36 @@ async function handleWildFaintRewards(isWild: boolean) {
  *   - Запускает handleWildFaintRewards если враг побеждён
  */
 /**
- * EV за повышение уровня.
+ * EV за повышение уровня — в ПУЛ на ручное распределение (спека 3.3).
  *
- * Раньше при росте уровня EV не начислялись вообще: опыт копился, baseLevel
- * рос, а evs оставались нулевыми, пока игрок вручную не разбрасывал их кнопками в
- * профиле. Начисление идёт в натуральную характеристику — с самую высокую базу
- * среди hp/atk/def/spa/spd/spe, — поэтому рост уровня ощутимо влияет на поке��она.
- *
- * По одному EV за уровень: до 99-го уровня покемон получает не больше 99 EV,
- * что заведомо ниже предела в 252 на характеристику и не конфликтует с
- * бюджетом из конфет и витаминов (candiesEaten*4 + vitaminsEaten*10).
+ * Раньше уровень сам клал +1 EV в стат с highest base: выбирать было нечего,
+ * что противоречило «распределяются игроком вручную». Теперь уровень даёт
+ * +2 EV в нераспределённый пул (mon.evPool), +3 если держит скобу (evBrace).
+ * Тратятся через инпуты/кнопки в профиле в пределах evBudget().
  */
-function grantLevelUpEVs(pokemon) {
-  if (!pokemon?.apiData?.stats?.length) return null;
-
-  const names: Record<string, string> = {
-    hp: 'hp', attack: 'atk', defense: 'def',
-    'special-attack': 'spa', 'special-defense': 'spd', speed: 'spe',
-  };
-  let bestKey: string | null = null;
-  let bestBase = -1;
-  for (const s of pokemon.apiData.stats) {
-    const key = names[s?.stat?.name];
-    if (!key) continue;
-    const base = s.base_stat || 0;
-    if (base > bestBase) { bestBase = base; bestKey = key; }
-  }
-  if (!bestKey) return null;
-
-  if (!pokemon.evs) pokemon.evs = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
-  if (typeof pokemon.evs[bestKey] !== 'number') pokemon.evs[bestKey] = 0;
-  if (pokemon.evs[bestKey] >= 252) return null;
-
-  pokemon.evs[bestKey] += 1;
-  // Сколько EV начислено за уровни. Это часть бюджета распределения, иначе
-  // остаток в интерфейсе уходил в минус: максимум считался только по конфетам и
-  // витаминам, а эти EV уже были разложены по статам.
-  if (typeof pokemon.evFromLevel !== 'number') pokemon.evFromLevel = 0;
-  pokemon.evFromLevel += 1;
-  return { key: bestKey, total: pokemon.evs[bestKey] };
+export function grantLevelUpEVs(pokemon) {
+  if (!pokemon) return null;
+  const brace = pokemon.heldItem === 'evBrace';
+  const gain = brace ? 3 : 2;
+  if (typeof pokemon.evPool !== 'number') pokemon.evPool = 0;
+  pokemon.evPool += gain;
+  return { gain, brace, total: pokemon.evPool };
 }
 
 /**
- * Бюджет EV для ручного распределения.
+ * Бюджет EV для ручного распределения (спека 3.10).
  *
- * Конфеты дают 4 очка, витамины 10, а уровни добавляют своё — раньше это
- * не учитывалось, и поле «осталось» показывало отрицательное число.
+ * Источники: конфеты (×4), витамины (×10, но не больше 100 суммарно),
+ * старые авто-EV за уровни (evFromLevel, legacy) и пул с уровней (evPool).
+ * Потолок — 496 всего (лимит на стат 126 enforced в UI).
  */
 export function evBudget(mon): number {
   if (!mon) return 0;
   const candies = (mon.candiesEaten || 0) * 4;
-  const vitamins = (mon.vitaminsEaten || 0) * 10;
+  const vitamins = Math.min((mon.vitaminsEaten || 0) * 10, 100);
   const fromLevel = mon.evFromLevel || 0;
-  return candies + vitamins + fromLevel;
+  const pool = mon.evPool || 0;
+  return Math.min(496, candies + vitamins + fromLevel + pool);
 }
 
 async function useMove(moveIndex) {
@@ -4337,13 +4376,21 @@ function initEncounterEvents() {
           if (GS.myTeam.length < 6) {
             GS.myTeam.push(newMon);
           } else {
-            if (pcBoxes.length === 0) pcBoxes.push([]);
-            pcBoxes[0].push(newMon);
+            if (GS.pcBoxes.length === 0) GS.pcBoxes.push([]);
+            GS.pcBoxes[0].push(newMon);
             addNotification('📦 Покемон в PC', `${S.activeWild.name} отправлен в Бокс 1 (команда полна).`);
             appendToLog(`${S.activeWild.name} отправлен в PC (команда полна).`, false, 'catch');
           }
           GS.pokedexCaught.add(S.activeWild.name);
           GS.pokedexSeen.add(S.activeWild.name);
+          // Достижения поимки: первая, команда 6, шайни, вехи покедекса
+          checkAchievement('first_catch');
+          if (GS.myTeam.length >= 6) checkAchievement('team_6');
+          if (newMon.isShiny) checkAchievement('shiny_catch');
+          const dexN = GS.pokedexCaught.size;
+          if (dexN >= 50) checkAchievement('dex_50');
+          if (dexN >= 100) checkAchievement('dex_100');
+          if (POKEDEX_ALL.length > 0 && dexN >= POKEDEX_ALL.length) checkAchievement('dex_all');
 
           checkQuestProgress('catch_x');
 
@@ -4663,10 +4710,6 @@ function openGymModal(locId) {
   };
 }
 
-document.getElementById('btn-close-gym-modal').addEventListener('click', () => {
-  document.getElementById('gym-modal').style.display = 'none';
-});
-
 function initGymEvents() {
   document.getElementById('btn-close-gym-modal').addEventListener('click', () => {
     document.getElementById('gym-modal').style.display = 'none';
@@ -4783,7 +4826,7 @@ async function startGymNextPokemon() {
         checkQuestProgress('earn_money', data.moneyReward);
         appendToLog(`Победа! Вы получили ${data.badgeName} и ¥${data.moneyReward}!`);
         store.updateMoneyDisplay();
-        updateBadgeDisplay();
+        (await import('../ui/location.js')).updateBadgeDisplay();
       } else if (resp.status === 409) {
         // Бадж уже есть — это нормально (перезапрос), всё равно показываем победу
         appendToLog(`Победа! (бадж ${leader.badgeName} уже получен)`);
@@ -4799,11 +4842,15 @@ async function startGymNextPokemon() {
       store.giveReward(leader.moneyReward, []);
       checkQuestProgress('earn_money', leader.moneyReward);
       store.updateMoneyDisplay();
-      updateBadgeDisplay();
+      (await import('../ui/location.js')).updateBadgeDisplay();
     }
 
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
+    // Победа над лидером — ачивки и счётчик побед
+    checkAchievement('beat_gym');
+    GS.battleWins = (GS.battleWins || 0) + 1;
+    if (GS.battleWins >= 100) checkAchievement('trainer_100');
     setTimeout(() => store.showGymRewardSelection(S.gymLeaderKey), 300);
     return;
   }
@@ -5040,6 +5087,8 @@ async function startEliteBattle() {
 
 async function startEliteNextMember() {
   if (S.gymTeamIndex >= GS.eliteFour.length) {
+    // Вся Элита пройдена — ачивка перед боем с чемпионом
+    checkAchievement('beat_elite');
     S.battleType = 'champion';
     await championBattle();
     return;
@@ -5164,6 +5213,10 @@ async function startChampionNextPokemon() {
     checkQuestProgress('earn_money', GS.champion.moneyReward);
     store.updateMoneyDisplay();
     appendToLog('ПОБЕДА! Вы стали Чемпионом Лиги!');
+    // Победа над чемпионом — ачивки и счётчик побед
+    checkAchievement('beat_champion');
+    GS.battleWins = (GS.battleWins || 0) + 1;
+    if (GS.battleWins >= 100) checkAchievement('trainer_100');
     document.getElementById('battle-main-menu').style.display = 'none';
     document.getElementById('battle-end-menu').style.display = 'flex';
     S.gymTeamIndex = 0;

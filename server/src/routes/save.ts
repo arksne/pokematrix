@@ -66,7 +66,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       throw e;
     }
 
-    res.json({ saveData });
+    res.json({ saveData, saveVersion: user.save_version ?? 0 });
   } catch (err: any) {
     console.error('[save/get]', err);
     res.status(500).json({ error: 'Internal server error' });

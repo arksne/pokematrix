@@ -31,11 +31,11 @@ import { state, lsKey, generateUID } from './state.js';
 import { store } from './store.js';
 import { REGIONS } from '../data/regions.js';
 import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress } from '../battle/core.js';
-import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents, totalPokemonCountOf } from './save.js';
+import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents, totalPokemonCountOf, totalPokemonCount, cloudUnreachable, clearLocalGameKeys } from './save.js';
 import { authTelegram } from './auth.js';
 import { initAppNav } from '../ui/nav.js';
 import { renderTrainerCard } from '../ui/trainer-card.js';
-import { getLocation, renderLocation, travelToRegion, updateTimeOfDay, updateMoneyDisplay, updateBadgeDisplay, fetchDropConfig, processMonsterDrop, updatePlayerLocation } from '../ui/location.js';
+import { getLocation, renderLocation, travelToRegion, updateTimeOfDay, updateMoneyDisplay, updateBadgeDisplay, fetchDropConfig, fetchServerFeatures, processMonsterDrop, updatePlayerLocation } from '../ui/location.js';
 import { renderTeamGrid, initProfileEvents, initProfileUXEvents } from '../ui/profile.js';
 import { updateInventoryDisplay, initInventoryEvents } from '../ui/inventory.js';
 import { initShopEvents, initSellTab } from '../ui/shop.js';
@@ -50,7 +50,6 @@ import { startBreedingCheck } from '../ui/daycare.js';
 import { openMap, setTravelCallback, setExploredLocs } from '../ui/map.js';
 import { setBeforeRenderLocation } from '../ui/location.js';
 import { startOnboarding, markLocationExplored, getExploredLocations, openHelp, isTutorialComplete } from '../ui/tutorial.js';
-import { openQuestPanel } from '../ui/quests.js';
 import { openAchievements } from '../ui/achievements.js';
 import { showToast } from '../utils/dom.js';
 import { checkTutorialProgress } from '../ui/npcs.js';
@@ -121,7 +120,12 @@ initGymEvents();
     // существовало — туториал было негде запустить вручную, а достижения и
     // PvP были доступны только из консоли.
     document.getElementById('btn-help-system')?.addEventListener('click', () => openHelp());
-    document.getElementById('btn-quests')?.addEventListener('click', () => openQuestPanel());
+    // Квесты — ОДНА подписка (openQuests → quest-modal, ниже строка ~402).
+    // Раньше здесь висел второй хендлер openQuestPanel() из ui/quests.js —
+    // мёртвой параллельной системы (её questStates никто не заполняет):
+    // по клику открывались сразу модалка с настоящими квестами И пустая
+    // инлайн-панель «Нет активных квестов» под картой, которая потом пропадала
+    // при следующем рендере локации. Симптом: «вкладка с квестами то есть то нет».
     document.getElementById('btn-achievements')?.addEventListener('click', () => openAchievements());
     document.getElementById('btn-tutorial')?.addEventListener('click', () => startOnboarding());
     document.getElementById('btn-pvp')?.addEventListener('click', async () => {
@@ -137,6 +141,7 @@ initGymEvents();
     // ── 3. Загрузка данных ────────────────────────────────────
     loadPokedexData();       // Все виды покемонов
     fetchDropConfig();       // Дроп-таблицы с сервера
+    fetchServerFeatures();   // Фичи сервера (админка): double_exp/shiny_boost/free_shop/beta
     renderTrainerCard();     // Карточка тренера
 
     // ── 4. Настройка колбэков ────────────────────────────────
@@ -167,21 +172,18 @@ initGymEvents();
     import('../ui/admin.js').then(m => m.initAdminPanel()).catch(e => console.warn('Admin panel init failed', e));
 
     // ── 6. Загрузка сохранения (localStorage → cloud) ──────
-    // Приоритет: cloud (сервер) > local storage.
+    // Источник истины — ТОЛЬКО облако (спека 8.1). Локальный снапшот игры
+    // больше не читается и не пишется: расхождение «локально vs облако» давало
+    // молчаливые откаты. loadGame ниже — одноразовая миграция: если облако
+    // пусто, а локально есть команда, выгружаем её наверх; дальше локальные
+    // ключи стираются первым успешным синком (clearLocalGameKeys).
     // Если нигде нет — giveStarter() (новая игра).
     const localLoaded = await loadGame();
+    const hadLocalTeam = localLoaded && state.myTeam.length > 0;
     let gameLoaded = false;
-    // Намеренный сброс админом или db:wipe помечает облачный сейв меткой
-    // _resetAt. Локальный сейв при этом цел, и без проверки ветка «локальный
-    // новее — выложить» возвращала прогресс обратно, отменяя сброс сам собой.
-    let resetAt = 0;
     if (state.tgToken) {
       const cloudData = await cloudLoad();
       if (cloudData) {
-        if (cloudData._resetAt) {
-          const parsed = Date.parse(cloudData._resetAt);
-          if (!Number.isNaN(parsed)) resetAt = parsed;
-        }
         // Сколько покемонов было в облаке — запоминаем ДО применения, чтобы
         // знать, что именно нельзя затирать пустым состоянием.
         state.lastCloudHadTeam = totalPokemonCountOf(cloudData) > 0;
@@ -206,6 +208,14 @@ initGymEvents();
             gameLoaded = true;
             console.warn('Cloud save has starterGiven but empty myTeam');
           }
+          // Локалка deprecated: чистим сразу, иначе мёртвые ключи снова начнут
+          // участвовать в сверках. Несинкнутое (слияние уже в памяти) — наверх:
+          // иначе оно живёт только до первого рефреша.
+          clearLocalGameKeys();
+          if (hadLocalTeam && totalPokemonCount() > totalPokemonCountOf(cloudData)) {
+            state.gameLoaded = true;
+            cloudSave();
+          }
         } else {
           // Раньше этот случай просто молча уходил в giveStarter(), и игрок
           // видел новую стартовую игру вместо своего облачного сейва, не понимая
@@ -217,35 +227,47 @@ initGymEvents();
             'Ключи сейва:', Object.keys(cloudData).join(', ') || '(пусто)',
           );
         }
-      }
-    }
-    // Локальный сейв уступает, если сброс был свежее его записи.
-    //
-    // Метка _resetAt лежит в облачном сейве постоянно, поэтому её нужно
-    // «съесть» один раз. Раньше проверка была только на resetAt > localTs, и
-    // после первого же обнуления save_ts становился равен 0 — то есть условие
-    // выполнялось при каждом входе, и локальный сейв удалялся снова и снова.
-    // Прогресс, который ещё не попал в облако, стирался при каждом обновлении
-    // страницы. Теперь метка применяется один раз на конкретный сброс.
-    const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
-    const resetSeenAt = parseInt(localStorage.getItem(lsKey('save_reset_seen')) || '0');
-    if (resetAt && resetAt > localTs && resetAt > resetSeenAt) {
-      localStorage.removeItem(lsKey('save'));
-      localStorage.setItem(lsKey('save_ts'), '0');
-      localStorage.setItem(lsKey('save_reset_seen'), String(resetAt));
-      console.log('[save] применён намеренный сброс от', new Date(resetAt).toISOString(), '— локальный сейв сброшен');
-    }
-    if (!gameLoaded) {
-      if (localLoaded && state.myTeam.length > 0) {
+      } else if (cloudUnreachable) {
+        // Сеть недоступна, а источник один — облако. Стартер НЕ выдаём:
+        // пустое состояние при появлении сети затёрло бы прогресс.
+        // Локальный режим остаётся только без токена (dev), см. ниже.
+        showOfflineGate();
+        return;
+      } else if (hadLocalTeam) {
+        // Облако пусто, локально команда есть: одноразовая миграция наверх.
+        // Сначала снимаем гейт, потом сохраняем (иначе cloudSave уйдёт в ранний
+        // return и выгрузка потеряется на весь сеанс).
         gameLoaded = true;
-        // Сначала снимаем гейт, потом сохраняем. Раньше cloudSave() стоял выше
-        // и уходил в ранний return по флагу state.gameLoaded, то есть выгрузка
-        // локального прогресса поверх пустого облака молча терялась на весь
-        // сеанс — и восстанавливалась только если позже срабатывал другой путь.
         state.gameLoaded = true;
-        if (state.tgToken) cloudSave();
+        cloudSave();
+      }
+    } else if (hadLocalTeam) {
+      // Без токена облака нет по определению — остаётся прежний локальный режим.
+      gameLoaded = true;
+      state.gameLoaded = true;
+    }
+    // Оффлайн-заглушка (облако — единственный источник, спека 8.1): играть
+    // не во что, а выдавать стартера нельзя — пустое состояние при появлении
+    // сети затёрло бы прогресс. Блокируем и ждём сеть.
+    function showOfflineGate() {
+      let gate = document.getElementById('offline-gate');
+      if (!gate) {
+        gate = document.createElement('div');
+        gate.id = 'offline-gate';
+        gate.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;background:#0b1020;color:#fff;font-size:16px;padding:24px;text-align:center;';
+        gate.innerHTML = '<div>☁️ Нет связи с сервером</div>' +
+          '<div style="font-size:13px;opacity:0.7">Прогресс хранится в облаке — без сети продолжать нельзя, иначе данные разойдутся.</div>';
+        const btn = document.createElement('button');
+        btn.className = 'btn-use';
+        btn.innerText = '🔄 Повторить';
+        btn.onclick = () => location.reload();
+        gate.appendChild(btn);
+        document.body.appendChild(gate);
+      } else {
+        gate.style.display = 'flex';
       }
     }
+
     // Стартовик нельзя пропустить: пока модалка висит, init.ts стоит на
     // await giveStarter(). Раньше клик по фону просто скрывал её, и промис
     // никогда не резолвился — игра не доходила ни до рендера локации, ни до
@@ -321,9 +343,19 @@ initGymEvents();
 
     initProfileEvents();
     initEncounterEvents();
-    restoreBattleState();
+    // ВАЖНО: restore ждём обязательно. Он асинхронный (дикий + вид + до 20 атак
+    // из PokeAPI, секунды), а тик автоохоты стартует через 2-5с и проверяет бой
+    // только по encounter-modal:flex. Без await охота вызывала startHunt() РАНЬШЕ,
+    // чем рестор дорисовал старый бой: новый энкаунтер затирал S.activeWild и
+    // перезаписывал battle_state — после F5 бой «сбрасывался» прямо на глазах.
+    // Охоту поднимаем только если восстанавливать нечего: поднятый цикл сам
+    // пропускает тики при открытом модале боя и подхватит гринд после его конца.
+    const battleRestored = await restoreBattleState().catch((e) => {
+      console.error('restoreBattleState failed:', e);
+      return false;
+    });
 
-    if (localStorage.getItem(lsKey('hunt_active')) === '1' && state.myTeam.some(m => m.currentHp > 0)) {
+    if (!battleRestored && localStorage.getItem(lsKey('hunt_active')) === '1' && state.myTeam.some(m => m.currentHp > 0)) {
       startAutoHunt();
     }
 
@@ -476,8 +508,10 @@ function flushSaveOnExit() {
     clearTimeout(state.cloudSaveTimer);
     state.cloudSaveTimer = null;
   }
-  const localTs = parseInt(localStorage.getItem(lsKey('save_ts')) || '0');
-  if (localTs <= state.lastCloudSync + 2000) return;
+  // Облако — источник истины: выгружаем, только если есть несохранённые
+  // изменения (флаг ставит autoSave, снимает успешный синк). Раньше решение
+  // принималось по локальному save_ts — его больше нет.
+  if (!state.saveDirty) return;
   try {
     validateGameState();
     const saveData = getFullSaveData();
