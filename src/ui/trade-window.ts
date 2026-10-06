@@ -185,8 +185,13 @@ function renderTradePickGrid() {
       card.title = 'Нельзя отдать единственного покемона';
     }
 
+    // sprite берётся из данных покемона. В офферах (renderOffers ниже) эти данные
+    // приходят от партнёра по сокету, то есть поле контролирует другой игрок.
+    // Раньше значение подставлялось в атрибут src без экранирования, поэтому
+    // строка вида x" onerror="… в чужом покемоне выполнялась в окне трейда.
+    // escHtml закрывает выход из атрибута; javascript: в img src не исполняется.
     card.innerHTML = `
-      <img src="${m.sprite || getSpriteUrl(m)}" alt="${m.apiData?.name || '?'}" loading="lazy">
+      <img src="${escHtml(m.sprite || getSpriteUrl(m))}" alt="${escHtml(m.apiData?.name || '?')}" loading="lazy">
       <div class="name">${escHtml(m.nickname || m.apiData?.name || '???')}</div>
       <div class="lvl">Lv${m.baseLevel + (m.candiesEaten || 0)}</div>
     `;
@@ -287,7 +292,7 @@ export function renderTradeOffers() {
     return offers.map(o => {
       if (o.type === 'pokemon') {
         const m = o.data;
-        return `<div class="trade-offer-entry"><img class="trade-offer-sprite" src="${m.sprite || getSpriteUrl(m)}" alt="${escHtml(m.apiData?.name || '?')}"><div class="trade-offer-name">${escHtml(m.nickname || m.apiData?.name || '???')}</div><div class="trade-offer-level">Lv${m.baseLevel + (m.candiesEaten || 0)}</div></div>`;
+        return `<div class="trade-offer-entry"><img class="trade-offer-sprite" src="${escHtml(m.sprite || getSpriteUrl(m))}" alt="${escHtml(m.apiData?.name || '?')}"><div class="trade-offer-name">${escHtml(m.nickname || m.apiData?.name || '???')}</div><div class="trade-offer-level">Lv${m.baseLevel + (m.candiesEaten || 0)}</div></div>`;
       }
       if (o.type === 'item') {
         const it = o.data;

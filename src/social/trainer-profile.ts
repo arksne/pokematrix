@@ -203,19 +203,28 @@ export async function openTrainerProfile(userId) {
       teamEl.innerHTML = '<div class="trainer-team-empty">Нет покемонов</div>';
       return;
     }
-    p.team.forEach(mon => {
-      const div = document.createElement('div');
-      div.className = 'trainer-team-mon';
-      div.innerHTML = `
-        <div class="trainer-team-mon-img-box">
-          <img class="trainer-team-mon-img" src="${mon.sprite || ''}" alt="">
-        </div>
-        <div class="trainer-team-mon-info">
-          <div class="trainer-team-mon-name">${escHtml(mon.nickname || mon.name)}</div>
-          <div class="trainer-team-mon-lvl">Lv${mon.level}</div>
-        </div>`;
-      teamEl.appendChild(div);
-    });
+      p.team.forEach(mon => {
+        const div = document.createElement('div');
+        div.className = 'trainer-team-mon';
+        // sprite приходит из save_data, то есть в него может положить что
+        // угодно сам игрок: сертер сохраняет тело запроса как есть
+        // (save.ts: JSON.stringify(body.saveData)), а teamMonSchema не
+        // перечисляет это поле. Раньше значение подставлялось в атрибут src
+        // без проверки, поэтому строка вида x" onerror="… сохранялась в чужом
+        // сейве и выполнялась у всех, кто открывал профиль. Здесь та же защита,
+        // что в ui/trainers.ts для аватара: принимаем только URL картинки.
+        const rawSprite = typeof mon.sprite === 'string' ? mon.sprite : '';
+        const safeSprite = /^https?:\/\/[^\s"'<>]+$/.test(rawSprite) ? escHtml(rawSprite) : '';
+        div.innerHTML = `
+          <div class="trainer-team-mon-img-box">
+            <img class="trainer-team-mon-img" src="${safeSprite}" alt="">
+          </div>
+          <div class="trainer-team-mon-info">
+            <div class="trainer-team-mon-name">${escHtml(mon.nickname || mon.name)}</div>
+            <div class="trainer-team-mon-lvl">Lv${mon.level}</div>
+          </div>`;
+        teamEl.appendChild(div);
+      });
   } catch (e) {
     console.error('Trainer profile error:', e);
     document.getElementById('modal-trainer-name').innerText = 'Ошибка загрузки';
