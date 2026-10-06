@@ -53,6 +53,7 @@ const battleState = {
   enemyReflectTurns: 0,     // То же для противника
   enemyLightScreenTurns: 0,
   protectActive: false,     // Защита игрока (Protect)
+  protectCounter: 0,        // Счётчик последовательных Protect: 1/3^(n-1) шанс провала
   substituteHP: 0,          // HP Substitute игрока
   enemyProtectActive: false,// Защита противника
   enemySubstituteHP: 0,     // HP Substitute противника

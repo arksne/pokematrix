@@ -122,6 +122,7 @@ playerReflectTurns: 0,
     enemyReflectTurns: 0,
     enemyLightScreenTurns: 0,
     protectActive: false,
+    protectCounter: 0,
     substituteHP: 0,
     enemyProtectActive: false,
     enemySubstituteHP: 0,
@@ -247,6 +248,7 @@ export interface BattleStateData {
   enemyReflectTurns: number;
   enemyLightScreenTurns: number;
   protectActive: boolean;
+  protectCounter: number;
   substituteHP: number;
   enemyProtectActive: boolean;
   enemySubstituteHP: number;

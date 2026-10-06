@@ -491,8 +491,10 @@ function getEffectiveSpeed(pokemon, isWild): number {
   const stage = pokemon?.statStages?.spe || 0;
   speed *= STAGE_MULTIPLIER[stage] ?? 1;
 
-  // Паралич: скорость падает вдвое
-  if (pokemon?.status === 'par') speed *= 0.5;
+  // Паралич НЕ снижает скорость — решение из спецификации: паралич даёт только
+  // 25% шанс потерять ход (см. checkStatusTurn). Раньше здесь стояло снижение
+  // вдвое, то есть паралич работал вдвойне — и тормозил, и пропускал ходы.
+  // Скорость больше не трогаем.
 
   const ability = getAbilityName(pokemon, isWild);
 
@@ -515,7 +517,10 @@ function playerMovesFirst(playerMove, enemyMove): boolean {
 
   const pSpe = getEffectiveSpeed(S.activePlayerMon, false);
   const eSpe = getEffectiveSpeed(S.activeWild, true);
-  return pSpe >= eSpe;
+  // При равенстве скорости порядок случаен — решение из спецификации. Раньше
+  // игрок всегда ходил первым, что давало ему бесплатное преимущество.
+  if (pSpe === eSpe) return Math.random() < 0.5;
+  return pSpe > eSpe;
 }
 
 /**
@@ -741,10 +746,18 @@ function handlePlayerStatusEffects(move) {
     return true;
   }
 
-  // 3. Protect
+  // 3. Protect — счётчик последовательных попыток. Первая подряд всегда
+  // срабатывает, дальше шанс провала по спецификации: 1/3^(n-1). Это защищает
+  // от спама: «Защита-Защита-Защита-…» уже не даёт бессрочного щита.
   if (move.name === 'protect') {
-    S.protectActive = true;
-    appendToLog(`${S.activePlayerMon.apiData.name} защищается!`);
+    S.protectCounter++;
+    const success = S.protectCounter === 1 || Math.random() >= 1 / Math.pow(3, S.protectCounter - 1);
+    if (success) {
+      S.protectActive = true;
+      appendToLog(`${S.activePlayerMon.apiData.name} защищается!`);
+    } else {
+      appendToLog(`${S.activePlayerMon.apiData.name} пытается защититься, но не удалось!`);
+    }
     return true;
   }
 
@@ -927,7 +940,7 @@ function handleEnemyStatusEffects(move) {
   const ailment = move.meta?.ailment?.name;
   if (ailment && ailment !== 'none' && ailment !== 'unknown') {
     const statusMap = {
-      'poison': 'psn', 'badly-poison': 'psn',
+      'poison': 'psn', 'badly-poison': 'tox',
       'burn': 'brn', 'paralysis': 'par',
       'sleep': 'slp', 'freeze': 'frz'
     };
@@ -1420,11 +1433,12 @@ function checkStatusTurn(target, isPlayer) {
 /**
  * applyStatusEndOfTurn — нанести урон от статуса в конце хода.
  * Яд (psn): 1/8 от макс HP каждый ход
+ * Токсин (tox): растущий урон 1/16, 2/16, 3/16… за каждый тик
  * Ожог (brn): 1/16 от макс HP каждый ход
  *
  * ГДЕ ВЫЗЫВАЕТСЯ:
- *   useMove() — перед ходом врага (если игрок пропустил ход из-за статуса)
- *   enemyTurn() — в начале хода врага (урон дикому), в конце (урон игроку)
+ *   useMove() — после хода игрока (яд/токсин игрока, Семя Ужаса)
+ *   finishEnemyTurn() — после хода врага (яд/токсин врага, Семя Ужаса)
  */
 function applyStatusEndOfTurn(target, isPlayer) {
   if (!target.status) return;
@@ -1441,6 +1455,24 @@ function applyStatusEndOfTurn(target, isPlayer) {
       updateWildHpUI();
     }
     appendToLog(`${isPlayer ? S.activePlayerMon.apiData.name : S.activeWild.name} теряет HP от яда! (-${dmg} HP)`, false, 'dmg');
+  }
+
+  // Токсин: растущий урон по решению из спецификации. Счётчик тиков хранится
+  // на самом объекте, обнуляется при cure/applyStatus (logic.ts).
+  if (target.status === 'tox') {
+    target.toxCounter = (target.toxCounter || 0) + 1;
+    const maxHp = isPlayer ? S.activePlayerMon.maxHp : S.wildMaxHP;
+    const dmg = Math.max(1, Math.floor(maxHp * target.toxCounter / 16));
+    if (isPlayer) {
+      S.activePlayerMon.currentHp -= dmg;
+      if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
+      updatePlayerHpUI();
+    } else {
+      S.wildCurHP -= dmg;
+      if (S.wildCurHP < 0) S.wildCurHP = 0;
+      updateWildHpUI();
+    }
+    appendToLog(`${isPlayer ? S.activePlayerMon.apiData.name : S.activeWild.name} отравлен токсином (${target.toxCounter} тик, -${dmg} HP)!`, false, 'dmg');
   }
 
   if (target.status === 'brn') {
@@ -2745,7 +2777,7 @@ async function useMove(moveIndex) {
     const ailment = move.meta?.ailment?.name;
     if (ailment && ailment !== 'none' && ailment !== 'unknown') {
       const statusMap = {
-        'poison': 'psn', 'badly-poison': 'psn',
+        'poison': 'psn', 'badly-poison': 'tox',
         'burn': 'brn', 'paralysis': 'par',
         'sleep': 'slp', 'freeze': 'frz'
       };
@@ -2922,7 +2954,7 @@ async function useMove(moveIndex) {
         // ailment_chance === 0 — валидное значение («эффект есть, но шанс 0»), поэтому ?? а не ||
         const chance = move.meta.ailment_chance ?? 0;
         if (Math.random() * 100 < chance) {
-          const sm = { 'poison': 'psn', 'badly-poison': 'psn', 'burn': 'brn', 'paralysis': 'par', 'sleep': 'slp', 'freeze': 'frz' };
+          const sm = { 'poison': 'psn', 'badly-poison': 'tox', 'burn': 'brn', 'paralysis': 'par', 'sleep': 'slp', 'freeze': 'frz' };
           const ts = sm[move.meta.ailment.name];
           if (ts && !S.wildStatus && !isStatusImmune(move.meta.ailment.name, S.activeWild)) {
             if (applyStatusEffect(S.activeWild, ts)) {
@@ -3029,14 +3061,18 @@ async function useMove(moveIndex) {
 
   document.getElementById('battle-main-menu').style.display = 'none';
 
-  if (S.activePlayerMon.currentHp <= 0) {
-    appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
-    handlePlayerFaint();
+  // По решению из спецификации при одновременной смерти побеждает игрок:
+  // сначала проверяем wild faint, потом player. Иначе клетка, где игрок
+  // убивает дикого в тот же ход, в котором умирает сам (Rough Skin, отдача
+  // Life Orb), засчитывается как поражение.
+  if (S.wildCurHP === 0) {
+    await handleWildFaintRewards(S.battleType === 'wild');
     return;
   }
 
-  if (S.wildCurHP === 0) {
-    await handleWildFaintRewards(S.battleType === 'wild');
+  if (S.activePlayerMon.currentHp <= 0) {
+    appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
+    handlePlayerFaint();
     return;
   }
 
@@ -3222,6 +3258,9 @@ function tickEnemyTurnDurations() {
     if (S.enemyLightScreenTurns === 0) appendToLog('Light Screen противника исчез!', false, 'system');
   }
   S.protectActive = false; // Protect действует один ход
+  // Счётчик последовательных попыток сбрасывается каждый раз, когда Protect
+  // отработал свой ход — иначе он помнил бы попытки с прошлых раундов.
+  S.protectCounter = 0;
 }
 
 async function enemyTurn() {
@@ -3549,7 +3588,7 @@ async function runEnemyTurnBody() {
       const chance = chosenMove.meta.ailment_chance ?? 0;
       if (Math.random() * 100 < chance) {
         const statusMap = {
-          'poison': 'psn', 'badly-poison': 'psn',
+          'poison': 'psn', 'badly-poison': 'tox',
           'burn': 'brn', 'paralysis': 'par',
           'sleep': 'slp', 'freeze': 'frz'
         };

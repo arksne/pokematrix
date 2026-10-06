@@ -98,7 +98,7 @@ export function getStatusIcon(status) {
   return icons[status] || '';
 }
 
-export const STATUS_NAMES = { psn: 'Отравление', brn: 'Ожог', par: 'Паралич', slp: 'Сон', frz: 'Заморозка' };
+export const STATUS_NAMES = { psn: 'Отравление', tox: 'Токсин', brn: 'Ожог', par: 'Паралич', slp: 'Сон', frz: 'Заморозка' };
 
 /**
  * Apply status to target. Returns false if already has a status.
@@ -109,12 +109,18 @@ export function applyStatusEffect(target, statusType) {
   if (statusType === 'slp') {
     target.sleepTurns = Math.floor(Math.random() * 3) + 1;
   }
+  // Счётчики длительности обнуляются при наложении: заморозка считается ходы
+  // до предохранителя, токсин — сколько раз уже тикнул.
+  target.freezeTurns = 0;
+  target.toxCounter = 0;
   return true;
 }
 
 export function cureStatus(target) {
   target.status = null;
   target.sleepTurns = 0;
+  target.freezeTurns = 0;
+  target.toxCounter = 0;
 }
 
 /**
@@ -135,8 +141,12 @@ export function checkStatusTurn(target) {
   }
 
   if (target.status === 'frz') {
-    if (Math.random() < 0.2) {
+    // Предохранитель из спецификации: максимум 3 хода, дальше оттаивает
+    // гарантированно. Без него заморозка с шансом 20% могла держаться весь бой.
+    target.freezeTurns = (target.freezeTurns || 0) + 1;
+    if (Math.random() < 0.2 || target.freezeTurns >= 3) {
       target.status = null;
+      target.freezeTurns = 0;
       return { canAct: true, message: 'оттаял!' };
     }
     return { canAct: false, message: 'заморожен!' };
@@ -316,12 +326,10 @@ alwaysCrit = false,
     natures: naturesList,
   });
 
-  // Burn modifier for physical attacks
-  let burnAtkMod = 1.0;
-  if (attacker.status === 'brn' && isPhysical) burnAtkMod = 0.5;
-
+  // Ожог НЕ снижает физическую атаку — решение из спецификации: ожог только
+  // наносит урон 1/16 после действия владельца. Раньше здесь стоял множитель
+  // 0.5, из-за чего ожог был и уроном, и дебаффом одновременно.
   let baseDmg = Math.floor((((2 * attackerLevel / 5 + 2) * power * (A / D)) / 50) + 2);
-  baseDmg = Math.floor(baseDmg * burnAtkMod);
 
   // STAB
   let stab = 1.0;
@@ -335,8 +343,10 @@ alwaysCrit = false,
   const weatherMult = getWeatherMultiplier(move.type?.name, weather);
   const randMod = 0.85 + Math.random() * 0.15;  // Всегда случайно, даже при гарантированном крите
 
-  // Crit — Gen 6+: 1.5x множитель, stages влияют на вероятность
-  const CRIT_RATES = [0.0625, 0.125, 0.25, 1/3, 0.5];
+  // Crit — таблица канона Gen VII+. Решение из спецификации: базовый шанс 1/24.
+  // Раньше здесь стояла таблица Gen II–V с базой 1/16, то есть криты случались
+  // в полтора раза чаще задуманного.
+  const CRIT_RATES = [1 / 24, 1 / 8, 1 / 2, 1, 1];
   const critRate = alwaysCrit ? 1.0 : CRIT_RATES[Math.min(critRateStage, CRIT_RATES.length - 1)];
   const isCrit = Math.random() < critRate;
   const critMult = isCrit ? 1.5 : 1.0;
@@ -353,7 +363,6 @@ alwaysCrit = false,
       isWild: isWildDefender, level: defenderLevel, natures: naturesList,
     });
     baseDmg = Math.floor((((2 * attackerLevel / 5 + 2) * power * (critA / critD)) / 50) + 2);
-    baseDmg = Math.floor(baseDmg * burnAtkMod);
   }
 
   // Air Balloon for defender (declare before held items due to Expert Belt check)
@@ -381,13 +390,11 @@ alwaysCrit = false,
     if (defAbil === 'dry-skin' && moveType === 'fire') effectiveTypeMult *= 1.25;
     if ((defAbil === 'filter' || defAbil === 'solid-rock') && effectiveTypeMult > 1) effectiveTypeMult *= 0.75;
   }
-  // Guts: nullifies burn Atk penalty and gives 1.5x Atk instead
-  if (attackerAbilityName) {
-    const atkAbil = attackerAbilityName.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    if (atkAbil === 'guts' && attacker.status === 'brn' && isPhysical) {
-      burnAtkMod = 1.5; // Guts: 1.5x Atk, ignores burn penalty
-    }
-  }
+  // Guts: раньше давал 1.5x Atk сгоревшему покемону, компенсируя штраф ожога.
+  // По решению из спецификации ожог больше не снижает атаку — поэтому и Guts
+  // не нужен в текущей логике. Способность помечена к отдельной фазе реализации.
+  // TODO(spec): перереализовать Guts, когда определится, даёт ли он +50% к
+  // атаке для сгоревшего покемона (сверх несуществующего штрафа).
   // Sniper: 2.25x crit damage instead of 1.5x
   let sniperCritMult = critMult;
   if (attackerAbilityName && isCrit) {

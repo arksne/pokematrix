@@ -583,7 +583,7 @@ describe('calculateDamage', () => {
 // ======================================================================
 // 7. BURN MODIFIER
 // ======================================================================
-describe('Burn halves physical attack damage', () => {
+describe('Burn no longer affects attack stat (spec: damage only)', () => {
   const attacker = {
     apiData: {
       name: 'machamp',
@@ -618,10 +618,10 @@ describe('Burn halves physical attack damage', () => {
     statStages: null, heldItem: null,
   };
 
-  it('burned physical attack does ~half damage', () => {
-    // calculateDamage бросает Math.random() для разброса урона (logic.ts: randMod),
-    // поэтому два независимых вызова давали разные числа и проверка точного
-    // равенства падала в зависимости от прогона. Фиксируем бросок.
+  it('burned physical attack deals the same damage as unburned', () => {
+    // По решению из спецификации ожог больше не снижает физ. атаку — только
+    // наносит урон 1/16 в конце хода владельца. Этот тест закрепляет новый
+    // контракт: burnAtkMod удалён, оба вызова дают одинаковый урон.
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
     try {
       const result = calculateDamage({
@@ -636,8 +636,7 @@ describe('Burn halves physical attack damage', () => {
         defender,
         alwaysCrit: true,
       });
-      expect(result.damage).toBeLessThan(resultNoBurn.damage);
-      expect(result.damage).toBe(Math.floor(resultNoBurn.damage * 0.5));
+      expect(result.damage).toBe(resultNoBurn.damage);
     } finally {
       vi.restoreAllMocks();
     }
