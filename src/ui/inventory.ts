@@ -126,47 +126,68 @@ import { checkNewMovesOnLevelUp } from './levelup_moves.js';
 
 import { calculateStat as calculateStatShared } from '../battle/stats.js';
 
-// ── ИНИЦИАЛИЗАЦИЯ СОБЫТИЙ QA-КНОПОК И HELD ITEM ──────────
-// Вызывается один раз при старте игры (init.ts)
+// ── ИНИЦИАЛИЗАЦИЯ КНОПКИ ПРЕДМЕТОВ И HELD ITEM ──────────
+// Вызывается один раз при старте игры (init.ts).
+// Раньше здесь было 10 отдельных кнопок (Аптечка, Конфета, ...) — захламляли
+// панель. Теперь одна кнопка «Предметы» открывает модалку со списком того,
+// что реально есть в рюкзаке.
 export function initInventoryEvents() {
-  // Карта соответствия: ID кнопки → ID предмета
-  // QA = Quick Access — быстрый доступ к часто используемым предметам
+  // Карта соответствия: ID предмета → подпись. Тот же набор, что был кнопками.
   const qaMap = {
-    'qa-potion': 'potion',           // Аптечка (+20 HP)
-    'qa-candy': 'rareCandy',             // Конфета (уровень)
-    'qa-vitamin': 'hpUp',         // Витамин (+EV)
-    'qa-train': 'train',             // Тренировка (усиление стата)
-    'qa-weaken': 'weaken',           // Ослабление (сброс тренировки)
-    'qa-super-potion': 'superPotion', // Супер Аптечка (+50 HP)
-    'qa-full-restore': 'fullRestore', // Полное восстановление
-    'qa-evolution-stone': 'evolutionStone', // Камень эволюции
-    'qa-tm': 'tm',                   // TM-диск (шарф)
+    'potion': 'Аптечка (+20 HP)',
+    'superPotion': 'Супер Аптечка (+50 HP)',
+    'fullRestore': 'Полное восстановление',
+    'rareCandy': 'Конфета (уровень)',
+    'hpUp': 'Витамин (+EV)',
+    'train': 'Тренировка (усиление стата)',
+    'weaken': 'Ослабление (сброс тренировки)',
+    'evolutionStone': 'Камень эволюции',
+    'tm': 'TM-диск',
   };
 
-  // Проходим по всем парам кнопка → предмет и вешаем обработчик клика
-  for (const [btnId, itemId] of Object.entries(qaMap)) {
-    const btn = document.getElementById(btnId);  // Ищем кнопку в DOM
-    if (btn) {
-      // При клике вызываем useItem() с ID предмета
-      btn.addEventListener('click', () => useItem(itemId));
-    }
+  // ── Кнопка «Предметы»: модалка со списком ──
+  const itemsBtn = document.getElementById('qa-items');
+  if (itemsBtn) {
+    itemsBtn.addEventListener('click', () => openItemsMenu(qaMap));
   }
+}
 
-  // ── Кнопка held item (удерживаемый предмет) ──
-  const heldBtn = document.getElementById('qa-held-item');
-  if (heldBtn) {
-    heldBtn.addEventListener('click', () => {
-      // Получаем индекс выбранного покемона (из вкладки "Команда")
-      const idx = getTeamState().currentPokemonIndex;
-      if (idx !== null) {
-        // Если покемон выбран — открываем пикер held item
-        openHeldItemPicker(idx);
-      } else {
-        // Если не выбран — ошибка
-        showToast('Сначала выберите покемона во вкладке "Команда"!', true);
-      }
+// ── openItemsMenu: модалка использования предметов ──────
+// Показывает только то, что есть в наличии (qty > 0), + пункт held-предмета.
+// Выборки по несуществующим кнопкам больше нет — нечему рассинхронизироваться.
+export function openItemsMenu(qaMap?: Record<string, string>) {
+  const map = qaMap || {
+    'potion': 'Аптечка (+20 HP)',
+    'superPotion': 'Супер Аптечка (+50 HP)',
+    'fullRestore': 'Полное восстановление',
+    'rareCandy': 'Конфета (уровень)',
+    'hpUp': 'Витамин (+EV)',
+    'train': 'Тренировка (усиление стата)',
+    'weaken': 'Ослабление (сброс тренировки)',
+    'evolutionStone': 'Камень эволюции',
+    'tm': 'TM-диск',
+  };
+  const entries: Array<{ label: string; subtitle: string; run: () => void }> = [];
+  for (const [itemId, hint] of Object.entries(map)) {
+    const qty = getItemQty(itemId);
+    if (qty <= 0) continue;
+    const def = getInvState().ITEMS.find(i => i.id === itemId);
+    entries.push({
+      label: `${def?.nameRu || itemId} ×${qty}`,
+      subtitle: hint,
+      run: () => useItem(itemId),
     });
   }
+  entries.push({
+    label: '🎽 Удерживаемый предмет…',
+    subtitle: 'Выбрать предмет покемону',
+    run: () => {
+      const idx = getTeamState().currentPokemonIndex;
+      if (idx !== null) openHeldItemPicker(idx);
+      else showToast('Сначала выберите покемона во вкладке "Команда"!', true);
+    },
+  });
+  showSelectionModal('🎒 Предметы', entries, (i: number) => entries[i]?.run(), true);
 }
 
 // ── УПРАВЛЕНИЕ EV (Effort Values / Очки усилий) ──────────
@@ -346,41 +367,14 @@ export function renderBattleItemSelect() {
   });
 }
 
-// ── updateQADisplays: обновить числовые метки на QA-кнопках ──
-// Показывает количество каждого предмета рядом с кнопкой быстрого доступа
+// ── updateQADisplays: счётчик на кнопке «Предметы» ──
+// Показывает, сколько видов usable-предметов сейчас в наличии.
+// Старые per-кнопочные метки (qa-qty-potion и т.д.) удалены вместе с кнопками.
 export function updateQADisplays() {
-  // Карта: ID элемента метки → ID предмета
-  const map = {
-    'qa-qty-potion': 'potion',
-    'qa-qty-candy': 'rareCandy',
-    'qa-qty-vitamin': 'hpUp',
-    'qa-qty-train': 'train',
-    'qa-qty-weaken': 'weaken',
-    'qa-qty-super-potion': 'superPotion',
-    'qa-qty-full-restore': 'fullRestore',
-    'qa-qty-evolution-stone': 'evolutionStone',
-    'qa-qty-tm': 'tm',
-  };
-
-  // Проходим по всем меткам и обновляем их текст с количеством
-  for (const [elId, itemId] of Object.entries(map)) {
-    const el = document.getElementById(elId);
-    if (el) el.textContent = String(getItemQty(itemId));
-  }
-
-  // ── Отображение held item (удерживаемого предмета) ──
-  const heldQty = document.getElementById('qa-qty-held-item');
-  if (heldQty) {
-    const idx = getTeamState().currentPokemonIndex;
-    if (idx !== null) {
-      // Если покемон выбран — показываем название его held item
-      const mon = getTeamState().myTeam[idx];
-      heldQty.textContent = mon?.heldItem ? getHeldItemName(mon.heldItem) : 'Пусто';
-    } else {
-      // Если не выбран — прочерк
-      heldQty.textContent = '-';
-    }
-  }
+  const el = document.getElementById('qa-qty-items');
+  if (!el) return;
+  const ids = ['potion', 'superPotion', 'fullRestore', 'rareCandy', 'hpUp', 'train', 'weaken', 'evolutionStone', 'tm'];
+  el.textContent = String(ids.filter((id) => getItemQty(id) > 0).length);
 }
 
 // ── renderInventory: полная отрисовка сетки предметов ─────

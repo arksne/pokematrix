@@ -44,6 +44,7 @@
  */
 
 import { ITEMS } from '../data/items.js';
+import { trainingStages } from '../data/training.js';
 
 const TYPE_COLORS = {
   normal: '#A8A77A', fire: '#EE8130', water: '#6390F0', electric: '#F7D02C',
@@ -576,34 +577,24 @@ export function getItemSpriteImg(itemId, size = 24) {
     : (item.spriteType === 'pokeapi' ? `${ITEM_SPRITE_BASE}${item.sprite}` : `${LOCAL_ITEM_SPRITE_BASE}${item.sprite}`);
   return `<img src="${spriteUrl}" style="width:${size}px;height:${size}px;vertical-align:middle;image-rendering:auto" alt="">`;
 }
-const HELD_ITEM_ICONS = {
-  sitrus: '🍊', oran: '🫐', lum: '🌈',
-  chesto: '🌰', rawst: '🍓'
-};
-
 export function updateBattleHeldIcons(playerMon, wildMon) {
-  const playerIcon = document.getElementById('player-held-icon');
-  const wildIcon = document.getElementById('wild-held-icon');
-  if (playerIcon) {
-    const itemId = playerMon?.heldItem;
-    if (itemId && HELD_ITEM_ICONS[itemId]) {
-      playerIcon.innerText = HELD_ITEM_ICONS[itemId];
-      playerIcon.style.display = '';
+  // Показываем СПРАЙТ удерживаемого предмета (а не эмодзи): раньше тут стояла
+  // карта из 5 коротких имён (sitrus/oran/...) — а heldItem хранит полные ID
+  // (sitrusBerry), совпадения не было НИКОГДА, иконки не было видно вообще.
+  const setIcon = (elId, mon) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const itemId = mon?.heldItem;
+    if (itemId) {
+      el.innerHTML = getItemSpriteImg(itemId, 18);
+      el.style.display = '';
     } else {
-      playerIcon.innerText = '';
-      playerIcon.style.display = 'none';
+      el.innerHTML = '';
+      el.style.display = 'none';
     }
-  }
-  if (wildIcon) {
-    const itemId = wildMon?.heldItem;
-    if (itemId && HELD_ITEM_ICONS[itemId]) {
-      wildIcon.innerText = HELD_ITEM_ICONS[itemId];
-      wildIcon.style.display = '';
-    } else {
-      wildIcon.innerText = '';
-      wildIcon.style.display = 'none';
-    }
-  }
+  };
+  setIcon('player-held-icon', playerMon);
+  setIcon('wild-held-icon', wildMon);
 }
 
 export function updateBattleSpriteBgs(playerMon, wildMon) {
@@ -616,4 +607,50 @@ export function updateBattleSpriteBgs(playerMon, wildMon) {
     wildBox.style.background = getTypeGradient(wildMon.types);
   }
   updateBattleHeldIcons(playerMon, wildMon);
+  updateBattleTrainBadges(playerMon, wildMon);
+}
+
+/** Шайни ли покемон: флаг лежит либо в корне (награды/админ), либо в apiData. */
+export function isShinyMon(mon) {
+  return !!(mon && (mon.isShiny || mon.apiData?.isShiny));
+}
+
+/**
+ * Бейдж тренировки: PNG-стрелка поверх спрайта в правом верхнем углу,
+ * подложка кругом в цвете стадии (серый начальная → красный топовая,
+ * цвета из data/training.ts). Стадии 0/нет — бейджа нет.
+ */
+export function trainingBadgeHtml(mon, size = 20) {
+  const stage = mon?.trainingStage || 0;
+  const st = trainingStages[stage];
+  if (!stage || !st) return '';
+  const img = Math.round(size * 0.72);
+  return `<span title="Тренировка: ${st.name} (+${st.pct}%)" style="position:absolute;top:2px;right:2px;width:${size}px;height:${size}px;border-radius:50%;background:${st.color};display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${st.color};z-index:2;"><img src="/assets/items/train-arrow.png" alt="" style="width:${img}px;height:${img}px;"></span>`;
+}
+
+/** Угол спрайта в бою: тренировка игрока (у диких её нет). */
+export function updateBattleTrainBadges(playerMon, wildMon) {
+  const pairs = [
+    ['player-sprite', playerMon],
+    ['wild-sprite', wildMon],
+  ];
+  for (const [spriteId, mon] of pairs) {
+    const img = document.getElementById(spriteId);
+    const box = img?.closest('.reborn-sprite-box') as HTMLElement | null;
+    if (!box) continue;
+    box.style.position = 'relative';
+    let badge = box.querySelector(':scope > .battle-train-badge') as HTMLElement | null;
+    const html = trainingBadgeHtml(mon, 20);
+    if (!html) {
+      if (badge) badge.remove();
+      continue;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'battle-train-badge';
+      badge.style.cssText = 'position:absolute;top:2px;right:2px;z-index:2;';
+      box.appendChild(badge);
+    }
+    badge.innerHTML = html;
+  }
 }

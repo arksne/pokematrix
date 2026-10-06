@@ -535,5 +535,8 @@ export async function showPokedexInfo(speciesName) {
 // ── Глобальная регистрация для onclick-вызовов ────────────
 // Регистрируем showPokedexInfo глобально (на window)
 // Это нужно чтобы из HTML onclick="showPokedexInfo('pikachu')" работал
-// Особенно для кликабельных эволюций и пре-эволюций
-(window as any).showPokedexInfo = showPokedexInfo;
+// Особенно для кликабельных эволюций и пре-эволюций.
+// Гард: модуль импортируется и в node-окружении (тесты) — там window нет.
+if (typeof window !== 'undefined') {
+  (window as any).showPokedexInfo = showPokedexInfo;
+}

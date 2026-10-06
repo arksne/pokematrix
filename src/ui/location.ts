@@ -29,7 +29,8 @@
 
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
-import { state } from '../game/state.js';          // Глобальное состояние
+import { state } from '../game/state.js';
+import { checkAchievement } from './achievements.js';          // Глобальное состояние
 import { apiFetch } from '../game/apiClient.js';     // fetch с авторизацией и обновлением токена игры
 import { REGIONS } from '../data/regions.js';       // Все регионы с локациями
 // gymLeaders — объект { locId: { name, title, badgeName, badgeIcon, team, ... } }
@@ -480,6 +481,7 @@ export let renderLocation = function(locId: any) {
       if (!state.visitedLocations.has(linkId)) {
         state.visitedLocations.add(linkId);
         getBattleCore().then(bc => bc.checkQuestProgress('explore'));
+        if (state.visitedLocations.size >= 20) checkAchievement('explorer');
       }
       renderLocation(linkId);  // Переходим в новую локацию
     };
@@ -506,6 +508,7 @@ export let renderLocation = function(locId: any) {
         if (!state.visitedLocations.has(linkId)) {
           state.visitedLocations.add(linkId);
           getBattleCore().then(bc => bc.checkQuestProgress('explore'));
+          if (state.visitedLocations.size >= 20) checkAchievement('explorer');
         }
         renderLocation(linkId);
       };
@@ -644,6 +647,29 @@ export async function fetchDropConfig() {
   } catch(e) {}
 }
 
+// ── fetchServerFeatures: включённые фичи сервера (админка → toggle_feature) ──
+// Публичный эндпоинт, читается при старте. Применяются: double_exp (×2 EXP),
+// shiny_boost (шанс шайни ×10), free_shop (покупки за 0 — и сервер тоже),
+// beta_mode (бейдж в шапке, на механики не влияет).
+export async function fetchServerFeatures() {
+  try {
+    const res = await fetch('/api/features');
+    if (res.ok) {
+      const data = await res.json();
+      state.serverFeatures = data.features || {};
+    }
+  } catch (e) { /* сервер недоступен — играем без фич */ }
+  if (!state.serverFeatures) state.serverFeatures = {};
+  if (state.serverFeatures.beta_mode && !document.getElementById('beta-badge')) {
+    const badge = document.createElement('span');
+    badge.id = 'beta-badge';
+    badge.innerText = 'BETA';
+    badge.style.cssText = 'font-size:0.6rem;background:#af52de;color:#fff;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;';
+    const header = document.getElementById('loc-name') || document.querySelector('header');
+    if (header) header.appendChild(badge);
+  }
+}
+
 // ── processMonsterDrop: расчёт дропа с покемона ────────
 // Принимает pokemonName — имя вида
 // Возвращает массив {item, qty} — выпавшие предметы
@@ -686,6 +712,8 @@ export function processMonsterDrop(pokemonName: string) {
 export function updateMoneyDisplay() {
   const el = document.getElementById('money-display');
   if (el) el.textContent = '¥' + ((state.inventory?.credit || 0).toLocaleString());
+  // Ачивка «Богач»: баланс достигал ¥100,000 (разовая, назад не отбирается)
+  if ((state.inventory?.credit || 0) >= 100000) checkAchievement('money_100k');
 }
 
 // ── updateBadgeDisplay: обновление отображения значков ──

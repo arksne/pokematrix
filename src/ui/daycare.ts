@@ -41,7 +41,8 @@ import { state } from '../game/state.js';            // Глобальное с�
 import { store } from '../game/store.js';              // Event-система (emit)
 import { addItem } from '../game/actions.js';          // Добавление предмета в инвентарь
 import { generateUID, getTrainerId } from '../game/state.js';  // Генерация ID
-import { showToast, showSelectionModal } from '../utils/dom.js';  // UI компоненты
+import { showToast, showSelectionModal } from '../utils/dom.js';
+import { checkAchievement } from './achievements.js';  // UI компоненты
 import { appendToLog, calculateStat } from '../battle/core.js';  // Лог + расчёт HP
 import { natures } from '../data/natures.js';          // Массив характеров
 
@@ -76,7 +77,7 @@ export function openDaycareDeposit() {
   // Создаём список для выбора первого покемона
   const items = available.map(({ m }: any) => ({
     label: `Lv.${m.baseLevel + m.candiesEaten} ${m.nickname || m.apiData?.name}`,
-    subtitle: `${m.apiData?.gender || '?'} | HP: ${m.currentHp}/${m.maxHp}`
+    subtitle: `${genderIcon(m)} | HP: ${m.currentHp}/${m.maxHp}`
   }));
 
   // Показываем модалку выбора ПЕРВОГО покемона
@@ -85,7 +86,7 @@ export function openDaycareDeposit() {
     const remaining = available.filter((_: any, i: number) => i !== i1);
     const items2 = remaining.map(({ m }: any) => ({
       label: `Lv.${m.baseLevel + m.candiesEaten} ${m.nickname || m.apiData?.name}`,
-      subtitle: `${m.apiData?.gender || '?'} | HP: ${m.currentHp}/${m.maxHp}`
+      subtitle: `${genderIcon(m)} | HP: ${m.currentHp}/${m.maxHp}`
     }));
 
     // Показываем модалку выбора ВТОРОГО покемона
@@ -237,24 +238,35 @@ async function getMonEggGroups(mon: any): Promise<string[]> {
 }
 
 // getMonGender — получить пол покемона
-function getMonGender(mon: any) {
+export function getMonGender(mon: any) {
   return mon.gender || mon.apiData?.wildGender || null;
+}
+
+/** Иконка пола для UI: ♂ / ♀ / ⚪ (бесполый или неизвестен) */
+export function genderIcon(mon: any): string {
+  const g = getMonGender(mon);
+  return g === 'male' ? '♂' : g === 'female' ? '♀' : '⚪';
 }
 
 // ── Проверка совместимости для разведения ──
 // Условия:
 //   (1) Разные покемоны (разные UID)
-//   (2) Оба имеют пол
-//   (3) Разные полы
-//   (4) Общая яйце-группа ИЛИ один из них Ditto
-function areBreedingCompatible(mon1: any, mon2: any, groups1: string[], groups2: string[]) {
+//   (2) Никто из пары ещё не спаривался (hasBred — один раз и всё)
+//   (3) Оба имеют пол (кроме пары с Ditto — бесполые идут только через него)
+//   (4) Разные полы (кроме Ditto)
+//   (5) Общая яйце-группа ИЛИ один из них Ditto
+export function areBreedingCompatible(mon1: any, mon2: any, groups1: string[], groups2: string[]) {
   if (mon1.uid === mon2.uid) return false;           // Один и тот же покемон
+  if (mon1.hasBred || mon2.hasBred) return false;    // Уже спаривались — хватит
+  const dittoInvolved = groups1.includes('ditto') || groups2.includes('ditto');
   const g1 = getMonGender(mon1);
   const g2 = getMonGender(mon2);
-  if (!g1 || !g2) return false;                       // Нет пола
-  if (g1 === g2) return false;                        // Один пол
+  if (!dittoInvolved) {
+    if (!g1 || !g2) return false;                     // Нет пола
+    if (g1 === g2) return false;                      // Один пол
+  }
   const shared = groups1.filter(g => groups2.includes(g));  // Общие группы
-  if (shared.length === 0 && !groups1.includes('ditto') && !groups2.includes('ditto')) return false;
+  if (shared.length === 0 && !dittoInvolved) return false;
   return true;
 }
 
@@ -310,6 +322,10 @@ export async function checkBreeding() {
             parent2Uid: existingPair.mon2Uid
           };
           state.eggs.push(egg);  // Добавляем в список яиц
+          // Покемон спаривается ОДИН раз: помечаем обоих родителей, иначе пара
+          // тут же собирается заново в этом же проходе (и после каждого рефреша)
+          m1.hasBred = true;
+          m2.hasBred = true;
 
           // Уведомление и лог
           store.emit('notification:add', '🥚 Новое яйцо!',
@@ -472,6 +488,7 @@ export async function hatchEgg(egg: any) {
 
     store.emit('team:render');
     store.emit('save');
+    checkAchievement('breeder');
   } catch(e) {
     console.error('Hatch failed:', e);
     state.eggs = state.eggs.filter((e: any) => e.uid !== eggData.uid);

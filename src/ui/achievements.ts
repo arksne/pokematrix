@@ -14,6 +14,13 @@
 //   isAchievementUnlocked()   — проверить статус достижения
 // ─────────────────────────────────────────────────────────────
 
+// ── ИМПОРТЫ ───────────────────────────────────────────────
+// state/store — только данные и сейв; циклов нет (никто из них сюда не импортирует)
+import { state } from '../game/state.js';
+import { store } from '../game/store.js';
+import { showToast } from '../utils/dom.js';
+import { addNotification } from './notifications.js';
+
 // ── СПИСОК ВСЕХ ДОСТИЖЕНИЙ ──────────────────────────────
 // Каждое: { id, icon, name, desc }
 const ACHIEVEMENTS = [
@@ -37,9 +44,24 @@ const ACHIEVEMENTS = [
 let unlockedAchievements: string[] = [];
 
 // ── setUnlockedAchievements: установить список разблокированных ──
-// Принимает массив ID достижений (загружается с сервера)
+// При загрузке сейва: state.achievements — источник, кэш дублирует для UI
 export function setUnlockedAchievements(ids: string[]) {
   unlockedAchievements = ids;
+  state.achievements = ids;
+}
+
+// ── checkAchievement: выдать достижение, если ещё нет ──
+// Единственная точка разблокировки: тост + уведомление + сейв. Идемпотентна.
+export function checkAchievement(id: string) {
+  if (!id) return;
+  if (!Array.isArray(state.achievements)) state.achievements = [];
+  if (state.achievements.includes(id)) return;
+  const def = ACHIEVEMENTS.find((a) => a.id === id);
+  state.achievements.push(id);
+  unlockedAchievements = state.achievements;
+  showToast(`🏆 Достижение: ${def ? def.name : id}!`, false);
+  addNotification('🏆 Достижение', def ? `${def.icon} ${def.name} — ${def.desc}` : id);
+  store.emit('save');
 }
 
 // ── isAchievementUnlocked: проверить, разблокировано ли ──
@@ -52,6 +74,8 @@ export function isAchievementUnlocked(id: string): boolean {
 // Разблокированные — цветные, заблокированные — серые
 // Вверху счётчик: "Получено: 5/14"
 export function openAchievements() {
+  // Источник истины — state.achievements (сейв): модульный кэш после рефреша пуст
+  if (Array.isArray(state.achievements)) unlockedAchievements = state.achievements;
   // Удаляем старую модалку (если есть)
   document.querySelectorAll('.achievement-modal').forEach(el => el.remove());
 

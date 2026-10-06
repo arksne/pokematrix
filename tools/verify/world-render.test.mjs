@@ -199,8 +199,15 @@ for (const [i, b] of HEADER_BUTTONS.entries()) {
   // Закрываем по-настоящему, а не только .modal-overlay: модалка достижений
   // имеет класс help-modal, и оставаясь в DOM, перекрывала шапку — следующие
   // клики уходили в неё, а не в кнопку.
+  // ВАЖНО: статические модалки из index.html (quest-modal и др.) только СКРЫВАЕМ,
+  // а не удаляем: их код ищет по getElementById и молча выходит, если элемента
+  // нет (openQuests: if (!modal) return). Удаление ломало последующие проверки.
   await page.evaluate(() => {
-    document.querySelectorAll('.modal-overlay, .help-modal, .trade-container, .achievement-modal')
+    document.querySelectorAll('.modal-overlay').forEach((o) => {
+      if (o.id === 'quest-modal') { o.style.display = 'none'; return; }
+      o.remove();
+    });
+    document.querySelectorAll('.help-modal, .trade-container, .achievement-modal')
       .forEach((o) => o.remove());
     document.querySelectorAll('[id^="pvp-modal"], #trade-center-modal').forEach((o) => o.remove());
   });

@@ -383,6 +383,31 @@ async function main() {
     if (r.code !== 0) exitCode = 1;
   }
 
+  // Юнит-тесты (vitest): быстрые, без браузера. Ловят регрессии до тяжёлых e2e.
+  // Идут здесь (а не в конце), чтобы не ждать 6+ минут ради упавшего юнита.
+  log('[0.5] юнит-тесты (npm run test:vitest)');
+  {
+    // shell:true обязателен: без него spawnSync 'npm.cmd' падает с EINVAL
+    // (статус null), и гейт ложно краснеет с пустым выводом.
+    const u = spawnSync('npm', ['run', 'test:vitest'], { cwd: REPO, encoding: 'utf8', timeout: 300000, shell: true });
+    const out = (u.stdout || '') + (u.stderr || '');
+    const m = out.match(/Tests\s+(\d+) passed.*?(\d+) skipped|Test Files\s+(\d+) passed/);
+    for (const l of out.split('\n')) {
+      if (/Test Files|Tests |FAIL|ERR_/i.test(l)) log('  ' + l.trimEnd());
+    }
+    if (u.status !== 0) {
+      log('  юниты КРАСНЫЕ — дальше не идём');
+      if (u.error) log('  spawn error: ' + u.error.message);
+      const tail = ((u.stdout || '') + (u.stderr || '')).slice(-800);
+      if (tail.trim()) log('  хвост: ' + tail.trim().split('\n').slice(-8).join(' | '));
+      exitCode = 1;
+    }
+  }
+  if (exitCode !== 0) {
+    log('стоп: ранние проверки красные, тяжёлый прогон пропущен');
+    process.exit(1);
+  }
+
   log('[1] PostgreSQL (PGlite, pg-wire)');
   const pg = await startPg({ fresh: false });
   log(`    ${PG_URL}`);
@@ -480,6 +505,7 @@ async function main() {
     ['13', '[13] аудит графа импортов клиента', 'import-audit.test.mjs'],
     ['14', '[14] аудит DOM-контракта', 'dom-audit.test.mjs'],
     ['15', '[15] боевой цикл и сохранение боя', 'battle-flow.test.mjs'],
+    ['16', '[16] рестор боя против автоохоты (гонка)', 'race-restore.test.mjs'],
   ]) {
     if (!selected(id)) {
       log(`\n${title} — пропущен (--only/--skip)`);
@@ -488,7 +514,7 @@ async function main() {
     log(`\n${title}`);
     const r = await runSuite(title, file);
     for (const l of r.out.split('\n')) {
-      if (/\[(?:R|S|E|T|D|TR|DR|W|C|M|H|B|P|G|F)\d+\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ|МИР РЕНДЕРИТСЯ|ОБМЕН ДОСТИЖИМ|Боевые механики|БОЕВОЙ ЦИКЛ/.test(l)) log('  ' + l.trimEnd());
+      if (/\[(?:R|S|E|T|D|TR|DR|W|C|M|H|B|P|G|F)\d+\]|^\[DBG\]/.test(l) || /ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ|МИР РЕНДЕРИТСЯ|ОБМЕН ДОСТИЖИМ|Боевые механики|БОЕВОЙ ЦИКЛ/.test(l)) log('  ' + l.trimEnd());
     }
     if (r.code !== 0) {
       if (!/ПРОВАЛЕНО|ВСЕ ПРОВЕРКИ/.test(r.out)) log('  вывод: ' + r.out.slice(-500));

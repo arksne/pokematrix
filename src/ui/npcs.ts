@@ -280,15 +280,21 @@ export function checkTutorialProgress(type: string, amount: number, itemId?: str
 
   // Обновляем прогресс
   if (!(questId in state.npcQuestProgress)) state.npcQuestProgress[questId] = 0;
+  const before = state.npcQuestProgress[questId];
   state.npcQuestProgress[questId] += amount;
 
-  // Если квест выполнен — уведомляем игрока
+  // Если квест выполнен — уведомляем игрока ОДИН раз, на переходе через цель.
+  // Раньше условие было `>= target` без памяти: каждая следующая проверка
+  // (каждый удар в бою, каждый подбор) слала дубликат «задание выполнено!»,
+  // пока квест не сдадут — так и спамило.
   if (state.npcQuestProgress[questId] >= quest.targetQty) {
     state.npcQuestProgress[questId] = quest.targetQty;  // Не больше цели
-    addNotification(
-      '📋 Квест!',
-      `Обучающий квест (шаг ${state.tutorialStep}): задание выполнено! Вернитесь к Профессору Оуку.`
-    );
+    if (before < quest.targetQty) {
+      addNotification(
+        '📋 Квест!',
+        `Обучающий квест (шаг ${state.tutorialStep}): задание выполнено! Вернитесь к Профессору Оуку.`
+      );
+    }
   }
 
   store.emit('save');
@@ -344,7 +350,7 @@ export function renderTutorialBar() {
       <span>${emoji}</span>
       <div style="flex:1;min-width:0;">
         <div style="font-size:0.7rem;font-weight:bold;display:flex;justify-content:space-between;">
-          <span>🎓 Шаг ${info.step}/5: <span id="tut-bar-desc">${desc}</span></span>
+          <span>🎓 Шаг ${info.step}/6: <span id="tut-bar-desc">${desc}</span></span>
           <span style="color:#888;">${info.isActive ? `${info.progress}/${info.targetQty}` : ''}</span>
         </div>
         ${info.isActive ? `

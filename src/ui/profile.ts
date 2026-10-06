@@ -47,7 +47,9 @@ import { getPowerStars, getRarityStars } from '../utils/state.js';
 // getTypeGradient — CSS-градиент для фона на основе типов покемона
 // getSpriteUrl — URL спрайта покемона (анимированный или обычный)
 // getTypeColor — HEX-цвет для типа покемона
-import { getTypeGradient, getSpriteUrl, getTypeColor } from '../utils/sprite.js';
+import { getTypeGradient, getSpriteUrl, getTypeColor, getItemSpriteImg, trainingBadgeHtml, isShinyMon } from '../utils/sprite.js';
+import { genderIcon } from './daycare.js';
+import { openPokedex, showPokedexInfo } from './pokedex.js';
 // escHtml — экранирует HTML-спецсимволы (чтобы избежать XSS)
 // renderStars — генерирует HTML строку со звёздами (★/☆)
 // showSelectionModal — показывает модалку с выбором из списка
@@ -119,12 +121,7 @@ export function renderTeamGrid() {
         const types = mon.apiData.types;
         const typeBg = getTypeGradient(types);
 
-        // ── Метка тренировки ──
-        // Если покемон тренирован — показываем название стадии и % усиления
-        const trainStage = mon.trainingStage || 0;
-        const trainLabel = trainStage > 0
-          ? `<div class="train-label" style="background:${trainingStages[trainStage].color};" title="${trainingStages[trainStage].name} (+${trainingStages[trainStage].pct}%)">${trainingStages[trainStage].name}</div>`
-          : '';
+        // trainBadgeHtml — PNG-стрелка поверх спрайта (sprite.ts)
 
         if (mon.isEgg) {
           // ── Слот с яйцом ──
@@ -157,18 +154,32 @@ export function renderTeamGrid() {
           const rStars2 = getRarityStars(mon);     // Звёзды редкости
           slot.innerHTML = `
             ${reorderHtml}
-            <div class="team-sprite-wrap">
+            <button class="team-dex-btn" data-index="${i}" title="Покедекс">📖</button>
+            <div class="team-sprite-wrap" style="position:relative;">
               <img src="${getSpriteUrl(mon)}" alt="sprite" style="background:${typeBg};">
-              ${trainLabel}
+              ${trainingBadgeHtml(mon, 22)}
+              ${mon.heldItem ? `<span class="team-held-badge" title="Держит: ${mon.heldItem}" style="position:absolute;right:2px;bottom:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.55);display:inline-flex;align-items:center;justify-content:center;">${getItemSpriteImg(mon.heldItem, 16)}</span>` : ''}
             </div>
-            <div class="slot-name">${escHtml(mon.nickname || mon.apiData.name)} ${statusIcon}</div>
+            <div class="slot-name">${isShinyMon(mon) ? '✨' : ''}${escHtml(mon.nickname || mon.apiData.name)} ${genderIcon(mon)} ${statusIcon}</div>
             <div class="slot-lvl">${renderStars(pwStars2, rStars2)} Lvl ${curLvl} | ${mon.currentHp}/${mon.maxHp} HP</div>
           `;
         }
         // Сохраняем индекс покемона в data-атрибуте
         slot.setAttribute('data-poke-index', String(i));
-        // При клике на слот (не на кнопку перестановки) — открываем профиль
+        // При клике на слот (не на кнопку перестановки/покедекса) — открываем профиль
         slot.addEventListener('click', (e) => {
+          const dexBtn = (e.target as HTMLElement).closest('.team-dex-btn');
+          if (dexBtn) {
+            // Кнопка 📖 — покедекс об этом виде, профиль не открываем
+            const idx = parseInt(dexBtn.getAttribute('data-index') || '0');
+            const m = state.myTeam[idx];
+            const species = m?.apiData?.species?.name || m?.apiData?.name;
+            if (species) {
+              openPokedex();
+              showPokedexInfo(species).catch(() => {});
+            }
+            return;
+          }
           if ((e.target as HTMLElement).closest('.team-move-btn')) return;  // Игнорируем клики по ▲/▼
           openPokemonProfile(i);
         });
@@ -229,14 +240,30 @@ export function refreshProfileUI() {
 
   // ── Имя и ID покемона ──
   const pokeName = document.getElementById('poke-name');
-  if (pokeName) pokeName.innerText = `${mon.nickname || mon.apiData.name} #${mon.apiData.id}`;
+  if (pokeName) pokeName.innerText = `${isShinyMon(mon) ? '✨' : ''}${mon.nickname || mon.apiData.name} ${genderIcon(mon)} #${mon.apiData.id}`;
 
-  // ── Спрайт покемона ──
+  // ── Спрайт покемона + бейдж тренировки в правом верхнем углу ──
   const animSprite = getSpriteUrl(mon);
   const pokeSprite = document.getElementById('poke-sprite') as HTMLImageElement;
   if (pokeSprite) {
     pokeSprite.src = animSprite;
     pokeSprite.style.background = getTypeGradient(mon.apiData.types);  // Фон по типу
+    const wrap = pokeSprite.parentElement;
+    if (wrap) {
+      wrap.style.position = 'relative';
+      let tb = wrap.querySelector(':scope > .profile-train-badge') as HTMLElement | null;
+      const html = trainingBadgeHtml(mon, 26);
+      if (!html) {
+        if (tb) tb.remove();
+      } else {
+        if (!tb) {
+          tb = document.createElement('span');
+          tb.className = 'profile-train-badge';
+          wrap.appendChild(tb);
+        }
+        tb.innerHTML = html;
+      }
+    }
   }
 
   // ── Типы покемона (значки с цветом) ──
@@ -283,7 +310,10 @@ export function refreshProfileUI() {
   const heldEl = document.getElementById('info-held-item');
   if (heldEl) {
     const heldItemName = getHeldItemName(mon.heldItem);
-    heldEl.innerText = heldItemName;
+    // Картинка предмета + название (было только текстом — предмет не было видно)
+    heldEl.innerHTML = mon.heldItem
+      ? `${getItemSpriteImg(mon.heldItem, 20)} ${escHtml(heldItemName)}`
+      : escHtml(heldItemName);
     heldEl.title = 'Нажмите чтобы сменить';  // Подсказка
     heldEl.style.cursor = 'pointer';           // Курсор-рука
     // При клике — открываем пикер held item

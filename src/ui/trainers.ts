@@ -45,6 +45,47 @@ import { apiFetch } from '../game/apiClient.js';
 // Формат: [{id, nickname, avatar, badges, teamSize, region, lastSeen, registered}, ...]
 let trainersAllData = [];
 
+// ── Аватары тренеров ──────────────────────────────────────
+// Сервер хранит avatar как ID (trainer_m, gentleman, ...), PNG лежат в
+// /avatars/<id>.png. Раньше список проверял значение по форме ПУТИ
+// (/avatars/x.png) — ID под неё не подходит никогда, и вместо картинки
+// огромным текстом печатался сам ID («gentleman», «trainer_m»).
+const TRAINER_AVATAR_FILES = new Set([
+  'trainer_f', 'trainer_m', 'ninja', 'sailor', 'super_nerd', 'beauty', 'gentleman',
+]);
+const TRAINER_AVATAR_EMOJI: Record<string, string> = {
+  trainer_f: '👩', trainer_m: '👨', ninja: '🥷', sailor: '🧑‍✈️',
+  super_nerd: '🤓', beauty: '💃', gentleman: '🤵',
+};
+const TRAINER_AVATAR_RU: Record<string, string> = {
+  trainer_f: 'Тренер', trainer_m: 'Тренер', ninja: 'Ниндзя', sailor: 'Моряк',
+  super_nerd: 'Заучка', beauty: 'Красотка', gentleman: 'Джентльмен',
+};
+
+/** Круглый аватар: PNG если есть, под ним эмодзи-заглушка. Никогда не текст. */
+export function trainerAvatarHtml(raw: unknown, size = 40): string {
+  const id = typeof raw === 'string' ? raw : '';
+  const circle = `width:${size}px;height:${size}px;border-radius:50%;`;
+  const bg = 'background:linear-gradient(135deg,#2a5298,#1e3c72);';
+  const fs = `font-size:${Math.round(size * 0.55)}px;`;
+  const emoji = TRAINER_AVATAR_EMOJI[id] || '👤';
+  const fallback = `<span style="${circle}display:inline-flex;align-items:center;justify-content:center;${bg}${fs}">${emoji}</span>`;
+  const src = TRAINER_AVATAR_FILES.has(id)
+    ? `/avatars/${id}.png`
+    : /^\/avatars\/[a-z0-9_-]+\.png$/.test(id) ? id : null;
+  // src здесь либо из белого списка ID, либо прошёл строгую форму пути —
+  // экранировать нечего, подставить XSS через него нельзя
+  if (!src) return fallback;
+  // Картинка поверх эмодзи: не загрузилась — удаляется, остаётся эмодзи
+  return `<span style="position:relative;display:inline-block;${circle}">${fallback}` +
+    `<img src="${src}" alt="" onerror="this.remove()" style="position:absolute;inset:0;${circle}object-fit:cover;"></span>`;
+}
+
+/** Подпись для селектов: «🤵 Джентльмен». */
+export function trainerAvatarLabel(id: string): string {
+  return `${TRAINER_AVATAR_EMOJI[id] || '👤'} ${TRAINER_AVATAR_RU[id] || id}`;
+}
+
 // ── loadAllTrainers: загрузка списка всех тренеров с сервера ──
 // GET /api/profile/trainers/all — возвращает массив тренеров
 // Для каждого тренера создаёт карточку с: аватаром, именем, онлайн-статусом,
@@ -79,17 +120,9 @@ export async function loadAllTrainers() {
       card.className = 'trainer-list-card';  // CSS класс для стилизации
 
       // ── Аватар ──
-      // Если аватар лежит на сервере (/avatars/) — показываем как <img>
-      // Иначе — показываем эмодзи (👤 или выбранный)
-      // Аватар приходит из сохранённых данных игрока. Раньше он подставлялся
-      // в innerHTML без экранирования, а сервер принимал любое значение, включая
-      // '/avatars/x" onerror=...' — это stored XSS. Теперь значение и
-      // экранируется, и проверяется по форме: только путь к .png внутри /avatars/.
-      const rawAvatar = typeof u.avatar === 'string' ? u.avatar : '';
-      const isAvatarPath = /^\/avatars\/[a-z0-9_-]+\.png$/.test(rawAvatar);
-      const avatarHtml = isAvatarPath
-        ? `<img src="${escHtml(rawAvatar)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
-        : `<span style="font-size:1.5rem;">${escHtml(rawAvatar || '👤')}</span>`;
+      // Сервер хранит ID (trainer_m, gentleman...), PNG — в /avatars/<id>.png.
+      // trainerAvatarHtml рисует круг с картинкой (эмодзи под ней как фолбэк).
+      const avatarHtml = trainerAvatarHtml(u.avatar, 44);
 
       // ── Последний визит ──
       // Парсим ISO дату: "2026-07-05T14:30:00.000Z" → "2026-07-05 14:30"
@@ -107,20 +140,21 @@ export async function loadAllTrainers() {
         : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:4px;"></span>';
 
       // Заполняем HTML карточки:
-      //   — Аватар (слева)
+      //   — Аватар-круг 44px (слева)
       //   — Имя с онлайн-точкой, значок регистрации
       //   — Количество значков 🏅 и размер команды 🐾
       //   — Регион 📍 и время последнего визита 🕐
       card.innerHTML = `
-        <div class="trainer-list-avatar">${avatarHtml}</div>
-        <div class="trainer-list-info">
-          <div class="trainer-list-name">
+        <div class="trainer-list-avatar" style="flex:0 0 auto;">${avatarHtml}</div>
+        <div class="trainer-list-info" style="flex:1;min-width:0;">
+          <div class="trainer-list-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             ${onlineDot}${escHtml(u.nickname || u.first_name || u.username || 'Тренер')}
             ${u.registered ? '✅' : '🆕'}
           </div>
-          <div class="trainer-list-id">🏅${u.badges||0} | 🐾${u.teamSize||0}</div>
-          <div class="trainer-list-id">📍${u.region || '?'} | 🕐${lastSeen}</div>
-        </div>`;
+          <div class="trainer-list-id">🏅${u.badges || 0} &nbsp; 🐾${u.teamSize || 0}</div>
+          <div class="trainer-list-id" style="opacity:0.7;">📍${escHtml(u.region || '?')} &nbsp; 🕐${escHtml(lastSeen)}</div>
+        </div>
+        <div style="flex:0 0 auto;opacity:0.4;">›</div>`;
 
       // При клике на карточку — открываем профиль тренера
       card.addEventListener('click', () => openTrainerProfile(u.id));
@@ -181,9 +215,15 @@ export function initTrainersTab() {
 // ── showAccountPanel: отображение панели настроек аккаунта ──
 // Заполняет все поля формы: аватар, имя, Telegram ID, поле ввода ника, выбор аватара
 export function showAccountPanel() {
-  // Отображаем аватар (из localStorage, с fallback на 👤)
-  document.getElementById('account-avatar').textContent =
-    localStorage.getItem(lsKey('avatar')) || '👤';
+  const AVATAR_IDS = ['trainer_f', 'trainer_m', 'ninja', 'sailor', 'super_nerd', 'beauty', 'gentleman'];
+  const saved = localStorage.getItem(lsKey('avatar')) || '👤';
+
+  // Аватар — картинкой, а не текстом ID (было: огромная надпись «gentleman»)
+  const avatarBox = document.getElementById('account-avatar');
+  if (avatarBox) {
+    avatarBox.textContent = '';
+    avatarBox.innerHTML = trainerAvatarHtml(TRAINER_AVATAR_FILES.has(saved) ? saved : '', 64);
+  }
 
   // Отображаем имя: никнейм → Telegram first_name → 'Тренер'
   document.getElementById('account-name').textContent =
@@ -197,7 +237,17 @@ export function showAccountPanel() {
   (document.getElementById('account-nickname') as HTMLInputElement).value =
     getSocialState().trainerNickname || '';
 
-  // Устанавливаем выбранный аватар в выпадающем списке
-  (document.getElementById('account-avatar-select') as HTMLSelectElement).value =
-    localStorage.getItem(lsKey('avatar')) || '👤';
+  // Селект аватаров строим из одного источника (эмодзи + русское имя),
+  // чтобы не рассинхронизировался со статикой в index.html
+  const sel = document.getElementById('account-avatar-select') as HTMLSelectElement;
+  if (sel) {
+    sel.innerHTML = '';
+    AVATAR_IDS.forEach((id) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = trainerAvatarLabel(id);
+      sel.appendChild(opt);
+    });
+    if (TRAINER_AVATAR_FILES.has(saved)) sel.value = saved;
+  }
 }
