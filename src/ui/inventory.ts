@@ -214,56 +214,42 @@ export function updateDynamicEVs() {
   // Берём текущего покемона
   const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
 
-  // Максимум EV = (конфеты × 4) + (витамины × 10)
-  // Каждая конфета даёт 4 очка распределения, каждый витамин — 10
+  // Максимум EV = потрачено + пул + legacy (evBudget); остаток — пул
+  // минус набранное в инпутах сверх текущих evs.
   const maxTotalEV = evBudget(mon);
   // Отображаем максимум
   document.getElementById('ev-total').innerText = String(maxTotalEV);
 
   // Собираем все EV-инпуты (поля ввода распределения)
   const evInputs = document.querySelectorAll('.reborn-input-ev');
-  let currentTotal = 0;
+  let inputsTotal = 0;
   // Суммируем все введённые значения
-  evInputs.forEach(input => currentTotal += parseInt((input as HTMLInputElement).value) || 0);
+  evInputs.forEach(input => inputsTotal += parseInt((input as HTMLInputElement).value) || 0);
 
-  // Отображаем остаток: максимум - уже распределено
-  document.getElementById('ev-remaining').innerText = String(Math.max(0, maxTotalEV - currentTotal));
+  const spentNow = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']
+    .reduce((a, s) => a + (mon.evs?.[s] || 0), 0);
+  const growth = Math.max(0, inputsTotal - spentNow);
+  const remaining = Math.max(0, (mon.evPool || 0) - growth);
+  // Отображаем остаток пула
+  document.getElementById('ev-remaining').innerText = String(remaining);
 }
 
 // ── applyEVs: применить распределение EV ─────────────────
-// Сохраняет значения из EV-инпутов в данные покемона
+// Пишет инпуты в mon.evs через saveActiveMonData (учёт пула + лок внутри).
+// Успешное применение ЛОЧИТ evs (D4): дальше только добавление, забрать назад
+// нельзя. Возврат false — не хватило пула, инпуты откачены.
 export function applyEVs() {
   // Проверяем, выбран ли покемон
   if (getTeamState().currentPokemonIndex === null) return;
   const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
 
-  // Вычисляем максимальное количество EV как в updateDynamicEVs
-  const maxTotalEV = evBudget(mon);
-  // Собираем все EV-инпуты
-  const evInputs = document.querySelectorAll('.reborn-input-ev');
-  let currentTotal = 0;
-  evInputs.forEach(input => currentTotal += parseInt((input as HTMLInputElement).value) || 0);
-
-  // Если распределено больше, чем доступно — автоматически урезаем
-  if (currentTotal > maxTotalEV) {
-    let diff = currentTotal - maxTotalEV;  // Сколько лишних очков
-    // Проходим по всем инпутам и уменьшаем пока не уложимся в лимит
-    document.querySelectorAll('.reborn-input-ev').forEach(input => {
-      let val = parseInt((input as HTMLInputElement).value) || 0;
-      if (val > 0 && diff > 0) {
-        let toSubtract = Math.min(val, diff);  // Сколько снять с этого поля
-        (input as HTMLInputElement).value = String(val - toSubtract);
-        diff -= toSubtract;
-        currentTotal -= toSubtract;
-      }
-    });
-  }
-
-  // Сохраняем данные покемона (EV записываются в mon.evs)
-  saveActiveMonData();
+  // Сохраняем данные покемона (EV записываются в mon.evs, пул списывается)
+  if (!saveActiveMonData()) return;  // тост уже показан внутри
+  mon.evsLocked = true;  // ЛОК: дальше статы только растут
   // Обновляем отображение
   updateDynamicEVs();
-  showToast('EV распределение сохранено! Теперь эти очки нельзя перенести в другие статы.', false);
+  autoSave();
+  showToast('EV применены и заблокированы! Дальше — только добавлять из пула.', false);
 }
 
 // ── updateStats: обновить отображение статов покемона ─────
@@ -759,16 +745,19 @@ export async function useItem(itemId) {
       break;
     }
 
-    // ── Витамин (Vitamin): +10 EV ──
+    // ── Витамин (Vitamin): +10 EV в пул ──
     case 'vitamin': {
-      // Максимум 10 витаминов на покемона
+      // Максимум 10 витаминов на покемона (= 100 EV, канон лиги)
       if (mon.vitaminsEaten >= 10) return showToast('Этот покемон уже съел максимум 10 витаминов!', true);
       removeItem('vitamin');
       mon.vitaminsEaten++;        // Увеличиваем счётчик витаминов
+      if (typeof mon.evPool !== 'number') mon.evPool = 0;
+      mon.evPool += 10;           // +10 EV в пул на ручное распределение
       mon.happiness += 5;         // +5 к счастью
       if (mon.happiness > 255) mon.happiness = 255;
       refreshProfileUI();
-      showToast(`Вы скормили Витамин! Доступно +10 EV.`, false);
+      updateDynamicEVs();
+      showToast(`Вы скормили Витамин! +10 EV в пул.`, false);
       break;
     }
 
@@ -1175,12 +1164,15 @@ export function openHeldItemPicker(monIndex) {
   if (!mon) return;  // Защита от несуществующего индекса
 
   // ── Фильтрация предметов ──
-  // Можно надевать: боевые предметы, ягоды, и "другое"
-  // Предмет должен быть в наличии и не помечен как isUsable===false
+  // Надеваются: боевые, ягоды, "другое" и тренировочные (там живут скоба,
+  // амулет, счастливое яйцо и т.д.). Расходники-наборы — в denylist.
+  // Скоба (evBrace, isUsable:false) надевается — флаг isUsable здесь не смотрим.
+  const NOT_HOLDABLE = new Set(['train', 'weaken', 'craftersKit']);
   const choices = getInvState().ITEMS.filter(item => {
-    return (item.category === 'battle' || item.category === 'berries' || item.category === 'other')
+    return (item.category === 'battle' || item.category === 'berries'
+        || item.category === 'other' || item.category === 'training')
       && getItemQty(item.id) > 0
-      && item.isUsable !== false;
+      && !NOT_HOLDABLE.has(item.id);
   });
 
   // ── Подготовка списка для showSelectionModal ──

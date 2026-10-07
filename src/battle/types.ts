@@ -106,6 +106,7 @@ export const INITIAL_BATTLE_STATE: BattleStateData = {
   wildMovesPP: null,
 
   battleRound: 0,
+  battleSeq: 0, // Счётчик боёв: отменяет отложенные таймеры прошлого боя
   activePlayerMon: null,
   playerMovesDetailed: [],
   battleType: 'wild',
@@ -232,6 +233,7 @@ export interface BattleStateData {
   wildMovesPP: PPData[] | null;
 
   battleRound: number;
+  battleSeq: number;
   activePlayerMon: any | null; // Player's team monster object
   playerMovesDetailed: (MoveData | null)[];
   battleType: string;

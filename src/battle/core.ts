@@ -77,6 +77,7 @@ import { addNotification } from '../ui/notifications.js';                // Ув
 // Это singleton — один инстанс на весь бой.
 // Экспортируется для тестов (могут создать свой через BattleStateMachine.create())
 import { BattleStateMachine, BattlePhase, recoverStuckTurn, leaveBattleToIdle } from './state-machine.js';
+import { getEncounterRate } from '../data/encounter.js';  // листовой модуль — цикла нет
 
 /** Singleton state machine — единый автомат фаз для всего боя */
 export const battle = new BattleStateMachine();
@@ -2025,11 +2026,9 @@ function startAutoHunt() {
     const enc = getLocationEncounters();
     if (enc.length === 0) { updateHuntBtn(); S.huntTimer = setTimeout(doTick, 5000); return; }
     updateHuntBtn();
-    // Плотность энкаунтеров по локации (D3): encounterRate в данных локи,
-    // по умолчанию 0.20 как было. Цифры по локациям — таблица D1.
-    const huntRate = GS.currentLocationId
-      ? (store.getLocation(GS.currentLocationId)?.encounterRate ?? 0.20)
-      : 0.20;
+    // Плотность энкаунтеров по локации (H1): кастом админки →
+    // encounterRate данных локи → дефолт 0.20.
+    const huntRate = getEncounterRate(GS.currentLocationId);
     // 20% base chance every tick — базовый шанс найти покемона
     if (Math.random() < huntRate) {
       const pkmName = pickWeightedEncounter(enc);
@@ -2155,6 +2154,9 @@ let huntPending = false;
 async function startHunt(encountersArray) {
   if (huntPending) return;
   huntPending = true;
+  // Счётчик боёв: побег гасит модалку по таймеру через 1с — если за эту
+  // секунду напал новый дикий, старый таймер не должен трогать новый бой.
+  S.battleSeq = (S.battleSeq || 0) + 1;
     GS.itemsUsedInBattle = 0;
     S.battleRound = 0;
     const activeMonIndex = GS.myTeam.findIndex(m => m.currentHp > 0);
@@ -2891,19 +2893,61 @@ export function grantLevelUpEVs(pokemon) {
 }
 
 /**
- * Бюджет EV для ручного распределения (спека 3.10).
+ * Потраченные EV (сумма по статам) — чистая, для бюджета и тестов.
+ */
+export function evSpent(mon): number {
+  if (!mon || !mon.evs) return 0;
+  return ['hp', 'atk', 'def', 'spa', 'spd', 'spe']
+    .reduce((a, s) => a + (mon.evs[s] || 0), 0);
+}
+
+const EV_STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+
+/**
+ * Расчёт записи EV с учётом пула и лока (чистая, для тестов и UI).
  *
- * Источники: конфеты (×4), витамины (×10, но не больше 100 суммарно),
- * старые авто-EV за уровни (evFromLevel, legacy) и пул с уровней (evPool).
- * Потолок — 496 всего (лимит на стат 126 enforced в UI).
+ * oldEvs — текущие evs покемона; want — желаемые (из инпутов);
+ * pool — нераспределённый остаток; locked — применение уже было.
+ * Правила: кламп 0..126; при локе пол снизу = текущие (забрать нельзя);
+ * рост финансируется из пула (не хватило → ok:false, evs без изменений).
+ */
+export function settleEVSpend(
+  oldEvs: any, want: any, pool: number, locked: boolean,
+): { evs: Record<string, number>; pool: number; ok: boolean } {
+  const clean: Record<string, number> = {};
+  for (const s of EV_STATS) {
+    let v = Math.floor(Number(want?.[s]) || 0);
+    if (v < 0) v = 0;
+    if (v > 126) v = 126;
+    if (locked && v < (oldEvs?.[s] || 0)) v = oldEvs[s] || 0;
+    clean[s] = v;
+  }
+  const oldSum = EV_STATS.reduce((a, s) => a + (oldEvs?.[s] || 0), 0);
+  const newSum = EV_STATS.reduce((a, s) => a + clean[s], 0);
+  const delta = newSum - oldSum;
+  if (delta > (pool || 0)) {
+    const back: Record<string, number> = {};
+    for (const s of EV_STATS) back[s] = oldEvs?.[s] || 0;
+    return { evs: back, pool: pool || 0, ok: false };
+  }
+  return { evs: clean, pool: (pool || 0) - delta, ok: true };
+}
+
+/**
+ * Бюджет EV (спека 3.10, канон лиги по итогам).
+ *
+ * Модель: пул (evPool) — единственное хранилище заработанного (уровни +2/+3,
+ * конфеты +1/+2/+3/+4 по типу, витамины +10). Раздача двигает пул→evs.
+ * Бюджет = потрачено + пул + legacy-добивка, потолок 496.
+ *
+ * Раньше формула складывала candiesEaten×4 ПОВЕРХ пула, куда feedCandy уже
+ * положил те же очки, — редкая конфета давала +8 вместо +4 (D1).
  */
 export function evBudget(mon): number {
   if (!mon) return 0;
-  const candies = (mon.candiesEaten || 0) * 4;
-  const vitamins = Math.min((mon.vitaminsEaten || 0) * 10, 100);
+  const pool = typeof mon.evPool === 'number' ? mon.evPool : 0;
   const fromLevel = mon.evFromLevel || 0;
-  const pool = mon.evPool || 0;
-  return Math.min(496, candies + vitamins + fromLevel + pool);
+  return Math.min(496, evSpent(mon) + pool + fromLevel);
 }
 
 async function useMove(moveIndex) {
@@ -3101,6 +3145,9 @@ async function useMove(moveIndex) {
     const wildPress = String(abilityOf(S.activeWild, true) || '')
       .toLowerCase().replace(/[^a-z0-9]/g, '');
     S.activePlayerMon.movesPP[moveIndex].current -= wildPress === 'pressure' ? 2 : 1;
+    // Сразу перерисовываем кнопку: раньше текст обновлялся только при
+    // перезагрузке кнопок, и PP визуально не тратились вообще.
+    updateMoveButtonUI(moveIndex, move);
   }
 
   // ═══ 7. CHOICE ITEM LOCK (after successful use) ═══
@@ -3582,7 +3629,17 @@ function handlePlayerFaint() {
     updateAbilityDisplay();
     loadMoveButtons(S.activePlayerMon, useMove);              // Загружаем атаки нового покемона
     saveBattleState();
-    setTimeout(() => { document.getElementById('battle-main-menu').style.display = 'flex'; }, 1000); // Показываем меню
+    setTimeout(() => {
+      // Гонка: пока шёл таймер, дикий мог упасть (яд/ожог/отдача) и бой уже
+      // закрыт (end-menu, фаза IDLE/VICTORY/DEFEAT). Без гарда меню показывалось
+      // поверх экрана конца боя, а клики упирались в «Подождите...».
+      const endOpen = document.getElementById('battle-end-menu')?.style.display === 'flex';
+      const ph = battle.phase;
+      if (!endOpen && S.wildCurHP > 0
+        && ph !== BattlePhase.IDLE && ph !== BattlePhase.VICTORY && ph !== BattlePhase.DEFEAT) {
+        document.getElementById('battle-main-menu').style.display = 'flex';
+      }
+    }, 1000); // Показываем меню
     store.autoSave();
   } else {
     // ── ВСЯ КОМАНДА В НОКАУТЕ — ПОРАЖЕНИЕ ──
@@ -4317,7 +4374,12 @@ function initEncounterEvents() {
     clearBattleState();
     S.escapeAttempts = 0;
 
+    // Токен боя: если за секунду таймера напал новый дикий (startHunt
+    // увеличил battleSeq), старый таймер молча выходит — иначе он гасил
+    // модалку УЖЕ НОВОГО боя и показывал чужой end-menu.
+    const fledSeq = S.battleSeq || 0;
     setTimeout(() => {
+      if ((S.battleSeq || 0) !== fledSeq) return;  // начался новый бой — не трогаем
       const modal = document.getElementById('encounter-modal');
       if (modal) modal.style.display = 'none';
       if (aliveBefore <= 1) {

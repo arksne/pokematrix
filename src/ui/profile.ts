@@ -62,8 +62,9 @@ import { openTutorRelearner } from './tm.js';
 // updateDynamicEVs — обновляет отображение доступных EV
 // applyEVs — применяет распределение EV
 import { getHeldItemName, openHeldItemPicker, updateDynamicEVs, applyEVs } from './inventory.js';
+// settleEVSpend — чистый учёт пула/лока при записи EV
+import { settleEVSpend } from '../battle/core.js';
 // autoSave — сохраняет игру (localStorage + сервер)
-import { evBudget } from '../battle/core.js';
 import { autoSave } from '../game/save.js';
 
 // ── Ленивый импорт battle/core.js (избегает циклических зависимостей) ──
@@ -321,6 +322,15 @@ export function refreshProfileUI() {
     // При клике — открываем пикер held item
     heldEl.onclick = () => openHeldItemPicker(state.currentPokemonIndex!);
   }
+  // Явная кнопка (D5: пикер не находился) — рядом с предметом
+  if (heldEl && heldEl.parentElement && !heldEl.parentElement.querySelector('.held-open-btn')) {
+    const heldBtn = document.createElement('button');
+    heldBtn.className = 'tma-btn held-open-btn';
+    heldBtn.style.cssText = 'margin-left:8px;padding:2px 8px;font-size:0.75rem;';
+    heldBtn.innerText = mon.heldItem ? '🔄 Сменить' : '🎒 Надеть предмет';
+    heldBtn.onclick = () => openHeldItemPicker(state.currentPokemonIndex!);
+    heldEl.parentElement.appendChild(heldBtn);
+  }
 
   // ── Текущее и максимальное HP ──
   const curHpEl = document.getElementById('info-cur-hp');
@@ -565,10 +575,12 @@ export function updateGenecodeDisplay_Profile(mon: any) {
 }
 
 // ── saveActiveMonData: сохранить данные активного покемона ──
-// Читает значения EV из полей ввода и записывает их в mon.evs
-// Пересчитывает maxHp по формуле с новыми EV
+// Читает значения EV из полей ввода и записывает их в mon.evs.
+// Учёт пула и лок (D4): рост финансируется из evPool; после первого
+// применения (evsLocked) статы можно только ДОБАВЛЯТЬ — забрать назад
+// нельзя. Возвращает true если записано, false если откат.
 export function saveActiveMonData() {
-  if (state.currentPokemonIndex === null) return;
+  if (state.currentPokemonIndex === null) return false;
   const mon = state.myTeam[state.currentPokemonIndex];
 
   // ── Чтение EV из DOM-инпутов ──
@@ -580,13 +592,23 @@ export function saveActiveMonData() {
   const evSpd = document.getElementById('ev-spd') as HTMLInputElement;
   const evSpe = document.getElementById('ev-spe') as HTMLInputElement;
 
-  // Записываем значения в mon.evs (parseInt с fallback на 0)
-  mon.evs.hp = parseInt(evHp?.value || '0') || 0;
-  mon.evs.atk = parseInt(evAtk?.value || '0') || 0;
-  mon.evs.def = parseInt(evDef?.value || '0') || 0;
-  mon.evs.spa = parseInt(evSpa?.value || '0') || 0;
-  mon.evs.spd = parseInt(evSpd?.value || '0') || 0;
-  mon.evs.spe = parseInt(evSpe?.value || '0') || 0;
+  const stats = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'] as const;
+  const inputs = [evHp, evAtk, evDef, evSpa, evSpd, evSpe];
+  if (typeof mon.evPool !== 'number') mon.evPool = 0;
+  if (!mon.evs) mon.evs = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+
+  // Считываем желаемые значения и сводим через чистый учёт пула/лока
+  const want: Record<string, number> = {};
+  stats.forEach((s, i) => { want[s] = parseInt(inputs[i]?.value || '0') || 0; });
+  const r = settleEVSpend(mon.evs, want, mon.evPool, !!mon.evsLocked);
+  if (!r.ok) {
+    // Не хватает пула — откатываем инпуты к текущим evs
+    stats.forEach((s, i) => { if (inputs[i]) inputs[i].value = String(mon.evs[s] || 0); });
+    showToast(`Не хватает EV в пуле! Доступно: ${mon.evPool}.`, true);
+    return false;
+  }
+  mon.evPool = r.pool;
+  stats.forEach((s) => { mon.evs[s] = r.evs[s]; });
 
   // ── Пересчёт maxHp ──
   // Формула HP: floor(0.01 * (2*base + IV + floor(0.25*EV)) * level) + level + 10
@@ -683,31 +705,32 @@ export function initProfileUXEvents() {
     });
   }
 
-  // ── Кнопки быстрого добавления EV (+1, +4, +8, +12, max) ──
+  // ── Кнопки быстрого добавления EV (+10, max) ──
+  // Рост финансируется из evPool; лок evsLocked кнопкам не мешает
+  // (они только добавляют). Без пула — тост.
   document.querySelectorAll('.reborn-ev-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       if (state.currentPokemonIndex === null) return;
       const mon = state.myTeam[state.currentPokemonIndex];
       const target = e.target as HTMLElement;
       const stat = target.getAttribute('data-stat') || 'hp';     // Какой стат (atk, def, ...)
-      const valStr = target.getAttribute('data-val') || '0';     // Сколько добавить ('1', '4', 'max')
+      const valStr = target.getAttribute('data-val') || '0';     // Сколько добавить ('10', 'max')
 
+      if (typeof mon.evPool !== 'number') mon.evPool = 0;
       const evs = mon.evs as Record<string, number>;
-      let totalEVs = Object.values(evs).reduce((a, b) => a + b, 0);  // Сумма всех EV
-      let maxTotal = evBudget(mon); // Максимум доступных EV, включая EV за уровни
 
       let currentEV = evs[stat] || 0;
       let toAdd = 0;
 
       if (valStr === 'max') {
-        // "Заполнить до 126" (максимум в Reborn-системе)
-        toAdd = Math.min(126 - currentEV, maxTotal - totalEVs);
+        // "Заполнить до 126" (максимум на стат)
+        toAdd = Math.min(126 - currentEV, mon.evPool);
       } else {
         toAdd = parseInt(valStr);
         // Не превышаем 126 на стат
         if (currentEV + toAdd > 126) toAdd = 126 - currentEV;
-        // Не превышаем общий лимит
-        if (totalEVs + toAdd > maxTotal) toAdd = maxTotal - totalEVs;
+        // Не превышаем пул
+        if (toAdd > mon.evPool) toAdd = mon.evPool;
       }
 
       if (toAdd > 0) {
@@ -715,13 +738,14 @@ export function initProfileUXEvents() {
         // объекте нет, сложение с undefined давало NaN, и EV покемона портились
         // навсегда — молча, без ошибки в консоли.
         evs[stat] = currentEV + toAdd;
+        mon.evPool -= toAdd;
         refreshProfileUI();       // Обновляем UI
         // Раньше сохранения здесь не было вовсе: EV начислялись, но терялись при
         // следующей же перезагрузке, и выглядело это так, будто они не падают.
         autoSave();
       } else {
         showToast(
-          'Нет свободных EV! Дайте покемону Конфеты (+4 EV) или Витамины (+10 EV).',
+          `Нет свободных EV в пуле (осталось ${mon.evPool})! Качай уровни, корми конфетами/витаминами.`,
           true
         );
       }

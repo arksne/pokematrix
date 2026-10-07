@@ -107,6 +107,11 @@ export function getLocation(locId: string) {
   return null;  // Локация не найдена
 }
 
+// ── getEncounterRate: шанс энкаунтера на локации (H1) ──
+// Реализация в листовом src/data/encounter.ts (без циклов импорта);
+// здесь реэкспорт для совместимости.
+export { getEncounterRate } from '../data/encounter.js';
+
 // ── getRegionOfLocation: получить регион локации ────────
 // Принимает locId, возвращает ключ региона (kanto, johto,...)
 // Если не найден — возвращает 'kanto' (по умолчанию)
@@ -146,13 +151,21 @@ export async function updatePlayerLocation() {
 // Принимает:
 //   targetRegion — регион назначения (kanto, johto, ...)
 //   targetLoc — ID локации в регионе назначения
-//   ticketItemId — ID предмета-билета (необязательно)
+//   ticketItemId — ID предмета-билета (если задан — требуется и сгорает, E1)
 // Используется: из TRANSPORT_HUBS (кнопки транспорта)
 export function travelToRegion(targetRegion: string, targetLoc: string, ticketItemId?: string) {
   // Гейт туториала (G1): дальше стартовой зоны — только после сдачи обучения
   if (!isTutorialGateOpen() && !STARTER_AREA.has(targetLoc)) {
     showToast('Сначала пройдите обучение у Профессора Оука!', true);
     return;
+  }
+  // E1: без билета не пускаем (если рейс/хаб его требует)
+  if (ticketItemId) {
+    if ((state.inventory?.[ticketItemId] || 0) <= 0) {
+      showToast('Нужен билет! Купи в маркете.', true);
+      return;
+    }
+    store.removeItem(ticketItemId);
   }
   state.currentRegion = targetRegion;  // Меняем текущий регион
   // Логируем в боевой лог (используем battle core)

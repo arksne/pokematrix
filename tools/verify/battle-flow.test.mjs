@@ -244,6 +244,19 @@ t('F4', 'бой проходит несколько ходов подряд', tu
 t('F5', 'атаки не блокируются фазой', attacksBlocked === 0 && logAdvanced >= 2,
   `ходов ${turnsPlayed}, лог продвинулся ${logAdvanced}, заблокировано ${attacksBlocked}`);
 
+// ── PP: текст кнопки должен уменьшаться после ходов (регресс «PP не тратятся») ──
+const ppText = await page.locator('[id^="move-btn-"]').first().innerText().catch(() => '');
+const ppMatch = ppText.match(/PP:\s*(\d+)\s*\/\s*(\d+)/);
+if (turnsPlayed >= 2 && ppMatch) {
+  const cur = parseInt(ppMatch[1]);
+  const max = parseInt(ppMatch[2]);
+  t('F12', 'PP атаки тратится (текст кнопки уменьшается)', cur < max,
+    `кнопка: «${ppText.slice(0, 60)}»`);
+} else {
+  t('F12', 'PP атаки тратится (текст кнопки уменьшается)', false,
+    turnsPlayed < 2 ? 'ходов меньше 2 — нечего проверять' : `в тексте нет PP: «${ppText.slice(0, 60)}»`);
+}
+
 t('F6', 'в логе боя нет сообщения «Подождите»', !/Подождите/.test(lastLog),
   lastLog.slice(-90));
 t('F7', 'нет недопустимых переходов фаз', phaseWarnings.length === 0,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evBudget, grantLevelUpEVs } from '../core.js';
+import { evBudget, evSpent, settleEVSpend, grantLevelUpEVs } from '../core.js';
 
 /**
  * EV-пул (спека 3.3/3.10): уровень даёт +2 в пул на ручное распределение,
@@ -34,24 +34,73 @@ describe('grantLevelUpEVs', () => {
 });
 
 describe('evBudget', () => {
-  it('конфеты ×4 + витамины ×10 + пул', () => {
-    expect(evBudget({ candiesEaten: 2, vitaminsEaten: 3, evPool: 5 })).toBe(2 * 4 + 3 * 10 + 5);
+  const evs = (o: Partial<Record<string, number>> = {}) => ({
+    hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, ...o,
   });
 
-  it('витамины capped на 100', () => {
-    expect(evBudget({ candiesEaten: 0, vitaminsEaten: 50, evPool: 0 })).toBe(100);
+  it('бюджет = потрачено + пул (конфеты/витамины лежат В ПУЛЕ)', () => {
+    // D1: бюджет больше не складывает candiesEaten×4 поверх пула — иначе
+    // редкая конфета давала +8 вместо +4.
+    expect(evBudget({ evs: evs(), evPool: 5 })).toBe(5);
+    expect(evBudget({ evs: evs({ atk: 10, spa: 4 }), evPool: 5 })).toBe(19);
   });
 
-  it('потолок 496', () => {
-    expect(evBudget({ candiesEaten: 99, vitaminsEaten: 99, evPool: 297 })).toBe(496);
+  it('потраченные EV входят в бюджет', () => {
+    expect(evBudget({ evs: evs({ hp: 126 }), evPool: 0 })).toBe(126);
+    expect(evSpent({ evs: evs({ hp: 10, atk: 6 }) })).toBe(16);
   });
 
   it('legacy evFromLevel учитывается', () => {
-    expect(evBudget({ candiesEaten: 0, vitaminsEaten: 0, evFromLevel: 10 })).toBe(10);
+    expect(evBudget({ evs: evs(), evFromLevel: 10 })).toBe(10);
+  });
+
+  it('потолок 496', () => {
+    expect(evBudget({ evs: evs({ atk: 200 }), evPool: 400 })).toBe(496);
   });
 
   it('пустого нет', () => {
     expect(evBudget(null)).toBe(0);
     expect(evBudget({})).toBe(0);
+  });
+});
+
+describe('settleEVSpend', () => {
+  const zeros = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+
+  it('рост списывается из пула', () => {
+    const r = settleEVSpend(zeros, { ...zeros, atk: 4 }, 10, false);
+    expect(r.ok).toBe(true);
+    expect(r.evs.atk).toBe(4);
+    expect(r.pool).toBe(6);
+  });
+
+  it('не хватило пула → отказ и evs без изменений', () => {
+    const old = { ...zeros, atk: 2 };
+    const r = settleEVSpend(old, { ...zeros, atk: 100 }, 10, false);
+    expect(r.ok).toBe(false);
+    expect(r.evs.atk).toBe(2);
+    expect(r.pool).toBe(10);
+  });
+
+  it('после лока нельзя забрать (значение ниже текущего игнорируется)', () => {
+    const old = { ...zeros, atk: 30 };
+    const r = settleEVSpend(old, { ...zeros, atk: 10, def: 5 }, 10, true);
+    expect(r.ok).toBe(true);
+    expect(r.evs.atk).toBe(30);  // не отняли
+    expect(r.evs.def).toBe(5);   // добавить можно
+    expect(r.pool).toBe(5);
+  });
+
+  it('до лока забрать можно, пул растёт', () => {
+    const old = { ...zeros, atk: 30 };
+    const r = settleEVSpend(old, { ...zeros, atk: 10 }, 10, false);
+    expect(r.ok).toBe(true);
+    expect(r.evs.atk).toBe(10);
+    expect(r.pool).toBe(30);
+  });
+
+  it('клампит 126', () => {
+    const r = settleEVSpend(zeros, { ...zeros, atk: 500 }, 1000, false);
+    expect(r.evs.atk).toBe(126);
   });
 });

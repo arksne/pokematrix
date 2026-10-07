@@ -154,6 +154,7 @@ export function getFullSaveData() {
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
       caughtLocation: m.caughtLocation, previousOwner: m.previousOwner,
       apiData: slimApiData(m.apiData), maxHp: m.maxHp, currentHp: m.currentHp,
+      isShiny: !!m.isShiny,
       ivs: m.ivs, evs: m.evs, evFromLevel: m.evFromLevel, baseLevel: m.baseLevel,
       exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
       vitaminsEaten: m.vitaminsEaten, training: m.training, trainingStage: m.trainingStage,
@@ -162,7 +163,8 @@ export function getFullSaveData() {
       movesPP: m.movesPP, statStages: m.statStages, abilityName: m.abilityName,
       heldItem: m.heldItem, berries: m.berries, learnableMoves: m.learnableMoves,
       lastMoveCheckLevel: m.lastMoveCheckLevel, hasBred: !!m.hasBred,
-      evPool: m.evPool || 0,
+      evPool: m.evPool || 0, evsLocked: !!m.evsLocked, trainingFails: m.trainingFails || 0,
+      evVitMigrated: !!m.evVitMigrated,
     })),
     currentPokemonIndex: state.currentPokemonIndex,
     pokedexSeen: Array.from(state.pokedexSeen),
@@ -173,7 +175,8 @@ export function getFullSaveData() {
     pcBoxes: state.pcBoxes.map(box => box.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
       caughtLocation: m.caughtLocation, apiData: slimApiData(m.apiData), maxHp: m.maxHp,
-      currentHp: m.currentHp, ivs: m.ivs, evs: m.evs, evFromLevel: m.evFromLevel, baseLevel: m.baseLevel,
+      currentHp: m.currentHp, isShiny: !!m.isShiny,
+      ivs: m.ivs, evs: m.evs, evFromLevel: m.evFromLevel, baseLevel: m.baseLevel,
       exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
       vitaminsEaten: m.vitaminsEaten, trainingStage: m.trainingStage, trainingStat: m.trainingStat,
       happiness: m.happiness, natureIdx: m.natureIdx, breedLetter: m.breedLetter, gender: m.gender,
@@ -181,7 +184,8 @@ export function getFullSaveData() {
       statStages: m.statStages, abilityName: m.abilityName, heldItem: m.heldItem,
       berries: m.berries, learnableMoves: m.learnableMoves,
       lastMoveCheckLevel: m.lastMoveCheckLevel, hasBred: !!m.hasBred,
-      evPool: m.evPool || 0,
+      evPool: m.evPool || 0, evsLocked: !!m.evsLocked, trainingFails: m.trainingFails || 0,
+      evVitMigrated: !!m.evVitMigrated,
     }))),
     daycareMons: state.daycareMons.map((d: any) => ({
       depositTime: d.depositTime,
@@ -190,6 +194,7 @@ export function getFullSaveData() {
       mon: d.mon ? { ...d.mon, apiData: slimApiData(d.mon.apiData) } : d.mon,
     })), lastLocation: state.lastLocation, expShareActive: state.expShareActive,
     transport: state.transport || null,
+    customEncounterRates: state.customEncounterRates || {},
     // Боксы разведения (A1): мон целиком + slim apiData, как daycareMons
     breedBoxes: (state.breedBoxes || []).map((b: any) => ({
       a: b?.a ? { ...b.a, apiData: slimApiData(b.a.apiData) } : null,
@@ -340,6 +345,13 @@ export async function loadGame() {
       // Канон лиги: буква симпатии A/T/G (старые A-D и мусор → случайно заново)
       if (!['A', 'T', 'G'].includes(m.breedLetter)) m.breedLetter = ['A', 'T', 'G'][Math.floor(Math.random() * 3)];
       if (typeof m.trainingFails !== 'number') m.trainingFails = 0;
+      // EV-модель D1: витамины раньше считались в бюджете, но не лежали в пуле.
+      // Разово переносим банк в пул, чтобы не потерять заработанное.
+      if (!m.evVitMigrated) {
+        if (typeof m.evPool !== 'number') m.evPool = 0;
+        m.evPool += Math.min((m.vitaminsEaten || 0) * 10, 100);
+        m.evVitMigrated = true;
+      }
     }));
     // Migrate team pokemon too
     state.myTeam.forEach(m => {
@@ -347,12 +359,18 @@ export async function loadGame() {
       if (m.hasBred === undefined) m.hasBred = false;
       if (!['A', 'T', 'G'].includes(m.breedLetter)) m.breedLetter = ['A', 'T', 'G'][Math.floor(Math.random() * 3)];
       if (typeof m.trainingFails !== 'number') m.trainingFails = 0;
+      if (!m.evVitMigrated) {
+        if (typeof m.evPool !== 'number') m.evPool = 0;
+        m.evPool += Math.min((m.vitaminsEaten || 0) * 10, 100);
+        m.evVitMigrated = true;
+      }
     });
     state.daycareMons = data.daycareMons || [];
     state.daycareMons.forEach(e => { if (!e.mon.currentHp || e.mon.currentHp < 0) e.mon.currentHp = e.mon.maxHp || 50; });
     // Рейс: облачный выигрывает если есть, иначе оставляем локальный (билет уже
     // съеден — потерять рейс нельзя, иначе игрок останется ни с чем).
-    state.transport = data.transport || state.transport || null;
+  state.transport = data.transport || state.transport || null;
+  state.customEncounterRates = data.customEncounterRates || state.customEncounterRates || {};
     // Боксы разведения (A1). Старые авто-пары breedingPairs больше не
     // обрабатываются (checkBreeding их не читает) — чистим, чтобы не висели
     // мёртвым грузом в сейве. Пары из боксов живут в breedBoxes.

@@ -100,4 +100,47 @@ describe('getFullSaveData: персист флагов', () => {
       state.inventory = prevInv;
     }
   });
+
+  it('isShiny и EV-лок переживают сейв (команда и боксы)', () => {
+    const prevTeam = state.myTeam;
+    const prevPc = state.pcBoxes;
+    const prevInv = state.inventory;
+    try {
+      const mon = (uid: string, extra: any = {}) => ({
+        uid,
+        originalTrainer: 't',
+        createdAt: 1,
+        caughtLocation: 'x',
+        apiData: null,
+        maxHp: 50,
+        currentHp: 50,
+        ivs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        baseLevel: 5,
+        ...extra,
+      });
+      state.myTeam = [mon('s1', { isShiny: true, evsLocked: true, trainingFails: 3, evVitMigrated: true })];
+      state.pcBoxes = [[mon('s2', { isShiny: true, evsLocked: false, trainingFails: 0 })]];
+      state.inventory = { credit: 500 };
+      state.badges = [];
+      state.pokedexSeen = new Set();
+      state.pokedexCaught = new Set();
+      state.visitedLocations = new Set();
+      state.daycareMons = [];
+      state.breedingPairs = [];
+      state.eggs = [];
+      state.notifications = [];
+      const data = getFullSaveData();
+      expect(data.myTeam[0].isShiny).toBe(true);
+      expect(data.myTeam[0].evsLocked).toBe(true);
+      expect(data.myTeam[0].trainingFails).toBe(3);
+      expect(data.myTeam[0].evVitMigrated).toBe(true);
+      expect(data.pcBoxes[0][0].isShiny).toBe(true);
+      expect(data.pcBoxes[0][0].evsLocked).toBe(false);
+    } finally {
+      state.myTeam = prevTeam;
+      state.pcBoxes = prevPc;
+      state.inventory = prevInv;
+    }
+  });
 });
