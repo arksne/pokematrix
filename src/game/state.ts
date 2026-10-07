@@ -60,7 +60,6 @@ export const state: Record<string, any> = {
 
   // ── Daycare / Breeding ───────────────────────────────────
   daycareMons: [] as Array<any>,  // Покемоны в питомнике
-  daycareEgg: null,               // Яйцо в питомнике (если есть)
   transport: null as any,         // Рейс C3: {vehicle, from, to, departAt, arriveAt} | null
   breedingPairs: [] as Array<any>, // LEGACY: авто-пары больше не используются (см. breedBoxes)
   breedBoxes: [] as Array<any>,   // Боксы разведения A1: [{a, b, readyAt} ×3]

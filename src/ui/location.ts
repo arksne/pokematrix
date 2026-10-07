@@ -50,8 +50,7 @@ import { TRANSPORT_HUBS } from '../data/transport.js';
 import { getDailyWeather, WEATHER_ICONS, WEATHER_NAMES } from '../data/weather.js';
 // checkDaycare — проверяет состояние питомника
 // collectDaycareMons — забирает покемонов из питомника
-// collectDaycareEgg — забирает яйцо из питомника
-import { checkDaycare, collectDaycareMons, collectDaycareEgg } from './daycare.js';
+import { checkDaycare, collectDaycareMons } from './daycare.js';
 import { openPC } from './pc.js';                   // Открыть PC-терминал
 import { openShop } from './shop.js';                // Открыть магазин
 // openNPCDialog — открыть диалог с NPC
@@ -505,16 +504,8 @@ export let renderLocation = function(locId: any) {
       actionsContainer.appendChild(btnCollect);
     }
 
-    // Кнопка "Забрать яйцо" (если готово)
-    if (state.daycareEgg && Date.now() >= state.daycareEgg.readyTime) {
-      const btnEgg = document.createElement('button');
-      btnEgg.className = 'btn-use';
-      btnEgg.style.backgroundColor = '#ffcc00';
-      btnEgg.style.color = '#000';
-      btnEgg.innerText = '🥚 Забрать яйцо!';
-      btnEgg.onclick = () => collectDaycareEgg();
-      actionsContainer.appendChild(btnEgg);
-    }
+    // Я15: старого пути daycareEgg больше нет — яйца только из боксов,
+    // сразу видны в рюкзаке (Я1), вылупление кнопкой (Я3).
   }
 
   // ── Кнопка лидера зала (гим) ──

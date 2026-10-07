@@ -175,7 +175,6 @@ export const saveDataSchema = z.object({
   itemsUsedInBattle: z.number().int().min(0).optional(),
   notifications: z.array(z.any()).optional(),
   daycareMons: z.array(z.any()).optional(),
-  daycareEgg: z.any().optional(),
   transport: z.any().optional(),
   breedingPairs: z.array(z.any()).optional(),
   breedBoxes: z.array(z.any()).optional(),

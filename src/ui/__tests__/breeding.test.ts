@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { areBreedingCompatible, breedRarity, isDoublePerfect, pairRarityKey } from '../daycare.js';
+import { areBreedingCompatible, breedRarity, isDoublePerfect, pairRarityKey, pickStarterMoves, pickRandomAbility } from '../daycare.js';
 
 /**
  * Совместимость пар: один раз и всё (hasBred), половой контроль,
@@ -109,5 +109,52 @@ describe('isDoublePerfect', () => {
   });
   it('без ivs: false, без падения', () => {
     expect(isDoublePerfect({}, {})).toBe(false);
+  });
+});
+
+describe('pickStarterMoves (Я12)', () => {
+  const poke = (moves: any[]) => ({ moves });
+  const lvl = (name: string, at: number) => ({
+    move: { name, url: 'https://pokeapi.co/api/v2/move/1/' },
+    version_group_details: [{ move_learn_method: { name: 'level-up' }, level_learned_at: at }],
+  });
+  const tm = (name: string) => ({
+    move: { name, url: 'https://pokeapi.co/api/v2/move/2/' },
+    version_group_details: [{ move_learn_method: { name: 'machine' }, level_learned_at: 0 }],
+  });
+
+  it('только level-up <= 1, максимум 4', () => {
+    const got = pickStarterMoves(poke([lvl('a', 1), lvl('b', 1), lvl('c', 5), tm('d'), lvl('e', 1), lvl('f', 1), lvl('g', 1)]));
+    expect(got.map((m: any) => m.move.name)).toEqual(['a', 'b', 'e', 'f']);
+  });
+
+  it('пусто — fallback tackle', () => {
+    const got = pickStarterMoves(poke([tm('x'), lvl('y', 9)]));
+    expect(got).toHaveLength(1);
+    expect(got[0].move.name).toBe('tackle');
+  });
+
+  it('без moves — fallback tackle, без падения', () => {
+    expect(pickStarterMoves({})[0].move.name).toBe('tackle');
+  });
+});
+
+describe('pickRandomAbility (Я7)', () => {
+  it('скрытая исключена', () => {
+    const p = { abilities: [
+      { ability: { name: 'static' }, is_hidden: false },
+      { ability: { name: 'lightning-rod' }, is_hidden: true },
+    ] };
+    for (let i = 0; i < 20; i++) expect(pickRandomAbility(p)).toBe('static');
+  });
+
+  it('все скрытые — берём из всех', () => {
+    const p = { abilities: [{ ability: { name: 'wonder-guard' }, is_hidden: true }] };
+    expect(pickRandomAbility(p)).toBe('wonder-guard');
+  });
+
+  it('нет способностей — null', () => {
+    expect(pickRandomAbility({ abilities: [] })).toBeNull();
+    expect(pickRandomAbility({})).toBeNull();
   });
 });

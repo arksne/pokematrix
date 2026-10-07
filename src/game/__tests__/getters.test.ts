@@ -58,7 +58,6 @@ const mockState = vi.hoisted(() => ({
   itemHistory: [],
   serverDropConfig: null,
   daycareMons: [],
-  daycareEgg: null,
   breedingPairs: [],
   hatching: false,
   _mapModule: null,

@@ -19,15 +19,14 @@
 // ИСПОЛЬЗУЕТСЯ В:
 //   init.ts     — startBreedingCheck
 //   inventory.ts — hatchEgg
-//   location.ts — checkDaycare, collectDaycareMons, collectDaycareEgg
+//   location.ts — checkDaycare, collectDaycareMons
 //   npcs.ts     — openDaycareDeposit
 //   pc.ts       — hatchEgg, checkBreeding, collectEgg
 //
 // ЭКСПОРТЫ:
 //   EGG_TIME, EGG_BONUS_TIME     — константы времени
 //   openDaycareDeposit           — депозит в питомник
-//   checkDaycare                 — проверка прокачки и яиц
-//   collectDaycareEgg            — забрать яйцо
+//   checkDaycare                 — проверка прокачки
 //   collectDaycareMons           — забрать покемонов
 //   checkBreeding                — проверка разведения в PC
 //   startBreedingCheck           — запуск периодической проверки
@@ -39,7 +38,6 @@
 
 import { state } from '../game/state.js';            // Глобальное состояние игры
 import { store } from '../game/store.js';              // Event-система (emit)
-import { addItem } from '../game/actions.js';          // Добавление предмета в инвентарь
 import { generateUID, getTrainerId } from '../game/state.js';  // Генерация ID
 import { showToast, showSelectionModal } from '../utils/dom.js';
 import { addNotification } from './notifications.js';
@@ -356,24 +354,6 @@ export function checkDaycare() {
   // Питомник оставил только прокачку уровней (ниже — без изменений).
 }
 
-// ── ПИТОМНИК: Забрать яйцо ────────────────────────────
-
-export function collectDaycareEgg() {
-  if (!state.daycareEgg) return showToast('Яйца пока нет!', true);
-  // Проверяем, готово ли яйцо
-  if (Date.now() < state.daycareEgg.readyTime) {
-    const minsLeft = Math.ceil((state.daycareEgg.readyTime - Date.now()) / 60000);
-    return showToast(`Яйцо ещё не готово! Осталось ~${minsLeft} мин.`, true);
-  }
-  if (!addItem('suspiciousEgg')) {
-    showToast('Рюкзак полон! Освободите место и попробуйте снова.', true);
-    return;
-  }
-  state.daycareEgg = null;  // Сбрасываем (яйцо забрано)
-  showToast('Вы получили яйцо! Оно добавлено в инвентарь.', false);
-  store.emit('save');
-}
-
 // ── ПИТОМНИК: Забрать покемонов ──────────────────────
 
 export function collectDaycareMons() {
@@ -484,11 +464,11 @@ export async function checkBreeding() {
       // Время вышло — создаём яйцо
       const dittoA = (m1.apiData?.species?.name || m1.apiData?.name) === 'ditto';
       const dittoB = (m2.apiData?.species?.name || m2.apiData?.name) === 'ditto';
-      const mother = dittoA ? m2 : dittoB ? m1
-        : (getMonGender(m1) === 'female' ? m1 : m2);
-      const father = mother === m1 ? m2 : m1;
-      const species = mother.apiData?.species?.name || mother.apiData?.name;
-      const eggTypes = mother.apiData?.types || [{ type: { name: 'normal' } }];
+      // Я9: вид потомства — СЛУЧАЙНЫЙ из родителей. С Дитто — всегда второй
+      // родитель (Дитто потомства не даёт), иначе 50/50.
+      const donor = dittoA ? m2 : dittoB ? m1 : (Math.random() < 0.5 ? m1 : m2);
+      const species = donor.apiData?.species?.name || donor.apiData?.name;
+      const eggTypes = donor.apiData?.types || [{ type: { name: 'normal' } }];
 
       // Наследование IV: среднее родителей ± случайность 2 (A5: оставить)
       const inheritIV = (parentVal: number) =>
@@ -514,6 +494,7 @@ export async function checkBreeding() {
         parent2Uid: m2.uid,
         // A6: двойной перфект (все 31 у обоих) — шайни 1/128 вместо 1/1024
         shinyBoost: isDoublePerfect(m1, m2),
+        notified: false, // Я3: уведомление о готовности — один раз, автовылупа нет
       };
       state.eggs.push(egg);
       // Один раз и всё: родители помечены, бокс освобождается, оба возвращаются
@@ -528,10 +509,14 @@ export async function checkBreeding() {
       appendToLog(`В боксе ${bi + 1} появилось яйцо! (${species})`, false, 'quest');
     }
 
-    // ── Проверка готовых к вылуплению яиц ──
+    // ── Готовые яйца (Я3: автовылупления НЕТ — только кнопка в рюкзаке) ──
+    // Здесь только одноразовое уведомление о готовности.
     for (const egg of state.eggs) {
-      if (now >= egg.readyTime) {
-        await hatchEgg(egg);
+      if (now >= egg.readyTime && !egg.notified) {
+        egg.notified = true;
+        store.emit('notification:add', '🥚 Яйцо готово!',
+          `${egg.species} готов вылупиться — нажми на яйцо в рюкзаке.`);
+        appendToLog(`🥚 Яйцо ${egg.species} готово к вылуплению!`, false, 'quest');
       }
     }
 
@@ -555,6 +540,29 @@ export function startBreedingCheck() {
   }, BREEDING_CHECK_INTERVAL);
 }
 
+// ── Я12: только стартовые атаки вида (level-up, level_learned_at <= maxLevel) ──
+// Зеркалит логику стартера (starter.ts): максимум 4, пусто → tackle.
+export function pickStarterMoves(pokeData: any, maxLevel = 1): any[] {
+  const learned = (pokeData?.moves || [])
+    .filter((m: any) => (m.version_group_details || []).some(
+      (v: any) => v.move_learn_method?.name === 'level-up' && v.level_learned_at <= maxLevel
+    ))
+    .slice(0, 4);
+  if (learned.length === 0) {
+    learned.push({ move: { name: 'tackle', url: 'https://pokeapi.co/api/v2/move/33/' } });
+  }
+  return learned;
+}
+
+// ── Я7: случайная способность из возможных вида (скрытая исключена) ──
+export function pickRandomAbility(pokeData: any): string | null {
+  const all = pokeData?.abilities || [];
+  const visible = all.filter((a: any) => !a.is_hidden);
+  const pool = visible.length ? visible : all;
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)]?.ability?.name || null;
+}
+
 // ── Вылупление яйца ──
 // Загружает данные покемона из PokeAPI, создаёт объект покемона
 // с наследованными IV от родителей, добавляет в команду или PC
@@ -575,6 +583,10 @@ export async function hatchEgg(egg: any) {
       return;
     }
     const pokeData = await res.json();
+
+    // Я12: режем лёрнсет до стартовых атак вида — с ними мон и вылупится,
+    // и ими же оперируют ленивая выдача PP в бою и обрезка сейва до 4 слотов.
+    pokeData.moves = pickStarterMoves(pokeData, 1);
 
     // Удаляем яйцо из списка яиц и из команды (если было в команде)
     const eggIdx = state.myTeam.findIndex((m: any) => m.uid === egg.uid);
@@ -608,7 +620,7 @@ export async function hatchEgg(egg: any) {
       status: null, sleepTurns: 0,
       movesPP: [],
       statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-      abilityName: pokeData.abilities[0]?.ability?.name || null,
+      abilityName: pickRandomAbility(pokeData),
       heldItem: null,
       berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
       learnableMoves: [],

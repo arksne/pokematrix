@@ -245,7 +245,6 @@ export interface GameState {
 
   // Daycare & Breeding
   daycareMons: any[];
-  daycareEgg: any;
   breedingPairs: any[];
   eggs: any[];
   hatching: boolean;
