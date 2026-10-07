@@ -141,3 +141,45 @@ export class BattleStateMachine {
     return new BattleStateMachine();
   }
 }
+
+/**
+ * recoverStuckTurn — вернуть ход игроку из залипшего ENEMY_TURN.
+ *
+ * КОНТЕКСТ: ход врага (runEnemyTurnBody в core.ts) может упасть с исключением
+ * ПОСЛЕ `transition(ENEMY_TURN)`, но ДО `showPlayerMenuAfterDelay()`. Тогда фаза
+ * навсегда остаётся ENEMY_TURN, и все кнопки боя (побег, смена, предмет, атаки)
+ * отвечают тостом «Подождите...». Зовётся только из catch-веток.
+ *
+ * Возвращает true, если итоговая фаза — PLAYER_TURN (включая случай, когда она
+ * уже была PLAYER_TURN и делать ничего не надо). В терминальных фазах
+ * (VICTORY/DEFEAT/IDLE) и в стартовых фазах ничего не трогает — false.
+ */
+export function recoverStuckTurn(sm: BattleStateMachine): boolean {
+  const phase = sm.phase;
+  if (phase === BattlePhase.PLAYER_TURN) return true;
+  if (phase !== BattlePhase.ENEMY_TURN) return false;
+  return sm.transition(BattlePhase.PLAYER_TURN);
+}
+
+/**
+ * leaveBattleToIdle — увести автомат в IDLE при выходе из боя.
+ *
+ * КОНТЕКСТ: кнопка «выход из боя» (btn-leave-battle) доступна из фаз конца боя
+ * (VICTORY/DEFEAT), а побег — из PLAYER_TURN. Прямой transition(IDLE) покрывает
+ * эти случаи, но если фаза по какой-то причине другая (например, ENEMY_TURN —
+ * из карты переходов IDLE туда не входит), делаем forcePhase: торчать в боевой
+ * фазе с закрытой модалкой и пустым battle_state хуже, чем принудительный сброс.
+ *
+ * Возвращает true, если итоговая фаза — IDLE.
+ */
+export function leaveBattleToIdle(sm: BattleStateMachine): boolean {
+  if (sm.phase === BattlePhase.IDLE) return true;
+  if (!sm.transition(BattlePhase.IDLE)) {
+    sm.forcePhase(BattlePhase.IDLE);
+  }
+  // Каст `as BattlePhase`: TS наследует суженный тип геттера phase через
+  // инициализатор поверх аннотации и считает финальное сравнение с IDLE
+  // «непреднамеренным». Каст разрывает цепочку сужения.
+  const landed = sm.phase as BattlePhase;
+  return landed === BattlePhase.IDLE;
+}

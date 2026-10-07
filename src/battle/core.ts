@@ -75,7 +75,7 @@ import { addNotification } from '../ui/notifications.js';                // Ув
 // BattleStateMachine — класс из state-machine.ts, управляющий фазами боя.
 // Это singleton — один инстанс на весь бой.
 // Экспортируется для тестов (могут создать свой через BattleStateMachine.create())
-import { BattleStateMachine, BattlePhase } from './state-machine.js';
+import { BattleStateMachine, BattlePhase, recoverStuckTurn, leaveBattleToIdle } from './state-machine.js';
 
 /** Singleton state machine — единый автомат фаз для всего боя */
 export const battle = new BattleStateMachine();
@@ -3022,17 +3022,25 @@ async function useMove(moveIndex) {
       // самодостаточен — он и доводит ход до конца, и возвращает меню через
       // showPlayerMenuAfterDelay, поэтому дополнительно звать enemyTurn()
       // нельзя, иначе ход удвоится.
-      if (S.wildCurHP <= 0 || S.activePlayerMon.currentHp <= 0) {
+      if (S.wildCurHP <= 0 || !S.activePlayerMon || S.activePlayerMon.currentHp <= 0) {
         saveBattleState();
         return;
       }
-      await runEnemyTurnBody();
+      try {
+        await runEnemyTurnBody();
+      } catch (e) {
+        // Исключение в ходе врага иначе оставляло фазу в ENEMY_TURN: нижняя
+        // проверка недостижима, меню не возвращается, побег и остальные кнопки
+        // вечно отвечают «Подождите...». См. recoverBattleMenu.
+        console.error('[battle] endTurn: enemy turn failed:', e);
+        recoverBattleMenu('useMove:endTurn');
+      }
       // Если бой не закончился и ход противника не отдал меню сам — отдаём
       // явно. Иначе меню останется скрытым, а фаза — в ENEMY_TURN.
       const phase = battle.phase;
       if (phase === BattlePhase.ENEMY_TURN
         && S.wildCurHP > 0
-        && S.activePlayerMon.currentHp > 0) {
+        && S.activePlayerMon && S.activePlayerMon.currentHp > 0) {
         saveBattleState();
         showPlayerMenuAfterDelay();
       }
@@ -3072,10 +3080,17 @@ async function useMove(moveIndex) {
 
       if (!playerMovesFirst(move, enemyMoveForOrder)) {
         document.getElementById('battle-main-menu').style.display = 'none';
-        await runEnemyTurnBody();
+        try {
+          await runEnemyTurnBody();
+        } catch (e) {
+          // Быстрый враг упал до нашей атаки: фазу вернёт recoverBattleMenu,
+          // а наша атака ниже всё равно выполняется — ход не теряется.
+          console.error('[battle] useMove: fast-enemy turn failed:', e);
+          recoverBattleMenu('useMove:fastEnemy');
+        }
         enemyAlreadyMoved = true;
         // Враг мог добить кого-то — тогда ход закончен, обработчики уже отработали.
-        if (S.activePlayerMon.currentHp <= 0 || S.wildCurHP <= 0) return;
+        if (!S.activePlayerMon || S.activePlayerMon.currentHp <= 0 || S.wildCurHP <= 0) return;
       }
     }
 
@@ -3623,6 +3638,29 @@ function showPlayerMenuAfterDelay(ms = 1000) {
   }, ms);
 }
 
+/**
+ * recoverBattleMenu — страховка от залипшей фазы ENEMY_TURN.
+ *
+ * ЗОВЁТСЯ ТОЛЬКО ИЗ catch-ВЕТОК хода врага (enemyTurn, endTurn в useMove).
+ * Если исключение прилетело после transition(ENEMY_TURN), но до возврата меню,
+ * фаза остаётся ENEMY_TURN навсегда и все кнопки (побег/смена/предмет/атаки)
+ * вечно отвечают «Подождите...». Здесь возвращаем ход игроку через тот же
+ * showPlayerMenuAfterDelay (с задержкой, как в штатном потоке).
+ *
+ * Меню показываем только если фаза РЕАЛЬНО сменилась ENEMY_TURN → PLAYER_TURN:
+ * иначе задваиваем таймеры показа меню на штатном пути.
+ */
+function recoverBattleMenu(source: string) {
+  if (!S.activePlayerMon || S.activePlayerMon.currentHp <= 0 || S.wildCurHP <= 0) return;
+  const before = battle.phase;
+  if (before === BattlePhase.VICTORY || before === BattlePhase.DEFEAT || before === BattlePhase.IDLE) return;
+  if (recoverStuckTurn(battle) && battle.phase !== before) {
+    console.warn(`[battle] recoverBattleMenu (${source}): фаза ${before} → ${battle.phase}`);
+    try { saveBattleState(); } catch (_) {}
+    showPlayerMenuAfterDelay();
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // СЕКЦИЯ 14: ХОД ПРОТИВНИКА (enemyTurn)
 // ═══════════════════════════════════════════════════════════════
@@ -3698,6 +3736,13 @@ async function enemyTurn() {
   // на любом выходе, включая ранние return внутри тела хода.
   try {
     await runEnemyTurnBody();
+  } catch (e) {
+    // Без этого catch любое исключение в ходе врага (null-доступ к модалке,
+    // битый activeWild, ошибка AI/урона) оставляло фазу в ENEMY_TURN навсегда:
+    // showPlayerMenuAfterDelay() недостижим, и все кнопки боя — включая побег —
+    // вечно отвечают «Подождите...». См. recoverBattleMenu.
+    console.error('[battle] enemyTurn failed:', e);
+    recoverBattleMenu('enemyTurn');
   } finally {
     tickEnemyTurnDurations();
   }
@@ -4211,7 +4256,27 @@ async function runEnemyTurnBody() {
 //   btn-leave-battle — выход из боя
 // ─────────────────────────────────────────────────────────────
 
+// Флаг идемпотентности: initEncounterEvents вызывается один раз при старте игры,
+// но повторный вызов (HMR, переинициализация) раньше дублировал слушатели —
+// тогда один клик «Сбежать» выполнял побег дважды (второй раз упирался в фазу
+// IDLE и показывал сбивающий с толку тост «Подождите...»).
+let encounterEventsInit = false;
+
 function initEncounterEvents() {
+  if (encounterEventsInit) return;
+  encounterEventsInit = true;
+
+  // Безопасная подписка: одного отсутствующего узла (например, после правки
+  // index.html) раньше хватало, чтобы TypeError оборвал всю функцию и
+  // btn-switch / btn-use-item / btn-leave-battle остались вообще без слушателей.
+  const on = (id: string, fn: (e: Event) => void) => {
+    const el = document.getElementById(id);
+    if (!el) {
+      console.warn(`[battle] initEncounterEvents: #${id} не найден — кнопка без обработчика`);
+      return;
+    }
+    el.addEventListener('click', fn);
+  };
 
   // ═══ 15a: ПОБЕГ ═══
   //
@@ -4221,7 +4286,7 @@ function initEncounterEvents() {
   // Раньше побег был вероятностным (формула от скорости), ничего не стоил, а
   // при удаче НЕ чистил battle_state и не переводил фазу в IDLE: после
   // перезагрузки восстанавливался бой, который игрок уже покинул.
-  document.getElementById('btn-run').addEventListener('click', () => {
+  on('btn-run', () => {
     if (S.battleType !== 'wild') {
       appendToLog('Нельзя сбежать от лидера!');
       return;
@@ -4234,9 +4299,14 @@ function initEncounterEvents() {
     }
 
     const mon = S.activePlayerMon;
+    if (!mon) {
+      console.warn('[battle] run: нет активного покемона — побег невозможен');
+      return;
+    }
     const aliveBefore = GS.myTeam.filter(m => m.currentHp > 0).length;
 
-    document.getElementById('battle-main-menu').style.display = 'none';
+    const mainMenu = document.getElementById('battle-main-menu');
+    if (mainMenu) mainMenu.style.display = 'none';
     appendToLog('Вам удалось сбежать!');
     appendToLog(`${mon.apiData.name} выложился до конца и потерял сознание.`, false, 'faint');
     mon.currentHp = 0;
@@ -4247,11 +4317,13 @@ function initEncounterEvents() {
     S.escapeAttempts = 0;
 
     setTimeout(() => {
-      document.getElementById('encounter-modal').style.display = 'none';
+      const modal = document.getElementById('encounter-modal');
+      if (modal) modal.style.display = 'none';
       if (aliveBefore <= 1) {
         // Бежал последним живым — команда пуста, это поражение
         appendToLog('Вся команда потеряла сознание... Вы проиграли.');
-        document.getElementById('battle-end-menu').style.display = 'flex';
+        const endMenu = document.getElementById('battle-end-menu');
+        if (endMenu) endMenu.style.display = 'flex';
       }
       store.autoSave();
     }, 1000);
@@ -4260,7 +4332,7 @@ function initEncounterEvents() {
   // ═══ 15b: СМЕНА ПОКЕМОНА ═══
   // По спецификации смена разрешена и в бою с лидером зала. Раньше здесь стоял
   // запрет для gym/elite/champion — он противоречил решению из интервью.
-  document.getElementById('btn-switch').addEventListener('click', () => {
+  on('btn-switch', () => {
     if (battle.phase !== BattlePhase.PLAYER_TURN) {
       showToast('Подождите... идёт ход противника.', true);
       return;
@@ -4278,7 +4350,7 @@ function initEncounterEvents() {
   //   - X-Items (X Attack, X Defense...)
   //   - Камни эволюции (Evolution Stone, Fire Stone...)
   //   - TM-совместимость
-  document.getElementById('btn-use-item').addEventListener('click', () => {
+  on('btn-use-item', () => {
     // Действовать можно только в свой ход. Без этой проверки предмет,
     // использованный во время хода врага, запускал ещё один enemyTurn() —
     // два хода противника подряд и удвоенный урон.
@@ -4632,10 +4704,16 @@ function initEncounterEvents() {
   });
 
   // ═══ 15d: ВЫХОД ИЗ БОЯ ═══
-  // Полная очистка: состояние боя, все стат-стадии, статусы, прогресс гима
-  document.getElementById('btn-leave-battle').addEventListener('click', () => {
-    document.getElementById('encounter-modal').style.display = 'none'; // Скрываем модалку
+  // Полная очистка: состояние боя, все стат-стадии, статусы, прогресс гима.
+  // Раньше здесь не было перехода фазы в IDLE (в отличие от побега 15a): фаза
+  // оставалась PLAYER_TURN/ENEMY_TURN/VICTORY/DEFEAT, и следующий startHunt()
+  // делал transition(WILD_START) из не-IDLE — невалидный переход, warn в
+  // консоль и грязный лог фаз. Та же классовая болезнь, что и залипание побега.
+  on('btn-leave-battle', () => {
+    const modal = document.getElementById('encounter-modal');
+    if (modal) modal.style.display = 'none'; // Скрываем модалку
     clearBattleState();                                        // Удаляем localStorage
+    leaveBattleToIdle(battle);                                 // Фаза → IDLE из любой фазы
     // Сбрасываем все поля боя
     S.gymTeamIndex = 0;
     S.gymTeamIndexInMember = 0;
@@ -4652,8 +4730,11 @@ function initEncounterEvents() {
       m.sleepTurns = 0;
     });
     // Очищаем плашки статов в UI
-    document.getElementById('player-stat-badges').innerHTML = '';
-    document.getElementById('wild-stat-badges').innerHTML = '';
+    const playerBadges = document.getElementById('player-stat-badges');
+    if (playerBadges) playerBadges.innerHTML = '';
+    const wildBadges = document.getElementById('wild-stat-badges');
+    if (wildBadges) wildBadges.innerHTML = '';
+    store.autoSave();
   });
 }
 
