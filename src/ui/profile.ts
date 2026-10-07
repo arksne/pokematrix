@@ -56,6 +56,7 @@ import { openPokedex, showPokedexInfo } from './pokedex.js';
 // showToast — показывает всплывающее уведомление
 import { escHtml, renderStars, showSelectionModal, showToast } from '../utils/dom.js';
 import { fetchSiteMoveDetail } from '../data/sitemove.js';
+import { openTutorRelearner } from './tm.js';
 // getHeldItemName — возвращает русское название held item по ID
 // openHeldItemPicker — открывает модалку выбора held item
 // updateDynamicEVs — обновляет отображение доступных EV
@@ -415,6 +416,15 @@ export function refreshProfileUI() {
 
         });
       });
+    }
+    // ── Учитель атак (ветка обучения лиги): tutor-список вида за 1.5М ──
+    if (!movesContent.querySelector('.tutor-open-btn')) {
+      const tutorBtn = document.createElement('button');
+      tutorBtn.className = 'tma-btn tutor-open-btn';
+      tutorBtn.style.cssText = 'width:100%;margin-top:8px;';
+      tutorBtn.innerText = '🧑‍🏫 Учитель атак (tutor-атаки вида)';
+      tutorBtn.onclick = () => openTutorRelearner();
+      movesContent.appendChild(tutorBtn);
     }
   }
 

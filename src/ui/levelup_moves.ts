@@ -19,7 +19,9 @@
 
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
-import { fetchPokeAPI } from '../utils/api.js';  // HTTP-клиент для PokeAPI
+import { fetchPokeAPI } from '../utils/api.js';  // HTTP-клиент для PokeAPI (fallback)
+import { fetchSiteLearnset, moveNameToSlug } from '../data/learnset.js';
+import type { SiteLearnset } from '../data/learnset.js';
 import { fetchSiteMoveDetail } from '../data/sitemove.js';  // детали атак — с сайта лиги
 
 // ── ЛЕНИВЫЙ ИМПОРТ (циклическая зависимость core.ts ↔ levelup_moves.ts) ──
@@ -37,45 +39,67 @@ async function appendToLogLazy(...args: any[]) {
 // Принимает:
 //   pokemon — объект покемона
 //   newLevel — новый уровень (после повышения)
+// ── siteLevelMoves: атаки сайта лиги, открывающиеся между уровнями ──
+// Чистая функция (для тестов): levelup в порядке таблицы сайта.
+export function siteLevelMoves(ls: any, prevLevel: number, newLevel: number, knownSlugs: Set<string>): Array<{ name: string; url: string }> {
+  const out: Array<{ name: string; url: string }> = [];
+  for (const [lvl, name] of (ls?.levelup || [])) {
+    if (lvl > prevLevel && lvl <= newLevel) {
+      const slug = moveNameToSlug(name);
+      if (slug && !knownSlugs.has(slug)) {
+        knownSlugs.add(slug);
+        out.push({ name: slug, url: `https://pokeapi.co/api/v2/move/${slug}/` });
+      }
+    }
+  }
+  return out;
+}
+
 //
 // Алгоритм:
-//   1. Загружает все атаки покемона из PokeAPI
+//   1. Загружает атаки вида с сайта лиги (/api/learnset)
 //   2. Находит атаки, изучаемые между prevCheckLevel и newLevel
 //   3. Для каждой — вызывает offerLearnMove (модалка замены/резерва)
 //   4. Обновляет lastMoveCheckLevel до newLevel
+//   Fallback без сайта — старый фильтр PokeAPI version_group_details.
 export async function checkNewMovesOnLevelUp(pokemon, newLevel) {
   try {
-    // ── 1. Загружаем все атаки покемона из PokeAPI ──
-    const pokeData = await fetchPokeAPI(`pokemon/${pokemon.apiData.id}`);
-    const allMoves = pokeData.moves || [];
-
-    // ── 2. Set уже известных атак ──
-    // Смотрим только первые 4 слота (текущий moveset)
-    const knownNames = new Set();
+    // ── Set уже известных атак (слаг-нормализованный, первые 4 слота) ──
+    const knownNames = new Set<string>();
     for (let i = 0; i < 4; i++) {
-      if (pokemon.apiData.moves[i]?.move?.name) {
-        knownNames.add(pokemon.apiData.moves[i].move.name);
-      }
+      const nm = pokemon.apiData.moves[i]?.move?.name;
+      if (nm) knownNames.add(moveNameToSlug(nm));
     }
 
-    // ── 3. Поиск новых атак между уровнями ──
-    // lastMoveCheckLevel — уровень, на котором мы последний раз проверяли
-    // (хранится в покемоне, сохраняется при save/load)
     const prevCheckLevel = pokemon.lastMoveCheckLevel || 1;
-    const newMoves = [];
+    let newMoves: Array<{ name: string; url: string }> = [];
 
-    // Проходим по всем атакам в PokeAPI
-    for (const entry of allMoves) {
-      for (const detail of entry.version_group_details) {
-        // Ищем атаки типа 'level-up' между prevCheckLevel и newLevel
-        if (detail.move_learn_method.name === 'level-up' &&
-            detail.level_learned_at > prevCheckLevel &&
-            detail.level_learned_at <= newLevel) {
-          // Если атака ещё не изучена — добавляем в список
-          if (!knownNames.has(entry.move.name)) {
-            newMoves.push(entry.move);
+    // ── 1. Источник — сайт лиги ──
+    const species = pokemon.apiData?.species?.name || pokemon.apiData?.name || '';
+    let siteOk = false;
+    try {
+      const ls = await fetchSiteLearnset(species);
+      if (ls) {
+        newMoves = siteLevelMoves(ls, prevCheckLevel, newLevel, knownNames);
+        siteOk = true;
+      }
+    } catch { /* ниже fallback */ }
+
+    if (!siteOk) {
+      // ── 1b. Fallback: все атаки покемона из PokeAPI ──
+      const pokeData = await fetchPokeAPI(`pokemon/${pokemon.apiData.id}`);
+      for (const entry of (pokeData.moves || [])) {
+        for (const detail of (entry.version_group_details || [])) {
+          if (detail.move_learn_method.name === 'level-up' &&
+              detail.level_learned_at > prevCheckLevel &&
+              detail.level_learned_at <= newLevel) {
+            const slug = moveNameToSlug(entry.move.name);
+            if (!knownNames.has(slug)) {
+              knownNames.add(slug);
+              newMoves.push({ name: slug, url: entry.move.url });
+            }
+            break;
           }
-          break;  // Выходим из inner цикла (достаточно одной записи)
         }
       }
     }
@@ -92,8 +116,9 @@ export async function checkNewMovesOnLevelUp(pokemon, newLevel) {
         // ── Инициализация PP для выученной атаки (данные с сайта лиги) ──
         try {
           const moveData = await fetchSiteMoveDetail(move);
-          // Находим слот, в который поместили атаку
-          const slot = pokemon.apiData.moves.findIndex(m => m && m.move.name === move.name);
+          // Находим слот, в который поместили атаку (сравнение по слагу —
+          // в старых сейвах имена могут быть в Title Case)
+          const slot = pokemon.apiData.moves.findIndex(m => m && moveNameToSlug(m.move.name) === move.name);
           if (slot >= 0 && moveData.pp) {
             if (!pokemon.movesPP) pokemon.movesPP = [];
             if (!pokemon.movesPP[slot]) pokemon.movesPP[slot] = {};
@@ -124,18 +149,23 @@ export async function checkNewMovesOnLevelUp(pokemon, newLevel) {
 //     3. "Пропустить" — не учить
 export function offerLearnMove(pokemon, move) {
   return new Promise((resolve) => {
-    const moveName = move.name;
+    const moveSlug = moveNameToSlug(move.name);
+    const pretty = moveSlug.replace(/-/g, ' ');
     const monName = pokemon.nickname || pokemon.apiData.name;
-    const url = move.url || `https://pokeapi.co/api/v2/move/${moveName}/`;
+    const url = move.url || `https://pokeapi.co/api/v2/move/${moveSlug}/`;
+    // Детали с сайта (PP/сила/тип для замены и резерва), лениво, с кэшем.
+    const detailOf = async () => {
+      try { return await fetchSiteMoveDetail(moveSlug); } catch { return null; }
+    };
 
     // ── Авто-изучение если есть пустой слот ──
     // Ищем пустой слот только среди первых четырёх — бой читает лишь moves[0..3]
     const emptySlot = (pokemon.apiData.moves || []).slice(0, 4).findIndex(m => !m?.move);
     if (emptySlot >= 0) {
       if (!pokemon.apiData.moves[emptySlot]) {
-        pokemon.apiData.moves[emptySlot] = { move: { name: moveName, url } };
+        pokemon.apiData.moves[emptySlot] = { move: { name: moveSlug, url } };
       }
-      appendToLogLazy(`${monName} выучил ${moveName}!`, false, 'system');
+      appendToLogLazy(`${monName} выучил ${pretty}!`, false, 'system');
       resolve(true);
       return;
     }
@@ -158,7 +188,7 @@ export function offerLearnMove(pokemon, move) {
     // Полная HTML модалки: заголовок + 4 кнопки слотов + резерв + пропустить
     modal.innerHTML = `
       <div class="selection-modal-card">
-        <h3>${monName} хочет выучить ${moveName}</h3>
+        <h3>${monName} хочет выучить ${pretty}</h3>
         <p style="font-size:0.85rem;color:var(--tma-hint);margin:4px 0 12px;">Выберите слот для замены:</p>
         <div class="selection-items">
           ${slotsHTML}
@@ -178,7 +208,7 @@ export function offerLearnMove(pokemon, move) {
 
     // ── Обработчик: замена слота ──
 modal.querySelectorAll('.replace-slot').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const slot = parseInt(btn.getAttribute('data-slot')!);
           // Имя старой атаки читаем безопасно. Раньше здесь стояло
           // `pokemon.apiData.moves[slot].move.name`, что падало с TypeError на
@@ -186,13 +216,15 @@ modal.querySelectorAll('.replace-slot').forEach(btn => {
           // не делал, и выглядело это как «слот 4 не работает».
           const oldName = pokemon.apiData.moves[slot]?.move?.name || '(пусто)';
           if (!pokemon.apiData.moves[slot]) pokemon.apiData.moves[slot] = {};
-          // Заменяем атаку — сбрасываем PP под новую
-          pokemon.apiData.moves[slot].move = { name: moveName, url };
+          // Заменяем атаку — PP под новую берём с сайта лиги (раньше всегда 30,
+          // т.к. у {name,url} нет pp).
+          const d = await detailOf();
+          const pp = d?.pp || 30;
+          pokemon.apiData.moves[slot].move = { name: moveSlug, url };
           if (!pokemon.movesPP) pokemon.movesPP = [];
-          const pp = move?.pp || 30;
           pokemon.movesPP[slot] = { current: pp, max: pp };
           appendToLogLazy(
-            `${monName}: ${moveName} заменил${oldName === '(пусто)' ? '' : `ла ${oldName}`} в слоте ${slot + 1}!`,
+            `${monName}: ${pretty} заменил${oldName === '(пусто)' ? '' : `ла ${oldName}`} в слоте ${slot + 1}!`,
             false, 'system'
           );
           cleanup();
@@ -201,19 +233,20 @@ modal.querySelectorAll('.replace-slot').forEach(btn => {
     });
 
     // ── Обработчик: в резерв ──
-    modal.querySelector('.reserve-btn')!.addEventListener('click', () => {
+    modal.querySelector('.reserve-btn')!.addEventListener('click', async () => {
       if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
-      // Проверяем, нет ли уже такой атаки в резерве
-      if (!pokemon.learnableMoves.some(m => m.name === moveName)) {
+      // Проверяем, нет ли уже такой атаки в резерве (по слагу)
+      if (!pokemon.learnableMoves.some(m => moveNameToSlug(m.name) === moveSlug)) {
+        const d = await detailOf();
         pokemon.learnableMoves.push({
-          name: moveName,
+          name: moveSlug,
           url,
-          power: move.power || 0,
-          type: move.type?.name || 'normal'
+          power: d?.power || 0,
+          type: d?.type?.name || 'normal',
         });
       }
       appendToLogLazy(
-        `${monName}: ${moveName} упал в резерв (все слоты заняты).`,
+        `${monName}: ${pretty} упал в резерв (все слоты заняты).`,
         false, 'system'
       );
       cleanup();
@@ -222,7 +255,7 @@ modal.querySelectorAll('.replace-slot').forEach(btn => {
 
     // ── Обработчик: пропустить ──
     modal.querySelector('#learn-skip')!.addEventListener('click', () => {
-      appendToLogLazy(`${monName}: пропустил изучение ${moveName}.`, false, 'system');
+      appendToLogLazy(`${monName}: пропустил изучение ${pretty}.`, false, 'system');
       cleanup();
       resolve(false);  // Атака проигнорирована
     });
@@ -230,7 +263,7 @@ modal.querySelectorAll('.replace-slot').forEach(btn => {
     // ── Обработчик: клик по затемнённому фону = пропустить ──
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
-        appendToLogLazy(`${monName}: пропустил изучение ${moveName}.`, false, 'system');
+        appendToLogLazy(`${monName}: пропустил изучение ${pretty}.`, false, 'system');
         cleanup();
         resolve(false);
       }

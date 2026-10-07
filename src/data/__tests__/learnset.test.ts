@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { moveNameToSlug, siteMoveEntry, siteStarterMoves, rollEggMove } from '../learnset.js';
+import { siteLevelMoves } from '../../ui/levelup_moves.js';
 
 const LS = {
   levelup: [
@@ -72,5 +73,36 @@ describe('rollEggMove (30% по канону лиги)', () => {
   it('нет списка → null, без падения', () => {
     expect(rollEggMove(undefined, [], () => 0.0)).toBeNull();
     expect(rollEggMove([], [], () => 0.0)).toBeNull();
+  });
+});
+
+describe('siteLevelMoves (уровни строго по сайту)', () => {
+  const LS2 = {
+    levelup: [[1, 'Tackle'], [3, 'Vine Whip'], [6, 'Growth'], [9, 'Leech Seed']] as Array<[number, string]>,
+    egg: [],
+  };
+
+  it('только (prev, new], в порядке сайта', () => {
+    const got = siteLevelMoves(LS2, 1, 9, new Set());
+    expect(got.map((m) => m.name)).toEqual(['vine-whip', 'growth', 'leech-seed']);
+  });
+
+  it('известные исключаются (сравнение по слагу)', () => {
+    const got = siteLevelMoves(LS2, 1, 9, new Set(['vine-whip']));
+    expect(got.map((m) => m.name)).toEqual(['growth', 'leech-seed']);
+  });
+
+  it('граница prev включительно-не: level == prev не берётся', () => {
+    const got = siteLevelMoves(LS2, 3, 6, new Set());
+    expect(got.map((m) => m.name)).toEqual(['growth']);
+  });
+
+  it('записи — {name slug, url} для sitemove', () => {
+    const got = siteLevelMoves(LS2, 1, 3, new Set());
+    expect(got).toEqual([{ name: 'vine-whip', url: 'https://pokeapi.co/api/v2/move/vine-whip/' }]);
+  });
+
+  it('null → пусто без падения', () => {
+    expect(siteLevelMoves(null, 1, 9, new Set())).toEqual([]);
   });
 });

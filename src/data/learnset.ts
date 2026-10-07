@@ -16,7 +16,12 @@
 //   siteMoveEntry      — запись вида { move: { name, url } } для apiData.moves
 // ─────────────────────────────────────────────────────────────
 
-export type SiteLearnset = { levelup: Array<[number, string]>; egg: string[] };
+export type SiteLearnset = {
+  levelup: Array<[number, string]>;
+  egg: string[];
+  tm?: Array<[number, string]>;
+  tutor?: string[];
+};
 
 const cache = new Map<string, SiteLearnset | null>();
 
@@ -48,6 +53,8 @@ export async function fetchSiteLearnset(species: string): Promise<SiteLearnset |
     const ls: SiteLearnset = {
       levelup: Array.isArray(data.levelup) ? data.levelup : [],
       egg: Array.isArray(data.egg) ? data.egg : [],
+      tm: Array.isArray(data.tm) ? data.tm : [],
+      tutor: Array.isArray(data.tutor) ? data.tutor : [],
     };
     cache.set(key, ls);
     return ls;

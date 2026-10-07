@@ -15,7 +15,12 @@ import { fileURLToPath } from 'url';
 
 const router = Router();
 
-type Learnset = { levelup: Array<[number, string]>; egg: string[] };
+type Learnset = {
+  levelup: Array<[number, string]>;
+  egg: string[];
+  tm?: Array<[number, string]>;
+  tutor?: string[];
+};
 let table: Record<string, Learnset> | null = null;
 let loadFailed = false;
 
@@ -64,7 +69,7 @@ router.get('/:name', (req: Request, res: Response) => {
     res.status(404).json({ error: `unknown species: ${req.params.name}` });
     return;
   }
-  res.json({ levelup: entry.levelup, egg: entry.egg || [] });
+  res.json({ levelup: entry.levelup, egg: entry.egg || [], tm: entry.tm || [], tutor: entry.tutor || [] });
 });
 
 export default router;

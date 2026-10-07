@@ -30,6 +30,7 @@ import { updateInventoryDisplay } from './inventory.js';  // Обновлени�
 import { showToast, showSelectionModal } from '../utils/dom.js';              // Всплывающие уведомления + выбор оплаты
 import { fetchPokeAPI } from '../utils/api.js';            // HTTP-клиент для PokeAPI
 import { fetchSiteMoveDetail } from '../data/sitemove.js';  // детали атак — с сайта лиги
+import { fetchSiteLearnset, moveNameToSlug } from '../data/learnset.js';
 import { state } from '../game/state.js';                  // Баланс для учителя
 
 // ── Тиры ТМ по силе атаки (B5): слабая <60 — 200к, средняя ≤90 — 2М, топ >90 — 20М.
@@ -49,8 +50,8 @@ export function tmTierAllows(itemId: string, power: number | null): boolean {
 
 // ── openMoveRelearner: открыть интерфейс повторного изучения атак ──
 // payItemId — каким диском платим ('tm' legacy без ограничений, иначе тир).
-// Загружает все возможные атаки покемона из PokeAPI, фильтрует
-// только атаки с силой (power > 0), исключает уже известные.
+// Пул — таблица совместимости ТМ с сайта лиги (species tm [[номер, атака]]),
+// статусные ТМ разрешены. Тир диска ограничивает максимальную силу (B5).
 // Показывает список доступных атак с кнопками для замены.
 export async function openMoveRelearner(payItemId = 'tm') {
   // Проверка: выбран ли покемон?
@@ -121,30 +122,51 @@ export async function openMoveRelearner(payItemId = 'tm') {
   modal.style.display = 'flex';  // Показываем модалку (загрузка идёт, показываем "Загрузка...")
 
   try {
-    // Загружаем все атаки покемона из PokeAPI
-    const pokeData = await fetchPokeAPI(`pokemon/${mon.apiData.id}`);
-    const allMoves = pokeData.moves || [];
-
-    // Set уже известных атак (чтобы не показывать их)
+    // Set уже известных атак (слаг-нормализованный, чтобы не показывать их)
     const knownNames = new Set(
-      (mon.apiData.moves || []).filter(m => m).map(m => m.move.name)
+      (mon.apiData.moves || []).filter(m => m).map(m => moveNameToSlug(m.move.name))
     );
 
-    // ── Загрузка деталей каждой атаки ──
-    // Ограничиваем 50 атаками (чтобы не грузить слишком много)
-    const movePromises = [];
-    for (let i = 0; i < allMoves.length && i < 50; i++) {
-      // Загружаем данные каждой атаки с сайта лиги (урон, PP, тип, класс урона)
-      movePromises.push(
-        fetchSiteMoveDetail(allMoves[i]).catch(() => null)
-      );
-    }
-    const moveResults = await Promise.all(movePromises);
+    // ── Пул ТМ — таблица совместимости с сайта лиги ──
+    // species tm: [[номер, атака]]; fallback без сайта — первые 50 PokeAPI.
+    const species = mon.apiData?.species?.name || mon.apiData?.name || '';
+    let tmNos = new Map<string, number>();
+    let sitePool: string[] | null = null;
+    try {
+      const ls = await fetchSiteLearnset(species);
+      if (ls?.tm?.length) {
+        sitePool = [];
+        for (const [no, name] of ls.tm) {
+          const slug = moveNameToSlug(name);
+          if (slug && !tmNos.has(slug)) {
+            tmNos.set(slug, no);
+            sitePool.push(slug);
+          }
+        }
+      }
+    } catch { /* ниже fallback */ }
 
-    // Фильтруем: только атаки с силой И которые ещё не изучены.
-    // Фильтр m.power > 0 убирает статусные атаки и пустые результаты;
-    // тир диска ограничивает максимальную силу (B5) через tmTierAllows.
-    const learnable = moveResults.filter(m => m && m.power && !knownNames.has(m.name)
+    let moveResults: any[];
+    if (sitePool) {
+      moveResults = (await Promise.all(
+        sitePool.map((slug) => fetchSiteMoveDetail(slug).catch(() => null))
+      )).filter(Boolean);
+    } else {
+      // Fallback: все атаки покемона из PokeAPI, первые 50
+      const pokeData = await fetchPokeAPI(`pokemon/${mon.apiData.id}`);
+      const allMoves = pokeData.moves || [];
+      const movePromises = [];
+      for (let i = 0; i < allMoves.length && i < 50; i++) {
+        movePromises.push(fetchSiteMoveDetail(allMoves[i]).catch(() => null));
+      }
+      moveResults = (await Promise.all(movePromises)).filter(Boolean);
+    }
+
+    // Фильтруем: неизученные, в тире диска. Статусные ТМ (power null)
+    // разрешены — тир их пропускает (tmTierAllows: power==null → true).
+    const learnable = moveResults.filter(m => m
+      && (m.power || m.damage_class?.name === 'status')
+      && !knownNames.has(moveNameToSlug(m.name))
       && tmTierAllows(payItemId, m.power));
 
     // ── Отображение доступных атак ──
@@ -155,8 +177,11 @@ export async function openMoveRelearner(payItemId = 'tm') {
       learnable.forEach((moveData) => {
         const moveEl = document.createElement('div');
         moveEl.className = 'tm-move-cell';
-        // Показываем: имя (сила | тип урона)
-        moveEl.innerText = `${moveData.name} (${moveData.power} | ${moveData.damage_class.name})`;
+        // Показываем: ТМ-номер с сайта (если есть) + имя (сила | тип урона)
+        const tmNo = tmNos.get(moveNameToSlug(moveData.name));
+        const noPrefix = tmNo != null ? `TM${String(tmNo).padStart(2, '0')} ` : '';
+        const powStr = moveData.power ?? '—';
+        moveEl.innerText = `${noPrefix}${moveData.name} (${powStr} | ${moveData.damage_class.name})`;
         // При клике — открываем выбор слота для замены (с тем же диском)
         moveEl.addEventListener('click', () => {
           showSlotPicker(mon, moveData, payItemId);
@@ -170,6 +195,66 @@ export async function openMoveRelearner(payItemId = 'tm') {
   }
 }
 
+// ── openTutorRelearner: обучение атакам у учителя (ветка лиги) ──
+// Пул — tutor-список вида с сайта лиги (как квестовое обучение у лиги,
+// у нас — за фикс 1.5М, без дисков). Замена — через тот же пикер слотов.
+export async function openTutorRelearner() {
+  if (getTeamState().currentPokemonIndex === null) {
+    return showToast('Сначала выберите покемона во вкладке "Команда"!', true);
+  }
+  const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
+  const modal = document.getElementById('tm-modal');
+  if (!modal) return;
+
+  document.getElementById('tm-pokemon-name').innerText =
+    `${mon.nickname || mon.apiData.name} (Lv${mon.baseLevel + mon.candiesEaten}) — 🧑‍🏫 Учитель`;
+
+  const currentList = document.getElementById('tm-current-list');
+  currentList.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const row = document.createElement('div');
+    row.className = 'tm-current-move';
+    const nm = mon.apiData.moves[i]?.move?.name || '-';
+    row.innerText = `${i + 1}. ${nm}`;
+    currentList.appendChild(row);
+  }
+
+  const availableList = document.getElementById('tm-available-list');
+  availableList.innerHTML = '<div class="tm-loading">Учитель смотрит, чему может научить...</div>';
+  modal.style.display = 'flex';
+
+  try {
+    const knownNames = new Set(
+      (mon.apiData.moves || []).filter(m => m).map(m => moveNameToSlug(m.move.name))
+    );
+    const species = mon.apiData?.species?.name || mon.apiData?.name || '';
+    const ls = await fetchSiteLearnset(species).catch(() => null);
+    const pool = (ls?.tutor || []).map(moveNameToSlug).filter(Boolean);
+    const moveResults = (await Promise.all(
+      pool.map((slug) => fetchSiteMoveDetail(slug).catch(() => null))
+    )).filter(Boolean);
+    const learnable = moveResults.filter(m => m && !knownNames.has(moveNameToSlug(m.name)));
+
+    availableList.innerHTML = '';
+    if (learnable.length === 0) {
+      availableList.innerHTML = '<div class="tm-empty">Учитель: этому покемону учить нечему</div>';
+    } else {
+      learnable.forEach((moveData) => {
+        const moveEl = document.createElement('div');
+        moveEl.className = 'tm-move-cell';
+        const powStr = moveData.power ?? '—';
+        moveEl.innerText = `🧑‍🏫 ${moveData.name} (${powStr} | ${moveData.damage_class.name}) — ¥${TEACHER_PRICE.toLocaleString()}`;
+        moveEl.addEventListener('click', () => {
+          showSlotPicker(mon, moveData, 'tm', { teacherOnly: true });
+        });
+        availableList.appendChild(moveEl);
+      });
+    }
+  } catch (e) {
+    availableList.innerHTML = '<div class="tm-error">Ошибка загрузки обучения</div>';
+  }
+}
+// Меняет и слоты apiData.moves, и PP. После — перерендер и сейв.
 // ── swapMoveSlots: поменять две атаки местами (H5: порядок в сете) ──
 // Меняет и слоты apiData.moves, и PP. После — перерендер и сейв.
 export function swapMoveSlots(mon, a, b, rerender?) {
@@ -190,7 +275,7 @@ export function swapMoveSlots(mon, a, b, rerender?) {
 // Показывает 4 кнопки (по одной на слот) + "Отмена" + порядок (▲▼, H5).
 // При выборе слота — выбор оплаты: TM-диск или Учитель за 1.5М (H3/H4).
 // При выборе — заменяет атаку в слоте, тратит оплату, сохраняет.
-export function showSlotPicker(mon, moveData, payItemId = 'tm') {
+export function showSlotPicker(mon, moveData, payItemId = 'tm', opts?: { teacherOnly?: boolean }) {
   const picker = document.getElementById('tm-slot-picker');
   picker.style.display = 'block';
   picker.innerHTML = '<h4>Выберите слот для замены:</h4>';
@@ -205,7 +290,7 @@ export function showSlotPicker(mon, moveData, payItemId = 'tm') {
     btn.innerText = `Слот ${i + 1}: ${currentName}`;
     // При клике — выбор оплаты (TM или учитель), затем замена
     btn.addEventListener('click', () => {
-      pickPaymentAndTeach(mon, moveData, i, payItemId);
+      pickPaymentAndTeach(mon, moveData, i, payItemId, opts);
     });
     picker.appendChild(btn);
   }
@@ -227,7 +312,18 @@ export const TEACHER_PRICE = 1500000;
 
 // ── pickPaymentAndTeach: выбор оплаты (TM-диск или учитель) и обучение ──
 // H3: забытые атаки возвращаются учителем ИЛИ диском. Учитель — 1.5М с баланса.
-export function pickPaymentAndTeach(mon, moveData, i, payItemId = 'tm') {
+// teacherOnly (ветка учителя): сразу charge 1.5М без модалки выбора.
+export function pickPaymentAndTeach(mon, moveData, i, payItemId = 'tm', opts?: { teacherOnly?: boolean }) {
+  if (opts?.teacherOnly) {
+    const balance = state.inventory?.credit || 0;
+    if (balance < TEACHER_PRICE) {
+      showToast(`Нужно ¥${TEACHER_PRICE.toLocaleString()}!`, true);
+      return;
+    }
+    state.inventory.credit = balance - TEACHER_PRICE;
+    teachMoveToSlot(mon, moveData, i);
+    return;
+  }
   const tmQty = getItemQty(payItemId);
   showSelectionModal(
     `Выучить ${moveData.name} в слот ${i + 1}: чем платим?`,
@@ -260,8 +356,9 @@ export function pickPaymentAndTeach(mon, moveData, i, payItemId = 'tm') {
 
 // ── teachMoveToSlot: записать атаку в слот (после оплаты) ──
 function teachMoveToSlot(mon, moveData, i) {
-  // Формируем URL атаки в PokeAPI (по ID)
-  const moveUrl = `https://pokeapi.co/api/v2/move/${moveData.id}/`;
+  // URL по слагу имени (у деталей с сайта нет числового id)
+  const slug = moveNameToSlug(moveData.name);
+  const moveUrl = `https://pokeapi.co/api/v2/move/${slug}/`;
 
   // Записываем новую атаку в слот
   if (!mon.apiData.moves[i]) {
