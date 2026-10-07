@@ -195,6 +195,11 @@ if (requestShown) {
     document.querySelectorAll('#trade-window-modal .trade-pokemon-card').length);
   t('TR10', 'в окне обмена есть покемоны для предложения', tradeItems > 0,
     `карточек: ${tradeItems}`);
+  // Я16: секция яиц (пустая — «Нет яиц», но присутствует).
+  const eggGrid = await bob.page.locator('#trade-window-modal #trade-egg-grid').count();
+  const eggText = await bob.page.locator('#trade-window-modal #trade-egg-grid').innerText().catch(() => '');
+  t('TR12', 'в окне обмена есть секция яиц', eggGrid === 1,
+    `«${eggText.replace(/\s+/g, ' ').trim()}»`);
 } else {
   t('TR8', 'после принятия открывается окно обмена', false, 'запрос не дошёл');
   t('TR9', 'окно обмена открылось и у отправителя', false, 'запрос не дошёл');

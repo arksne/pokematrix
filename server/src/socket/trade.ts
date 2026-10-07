@@ -44,7 +44,8 @@ interface TradeSession {
  */
 type CanonicalOffer =
   | { type: 'item'; id: string; qty: number }
-  | { type: 'pokemon'; uid: string };
+  | { type: 'pokemon'; uid: string }
+  | { type: 'egg'; uid: string };
 
 /** Сколько живёт сессия обмена без активности. */
 const TRADE_TTL_MS = 5 * 60 * 1000;
@@ -63,7 +64,7 @@ let sweepTimer: NodeJS.Timeout | null = null;
 /**
  * Приводит офферы клиента к каноническому виду.
  *
- * - отбрасывает всё, что не item/pokemon;
+ * - отбрасывает всё, что не item/pokemon/egg;
  * - суммирует количества предметов по id: два оффера одного предмета раньше
  *   проходили проверку отдельно, а выдавались дважды (клонирование);
  * - повторяющиеся покемоны по uid схлопываются в один;
@@ -77,6 +78,7 @@ function normalizeOffers(raw: unknown): { offers: CanonicalOffer[]; error?: stri
 
   const items = new Map<string, number>();
   const mons = new Set<string>();
+  const eggs = new Set<string>();
 
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object') return { offers: [], error: 'malformed offer' };
@@ -103,6 +105,10 @@ function normalizeOffers(raw: unknown): { offers: CanonicalOffer[]; error?: stri
       const uid = typeof data.uid === 'string' ? data.uid : '';
       if (!uid || uid.length > 64) return { offers: [], error: 'invalid pokemon uid' };
       mons.add(uid);
+    } else if (o.type === 'egg') {
+      const uid = typeof data.uid === 'string' ? data.uid : '';
+      if (!uid || uid.length > 64) return { offers: [], error: 'invalid egg uid' };
+      eggs.add(uid);
     } else {
       return { offers: [], error: 'unknown offer type' };
     }
@@ -111,6 +117,7 @@ function normalizeOffers(raw: unknown): { offers: CanonicalOffer[]; error?: stri
   const offers: CanonicalOffer[] = [];
   for (const [id, qty] of items) offers.push({ type: 'item', id, qty });
   for (const uid of mons) offers.push({ type: 'pokemon', uid });
+  for (const uid of eggs) offers.push({ type: 'egg', uid });
   return { offers };
 }
 
@@ -143,6 +150,11 @@ function toClientOffers(offers: CanonicalOffer[], ownerSave: any): any[] {
   return offers.map((o) => {
     if (o.type === 'item') {
       return { type: 'item', data: { id: o.id, name: o.id, qty: o.qty } };
+    }
+    if (o.type === 'egg') {
+      const ownEggs: any[] = Array.isArray(ownerSave.eggs) ? ownerSave.eggs : [];
+      const egg = ownEggs.find((e) => e && e.uid === o.uid);
+      return { type: 'egg', data: egg ? { ...egg } : { uid: o.uid } };
     }
     const mon = allMons.find((m) => m && m.uid === o.uid);
     return { type: 'pokemon', data: mon ? { ...mon } : { uid: o.uid } };
@@ -284,6 +296,7 @@ export function initTrade(io: Server, socket: Socket) {
       const team: any[] = Array.isArray(saveData.myTeam) ? saveData.myTeam : [];
       const boxes: any[][] = Array.isArray(saveData.pcBoxes) ? saveData.pcBoxes : [];
       const allMons = [...team, ...boxes.flat()];
+      const ownEggs: any[] = Array.isArray(saveData.eggs) ? saveData.eggs : [];
 
       // Сверяем офферы с реальным содержимым сейва отправителя.
       for (const offer of offers) {
@@ -293,6 +306,12 @@ export function initTrade(io: Server, socket: Socket) {
             socket.emit('trade_offer_rejected', {
               reason: `Недостаточно ${offer.id}: есть ${have}, нужно ${offer.qty}`,
             });
+            return;
+          }
+        } else if (offer.type === 'egg') {
+          const owned = ownEggs.some((e: any) => e && e.uid === offer.uid);
+          if (!owned) {
+            socket.emit('trade_offer_rejected', { reason: `Яйцо ${offer.uid} не найдено` });
             return;
           }
         } else {
@@ -413,6 +432,26 @@ function giveMons(saveData: any, mons: any[]) {
   }
 }
 
+/**
+ * Убирает из сейва яйца с указанными uid. Возвращает сами удалённые
+ * объекты — именно они передаются партнёру.
+ */
+function takeEggs(saveData: any, uids: Set<string>): any[] {
+  const taken: any[] = [];
+  if (!Array.isArray(saveData.eggs)) saveData.eggs = [];
+  saveData.eggs = saveData.eggs.filter((e: any) => {
+    if (e && uids.has(e.uid)) { taken.push(e); return false; }
+    return true;
+  });
+  return taken;
+}
+
+/** Кладёт яйца в рюкзак (лимита нет, Я14). */
+function giveEggs(saveData: any, eggs: any[]) {
+  if (!Array.isArray(saveData.eggs)) saveData.eggs = [];
+  for (const egg of eggs) saveData.eggs.push(egg);
+}
+
 function countMons(saveData: any): number {
   const team = Array.isArray(saveData.myTeam) ? saveData.myTeam.length : 0;
   const boxes = Array.isArray(saveData.pcBoxes)
@@ -462,6 +501,8 @@ async function executeTradeSwap(
     const db = getDb();
     const uid1 = new Set(session.p1Offers.filter((o): o is Extract<CanonicalOffer, { type: 'pokemon' }> => o.type === 'pokemon').map((o) => o.uid));
     const uid2 = new Set(session.p2Offers.filter((o): o is Extract<CanonicalOffer, { type: 'pokemon' }> => o.type === 'pokemon').map((o) => o.uid));
+    const egg1 = new Set(session.p1Offers.filter((o): o is Extract<CanonicalOffer, { type: 'egg' }> => o.type === 'egg').map((o) => o.uid));
+    const egg2 = new Set(session.p2Offers.filter((o): o is Extract<CanonicalOffer, { type: 'egg' }> => o.type === 'egg').map((o) => o.uid));
 
     await db.transaction(async (tx) => {
       const [p1, p2] = await Promise.all([
@@ -482,10 +523,12 @@ async function executeTradeSwap(
 
 
       // ── TOCTOU-перепроверка: то, что предлагают, ещё должно быть у владельца ──
-      const checkOffers = (inv: Record<string, any>, offers: CanonicalOffer[], ownUids: Set<string>, allMons: any[]) => {
+      const checkOffers = (inv: Record<string, any>, offers: CanonicalOffer[], ownUids: Set<string>, allMons: any[], ownEggs: any[]) => {
         for (const o of offers) {
           if (o.type === 'item') {
             if ((Number(inv[o.id]) || 0) < o.qty) return `Недостаточно ${o.id}`;
+          } else if (o.type === 'egg') {
+            if (!ownEggs.some((e: any) => e && e.uid === o.uid)) return `Яйцо ${o.uid} больше не в рюкзаке`;
           } else if (!allMons.some((m: any) => m && m.uid === o.uid)) {
             return `Покемон ${o.uid} больше не в коллекции`;
           }
@@ -498,15 +541,18 @@ async function executeTradeSwap(
         const boxes = Array.isArray(sd.pcBoxes) ? sd.pcBoxes.flat() : [];
         return [...team, ...boxes];
       };
+      const eggList = (sd: any) => Array.isArray(sd.eggs) ? sd.eggs : [];
 
-      const bad1 = checkOffers(sd1.inventory, session.p1Offers, uid1, monList(sd1));
+      const bad1 = checkOffers(sd1.inventory, session.p1Offers, uid1, monList(sd1), eggList(sd1));
       if (bad1) throw new Error(`Trade failed: ${bad1}`);
-      const bad2 = checkOffers(sd2.inventory, session.p2Offers, uid2, monList(sd2));
+      const bad2 = checkOffers(sd2.inventory, session.p2Offers, uid2, monList(sd2), eggList(sd2));
       if (bad2) throw new Error(`Trade failed: ${bad2}`);
 
       // ── Забираем своё ──
       const monsFromP1 = takeMons(sd1, uid1);
       const monsFromP2 = takeMons(sd2, uid2);
+      const eggsFromP1 = takeEggs(sd1, egg1);
+      const eggsFromP2 = takeEggs(sd2, egg2);
       for (const o of session.p1Offers) {
         if (o.type === 'item') sd1.inventory[o.id] = (Number(sd1.inventory[o.id]) || 0) - o.qty;
       }
@@ -529,6 +575,16 @@ async function executeTradeSwap(
       }));
       giveMons(sd1, forP1);
       giveMons(sd2, forP2);
+      // Яйца — с новым uid (родители чужие, parentUid обнуляем:
+      // наследование при вылуплении ищет родителей и не найдёт — IV яйца целы).
+      const eggsForP1 = eggsFromP2.map((e, i) => ({
+        ...e, uid: `trade_${stamp}_e${i}`, parent1Uid: null, parent2Uid: null, notified: false,
+      }));
+      const eggsForP2 = eggsFromP1.map((e, i) => ({
+        ...e, uid: `trade_${stamp}_ex${i}`, parent1Uid: null, parent2Uid: null, notified: false,
+      }));
+      giveEggs(sd1, eggsForP1);
+      giveEggs(sd2, eggsForP2);
 
       for (const o of session.p2Offers) {
         if (o.type === 'item') sd1.inventory[o.id] = (Number(sd1.inventory[o.id]) || 0) + o.qty;

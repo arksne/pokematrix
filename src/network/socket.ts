@@ -193,6 +193,8 @@ export function initTradeSocket() {
           if (idx !== -1) state.myTeam.splice(idx, 1);
         } else if (offer.type === 'item') {
           removeItem(offer.data.id, offer.data.qty || 1);
+        } else if (offer.type === 'egg') {
+          state.eggs = (state.eggs || []).filter(e => e.uid !== offer.data.uid);
         }
       });
     }
@@ -214,6 +216,26 @@ export function initTradeSocket() {
         } else if (offer.type === 'item') {
           addItem(offer.data.id, offer.data.qty || 1);
           showToast(`Получено: ${offer.data.name} x${offer.data.qty || 1}!`, false);
+        } else if (offer.type === 'egg') {
+          // Полные данные яйца — из витрины партнёра (в trade_execute
+          // приходят только канонические {type, uid}).
+          const shown = (state.partnerTradeOffers || []).find(
+            o => o && o.type === 'egg' && o.data && o.data.uid === (offer as any).uid
+          );
+          const src: any = (shown && shown.data) || {};
+          if (!state.eggs) state.eggs = [];
+          state.eggs.push({
+            uid: generateUID(),
+            species: src.species || 'egg',
+            types: src.types || [{ type: { name: 'normal' } }],
+            ivs: src.ivs || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+            readyTime: src.readyTime || Date.now(),
+            parent1Uid: null,
+            parent2Uid: null,
+            shinyBoost: !!src.shinyBoost,
+            notified: false,
+          });
+          showToast(`Получено яйцо: ${src.species || '???'}!`, false);
         }
       });
     }

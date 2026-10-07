@@ -74,10 +74,12 @@ export function openTradeWindow(partnerName) {
           </div>
         </div>
 
-        <!-- Зона выбора: покемоны и предметы -->
+        <!-- Зона выбора: покемоны, яйца и предметы -->
         <div id="trade-pick-area">
           <div class="trade-section-title">🐾 Покемоны:</div>
           <div class="trade-pokemon-grid" id="trade-pick-grid"></div>
+          <div class="trade-section-title" style="margin-top:10px;">🥚 Яйца:</div>
+          <div class="trade-pokemon-grid" id="trade-egg-grid" style="grid-template-columns: repeat(4, 1fr);"></div>
           <div class="trade-section-title" style="margin-top:10px;">🎒 Предметы:</div>
           <div class="trade-pokemon-grid" id="trade-item-grid" style="grid-template-columns: repeat(4, 1fr);"></div>
         </div>
@@ -116,6 +118,7 @@ export function openTradeWindow(partnerName) {
       state.socket.emit('trade_offer', { tradeId: state.activeTradeId, offers: [] });
       renderTradeOffers();
       renderTradePickGrid();
+      renderTradeEggGrid();
       renderTradeItemGrid();
       const conf = document.getElementById('btn-trade-confirm');
       conf.textContent = '✅ Подтвердить обмен';
@@ -148,6 +151,7 @@ export function openTradeWindow(partnerName) {
   // Отрисовываем всё
   renderTradeOffers();
   renderTradePickGrid();
+  renderTradeEggGrid();
   renderTradeItemGrid();
 
   // Прячем торговый центр, показываем окно обмена
@@ -211,6 +215,50 @@ function renderTradePickGrid() {
         renderTradePickGrid();  // Перерисовываем (обновляем подсветку)
       });
     }
+
+    grid.appendChild(card);
+  });
+}
+
+// ── renderTradeEggGrid: отрисовка сетки яиц для выбора (Я16) ──
+// Клик — добавить/убрать яйцо из myTradeOffers (тип 'egg').
+function renderTradeEggGrid() {
+  const grid = document.getElementById('trade-egg-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const eggs = state.eggs || [];
+  if (eggs.length === 0) {
+    grid.innerHTML = '<div class="text-center text-muted p-10 gc-all fs-08">Нет яиц</div>';
+    return;
+  }
+
+  const offeredUids = new Set(state.myTradeOffers.filter(o => o.type === 'egg').map(o => o.data.uid));
+  const now = Date.now();
+
+  eggs.forEach((egg) => {
+    const card = document.createElement('div');
+    card.className = 'trade-pokemon-card';
+    if (offeredUids.has(egg.uid)) card.classList.add('selected');
+
+    const ready = (egg.readyTime || 0) <= now;
+    const badge = ready ? '✓' : `${Math.max(1, Math.ceil((egg.readyTime - now) / 60000))}м`;
+    card.innerHTML = `
+      <img src="assets/egg.png" alt="🥚" loading="lazy" style="width:32px;height:32px;image-rendering:pixelated;">
+      <div class="name">${escHtml(egg.species || 'Яйцо')}</div>
+      <div class="lvl">${badge}</div>
+    `;
+
+    card.addEventListener('click', () => {
+      if (offeredUids.has(egg.uid)) {
+        state.myTradeOffers = state.myTradeOffers.filter(o => !(o.type === 'egg' && o.data.uid === egg.uid));
+      } else {
+        state.myTradeOffers.push({ type: 'egg', data: egg });
+      }
+      state.socket.emit('trade_offer', { tradeId: state.activeTradeId, offers: state.myTradeOffers });
+      renderTradeOffers();
+      renderTradeEggGrid();
+    });
 
     grid.appendChild(card);
   });
@@ -320,6 +368,11 @@ export function renderTradeOffers() {
       if (o.type === 'item') {
         const it = o.data;
         return `<div class="trade-offer-entry"><div>${getItemSpriteImg(it.id, 32)}</div><div class="trade-offer-name">${escHtml(String(it.name ?? ''))}</div><div class="trade-offer-level">x${Number(it.qty) || 1}</div></div>`;
+      }
+      if (o.type === 'egg') {
+        const e = o.data || {};
+        const ready = (e.readyTime || 0) <= Date.now() ? '✓' : '…';
+        return `<div class="trade-offer-entry"><img class="trade-offer-sprite" src="assets/egg.png" alt="🥚"><div class="trade-offer-name">${escHtml(e.species || 'Яйцо')}</div><div class="trade-offer-level">${ready}</div></div>`;
       }
       return '';
     }).join('');

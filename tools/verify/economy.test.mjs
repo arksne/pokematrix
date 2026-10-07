@@ -163,6 +163,64 @@ const sockB = await connect(tokenB, 'B');
       }
     }
 
+    // ── T9/T10: обмен яйцами (Я16). T8 закрыл сессию (activeTrades.delete),
+    // поэтому открываем новую.
+    {
+      const EGG_UID = 't1-egg-1';
+      const eggObj = {
+        uid: EGG_UID, species: 'pikachu',
+        types: [{ type: { name: 'electric' } }],
+        ivs: { hp: 20, atk: 20, def: 20, spa: 20, spd: 20, spe: 20 },
+        readyTime: Date.now() + 86400000,
+        parent1Uid: null, parent2Uid: null, shinyBoost: false, notified: false,
+      };
+      // Кладём яйцо в сейв t1 напрямую через API сейва
+      const cur = asObject((await api('/api/save', { method: 'GET', token: t1 })).json?.saveData);
+      cur.eggs = [...(cur.eggs || []), eggObj];
+      await api('/api/save', { method: 'POST', token: t1, body: { saveData: cur } });
+
+      s2.emit('trade_request', 222000001);
+      await onceEvent(s1, 'trade_request_received', 3000);
+      s1.emit('trade_accept', 222000002);
+      const started2 = await onceEvent(s2, 'trade_started', 4000);
+      const tradeId2 = started2?.tradeId;
+      if (!tradeId2) {
+        check('T9', 'Трейд: вторая сессия для яиц создаётся', false, 'trade_started не пришёл');
+      } else {
+        const expectReject2 = async (id, name, offers) => {
+          const p = onceEvent(s2, 'trade_offer_rejected', 3000);
+          s2.emit('trade_offer', { tradeId: tradeId2, offers });
+          const rej = await p;
+          check(id, name, rej !== null, rej ? (rej.reason || '').slice(0, 70) : 'отклонения не было');
+        };
+
+        // T9: чужое яйцо отклоняется
+        await expectReject2('T9', 'Трейд: яйцо, которого нет, отклоняется',
+          [{ type: 'egg', data: { uid: 'no-such-egg' } }]);
+
+        // T10: валидное яйцо переходит к партнёру (предлагает владелец s1)
+        const relayedEggP = onceEvent(s2, 'trade_partner_offers', 4000);
+        s1.emit('trade_offer', { tradeId: tradeId2, offers: [{ type: 'egg', data: { uid: EGG_UID } }] });
+        const relayedEgg = await relayedEggP;
+        check('T10a', 'Трейд: оффер яйца доходит до партнёра', relayedEgg !== null,
+          relayedEgg ? `элементов: ${relayedEgg.length}` : 'оффер не доставлен');
+
+        if (relayedEgg) {
+          s1.emit('trade_confirm', tradeId2);
+          await sleep(300);
+          s2.emit('trade_confirm', tradeId2);
+          await sleep(1500);
+
+          const sd1 = asObject((await api('/api/save', { method: 'GET', token: t1 })).json?.saveData);
+          const sd2 = asObject((await api('/api/save', { method: 'GET', token: t2 })).json?.saveData);
+          const stillThere = (sd1.eggs || []).some((e) => e.uid === EGG_UID);
+          const received = (sd2.eggs || []).some((e) => e.species === 'pikachu');
+          check('T10', 'Трейд: яйцо реально переходит к партнёру', !stillThere && received,
+            `у отправителя: ${stillThere}, у получателя: ${received}`);
+        }
+      }
+    }
+
     s1.close();
     s2.close();
   }
