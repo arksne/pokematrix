@@ -204,9 +204,13 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     // считаются из проверенного save_data. Раньше money брался из тела запроса
     // вообще вне Zod-схемы, а money — колонка int4, то есть значение 1e300
     // роняло сохранение с 500.
+    //
+    // K1: потолок поднят до максимума int4 (2 147 483 647) — миллиард и выше
+    // сохраняются. Реального «без лимита» не будет, пока колонка money не
+    // станет bigint (это миграция БД, отдельная задача).
     const moneyFromSave = Number(validation.data.inventory?.['credit'] ?? 0);
     const money = Number.isFinite(moneyFromSave)
-      ? Math.min(Math.max(Math.trunc(moneyFromSave), 0), 2_000_000_000)
+      ? Math.min(Math.max(Math.trunc(moneyFromSave), 0), 2_147_483_647)
       : currentUser.money ?? 0;
     const pokemonCount = countSavePokemon(validation.data);
 
