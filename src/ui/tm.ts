@@ -29,6 +29,7 @@ import { removeItem } from '../game/actions.js';          // Удаление п
 import { updateInventoryDisplay } from './inventory.js';  // Обновление инвентаря
 import { showToast, showSelectionModal } from '../utils/dom.js';              // Всплывающие уведомления + выбор оплаты
 import { fetchPokeAPI } from '../utils/api.js';            // HTTP-клиент для PokeAPI
+import { fetchSiteMoveDetail } from '../data/sitemove.js';  // детали атак — с сайта лиги
 import { state } from '../game/state.js';                  // Баланс для учителя
 
 // ── Тиры ТМ по силе атаки (B5): слабая <60 — 200к, средняя ≤90 — 2М, топ >90 — 20М.
@@ -133,9 +134,9 @@ export async function openMoveRelearner(payItemId = 'tm') {
     // Ограничиваем 50 атаками (чтобы не грузить слишком много)
     const movePromises = [];
     for (let i = 0; i < allMoves.length && i < 50; i++) {
-      // Загружаем данные каждой атаки (урон, PP, тип, класс урона)
+      // Загружаем данные каждой атаки с сайта лиги (урон, PP, тип, класс урона)
       movePromises.push(
-        fetch(allMoves[i].move.url).then(r => r.json()).catch(() => null)
+        fetchSiteMoveDetail(allMoves[i]).catch(() => null)
       );
     }
     const moveResults = await Promise.all(movePromises);

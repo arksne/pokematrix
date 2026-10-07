@@ -41,6 +41,7 @@ import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
 import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
 import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
+import { fetchSiteMoveDetail } from '../data/sitemove.js';              // детали атак — с сайта лиги
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
 import { checkEvolution, triggerEvolution } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
 import { natures } from '../data/natures.js';                            // Массив характеров (nature) с buff/nerf модификаторами
@@ -334,7 +335,7 @@ async function restoreBattleState() {
         const movePromises = [];
         for (let i = 0; i < S.activeWild.moves.length && i < 20; i++) {
           movePromises.push(
-            fetchPokeAPI(S.activeWild.moves[i].move.url).catch(() => null)
+            fetchSiteMoveDetail(S.activeWild.moves[i]).catch(() => null)
           );
         }
         const moveResults = await Promise.all(movePromises);
@@ -393,7 +394,7 @@ async function restoreBattleState() {
         const movePromises = [];
         for (let i = 0; i < S.activeWild.moves.length && i < 20; i++) {
           movePromises.push(
-            fetchPokeAPI(S.activeWild.moves[i].move.url).catch(() => null)
+            fetchSiteMoveDetail(S.activeWild.moves[i]).catch(() => null)
           );
         }
         const moveResults = await Promise.all(movePromises);
@@ -2392,7 +2393,7 @@ function loadMoveButtons(activeMon, clickHandler) {
       mBtn.innerText = '...';                              // Плейсхолдер во время загрузки
       mBtn.classList.add('disabled');                       // Блокируем пока не загрузится
       mBtn.onclick = null;
-      fetchPokeAPI(moveEntry.move.url)                     // Асинхронная загрузка из PokeAPI
+      fetchSiteMoveDetail(moveEntry)                     // Асинхронная загрузка с сайта лиги
         .then(d => {
           S.playerMovesDetailed[i] = d;                    // Сохраняем детальные данные
           if (!activeMon.movesPP) activeMon.movesPP = [];
@@ -5012,7 +5013,7 @@ async function startGymNextPokemon() {
       return (b.version_group_details?.[0]?.level_learned_at || 0) - (a.version_group_details?.[0]?.level_learned_at || 0);
     }).slice(0, 30);
     const moveResults3 = (await Promise.all(movePool.map(m =>
-      fetchPokeAPI(m.move.url).catch(() => null)
+      fetchSiteMoveDetail(m).catch(() => null)
     ))).filter(Boolean);
     // H2: даже умный подбор — только из атак по уровню (S.wildLvl = уровень
     // текущего покемона лидера). Без фильтра сюда попадали топ-атаки вида.

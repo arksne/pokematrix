@@ -10,10 +10,22 @@
   evo (сырой текст цепочки эволюции — парсить отдельно при нужде).
 - `moves.json` (~52 КБ, 742 атаки): `{type, cat, power, acc, pp}` —
   коды английские (`electric/special/...`), `null` = прочерк в источнике.
+- `learnsets.json` (~369 КБ): только `{levelup, egg}` по видам — источник
+  для `GET /api/learnset/:name` (порядок изучения + яйцевые атаки).
+- `moves_db.json` (~644 КБ, 741 атака, гэпов нет): `{site: {type, cat,
+  power, acc, pp}, fx: {priority, target, stat_changes, meta, ...},
+  desc_ru}` — источник для `GET /api/sitemove/:name`. Цифры с сайта лиги,
+  скелет эффектов канонный, `desc_ru` — описание атаки с сайта.
+  Бой/ТМ/профиль ходят только сюда — PokeAPI в бою не участвует
+  (fallback на прокси лишь если атаки нет в базе).
 - `attacks_raw.json` (~1.4 МБ): сырые страницы атак — там же списки
   «кто учит и на каком уровне» (для сверки мувсетов и тиров ТМ).
 - `items_raw.json` (~122 КБ): категории предметов вики (сырые строки таблиц).
-- `scrape.py`, `normalize.py` — воспроизводимость (запуск: `python scrape.py all`).
+- `scrape.py`, `normalize.py` — скрап и нормализация.
+- `build_moves_db.py` — сборка moves_db (тянет скелет эффектов с PokeAPI,
+  одноразово; прогресс в `moves_db.progress.json`).
+- `rebuild_site_layer.py` — пересборка site-слоя moves_db (типы/бэкфилл
+  из attacks_raw, без перекачки).
 
 ## Что дальше (решает интервью)
 

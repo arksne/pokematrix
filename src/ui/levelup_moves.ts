@@ -20,6 +20,7 @@
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
 import { fetchPokeAPI } from '../utils/api.js';  // HTTP-клиент для PokeAPI
+import { fetchSiteMoveDetail } from '../data/sitemove.js';  // детали атак — с сайта лиги
 
 // ── ЛЕНИВЫЙ ИМПОРТ (циклическая зависимость core.ts ↔ levelup_moves.ts) ──
 // core.ts вызывает checkNewMovesOnLevelUp при повышении уровня
@@ -88,10 +89,9 @@ export async function checkNewMovesOnLevelUp(pokemon, newLevel) {
       if (learned) {
         knownNames.add(move.name);
 
-        // ── Инициализация PP для выученной атаки ──
+        // ── Инициализация PP для выученной атаки (данные с сайта лиги) ──
         try {
-          const moveRes = await fetch(move.url);  // Загружаем данные атаки
-          const moveData = await moveRes.json();
+          const moveData = await fetchSiteMoveDetail(move);
           // Находим слот, в который поместили атаку
           const slot = pokemon.apiData.moves.findIndex(m => m && m.move.name === move.name);
           if (slot >= 0 && moveData.pp) {

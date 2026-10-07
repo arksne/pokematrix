@@ -26,6 +26,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { state } from '../game/state.js';
+import { fetchSiteMoveDetail } from '../data/sitemove.js';
 import { store } from '../game/store.js';
 import { showToast } from '../utils/dom.js';
 import { getSpriteUrl } from '../utils/sprite.js';
@@ -216,8 +217,8 @@ export async function updatePvPUI() {
 
   // Создаём кнопки для каждой атаки
   topMoves.forEach((m, i) => {
-    // Асинхронная загрузка деталей атаки (для определения типа)
-    fetch(m.url).then(r => r.json()).then(d => {
+    // Асинхронная загрузка деталей атаки с сайта лиги (для определения типа)
+    fetchSiteMoveDetail(m).then(d => {
       state.pvpMovesDetailed[i] = d;
       const btns = movesDiv.querySelectorAll('.reborn-move-link');
       if (btns[i]) {

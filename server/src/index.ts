@@ -27,6 +27,8 @@ import economyRoutes from './routes/economy.js';
 import chatRoutes from './routes/chat.js';
 import profileRoutes from './routes/profile.js';
 import pokeapiRoutes from './routes/pokeapi.js';
+import learnsetRoutes from './routes/learnset.js';
+import sitemoveRoutes from './routes/sitemove.js';
 import dropsRoutes from './routes/drops.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import battleRoutes from './routes/battle.js';
@@ -188,6 +190,8 @@ async function main() {
   app.use('/api/chat', chatRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/pokeapi', pokeapiRoutes);
+  app.use('/api/learnset', learnsetRoutes);
+  app.use('/api/sitemove', sitemoveRoutes);
   app.use('/api/drops', dropsRoutes);
   app.use('/api/leaderboard', leaderboardRoutes);
   app.use('/api/battle', battleRoutes);

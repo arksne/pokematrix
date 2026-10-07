@@ -22,7 +22,8 @@ import { store } from '../game/store.js';            // Event-система (em
 import { generateUID, getTrainerId } from '../game/state.js';  // Генерация UID и ID тренера
 import { showToast } from '../utils/dom.js';          // Всплывающие уведомления
 import { addNotification } from './notifications.js';  // Системные уведомления
-import { natures } from '../data/natures.js';         // Массив характеров покемонов
+import { natures } from '../data/natures.js';         // Массив характеров
+import { fetchSiteLearnset, siteStarterMoves } from '../data/learnset.js';
 // GEN_STARTERS — массив массивов: [
 //   ['bulbasaur','charmander','squirtle'],          // Поколение 1
 //   ['chikorita','cyndaquil','totodile'],            // Поколение 2
@@ -57,15 +58,24 @@ export async function giveStarterMon(pokemonName: string) {
     const baseLevel = 5;  // Стартовый уровень
 
     // ── 2. Фильтрация атак ──
-    // Оставляем только те атаки, которые изучаются до 5 уровня (level-up)
-    // Берём максимум 4 атаки (4 слота в бою)
-    let learnedMoves = starterData.moves
-      .filter((m: any) => {
-        return m.version_group_details.some(
-          (v: any) => v.move_learn_method.name === 'level-up' && v.level_learned_at <= baseLevel
-        );
-      })
-      .slice(0, 4);
+    // Порядок — как на сайте лиги (первые 4 с level <= 5 в порядке таблицы),
+    // fallback — фильтр PokeAPI. Берём максимум 4 атаки (4 слота в бою).
+    let learnedMoves: any[];
+    try {
+      const site = await fetchSiteLearnset(pokemonName);
+      learnedMoves = site ? siteStarterMoves(site, baseLevel, 4) : [];
+    } catch {
+      learnedMoves = [];
+    }
+    if (!learnedMoves.length) {
+      learnedMoves = starterData.moves
+        .filter((m: any) => {
+          return m.version_group_details.some(
+            (v: any) => v.move_learn_method.name === 'level-up' && v.level_learned_at <= baseLevel
+          );
+        })
+        .slice(0, 4);
+    }
 
     // Если атак нет (защита от пустого списка) — добавляем Tackle (базовая атака)
     if (learnedMoves.length === 0) {

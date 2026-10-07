@@ -46,6 +46,7 @@ import { LEGENDARY_SET } from '../utils/state.js';
 import { baseStatTotal } from '../battle/stats.js';  // UI компоненты
 import { appendToLog, calculateStat } from '../battle/core.js';  // Лог + расчёт HP
 import { natures } from '../data/natures.js';          // Массив характеров
+import { fetchSiteLearnset, siteStarterMoves, rollEggMove } from '../data/learnset.js';
 
 // ── КОНСТАНТЫ ────────────────────────────────────────────
 
@@ -584,9 +585,27 @@ export async function hatchEgg(egg: any) {
     }
     const pokeData = await res.json();
 
-    // Я12: режем лёрнсет до стартовых атак вида — с ними мон и вылупится,
-    // и ими же оперируют ленивая выдача PP в бою и обрезка сейва до 4 слотов.
-    pokeData.moves = pickStarterMoves(pokeData, 1);
+    // Я12: режем лёрнсет до стартовых атак вида.
+    // Порядок — как на сайте лиги (таблица «Развитие»: статусы первыми),
+    // первые 4 с level <= 1. Нет сайта → fallback на фильтр PokeAPI.
+    // Плюс канон лиги: 30% случайная яйцевая атака при вылуплении.
+    let eggMoveName: string | null = null;
+    try {
+      const site = await fetchSiteLearnset(egg.species);
+      if (site) {
+        pokeData.moves = siteStarterMoves(site, 1, 4);
+        const eggMove = rollEggMove(site.egg, pokeData.moves.map((m: any) => m.move?.name));
+        if (eggMove) {
+          if (pokeData.moves.length < 4) pokeData.moves.push(eggMove);
+          else pokeData.moves[3] = eggMove; // яйцевая вытесняет последнюю
+          eggMoveName = eggMove.move.name;
+        }
+      } else {
+        pokeData.moves = pickStarterMoves(pokeData, 1);
+      }
+    } catch {
+      pokeData.moves = pickStarterMoves(pokeData, 1);
+    }
 
     // Удаляем яйцо из списка яиц и из команды (если было в команде)
     const eggIdx = state.myTeam.findIndex((m: any) => m.uid === egg.uid);
@@ -646,8 +665,8 @@ export async function hatchEgg(egg: any) {
     // Добавляем в команду или PC
     if (state.myTeam.length < 6) {
       state.myTeam.push(newMon);
-      store.emit('notification:add', '🎉 Яйцо вылупилось!', `${pokeData.name} появился на свет!`);
-      appendToLog(`🎉 Из яйца вылупился ${pokeData.name}!`, false, 'quest');
+      store.emit('notification:add', '🎉 Яйцо вылупилось!', `${pokeData.name} появился на свет!` + (eggMoveName ? ` Сразу знает яйцевую атаку ${eggMoveName}!` : ''));
+      appendToLog(`🎉 Из яйца вылупился ${pokeData.name}!` + (eggMoveName ? ` (яйцевая атака: ${eggMoveName})` : ''), false, 'quest');
     } else {
       // Если команда полна — в первый бокс PC
       if (state.pcBoxes.length === 0) state.pcBoxes.push([]);

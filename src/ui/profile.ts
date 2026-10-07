@@ -55,6 +55,7 @@ import { openPokedex, showPokedexInfo } from './pokedex.js';
 // showSelectionModal — показывает модалку с выбором из списка
 // showToast — показывает всплывающее уведомление
 import { escHtml, renderStars, showSelectionModal, showToast } from '../utils/dom.js';
+import { fetchSiteMoveDetail } from '../data/sitemove.js';
 // getHeldItemName — возвращает русское название held item по ID
 // openHeldItemPicker — открывает модалку выбора held item
 // updateDynamicEVs — обновляет отображение доступных EV
@@ -458,9 +459,8 @@ export async function colorMoveElement(index: number, moveUrl: string) {
   try {
     // Проверяем кэш типов атак (state.moveTypeCache — Map)
     if (!state.moveTypeCache.has(moveUrl)) {
-      // Загружаем данные атаки из PokeAPI
-      const res = await fetch(moveUrl);
-      const data = await res.json();
+      // Загружаем данные атаки с сайта лиги
+      const data = await fetchSiteMoveDetail(moveUrl);
       // Кэшируем: damage_class = 'physical' | 'special' | 'status'
       state.moveTypeCache.set(moveUrl, data.damage_class?.name || 'status');
     }
