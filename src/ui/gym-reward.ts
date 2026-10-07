@@ -76,7 +76,7 @@ export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {
       training: null, trainingStage: 0, trainingStat: null,
       happiness: 120,                          // Высокое счастье
       natureIdx,                                // Лучший характер
-      breedLetter: 'S',                        // 'S' = Special (награда лидера)
+      breedLetter: ['A', 'T', 'G'][Math.floor(Math.random() * 3)],  // симпатия (канон лиги)
       gender: Math.random() < 0.5 ? 'male' : 'female',
       status: null, sleepTurns: 0, movesPP: [],
       statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },

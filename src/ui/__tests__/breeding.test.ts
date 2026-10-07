@@ -1,63 +1,118 @@
 import { describe, it, expect } from 'vitest';
-import { areBreedingCompatible, breedRarity, isDoublePerfect, pairRarityKey, pickStarterMoves, pickRandomAbility } from '../daycare.js';
+import {
+  areBreedingCompatible, breedRarity, isDoublePerfect, pairRarityKey,
+  pickStarterMoves, pickRandomAbility, randomSympathy, isLegendaryMon, isStarterMon,
+} from '../daycare.js';
 
 /**
- * Совместимость пар: один раз и всё (hasBred), половой контроль,
- * бесполые только через Ditto.
+ * Совместимость пар (канон лиги): один вид + разный пол + одинаковая
+ * буква симпатии A/T/G; легенды/стартеры/повторное спаривание — запрет.
+ * Дитто — кросс-видовое исключение.
  */
 
 const mon = (over: any = {}) => ({
   uid: 'x',
   gender: 'male',
-  apiData: {},
+  breedLetter: 'A',
+  apiData: { name: 'pikachu', species: { name: 'pikachu' } },
   hasBred: false,
   ...over,
 });
+const species = (name: string) => ({ name, species: { name } });
 
 describe('areBreedingCompatible', () => {
-  it('разные полы + общая группа: ок', () => {
+  it('один вид + разные полы + одна буква: ок', () => {
     expect(
-      areBreedingCompatible(mon({ uid: 'a', gender: 'male' }), mon({ uid: 'b', gender: 'female' }), ['monster'], ['monster']),
+      areBreedingCompatible(mon({ uid: 'a', gender: 'male' }), mon({ uid: 'b', gender: 'female', apiData: species('pikachu') })),
     ).toBe(true);
   });
 
   it('тот же покемон: нет', () => {
     expect(
-      areBreedingCompatible(mon({ uid: 'a' }), mon({ uid: 'a', gender: 'female' }), ['monster'], ['monster']),
+      areBreedingCompatible(mon({ uid: 'a' }), mon({ uid: 'a', gender: 'female' })),
     ).toBe(false);
   });
 
   it('уже спаривался (любой из пары): нет', () => {
     expect(
-      areBreedingCompatible(mon({ uid: 'a', gender: 'male', hasBred: true }), mon({ uid: 'b', gender: 'female' }), ['monster'], ['monster']),
+      areBreedingCompatible(mon({ uid: 'a', gender: 'male', hasBred: true }), mon({ uid: 'b', gender: 'female' })),
     ).toBe(false);
     expect(
-      areBreedingCompatible(mon({ uid: 'a', gender: 'male' }), mon({ uid: 'b', gender: 'female', hasBred: true }), ['monster'], ['monster']),
+      areBreedingCompatible(mon({ uid: 'a', gender: 'male' }), mon({ uid: 'b', gender: 'female', hasBred: true })),
     ).toBe(false);
   });
 
   it('один пол: нет', () => {
     expect(
-      areBreedingCompatible(mon({ uid: 'a', gender: 'male' }), mon({ uid: 'b', gender: 'male' }), ['monster'], ['monster']),
+      areBreedingCompatible(mon({ uid: 'a', gender: 'male' }), mon({ uid: 'b', gender: 'male' })),
     ).toBe(false);
+  });
+
+  it('разные виды без Ditto: нет', () => {
+    expect(
+      areBreedingCompatible(
+        mon({ uid: 'a', gender: 'male', apiData: species('pikachu') }),
+        mon({ uid: 'b', gender: 'female', apiData: species('bulbasaur') }),
+      ),
+    ).toBe(false);
+  });
+
+  it('разные буквы симпатии: нет', () => {
+    expect(
+      areBreedingCompatible(
+        mon({ uid: 'a', gender: 'male', breedLetter: 'A' }),
+        mon({ uid: 'b', gender: 'female', breedLetter: 'T' }),
+      ),
+    ).toBe(false);
+  });
+
+  it('Ditto + другой вид: ок', () => {
+    expect(
+      areBreedingCompatible(
+        mon({ uid: 'a', gender: null, apiData: species('ditto') }),
+        mon({ uid: 'b', gender: 'female', apiData: species('pikachu') }),
+      ),
+    ).toBe(true);
   });
 
   it('бесполый без Ditto: нет', () => {
     expect(
-      areBreedingCompatible(mon({ uid: 'a', gender: null }), mon({ uid: 'b', gender: 'female' }), ['mineral'], ['monster']),
+      areBreedingCompatible(
+        mon({ uid: 'a', gender: null, apiData: species('magnemite') }),
+        mon({ uid: 'b', gender: 'female', apiData: species('magnemite') }),
+      ),
     ).toBe(false);
   });
 
-  it('бесполый + Ditto: ок', () => {
+  it('легенда: нет', () => {
     expect(
-      areBreedingCompatible(mon({ uid: 'a', gender: null }), mon({ uid: 'b', gender: 'male' }), ['mineral'], ['ditto']),
-    ).toBe(true);
+      areBreedingCompatible(
+        mon({ uid: 'a', gender: 'male', apiData: species('mewtwo') }),
+        mon({ uid: 'b', gender: 'female', apiData: species('mewtwo') }),
+      ),
+    ).toBe(false);
   });
 
-  it('нет общей группы и нет Ditto: нет', () => {
+  it('стартер: нет', () => {
     expect(
-      areBreedingCompatible(mon({ uid: 'a', gender: 'male' }), mon({ uid: 'b', gender: 'female' }), ['mineral'], ['monster']),
+      areBreedingCompatible(
+        mon({ uid: 'a', gender: 'male', apiData: species('bulbasaur') }),
+        mon({ uid: 'b', gender: 'female', apiData: species('bulbasaur') }),
+      ),
     ).toBe(false);
+  });
+});
+
+describe('sympathy/flags', () => {
+  it('randomSympathy только A/T/G', () => {
+    for (let i = 0; i < 30; i++) expect(['A', 'T', 'G']).toContain(randomSympathy());
+  });
+
+  it('isLegendaryMon / isStarterMon', () => {
+    expect(isLegendaryMon(mon({ apiData: species('mewtwo') }))).toBe(true);
+    expect(isLegendaryMon(mon())).toBe(false);
+    expect(isStarterMon(mon({ apiData: species('charmander') }))).toBe(true);
+    expect(isStarterMon(mon())).toBe(false);
   });
 });
 

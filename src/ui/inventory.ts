@@ -69,6 +69,8 @@ import { openCrafting } from './crafting.js';
 import { openMoveRelearner } from './tm.js';
 // hatchEgg — вылупляет яйцо (проверяет readyTime и добавляет покемона в команду)
 import { hatchEgg } from './daycare.js';
+import { breedRarity } from './daycare.js';
+import { rollTraining, trainingPityMult } from '../data/training.js';
 // autoSave — сохраняет игру (localStorage + сервер)
 import { autoSave } from '../game/save.js';
 // showItemInfoModal — показывает модалку с подробной информацией о предмете
@@ -770,19 +772,27 @@ export async function useItem(itemId) {
       break;
     }
 
-    // ── Тренировка (Train): усиление случайного стата ──
+    // ── Тренировка (Train): усиление случайного стата (канон лиги) ──
+    // Стадии строго по порядку, стат случайный (кроме HP), набор сгорает
+    // всегда. Шанс/гарант из trainingStages; гарант умножается на категорию
+    // силы (common/uncommon ×1, rare ×2, legendary ×3).
     case 'train': {
       // Всего 6 стадий тренировки (0-5, максимальная 6 — "Именная")
       if (mon.trainingStage >= 6) return showToast('Тренировка уже на Именной стадии!', true);
       removeItem('train');
 
-      // Шанс успеха зависит от текущей стадии:
-      //   stage 0: 100%, stage 1: 80%, stage 2: 50%, stage 3: 30%, stage 4: 15%, stage 5: 5%
-      const chances = [1.0, 0.8, 0.5, 0.3, 0.15, 0.05];
-      if (Math.random() > chances[mon.trainingStage]) {
-        // Неудача — набор потрачен, тренировка не повышается
-        return showToast(`Тренировка не удалась! Набор потрачен.`, false);
+      const next = getInvState().trainingStages[mon.trainingStage + 1];
+      const pityAt = (next.pity || Infinity) * trainingPityMult(breedRarity(mon));
+      if (typeof mon.trainingFails !== 'number') mon.trainingFails = 0;
+
+      // Шанс успеха зависит от следующей стадии; после pityAt неудач — гарант
+      const success = rollTraining(mon.trainingFails, next.chance ?? 0, pityAt);
+      if (!success) {
+        mon.trainingFails++;
+        autoSave();
+        return showToast(`Тренировка не удалась! Набор потрачен (${mon.trainingFails}/${pityAt}).`, false);
       }
+      mon.trainingFails = 0;
 
       // Выбираем случайный стат для тренировки (кроме HP)
       const trainableStats = ['atk', 'def', 'spa', 'spd', 'spe'];
@@ -791,7 +801,8 @@ export async function useItem(itemId) {
       mon.happiness += 10;     // +10 к счастью
       if (mon.happiness > 255) mon.happiness = 255;
       refreshProfileUI();
-      showToast(`Успешно! Теперь это ${getInvState().trainingStages[mon.trainingStage].name} тренировка!`, false);
+      autoSave();
+      showToast(`Успешно! Теперь это ${getInvState().trainingStages[mon.trainingStage].name} тренировка (+${getInvState().trainingStages[mon.trainingStage].pct}%)!`, false);
       break;
     }
 

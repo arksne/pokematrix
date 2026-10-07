@@ -337,11 +337,16 @@ export async function loadGame() {
       // Migrate old _bredWith to hasBred
       if (m._bredWith !== undefined) { m.hasBred = m._bredWith.length > 0; delete m._bredWith; }
       if (m.hasBred === undefined) m.hasBred = false;
+      // Канон лиги: буква симпатии A/T/G (старые A-D и мусор → случайно заново)
+      if (!['A', 'T', 'G'].includes(m.breedLetter)) m.breedLetter = ['A', 'T', 'G'][Math.floor(Math.random() * 3)];
+      if (typeof m.trainingFails !== 'number') m.trainingFails = 0;
     }));
     // Migrate team pokemon too
     state.myTeam.forEach(m => {
       if (m._bredWith !== undefined) { m.hasBred = m._bredWith.length > 0; delete m._bredWith; }
       if (m.hasBred === undefined) m.hasBred = false;
+      if (!['A', 'T', 'G'].includes(m.breedLetter)) m.breedLetter = ['A', 'T', 'G'][Math.floor(Math.random() * 3)];
+      if (typeof m.trainingFails !== 'number') m.trainingFails = 0;
     });
     state.daycareMons = data.daycareMons || [];
     state.daycareMons.forEach(e => { if (!e.mon.currentHp || e.mon.currentHp < 0) e.mon.currentHp = e.mon.maxHp || 50; });

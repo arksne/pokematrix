@@ -4451,7 +4451,7 @@ function initEncounterEvents() {
             trainingStat: null,
             happiness: 70,
             natureIdx: Math.floor(Math.random() * natures.length),
-            breedLetter: ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)],
+            breedLetter: ['A', 'T', 'G'][Math.floor(Math.random() * 3)],  // симпатия (канон лиги)
             status: S.wildStatus || null,
             sleepTurns: S.wildSleepTurns || 0,
             movesPP: S.wildMovesPP ? S.wildMovesPP.map(pp => ({ current: pp.max, max: pp.max })) : [],

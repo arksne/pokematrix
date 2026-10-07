@@ -43,6 +43,7 @@ import { showToast, showSelectionModal } from '../utils/dom.js';
 import { addNotification } from './notifications.js';
 import { checkAchievement } from './achievements.js';
 import { LEGENDARY_SET } from '../utils/state.js';
+import { GEN_STARTERS } from '../data/starters.js';
 import { baseStatTotal } from '../battle/stats.js';  // UI компоненты
 import { appendToLog, calculateStat } from '../battle/core.js';  // Лог + расчёт HP
 import { natures } from '../data/natures.js';          // Массив характеров
@@ -54,13 +55,12 @@ export const EGG_TIME = 10 * 60 * 1000;         // 10 минут на произ
 export const EGG_BONUS_TIME = 5 * 60 * 1000;     // 5 минут если характеры совпадают
 const BREEDING_CHECK_INTERVAL = 60 * 1000;       // Проверка разведения каждую минуту
 
-// ── Шкалы времени разведения по редкости (A3/A4) ──────────
+// ── Время кладки по редкости пары (кладка — наше, сайт не нормирует) ──
 // Редкость: common (BST<400), uncommon (400-499), rare (500+, не легенда),
-// legendary (LEGENDARY_SET). Пара берётся по ВЫСШЕЙ редкости.
-// Цифры — предложение автора, крутить после первых недель экономики:
-// яйцо: 10мин / 30мин / 2ч / 8ч; вылупление: 3ч / 8ч / 24ч / 72ч.
+// legendary (LEGENDARY_SET, но легенды не спариваются — ветка мёртвая).
+// Пара берётся по ВЫСШЕЙ редкости: 10мин / 30мин / 2ч / 8ч.
+// Вылупление — канон лиги: случайно 5-9 дней (см. checkBreeding).
 const EGG_LAY_MS = { common: 10 * 60 * 1000, uncommon: 30 * 60 * 1000, rare: 2 * 3600 * 1000, legendary: 8 * 3600 * 1000 };
-const HATCH_MS = { common: 3 * 3600 * 1000, uncommon: 8 * 3600 * 1000, rare: 24 * 3600 * 1000, legendary: 72 * 3600 * 1000 };
 
 export function breedRarity(mon: any): string {
   const species = mon?.apiData?.species?.name || mon?.apiData?.name || '';
@@ -77,6 +77,28 @@ export function pairRarityKey(m1: any, m2: any): string {
   return rank[r1] >= rank[r2] ? r1 : r2;
 }
 
+// ── Буквы симпатии (канон лиги): A / T / G ──
+// Спарка успешна только при ОДИНАКОВОЙ букве у обоих. Буква назначается
+// при получении покемона (поимка/стартер/награда/вылупление), навсегда.
+export const SYMPATHY_LETTERS = ['A', 'T', 'G'] as const;
+export function randomSympathy(): string {
+  return SYMPATHY_LETTERS[Math.floor(Math.random() * SYMPATHY_LETTERS.length)];
+}
+
+/** Все стартеры всех поколений — им спаривание запрещено (канон лиги). */
+const STARTER_SET = new Set((GEN_STARTERS || []).flat().map((s: string) => (s || '').toLowerCase()));
+
+export function monSpecies(m: any): string {
+  return (m?.apiData?.species?.name || m?.apiData?.name || '').toLowerCase();
+}
+
+export function isLegendaryMon(m: any): boolean {
+  return LEGENDARY_SET.has(monSpecies(m));
+}
+
+export function isStarterMon(m: any): boolean {
+  return STARTER_SET.has(monSpecies(m));
+}
 /** Перфект: все IV 31. Двойной перфект пары → шайни 1/128 (A6). */
 export function isDoublePerfect(m1: any, m2: any): boolean {
   const perfect = (m: any) => !!m?.ivs && ['hp', 'atk', 'def', 'spa', 'spd', 'spe'].every((s) => m.ivs[s] === 31);
@@ -121,64 +143,50 @@ function randomHatchTime() {
 
 // ── ПИТОМНИК: Депозит ─────────────────────────────────────
 
-// openDaycareDeposit — показать выбор покемонов для отправки в питомник
-// Пользователь выбирает 2 покемонов из команды (должны быть живы)
-// Они удаляются из команды и помещаются в state.daycareMons
+// openDaycareDeposit — отправить ОДНОГО покемона в питомник (прокачка
+// +1/час). Парной механики тут нет: разведение — только в боксах
+// (openBreedBoxes). Повторный вызов кладёт ещё одного.
 export function openDaycareDeposit() {
+  // Нельзя оставлять последнего покемона (команда не бывает пустой)
+  if (state.myTeam.length < 2) {
+    showToast('Нельзя оставить последнего покемона!', true);
+    return;
+  }
   // Фильтруем только живых покемонов (currentHp > 0)
   const available = state.myTeam
     .map((m: any, i: number) => ({ m, i }))
     .filter(({ m }: any) => m.currentHp > 0);
 
-  // Нужно минимум 2 покемона
-  if (available.length < 2) {
-    showToast('Нужно минимум 2 живых покемона!', true);
+  if (available.length < 1) {
+    showToast('Нет живых покемонов для питомника!', true);
     return;
   }
 
-  // Создаём список для выбора первого покемона
   const items = available.map(({ m }: any) => ({
     label: `Lv.${m.baseLevel + m.candiesEaten} ${m.nickname || m.apiData?.name}`,
     subtitle: `${genderIcon(m)} | HP: ${m.currentHp}/${m.maxHp}`
   }));
 
-  // Показываем модалку выбора ПЕРВОГО покемона
-  showSelectionModal('Питомник — выберите ПЕРВОГО покемона', items, (i1: number) => {
-    // Оставшиеся покемоны (исключая выбранного)
-    const remaining = available.filter((_: any, i: number) => i !== i1);
-    const items2 = remaining.map(({ m }: any) => ({
-      label: `Lv.${m.baseLevel + m.candiesEaten} ${m.nickname || m.apiData?.name}`,
-      subtitle: `${genderIcon(m)} | HP: ${m.currentHp}/${m.maxHp}`
-    }));
+  showSelectionModal('Питомник — кого оставить? (+1 ур./час)', items, (i1: number) => {
+    const mon = available[i1].m;
+    const idx = state.myTeam.indexOf(mon);
+    if (idx === -1) {
+      showToast('Покемон уже не в команде', true);
+      return;
+    }
+    const [deposited] = state.myTeam.splice(idx, 1);
 
-    // Показываем модалку выбора ВТОРОГО покемона
-    showSelectionModal('Выберите ВТОРОГО покемона', items2, (i2: number) => {
-      const mon1 = available[i1].m;
-      const mon2 = remaining[i2].m;
+    // Добавляем в питомник с текущим временем
+    state.daycareMons.push({ mon: deposited, depositTime: Date.now() });
 
-      // Находим индексы в оригинальном массиве myTeam
-      const idx1 = state.myTeam.indexOf(mon1);
-      const idx2 = state.myTeam.indexOf(mon2);
-
-      // Удаляем из команды (сначала больший индекс, чтобы не сбить порядок)
-      const hi = Math.max(idx1, idx2);
-      const lo = Math.min(idx1, idx2);
-      const depositMon2 = state.myTeam.splice(hi, 1)[0];  // Удаляем второго
-      const depositMon1 = state.myTeam.splice(lo, 1)[0];  // Удаляем первого
-
-      // Добавляем в питомник с текущим временем
-      state.daycareMons.push({ mon: depositMon2, depositTime: Date.now() });
-      state.daycareMons.push({ mon: depositMon1, depositTime: Date.now() });
-
-      // Логируем
-      appendToLog(
-        `${mon1.nickname || mon1.apiData?.name} и ${mon2.nickname || mon2.apiData?.name} оставлены в Питомнике!`,
-        false, 'quest'
-      );
-      showToast('Покемоны оставлены в Питомнике!', false);
-      store.emit('team:render');  // Перерисовываем команду
-      store.emit('save');          // Сохраняем
-    });
+    // Логируем
+    appendToLog(
+      `${mon.nickname || mon.apiData?.name} оставлен в Питомнике!`,
+      false, 'quest'
+    );
+    showToast('Покемон оставлен в Питомнике!', false);
+    store.emit('team:render');  // Перерисовываем команду
+    store.emit('save');          // Сохраняем
   });
 }
 
@@ -210,8 +218,8 @@ function breedMonLabel(m: any): string {
   const nm = m.nickname || m.apiData?.name || '?';
   const g = getMonGender(m);
   const gi = g === 'male' ? '♂' : g === 'female' ? '♀' : '⚪';
-  const nat = natures[m.natureIdx]?.name || '';
-  return `Lv.${m.baseLevel + (m.candiesEaten || 0)} ${nm} ${gi} ${nat}`;
+  const sym = m.breedLetter ? `[${m.breedLetter}]` : '[?]';
+  return `Lv.${m.baseLevel + (m.candiesEaten || 0)} ${nm} ${gi} ${sym}`;
 }
 
 function renderBreedBoxes(overlay: HTMLElement) {
@@ -241,7 +249,7 @@ function renderBreedBoxes(overlay: HTMLElement) {
         <h3 style="margin:0;">💕 Боксы разведения</h3>
         <button class="tma-btn" id="btn-breed-close" style="padding:4px 8px;background:#ff3b30;">✕</button>
       </div>
-      <div style="font-size:0.7rem;opacity:0.7;">Пара: разный пол (или Дитто) + одинаковый характер. Каждый спаривается один раз.</div>
+      <div style="font-size:0.7rem;opacity:0.7;">Пара: один вид + разный пол (кросс — через Дитто) + одинаковая буква симпатии [A/T/G]. Каждый спаривается один раз. Легенды и стартеры не спариваются.</div>
       ${cards}
     </div>`;
   (overlay.querySelector('#btn-breed-close') as HTMLElement).onclick = () => overlay.remove();
@@ -267,8 +275,8 @@ function renderBreedBoxes(overlay: HTMLElement) {
     });
 }
 
-// ── Выбор покемона в бокс: проверка пола+характера ─────────
-async function pickBreedMon(bi: number, side: number, overlay: HTMLElement) {
+// ── Выбор покемона в бокс: проверки по канону лиги ─────────
+function pickBreedMon(bi: number, side: number, overlay: HTMLElement) {
   const list = breedCandidateList();
   if (!list.length) {
     showToast('Некого класть: все либо уже спаривались, либо без данных', true);
@@ -279,37 +287,28 @@ async function pickBreedMon(bi: number, side: number, overlay: HTMLElement) {
     subtitle: from === 'team' ? 'команда' : 'PC',
     idx: i,
   }));
-  showSelectionModal('Кого положить?', items, async (i: number) => {
+  showSelectionModal('Кого положить?', items, (i: number) => {
     const pick = list[items[i]?.idx ?? i];
     if (!pick) return;
     const box = ensureBreedBoxes()[bi];
     const other = side === 0 ? box.b : box.a;
-    if (other) {
-      // Пол: разный, либо замешан Дитто
-      const sp = (m: any) => m.apiData?.species?.name || m.apiData?.name || '';
-      const ditto = sp(pick.m) === 'ditto' || sp(other) === 'ditto';
-      const g1 = getMonGender(pick.m), g2 = getMonGender(other);
-      if (!ditto && (!g1 || !g2 || g1 === g2)) {
-        showToast('Не подходит по полу! Нужны разнополые (или Дитто).', true);
-        addNotification('💕 Разведение', 'Положите соответствующего покемона: нужен другой пол.');
-        return;
+    if (other && !areBreedingCompatible(pick.m, other)) {
+      // Точная причина для уведомления
+      const ditto = monSpecies(pick.m) === 'ditto' || monSpecies(other) === 'ditto';
+      let reason = 'Пара несовместима.';
+      if (!ditto && monSpecies(pick.m) !== monSpecies(other)) reason = 'Нужен тот же вид (кросс — только через Дитто).';
+      else if ((pick.m.breedLetter || '') !== (other.breedLetter || '')) reason = `Нужна одинаковая буква симпатии (у пары: ${other.breedLetter || '—'}, у этого: ${pick.m.breedLetter || '—'}).`;
+      else if (isLegendaryMon(pick.m) || isLegendaryMon(other)) reason = 'Легенды не спариваются.';
+      else if (isStarterMon(pick.m) || isStarterMon(other)) reason = 'Стартеры не спариваются.';
+      else {
+        const g1 = getMonGender(pick.m), g2 = getMonGender(other);
+        if (!g1 || !g2 || g1 === g2) reason = 'Нужны разнополые (или Дитто).';
       }
-      // Характер: одинаковый
-      if ((pick.m.natureIdx ?? -1) !== (other.natureIdx ?? -2)) {
-        showToast('Не подходит по характеру! Нужен одинаковый характер.', true);
-        addNotification('💕 Разведение', 'Положите соответствующего покемона: нужен такой же характер.');
-        return;
-      }
-      // Яйце-группы (PokeAPI, с кэшем)
-      const groups1 = await getMonEggGroups(pick.m);
-      const groups2 = await getMonEggGroups(other);
-      if (!areBreedingCompatible(pick.m, other, groups1, groups2)) {
-        showToast('Несовместимы по яйце-группам!', true);
-        addNotification('💕 Разведение', 'Положите соответствующего покемона: нет общей яйце-группы.');
-        return;
-      }
-      box.readyAt = 0; // таймер взведётся в checkBreeding
+      showToast(reason, true);
+      addNotification('💕 Разведение', 'Положите соответствующего покемона: ' + reason);
+      return;
     }
+    if (other) box.readyAt = 0; // таймер взведётся в checkBreeding
     const taken = takeMonByUid(pick.m.uid);
     if (!taken) {
       showToast('Покемон уже не на месте', true);
@@ -363,47 +362,24 @@ export function collectDaycareMons() {
 
   checkDaycare();  // Сначала применяем накопленные уровни
 
-  // Забираем первого покемона
-  const entry = state.daycareMons.shift();
-  state.myTeam.push(entry.mon);
-
-  // Забираем второго (если есть место)
-  if (state.daycareMons.length > 0 && state.myTeam.length < 6) {
-    const entry2 = state.daycareMons.shift();
-    state.myTeam.push(entry2.mon);
+  // Забираем всех, кому хватает места (депозит теперь по одному,
+  // в питомнике может лежать сколько угодно)
+  let took = 0;
+  while (state.daycareMons.length > 0 && state.myTeam.length < 6) {
+    const entry = state.daycareMons.shift();
+    state.myTeam.push(entry.mon);
+    took++;
   }
 
-  appendToLog('Покемоны возвращены из Питомника!', false, 'quest');
+  appendToLog(took === 1 ? 'Покемон возвращён из Питомника!' : `Из Питомника возвращено: ${took}!`, false, 'quest');
   store.emit('team:render');
   store.emit('save');
 }
 
 // ── РАЗВЕДЕНИЕ (Breeding) ───────────────────────────────
-
-// ── Яйце-группы ──
-// Кэш: speciesName → [eggGroupName, ...]
-// Загружается из PokeAPI /pokemon-species/{name} → egg_groups
-const eggGroupCache = new Map<string, string[]>();
-
-// getMonEggGroups — получить яйце-группы покемона
-// Загружает с PokeAPI, кэширует для ускорения
-async function getMonEggGroups(mon: any): Promise<string[]> {
-  const name = mon.apiData?.species?.name || mon.apiData?.name;
-  if (!name) return [];
-  if (eggGroupCache.has(name)) return eggGroupCache.get(name)!;  // Из кэша
-
-  try {
-    // URL вида: /api/v2/pokemon-species/pikachu
-    const speciesUrl = mon.apiData?.species?.url ||
-      `https://pokeapi.co/api/v2/pokemon-species/${name}`;
-    const res = await fetch(speciesUrl);
-    const data = await res.json();
-    // Извлекаем имена групп: [{name: 'monster'}, {name: 'ground'}]
-    const groups = (data.egg_groups || []).map((g: any) => g.name);
-    eggGroupCache.set(name, groups);  // Кэшируем
-    return groups;
-  } catch(e) { return []; }
-}
+// Канон лиги: спариваются только ОДИН ВИД + разный пол, при ОДИНАКОВОЙ
+// букве симпатии (A/T/G). Яйце-групп PokeAPI нет — удалены. Запрещены:
+// легенды/мифические, стартеры, уже спаривавшиеся (hasBred навсегда).
 
 // getMonGender — получить пол покемона
 export function getMonGender(mon: any) {
@@ -416,25 +392,28 @@ export function genderIcon(mon: any): string {
   return g === 'male' ? '♂' : g === 'female' ? '♀' : '⚪';
 }
 
-// ── Проверка совместимости для разведения ──
+// ── Проверка совместимости для разведения (канон лиги) ──
 // Условия:
 //   (1) Разные покемоны (разные UID)
 //   (2) Никто из пары ещё не спаривался (hasBred — один раз и всё)
-//   (3) Оба имеют пол (кроме пары с Ditto — бесполые идут только через него)
-//   (4) Разные полы (кроме Ditto)
-//   (5) Общая яйце-группа ИЛИ один из них Ditto
-export function areBreedingCompatible(mon1: any, mon2: any, groups1: string[], groups2: string[]) {
-  if (mon1.uid === mon2.uid) return false;           // Один и тот же покемон
+//   (3) Один вид (кроме пары с Ditto — кросс-видовые только через него)
+//   (4) Разные полы (кроме Ditto; бесполые без Ditto не спариваются)
+//   (5) Одинаковая буква симпатии A/T/G (характер НЕ проверяется)
+//   (6) Не легенда/мифик и не стартер
+export function areBreedingCompatible(mon1: any, mon2: any): boolean {
+  if (!mon1 || !mon2 || mon1.uid === mon2.uid) return false;
   if (mon1.hasBred || mon2.hasBred) return false;    // Уже спаривались — хватит
-  const dittoInvolved = groups1.includes('ditto') || groups2.includes('ditto');
+  if (isLegendaryMon(mon1) || isLegendaryMon(mon2)) return false;
+  if (isStarterMon(mon1) || isStarterMon(mon2)) return false;
+  const dittoInvolved = monSpecies(mon1) === 'ditto' || monSpecies(mon2) === 'ditto';
+  if (!dittoInvolved && monSpecies(mon1) !== monSpecies(mon2)) return false;
   const g1 = getMonGender(mon1);
   const g2 = getMonGender(mon2);
   if (!dittoInvolved) {
     if (!g1 || !g2) return false;                     // Нет пола
     if (g1 === g2) return false;                      // Один пол
   }
-  const shared = groups1.filter(g => groups2.includes(g));  // Общие группы
-  if (shared.length === 0 && !dittoInvolved) return false;
+  if ((mon1.breedLetter || '') !== (mon2.breedLetter || '')) return false;
   return true;
 }
 
@@ -457,6 +436,16 @@ export async function checkBreeding() {
       const box = state.breedBoxes[bi];
       if (!box || !box.a || !box.b) continue;
       const m1 = box.a, m2 = box.b;
+      // Перепроверка совместимости (правила могли измениться, мон мог
+      // стать недоступен): несовместимых возвращаем и чистим бокс.
+      if (!areBreedingCompatible(m1, m2)) {
+        returnMonFromBox(m1);
+        returnMonFromBox(m2);
+        state.breedBoxes[bi] = { a: null, b: null, readyAt: 0 };
+        store.emit('notification:add', '💕 Разведение',
+          `Пара в боксе ${bi + 1} несовместима и возвращена.`);
+        continue;
+      }
       if (!box.readyAt) {
         const key = pairRarityKey(m1, m2);
         box.readyAt = now + (EGG_LAY_MS[key] ?? EGG_LAY_MS.common);
@@ -471,26 +460,29 @@ export async function checkBreeding() {
       const species = donor.apiData?.species?.name || donor.apiData?.name;
       const eggTypes = donor.apiData?.types || [{ type: { name: 'normal' } }];
 
-      // Наследование IV: среднее родителей ± случайность 2 (A5: оставить)
-      const inheritIV = (parentVal: number) =>
-        Math.min(31, Math.max(0, parentVal + (Math.random() < 0.5 ? 2 : -2)));
-      const avgIV = (stat: string) => Math.round((m1.ivs[stat] + m2.ivs[stat]) / 2);
+      // Наследование IV (канон лиги): ЛУЧШИЙ ген родителей ±1-2.
+      const bestIV = (stat: string) => {
+        const best = Math.max(m1.ivs?.[stat] ?? 0, m2.ivs?.[stat] ?? 0);
+        const delta = (Math.random() < 0.5 ? -1 : 1) * (Math.random() < 0.5 ? 1 : 2);
+        return Math.min(31, Math.max(0, best + delta));
+      };
       const eggIvs = {
-        hp: inheritIV(avgIV('hp')),
-        atk: inheritIV(avgIV('atk')),
-        def: inheritIV(avgIV('def')),
-        spa: inheritIV(avgIV('spa')),
-        spd: inheritIV(avgIV('spd')),
-        spe: inheritIV(avgIV('spe'))
+        hp: bestIV('hp'),
+        atk: bestIV('atk'),
+        def: bestIV('def'),
+        spa: bestIV('spa'),
+        spd: bestIV('spd'),
+        spe: bestIV('spe')
       };
 
-      const rkey = pairRarityKey(m1, m2);
+      // Вылупление 5-9 дней (канон лиги), случайно.
+      const hatchMs = (5 + Math.random() * 4) * 24 * 3600 * 1000;
       const egg = {
         uid: generateUID(),
         species,
         types: eggTypes,
         ivs: eggIvs,
-        readyTime: now + (HATCH_MS[rkey] ?? HATCH_MS.common),
+        readyTime: now + hatchMs,
         parent1Uid: m1.uid,
         parent2Uid: m2.uid,
         // A6: двойной перфект (все 31 у обоих) — шайни 1/128 вместо 1/1024
@@ -533,11 +525,13 @@ export async function checkBreeding() {
 }
 
 // ── Периодическая проверка разведения ──
-// Запускает интервал: каждую минуту проверяет, есть ли
-// яйца или пары, и если да — вызывает checkBreeding()
+// Каждую минуту: если есть пары в боксах или яйца — checkBreeding().
+// (Боксы раньше не проверялись — интервал смотрел только eggs/breedingPairs,
+// и яйца из боксов не появлялись никогда.)
 export function startBreedingCheck() {
   setInterval(() => {
-    if (state.eggs.length > 0 || state.breedingPairs.length > 0) checkBreeding();
+    const boxesBusy = (state.breedBoxes || []).some((b: any) => b && (b.a || b.b));
+    if (state.eggs.length > 0 || boxesBusy) checkBreeding();
   }, BREEDING_CHECK_INTERVAL);
 }
 
@@ -634,7 +628,7 @@ export async function hatchEgg(egg: any) {
       training: null, trainingStage: 0, trainingStat: null,
       happiness: 120,                            // Высокое счастье (только вылупился)
       natureIdx: Math.floor(Math.random() * natures.length),  // Случайный характер
-      breedLetter: ['A','B','C','D'][Math.floor(Math.random()*4)],  // Буква разведения
+      breedLetter: randomSympathy(),  // буква симпатии A/T/G (канон лиги)
       gender: Math.random() < 0.5 ? 'male' : 'female',  // 50/50
       status: null, sleepTurns: 0,
       movesPP: [],
@@ -647,20 +641,8 @@ export async function hatchEgg(egg: any) {
       hasBred: false          // Ещё не разводился
     };
 
-    // ── Наследование IV от родителей ──
-    // Если есть оба родителя — берём по одному случайному IV от каждого
-    if (eggData.parent1Uid && eggData.parent2Uid) {
-      const allMons = [...state.myTeam, ...state.pcBoxes.flat()];
-      const p1 = allMons.find((m: any) => m.uid === eggData.parent1Uid);
-      const p2 = allMons.find((m: any) => m.uid === eggData.parent2Uid);
-      if (p1) {
-        const stats = ['hp','atk','def','spa','spd','spe'];
-        const s1 = stats[Math.floor(Math.random()*stats.length)];  // Случайный стат от родителя 1
-        const s2 = stats[Math.floor(Math.random()*stats.length)];  // Случайный стат от родителя 2
-        if (p1.ivs) newMon.ivs[s1] = p1.ivs[s1];
-        if (p2?.ivs) newMon.ivs[s2] = p2.ivs[s2];
-      }
-    }
+    // IV уже финализированы при кладке (лучший ген родителей ±1-2,
+    // канон лиги) — здесь не трогаем, превью на карточке яйца честное.
 
     // Добавляем в команду или PC
     if (state.myTeam.length < 6) {

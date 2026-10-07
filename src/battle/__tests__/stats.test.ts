@@ -38,8 +38,8 @@ function mon(over = {}) {
 
 describe('trainingPercent — тренировка наконец применяется', () => {
   it('даёт бонус выбранному стату на выбранной стадии', () => {
-    expect(trainingPercent({ trainingStat: 'atk', trainingStage: 6 }, 'atk')).toBeCloseTo(0.40);
-    expect(trainingPercent({ trainingStat: 'atk', trainingStage: 3 }, 'atk')).toBeCloseTo(0.25);
+    expect(trainingPercent({ trainingStat: 'atk', trainingStage: 6 }, 'atk')).toBeCloseTo(0.20);
+    expect(trainingPercent({ trainingStat: 'atk', trainingStage: 3 }, 'atk')).toBeCloseTo(0.10);
   });
 
   it('не даёт бонус другим статам', () => {
@@ -57,8 +57,8 @@ describe('trainingPercent — тренировка наконец применя
     const trained = mon({ trainingStat: 'atk', trainingStage: 6 });
     const plain = calculateStat(base, 'attack');
     const withTraining = calculateStat(trained, 'attack');
-    // stage 6 = +40%
-    expect(withTraining).toBe(Math.floor(plain * 1.4));
+    // stage 6 = Именная +20% (канон лиги)
+    expect(withTraining).toBe(Math.floor(plain * 1.2));
     expect(withTraining).toBeGreaterThan(plain);
   });
 });

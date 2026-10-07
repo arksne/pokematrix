@@ -116,7 +116,7 @@ export async function giveStarterMon(pokemonName: string) {
       trainingStat: null,                            // Какой стат тренируется
       happiness: 70,                                 // Счастье (изначально 70)
       natureIdx: Math.floor(Math.random() * natures.length), // Случайный характер
-      breedLetter: 'A',                              // Буква разведения
+      breedLetter: ['A', 'T', 'G'][Math.floor(Math.random() * 3)],  // симпатия (канон лиги)
       gender: Math.random() < 0.5 ? 'male' : 'female', // Случайный пол (50/50)
       status: null,                                  // Нет статуса
       sleepTurns: 0,                                 // Ходов сна
