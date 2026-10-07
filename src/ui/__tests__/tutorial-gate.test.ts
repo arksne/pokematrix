@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isTutorialGateOpen } from '../location.js';
+import { isTutorialGateOpen, isVeteranForTutorial } from '../location.js';
 import { state } from '../../game/state.js';
 
 /**
@@ -32,5 +32,37 @@ describe('isTutorialGateOpen', () => {
     state.tutorialStep = 7;
     state.completedNPCQuests = [];
     expect(isTutorialGateOpen()).toBe(true);
+  });
+});
+
+describe('isVeteranForTutorial', () => {
+  const mon = (lvl: number) => ({ baseLevel: lvl, candiesEaten: 0 });
+
+  it('новичок (стартер 5, ни бейджей, ни локаций): не ветеран', () => {
+    expect(isVeteranForTutorial([mon(5)], [], 1)).toBe(false);
+  });
+
+  it('бейдж: ветеран', () => {
+    expect(isVeteranForTutorial([mon(5)], ['Boulder Badge'], 1)).toBe(true);
+  });
+
+  it('6+ локаций: ветеран', () => {
+    expect(isVeteranForTutorial([mon(5)], [], 6)).toBe(true);
+  });
+
+  it('ровно 5 локаций: ещё нет', () => {
+    expect(isVeteranForTutorial([mon(5)], [], 5)).toBe(false);
+  });
+
+  it('мон 11+ уровня: ветеран', () => {
+    expect(isVeteranForTutorial([mon(11)], [], 1)).toBe(true);
+  });
+
+  it('мон 10 уровня: ещё нет', () => {
+    expect(isVeteranForTutorial([mon(10)], [], 1)).toBe(false);
+  });
+
+  it('пустая команда без прогресса: не ветеран', () => {
+    expect(isVeteranForTutorial([], [], 0)).toBe(false);
   });
 });

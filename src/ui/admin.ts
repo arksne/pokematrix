@@ -398,7 +398,18 @@ export function initAdminPanel() {
     try {
       const res = await apiFetch('/admin/api', { method: 'POST', body: JSON.stringify({ cmd: 'teleport', user: myId, val: loc }) });
       const data = await res.json();
-      showToast(data.status === 'ok' ? '✅ Teleported' : '❌ Error', data.status !== 'ok');
+      if (data.status !== 'ok') { showToast('❌ Error', true); return; }
+      // Сервер поменял локацию в БД, но живой клиент никуда не едет сам:
+      // переносим состояние и рендерим сразу (иначе «тп не робит»).
+      const { travelToRegion } = await import('./location.js');
+      const { REGIONS } = await import('../data/regions.js');
+      let region = state.currentRegion;
+      for (const [rk, r] of Object.entries(REGIONS) as any) {
+        if (r.locations && r.locations[loc]) { region = rk; break; }
+      }
+      travelToRegion(region, loc);
+      autoSave();
+      showToast('✅ Teleported', false);
     } catch (e) { console.error('[admin] tp self', e); showToast('API Error', true); }
   });
 

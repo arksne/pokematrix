@@ -174,6 +174,20 @@ export function isTutorialGateOpen(): boolean {
   if ((state.tutorialStep || 0) > 6) return true;
   return (state.completedNPCQuests || []).includes('tutorial_6');
 }
+
+/**
+ * Ветеран для миграции: виден реальный прогресс (бейджи / 6+ локаций /
+ * мон 10+ уровня), а гейт закрыт — таким засчитываем обучение сразу,
+ * иначе тестеры со старыми сейвами застряли бы на старте навсегда.
+ * Чистая функция ради тестов.
+ */
+export function isVeteranForTutorial(
+  team: any[], badges: any[], visitedCount: number,
+): boolean {
+  const maxLvl = (team || []).reduce(
+    (mx: number, m: any) => Math.max(mx, (m?.baseLevel || 1) + (m?.candiesEaten || 0)), 0);
+  return (badges?.length || 0) > 0 || visitedCount > 5 || maxLvl > 10;
+}
 function tutorialGateToast(): boolean {
   showToast('Сначала пройдите обучение у Профессора Оука!', true);
   return false;

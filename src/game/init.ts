@@ -35,7 +35,7 @@ import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameS
 import { authTelegram } from './auth.js';
 import { initAppNav } from '../ui/nav.js';
 import { renderTrainerCard } from '../ui/trainer-card.js';
-import { getLocation, renderLocation, travelToRegion, updateTimeOfDay, updateMoneyDisplay, updateBadgeDisplay, fetchDropConfig, fetchServerFeatures, processMonsterDrop, updatePlayerLocation } from '../ui/location.js';
+import { getLocation, renderLocation, travelToRegion, updateTimeOfDay, updateMoneyDisplay, updateBadgeDisplay, fetchDropConfig, fetchServerFeatures, processMonsterDrop, updatePlayerLocation, isVeteranForTutorial } from '../ui/location.js';
 import { renderTeamGrid, initProfileEvents, initProfileUXEvents } from '../ui/profile.js';
 import { updateInventoryDisplay, initInventoryEvents } from '../ui/inventory.js';
 import { initShopEvents, initSellTab } from '../ui/shop.js';
@@ -253,6 +253,28 @@ initGymEvents();
       // Без токена облака нет по определению — остаётся прежний локальный режим.
       gameLoaded = true;
       state.gameLoaded = true;
+    }
+    // Миграция ветеранов: гейт туториала (G1) ввели позже релиза, а старые
+    // сейвы висят на tutorialStep 1-6 — тестеры застряли на старте. Если виден
+    // реальный прогресс (бейджи / 6+ локаций / мон 10+ уровня), засчитываем
+    // обучение сразу. Новичков не трогает: у них ни того, ни другого.
+    {
+      const veteran = isVeteranForTutorial(
+        state.myTeam, state.badges, state.visitedLocations?.size || 0);
+      const gateOpen = (state.tutorialStep || 0) > 6
+        || (state.completedNPCQuests || []).includes('tutorial_6');
+      if (veteran && !gateOpen) {
+        state.tutorialStep = 7;
+        for (let i = 1; i <= 6; i++) {
+          const qid = 'tutorial_' + i;
+          if (!state.completedNPCQuests.includes(qid)) state.completedNPCQuests.push(qid);
+        }
+        Object.keys(state.npcQuestProgress || {}).forEach((k) => {
+          if (k.startsWith('tutorial_')) delete state.npcQuestProgress[k];
+        });
+        showToast('Обучение засчитано (ветеран). Карта открыта!', false);
+        if (state.gameLoaded) cloudSave();
+      }
     }
     // Оффлайн-заглушка (облако — единственный источник, спека 8.1): играть
     // не во что, а выдавать стартера нельзя — пустое состояние при появлении
