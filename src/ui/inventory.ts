@@ -138,11 +138,17 @@ export function initInventoryEvents() {
     'superPotion': 'Супер Аптечка (+50 HP)',
     'fullRestore': 'Полное восстановление',
     'rareCandy': 'Конфета (уровень)',
+    'vanillaCandy': 'Ванильная конфета (+2 EV)',
+    'commonCandy': 'Обычная конфета (+3 EV)',
+    'typeCandy': 'Типовая конфета (+3 EV)',
     'hpUp': 'Витамин (+EV)',
     'train': 'Тренировка (усиление стата)',
     'weaken': 'Ослабление (сброс тренировки)',
     'evolutionStone': 'Камень эволюции',
-    'tm': 'TM-диск',
+    'tm': 'TM-диск (без ограничений)',
+    'tmWeak': 'ТМ слабая (<60)',
+    'tmMid': 'ТМ средняя (≤90)',
+    'tmTop': 'ТМ топовая (любая)',
   };
 
   // ── Кнопка «Предметы»: модалка со списком ──
@@ -161,11 +167,17 @@ export function openItemsMenu(qaMap?: Record<string, string>) {
     'superPotion': 'Супер Аптечка (+50 HP)',
     'fullRestore': 'Полное восстановление',
     'rareCandy': 'Конфета (уровень)',
+    'vanillaCandy': 'Ванильная конфета (+2 EV)',
+    'commonCandy': 'Обычная конфета (+3 EV)',
+    'typeCandy': 'Типовая конфета (+3 EV)',
     'hpUp': 'Витамин (+EV)',
     'train': 'Тренировка (усиление стата)',
     'weaken': 'Ослабление (сброс тренировки)',
     'evolutionStone': 'Камень эволюции',
-    'tm': 'TM-диск',
+    'tm': 'TM-диск (без ограничений)',
+    'tmWeak': 'ТМ слабая (<60)',
+    'tmMid': 'ТМ средняя (≤90)',
+    'tmTop': 'ТМ топовая (любая)',
   };
   const entries: Array<{ label: string; subtitle: string; run: () => void }> = [];
   for (const [itemId, hint] of Object.entries(map)) {
@@ -617,6 +629,51 @@ export function renderInventory() {
   });
 }
 
+// ── feedCandy: скормить конфету (общий путь всех 4 видов) ──
+// +1 уровень всегда, +EV в пул по типу конфеты, пересчёт HP, эволюция,
+// новые атаки. Возвращает false если уровень уже 100.
+async function feedCandy(mon, itemId, label, evGain = 4) {
+  // Максимальный уровень: 100
+  if (mon.baseLevel + mon.candiesEaten >= 100) {
+    showToast('Достигнут максимальный 100 уровень!', true);
+    return false;
+  }
+  removeItem(itemId);
+  mon.candiesEaten++;          // Увеличиваем съеденные конфеты
+  if (typeof mon.evPool !== 'number') mon.evPool = 0;
+  mon.evPool += evGain;        // EV в пул на ручное распределение
+  mon.happiness += 2;          // +2 к счастью
+  if (mon.happiness > 255) mon.happiness = 255;
+
+  // ── Пересчёт HP при повышении уровня ──
+  const baseHp = mon.apiData.stats[0].base_stat;
+  const curLvl = mon.baseLevel + mon.candiesEaten;  // Новый уровень
+  const oldMax = mon.maxHp;
+  mon.maxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * curLvl) + curLvl + 10;
+  // Добавляем разницу к текущему HP (чтобы не было потери HP при левелапе)
+  mon.currentHp += (mon.maxHp - oldMax);
+
+  // ── Проверка эволюции ──
+  const evoPromise = (async () => {
+    const evoTarget = await _checkEvolution(mon);
+    if (evoTarget) {
+      await _triggerEvolution(mon, evoTarget.name);
+      refreshProfileUI();
+    }
+  })();
+
+  // ── Изучение новых атак по уровню (через единую функцию) ──
+  (async () => {
+    await evoPromise;  // Ждём эволюцию, чтобы избежать race condition
+    await checkNewMovesOnLevelUp(mon, curLvl);
+  })();
+
+  refreshProfileUI();
+  autoSave();
+  showToast(`Вы скормили ${label}! Уровень повышен до ${curLvl}, +${evGain} EV в пул.`, false);
+  return true;
+}
+
 // ── useItem: основной обработчик использования предмета ──
 // Принимает itemId — ID предмета (строка)
 // Это огромный switch-case с логикой для каждого типа предмета
@@ -678,44 +735,25 @@ export async function useItem(itemId) {
       break;
     }
 
-    // ── Редкая Конфета (Rare Candy): +1 уровень ──
+    // ── Редкая Конфета (Rare Candy): +1 уровень + 4 EV в пул ──
     case 'rareCandy': {
-      // Максимальный уровень: 100
-      if (mon.baseLevel + mon.candiesEaten >= 100) return showToast('Достигнут максимальный 100 уровень!', true);
-      removeItem('rareCandy');
-      mon.candiesEaten++;          // Увеличиваем съеденные конфеты
-      mon.happiness += 2;          // +2 к счастью
-      if (mon.happiness > 255) mon.happiness = 255;
+      await feedCandy(mon, 'rareCandy', 'Сладкую Конфету');
+      break;
+    }
 
-      // ── Пересчёт HP при повышении уровня ──
-      // Старый максимум HP
-      const baseHp = mon.apiData.stats[0].base_stat;
-      const curLvl = mon.baseLevel + mon.candiesEaten;  // Новый уровень
-      const oldMax = mon.maxHp;
-      // Вычисляем новый maxHp по формуле
-      mon.maxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * curLvl) + curLvl + 10;
-      // Добавляем разницу к текущему HP (чтобы не было потери HP при левелапе)
-      mon.currentHp += (mon.maxHp - oldMax);
-
-      // ── Проверка эволюции ──
-      // Асинхронно проверяем, может ли покемон эволюционировать на этом уровне
-      const evoPromise = (async () => {
-        const evoTarget = await _checkEvolution(mon);
-        if (evoTarget) {
-          // Если может — запускаем эволюцию
-          await _triggerEvolution(mon, evoTarget.name);
-          refreshProfileUI();
-        }
-      })();
-
-      // ── Изучение новых атак по уровню (через единую функцию) ──
-      (async () => {
-        await evoPromise;  // Ждём эволюцию, чтобы избежать race condition
-        await checkNewMovesOnLevelUp(mon, curLvl);
-      })();
-
-      refreshProfileUI();
-      showToast(`Вы скормили Сладкую Конфету! Уровень повышен до ${curLvl}.`, false);
+    // ── Конфеты (B1): +1 уровень всегда + EV в пул по типу ──
+    // ванильная 2, обычная/типовая 3, редкая 4. Ограничение «типовая только
+    // своему типу» — TODO отдельно (нужна таблица соответствия).
+    case 'vanillaCandy': {
+      await feedCandy(mon, 'vanillaCandy', 'Ванильную конфету', 2);
+      break;
+    }
+    case 'commonCandy': {
+      await feedCandy(mon, 'commonCandy', 'Обычную конфету', 3);
+      break;
+    }
+    case 'typeCandy': {
+      await feedCandy(mon, 'typeCandy', 'Типовую конфету', 3);
       break;
     }
 
@@ -783,7 +821,21 @@ export async function useItem(itemId) {
 
     // ── TM-диск (шарф) — открывает репитер атак ──
     case 'tm': {
-      openMoveRelearner();
+      openMoveRelearner('tm');
+      break;
+    }
+
+    // ── Тировые TM (B5): слабые <60, средние ≤90, топ — всё ──
+    case 'tmWeak': {
+      openMoveRelearner('tmWeak');
+      break;
+    }
+    case 'tmMid': {
+      openMoveRelearner('tmMid');
+      break;
+    }
+    case 'tmTop': {
+      openMoveRelearner('tmTop');
       break;
     }
 

@@ -189,6 +189,13 @@ export function getFullSaveData() {
       // это третий путь, через который полный apiData попадал в сохранение.
       mon: d.mon ? { ...d.mon, apiData: slimApiData(d.mon.apiData) } : d.mon,
     })), daycareEgg: state.daycareEgg, lastLocation: state.lastLocation, expShareActive: state.expShareActive,
+    transport: state.transport || null,
+    // Боксы разведения (A1): мон целиком + slim apiData, как daycareMons
+    breedBoxes: (state.breedBoxes || []).map((b: any) => ({
+      a: b?.a ? { ...b.a, apiData: slimApiData(b.a.apiData) } : null,
+      b: b?.b ? { ...b.b, apiData: slimApiData(b.b.apiData) } : null,
+      readyAt: b?.readyAt || 0,
+    })),
     breedingPairs: state.breedingPairs.map(p => ({ boxIdx: p.boxIdx, mon1Uid: p.mon1Uid, mon2Uid: p.mon2Uid, startTime: p.startTime, readyTime: p.readyTime })),
     eggs: state.eggs.map(e => ({ uid: e.uid, species: e.species, types: e.types, ivs: e.ivs, readyTime: e.readyTime, boxIdx: e.boxIdx, parent1Uid: e.parent1Uid, parent2Uid: e.parent2Uid })),
     notifications: state.notifications.slice(0, 30),
@@ -338,6 +345,14 @@ export async function loadGame() {
     });
     state.daycareMons = data.daycareMons || [];
     state.daycareMons.forEach(e => { if (!e.mon.currentHp || e.mon.currentHp < 0) e.mon.currentHp = e.mon.maxHp || 50; });
+    // Рейс: облачный выигрывает если есть, иначе оставляем локальный (билет уже
+    // съеден — потерять рейс нельзя, иначе игрок останется ни с чем).
+    state.transport = data.transport || state.transport || null;
+    // Боксы разведения (A1). Старые авто-пары breedingPairs больше не
+    // обрабатываются (checkBreeding их не читает) — чистим, чтобы не висели
+    // мёртвым грузом в сейве. Пары из боксов живут в breedBoxes.
+    state.breedingPairs = [];
+    state.breedBoxes = Array.isArray(data.breedBoxes) ? data.breedBoxes : [];
     state.daycareEgg = data.daycareEgg || null;
     state.lastLocation = data.lastLocation || null;
     state.expShareActive = data.expShareActive || false;
@@ -756,6 +771,9 @@ export async function applyCloudSave(data) {
     ? (data.daycareMons || state.daycareMons)
     : mergeMonLists(state.daycareMons, data.daycareMons, (d: any) => d?.mon?.uid);
   state.daycareEgg = data.daycareEgg || state.daycareEgg;
+  state.transport = data.transport || state.transport || null;
+  state.breedBoxes = data.breedBoxes || state.breedBoxes;
+  state.breedingPairs = [];
   state.lastLocation = data.lastLocation || state.lastLocation;
   state.expShareActive = data.expShareActive || state.expShareActive;
   state.breedingPairs = data.breedingPairs || state.breedingPairs;

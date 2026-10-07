@@ -11,12 +11,10 @@ import { dropConfig } from '../db/schema.js';
 
 const router = Router();
 
-// Дефолтные дропы (копия из src/ui/location.ts)
+// Дефолтные дропы (копия из src/ui/location.ts). D4: только самородок.
 const DEFAULT_MONSTER_DROPS: Record<string, any> = {};
 const DEFAULT_UNIVERSAL_DROPS = [
-  { item: 'prettyWing', chance: 0.04, qty: 1 },
   { item: 'nugget', chance: 0.02, qty: 1 },
-  { item: 'starPiece', chance: 0.01, qty: 1 },
 ];
 
 router.get('/', async (_req: Request, res: Response) => {

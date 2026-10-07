@@ -138,6 +138,14 @@ initGymEvents();
     // После этого: state.tgToken, state.tgUser, state.isAdmin.
     await authTelegram();
 
+    // Сокет СРАЗУ после авторизации: announcements/PvP/онлайн иначе мертвы,
+    // пока игрок не откроет трейд/чат (админская рассылка «не работала»
+    // именно поэтому — сокета просто не было). Идемпотентен.
+    try {
+      const { initTradeSocket } = await import('../network/socket.js');
+      initTradeSocket();
+    } catch (e) { console.warn('[socket] boot connect failed', e); }
+
     // ── 3. Загрузка данных ────────────────────────────────────
     loadPokedexData();       // Все виды покемонов
     fetchDropConfig();       // Дроп-таблицы с сервера

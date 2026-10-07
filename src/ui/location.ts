@@ -30,6 +30,7 @@
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
 import { state } from '../game/state.js';
+import { store } from '../game/store.js';
 import { checkAchievement } from './achievements.js';          // Глобальное состояние
 import { apiFetch } from '../game/apiClient.js';     // fetch с авторизацией и обновлением токена игры
 import { REGIONS } from '../data/regions.js';       // Все регионы с локациями
@@ -149,12 +150,81 @@ export async function updatePlayerLocation() {
 //   ticketItemId — ID предмета-билета (необязательно)
 // Используется: из TRANSPORT_HUBS (кнопки транспорта)
 export function travelToRegion(targetRegion: string, targetLoc: string, ticketItemId?: string) {
+  // Гейт туториала (G1): дальше стартовой зоны — только после сдачи обучения
+  if (!isTutorialGateOpen() && !STARTER_AREA.has(targetLoc)) {
+    showToast('Сначала пройдите обучение у Профессора Оука!', true);
+    return;
+  }
   state.currentRegion = targetRegion;  // Меняем текущий регион
   // Логируем в боевой лог (используем battle core)
   getBattleCore().then(bc => {
     bc.appendToLog(`Вы отправились в регион ${REGIONS[targetRegion].name}!`, false, 'quest');
   });
   renderLocation(targetLoc);  // Отрисовываем новую локацию
+}
+
+// ── Туториал-гейт (G1): карта дальше стартовой зоны закрыта, пока не сданы
+// все 6 шагов обучения (tutorial_6 в сданных). Стартовый город и его
+// сервисы доступны всегда.
+const STARTER_AREA = new Set([
+  'goldenrodCity', 'pokemart', 'pokecenter',
+  'goldenrodStadium', 'goldenrodCity_trainingGrounds',
+]);
+export function isTutorialGateOpen(): boolean {
+  if ((state.tutorialStep || 0) > 6) return true;
+  return (state.completedNPCQuests || []).includes('tutorial_6');
+}
+function tutorialGateToast(): boolean {
+  showToast('Сначала пройдите обучение у Профессора Оука!', true);
+  return false;
+}
+
+// ── Транспорт C3: паром 3ч/300к, поезд 2ч/500к ────────────
+// Билет сгорает при посадке. Поезд и паром — отдельные локи без выходов:
+// сильные энкаунтеры, дроп и редкие виды. Состояние в state.transport,
+// переживает рефреши через сейв.
+const TRANSPORTS = {
+  train: { ticket: 'trainTicket', rideLoc: 'trainRide', to: 'ecruteakCity', ms: 2 * 3600 * 1000, label: 'поезд' },
+  ferry: { ticket: 'ferryTicket', rideLoc: 'seaFerryRide', to: 'cianwoodCity', ms: 3 * 3600 * 1000, label: 'паром' },
+};
+
+/** Чистый статус рейса (для UI и тестов): none aboard arrived. */
+export function transportStatus(tr: any, now = Date.now()) {
+  if (!tr || !tr.arriveAt || !TRANSPORTS[tr.vehicle]) return { phase: 'none', msLeft: 0 };
+  if (now >= tr.arriveAt) return { phase: 'arrived', msLeft: 0 };
+  return { phase: 'aboard', msLeft: tr.arriveAt - now };
+}
+
+export function boardTransport(vehicle: 'train' | 'ferry') {
+  const t = TRANSPORTS[vehicle];
+  if (!t) return;
+  if ((state.inventory?.[t.ticket] || 0) <= 0) {
+    showToast('Нужен билет! Купи в маркете.', true);
+    return;
+  }
+  store.removeItem(t.ticket);
+  const now = Date.now();
+  state.transport = {
+    vehicle, from: state.currentLocationId, to: t.to,
+    departAt: now, arriveAt: now + t.ms,
+  };
+  renderLocation(t.rideLoc);
+  autoSave();
+  showToast(`Ты сел на ${t.label}! В пути лови сильных покемонов.`, false);
+}
+
+export function arriveTransport() {
+  const st = transportStatus(state.transport, Date.now());
+  if (st.phase !== 'arrived') {
+    const mins = Math.max(1, Math.ceil(st.msLeft / 60000));
+    showToast(`Ещё в пути (~${mins} мин).`, true);
+    return;
+  }
+  const to = state.transport.to;
+  state.transport = null;
+  travelToRegion('johto', to);
+  autoSave();
+  showToast('Прибыли!', false);
 }
 
 // ── healTeam: лечение всей команды в покецентре ─────────
@@ -346,6 +416,39 @@ export let renderLocation = function(locId: any) {
     actionsContainer.appendChild(btnShop);
   }
 
+  // ── Транспорт C3: посадка и прибытие ──
+  // Вокзал/причал: кнопка посадки (съедает билет). Рейс: обратный отсчёт
+  // + кнопка прибытия (активна по истечении 2ч поезд / 3ч паром).
+  if (locId === 'goldenrodStation' || locId === 'olivinePier') {
+    const isTrain = locId === 'goldenrodStation';
+    const btnBoard = document.createElement('button');
+    btnBoard.className = 'btn-use';
+    btnBoard.style.backgroundColor = '#5856d6';
+    btnBoard.innerText = isTrain ? '🚂 Сесть на поезд (Голденрод → Экрутик)' : '⛴ Сесть на паром (Оливин → Цианвуд)';
+    btnBoard.onclick = () => boardTransport(isTrain ? 'train' : 'ferry');
+    actionsContainer.appendChild(btnBoard);
+  }
+  if (locId === 'trainRide' || locId === 'seaFerryRide') {
+    const st = transportStatus(state.transport, Date.now());
+    const rideDiv = document.createElement('div');
+    rideDiv.style.cssText = 'grid-column:1/-1;text-align:center;padding:8px;border:1px solid var(--tma-border);border-radius:8px;';
+    if (st.phase === 'arrived') {
+      rideDiv.innerHTML = '<div>🏁 Прибыли! Можно сходить.</div>';
+      const btnArrive = document.createElement('button');
+      btnArrive.className = 'btn-use';
+      btnArrive.style.backgroundColor = '#34c759';
+      btnArrive.style.marginTop = '6px';
+      btnArrive.innerText = '🚪 Сойти';
+      btnArrive.onclick = () => arriveTransport();
+      rideDiv.appendChild(btnArrive);
+    } else {
+      const mins = Math.max(1, Math.ceil(st.msLeft / 60000));
+      const h = Math.floor(mins / 60), m = mins % 60;
+      rideDiv.innerHTML = `<div>🛤️ В пути… прибытие через ${h > 0 ? h + ' ч ' : ''}${m} мин</div><div style="font-size:0.7rem;opacity:0.7;">По пути сильные покемоны — охоться!</div>`;
+    }
+    actionsContainer.appendChild(rideDiv);
+  }
+
   // ── ПокеЦентр ──
   if (locId === 'pokecenter' || locId.endsWith('_pokecenter')) {
     checkDaycare();  // Проверяем питомник (обновляем статус)
@@ -478,6 +581,7 @@ export let renderLocation = function(locId: any) {
     btn.innerHTML = `<span>➔ ${linkLoc.name}</span>`;
     btn.onclick = () => {
       // Отслеживание исследования: если локация новая — проверяем квест
+      if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
       if (!state.visitedLocations.has(linkId)) {
         state.visitedLocations.add(linkId);
         getBattleCore().then(bc => bc.checkQuestProgress('explore'));
@@ -505,6 +609,7 @@ export let renderLocation = function(locId: any) {
       const label = isTraining ? `${loc.name} (до 15 ур.)` : loc.name;
       btn.innerHTML = `<span>${icon} ${label}</span>`;
       btn.onclick = () => {
+        if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
         if (!state.visitedLocations.has(linkId)) {
           state.visitedLocations.add(linkId);
           getBattleCore().then(bc => bc.checkQuestProgress('explore'));
@@ -615,12 +720,9 @@ export function getLocationDropString(uniqueMons: string[]) {
 }
 
 // ── UNIVERSAL_DROPS: базовые универсальные дропы ────────
-// Используются если сервер не предоставил свою конфигурацию
-// Каждый предмет: {item, chance (0-1), qty}
+// D4: оставлен ТОЛЬКО самородок (2%). Крыло и кусок звезды убраны.
 const UNIVERSAL_DROPS = [
-  { item: 'prettyWing', chance: 0.04, qty: 1 },   // 4% — Красивое крыло
   { item: 'nugget', chance: 0.02, qty: 1 },         // 2% — Самородок
-  { item: 'starPiece', chance: 0.01, qty: 1 },      // 1% — Кусок звезды
 ];
 
 // ── fetchDropConfig: загрузка конфигурации дропов с сервера ──

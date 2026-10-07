@@ -31,7 +31,7 @@ import { showToast } from '../utils/dom.js';              // Всплывающ�
 import { addNotification } from './notifications.js';      // Системные уведомления (колокольчик)
 import { appendToLog } from '../battle/core.js';           // Запись в боевой лог
 import { openPC } from './pc.js';                          // Открытие PC
-import { openDaycareDeposit } from './daycare.js';          // Депозит в питомник
+import { openDaycareDeposit, openBreedBoxes } from './daycare.js';
 import { NPC_DATA } from '../data/npc.js';                  // Статические данные NPC
 
 // ── renderNPCQuests: отрисовка списка квестов NPC ───────
@@ -256,6 +256,17 @@ export function openNPCDialog(npcId: string) {
       modal.style.display = 'none';
     };
     actionsContainer.insertBefore(btnDaycare, document.getElementById('btn-close-npc'));
+
+    // Кнопка "Боксы разведения" (A1): 3 бокса, пару кладёт игрок вручную
+    const btnBreed = document.createElement('button');
+    btnBreed.className = 'tma-btn npc-action-extra';
+    btnBreed.style.backgroundColor = '#e040fb';  // Фиолетовая
+    btnBreed.innerText = '💕 Боксы разведения';
+    btnBreed.onclick = () => {
+      modal.style.display = 'none';
+      openBreedBoxes();
+    };
+    actionsContainer.insertBefore(btnBreed, document.getElementById('btn-close-npc'));
   }
 }
 

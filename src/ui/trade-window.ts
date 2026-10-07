@@ -29,7 +29,7 @@
 
 import { state, getTrainerId } from '../game/state.js';  // Глобальное состояние
 import { ITEMS } from '../data/items.js';                  // Все предметы
-import { showToast } from '../utils/dom.js';               // Всплывающие уведомления
+import { showToast, showSelectionModal } from '../utils/dom.js';  // Уведомления + выбор количества
 import { escHtml } from '../utils/dom.js';                  // Экранирование HTML (XSS)
 import { getItemSpriteImg, getSpriteUrl } from '../utils/sprite.js';  // Спрайты
 import { addItem } from '../game/actions.js';               // Добавление предмета
@@ -260,19 +260,42 @@ function renderTradeItemGrid() {
         // Удаляем старый оффер кредитов (если есть)
         state.myTradeOffers = state.myTradeOffers.filter(o => !(o.type === 'item' && o.data.id === 'credit'));
         state.myTradeOffers.push({ type: 'item', data: { id: 'credit', name: '¥ Кредиты', qty } });
+        // Отправляем обновление партнёру и перерисовываем
+        state.socket.emit('trade_offer', { tradeId: state.activeTradeId, offers: state.myTradeOffers });
+        renderTradeOffers();
+        renderTradeItemGrid();
+        renderTradePickGrid();
       } else {
-        // ── Обычный предмет ──
+        // ── Обычный предмет: выбор количества (E1: степпер + всё/половина) ──
         if (offeredItemIds.has(item.id)) {
           state.myTradeOffers = state.myTradeOffers.filter(o => !(o.type === 'item' && o.data.id === item.id));
+          // Отправляем обновление партнёру и перерисовываем
+          state.socket.emit('trade_offer', { tradeId: state.activeTradeId, offers: state.myTradeOffers });
+          renderTradeOffers();
+          renderTradeItemGrid();
+          renderTradePickGrid();
         } else {
-          state.myTradeOffers.push({ type: 'item', data: { id: item.id, name: item.nameRu, qty: 1 } });
+          const have = state.inventory[item.id] || 0;
+          const half = Math.max(1, Math.floor(have / 2));
+          showSelectionModal(
+            `Сколько: ${item.nameRu} (×${have})?`,
+            [
+              { label: '1 шт', subtitle: 'Одна штука' },
+              { label: `Половина (×${half})`, subtitle: 'Половина запаса' },
+              { label: `Всё (×${have})`, subtitle: 'Весь запас' },
+            ],
+            (choice: number) => {
+              const qty = choice === 2 ? have : choice === 1 ? half : 1;
+              state.myTradeOffers.push({ type: 'item', data: { id: item.id, name: item.nameRu, qty } });
+              state.socket.emit('trade_offer', { tradeId: state.activeTradeId, offers: state.myTradeOffers });
+              renderTradeOffers();
+              renderTradeItemGrid();
+              renderTradePickGrid();
+            },
+            true,
+          );
         }
       }
-      // Отправляем обновление партнёру и перерисовываем
-      state.socket.emit('trade_offer', { tradeId: state.activeTradeId, offers: state.myTradeOffers });
-      renderTradeOffers();
-      renderTradeItemGrid();
-      renderTradePickGrid();
     });
 
     grid.appendChild(card);
