@@ -338,7 +338,7 @@ async function restoreBattleState() {
           );
         }
         const moveResults = await Promise.all(movePromises);
-        S.wildMovesDetailed = moveResults.filter(Boolean);
+        S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
       }
 
       // ── IVs дикого (если нет — генерируем случайные) ──
@@ -397,7 +397,7 @@ async function restoreBattleState() {
           );
         }
         const moveResults = await Promise.all(movePromises);
-        S.wildMovesDetailed = moveResults.filter(Boolean);
+        S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
       }
 
       // ── Данные лидера зала ──
@@ -572,6 +572,37 @@ function playerMovesFirst(playerMove, enemyMove): boolean {
   // игрок всегда ходил первым, что давало ему бесплатное преимущество.
   if (pSpe === eSpe) return Math.random() < 0.5;
   return pSpe > eSpe;
+}
+
+/**
+ * Фильтр атак по уровню изучения (спека H1/H2).
+ * Дикие и лидеры знают только level-up атаки с min level_learned_at <= level.
+ * Именно отсутствие фильтра давало Маджикарпу Гидропомпу: сортировка брала
+ * топ по убыванию уровня изучения. Пусто — самая ранняя доступная;
+ * совсем ничего — синтетический Tackle (иначе дикий беспомощен).
+ */
+export function filterMovesByLevel(moveDetails, level) {
+  const lvl = Math.max(1, level || 1);
+  const withLvl = (moveDetails || []).map((m) => {
+    const lvls = ((m && m.version_group_details) || [])
+      .filter((v) => v && v.move_learn_method && v.move_learn_method.name === 'level-up'
+        && typeof v.level_learned_at === 'number')
+      .map((v) => v.level_learned_at);
+    return { m, min: lvls.length ? Math.min(...lvls) : Infinity };
+  }).filter((e) => e.m);
+  const known = withLvl
+    .filter((e) => e.min <= lvl)
+    .sort((a, b) => a.min - b.min)
+    .map((e) => e.m);
+  if (known.length) return known;
+  if (withLvl.length) {
+    return [withLvl.slice().sort((a, b) => a.min - b.min)[0].m];
+  }
+  return [{
+    name: 'tackle', power: 40, accuracy: 100, pp: 35,
+    type: { name: 'normal' }, damage_class: { name: 'physical' },
+    meta: {}, effect_entries: [],
+  }];
 }
 
 /**
@@ -1993,8 +2024,13 @@ function startAutoHunt() {
     const enc = getLocationEncounters();
     if (enc.length === 0) { updateHuntBtn(); S.huntTimer = setTimeout(doTick, 5000); return; }
     updateHuntBtn();
+    // Плотность энкаунтеров по локации (D3): encounterRate в данных локи,
+    // по умолчанию 0.20 как было. Цифры по локациям — таблица D1.
+    const huntRate = GS.currentLocationId
+      ? (store.getLocation(GS.currentLocationId)?.encounterRate ?? 0.20)
+      : 0.20;
     // 20% base chance every tick — базовый шанс найти покемона
-    if (Math.random() < 0.20) {
+    if (Math.random() < huntRate) {
       const pkmName = pickWeightedEncounter(enc);
       startHunt([pkmName]);                                // Начинаем битву
       S.huntTimer = setTimeout(doTick, 3000);
@@ -2200,7 +2236,7 @@ async function startHunt(encountersArray) {
       );
     }
     const moveResults = await Promise.all(movePromises);
-    S.wildMovesDetailed = moveResults.filter(Boolean);
+    S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
     S.wildMovesPP = S.wildMovesDetailed.map(m => ({ current: m.pp || 30, max: m.pp || 30 }));
 
     document.getElementById('wild-name').innerText = S.activeWild.name;
@@ -4897,9 +4933,12 @@ async function startGymNextPokemon() {
     const moveResults3 = (await Promise.all(movePool.map(m =>
       fetchPokeAPI(m.move.url).catch(() => null)
     ))).filter(Boolean);
+    // H2: даже умный подбор — только из атак по уровню (S.wildLvl = уровень
+    // текущего покемона лидера). Без фильтра сюда попадали топ-атаки вида.
+    const eligible3 = filterMovesByLevel(moveResults3, S.wildLvl);
     // Categorize moves
     const stabMoves = [], coverageMoves = [], statusMoves = [];
-    for (const m of moveResults3) {
+    for (const m of eligible3) {
       const isSpMove = m.damage_class?.name === 'special';
       const statFit = (isSpecialAttacker && isSpMove) || (!isSpecialAttacker && !isSpMove);
       const isStab = wildTypes.includes(m.type?.name);
@@ -5138,7 +5177,7 @@ async function startEliteNextPokemon() {
       );
     }
     const moveResults = await Promise.all(movePromises);
-    S.wildMovesDetailed = moveResults.filter(Boolean);
+    S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
     S.wildMovesPP = S.wildMovesDetailed.map(m => ({ current: m.pp || 30, max: m.pp || 30 }));
 
     document.getElementById('wild-name').innerText = S.activeWild.name;
@@ -5249,7 +5288,7 @@ async function startChampionNextPokemon() {
       );
     }
     const moveResults = await Promise.all(movePromises);
-    S.wildMovesDetailed = moveResults.filter(Boolean);
+    S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
     S.wildMovesPP = S.wildMovesDetailed.map(m => ({ current: m.pp || 30, max: m.pp || 30 }));
 
     document.getElementById('wild-name').innerText = S.activeWild.name;

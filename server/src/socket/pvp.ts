@@ -25,10 +25,16 @@ function clampInt(value: unknown, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 // Активные PvP-сессии: battleId → { playerA, playerB }
-const activeBattles = new Map<string, { playerA: string; playerB: string; userA: number; userB: number; startedAt: number }>();
+const activeBattles = new Map<string, { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null }>();
 
 /** Сколько живёт бой без активности. */
 const BATTLE_TTL_MS = 10 * 60 * 1000;
+/** Вызов без ответа: через столько считаем оппонента AFK. */
+const CHALLENGE_TTL_MS = 60 * 1000;
+/** Без ходов столько: AFK-сторона проигрывает ( было: висело до 10-мин TTL ). */
+const INACTIVITY_TTL_MS = 90 * 1000;
+/** Ожидающие вызовы: socketId вызывающего → { кому, когда }. */
+const pendingChallenges = new Map<string, { partnerUserId: number; at: number }>();
 /** Потолок одновременных боёв на процесс — защита от роста памяти. */
 const MAX_ACTIVE_BATTLES = 300;
 
@@ -42,7 +48,7 @@ let sweepTimer: NodeJS.Timeout | null = null;
 function getBattleForSocket(
   battleId: unknown,
   socketId: string,
-): { battle: { playerA: string; playerB: string; userA: number; userB: number; startedAt: number }; isPlayerA: boolean } | null {
+): { battle: { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null }; isPlayerA: boolean } | null {
   if (typeof battleId !== 'string' || !battleId) return null;
   const battle = activeBattles.get(battleId);
   if (!battle) return null;
@@ -52,19 +58,54 @@ function getBattleForSocket(
 }
 
 /** Уборка боёв по TTL. Без неё карта жила до перезапуска процесса. */
-function sweepBattles(io: Server) {
+async function sweepBattles(io: Server) {
   const now = Date.now();
-  for (const [battleId, b] of activeBattles) {
-    if (now - b.startedAt < BATTLE_TTL_MS) continue;
-    activeBattles.delete(battleId);
-    io.sockets.sockets.get(b.playerA)?.emit('pvp_opponent_left', 'Бой прерван');
-    io.sockets.sockets.get(b.playerB)?.emit('pvp_opponent_left', 'Бой прерван');
+  // Протухшие вызовы: вызывающий ждал в AFK — отпускаем с уведомлением
+  for (const [sockId, ch] of [...pendingChallenges]) {
+    if (now - ch.at < CHALLENGE_TTL_MS) continue;
+    pendingChallenges.delete(sockId);
+    io.sockets.sockets.get(sockId)?.emit('pvp_challenge_timeout', {});
   }
+  for (const [battleId, b] of [...activeBattles]) {
+    if (now - b.startedAt < BATTLE_TTL_MS && now - b.lastActivityAt < INACTIVITY_TTL_MS) continue;
+    activeBattles.delete(battleId);
+    const timedOut = now - b.lastActivityAt >= INACTIVITY_TTL_MS;
+    if (timedOut && b.lastActorSocketId) {
+      // AFK-проигрыш: победитель — активная сторона. Рейтинг — да, деньги —
+      // нет (иначе вызов альта + AFK = печатный станок).
+      await settleTimeoutWin(io, b);
+    } else {
+      io.sockets.sockets.get(b.playerA)?.emit('pvp_opponent_left', 'Бой прерван');
+      io.sockets.sockets.get(b.playerB)?.emit('pvp_opponent_left', 'Бой прерван');
+    }
+  }
+}
+
+/** AFK-победа активной стороне: рейтинг без денег. */
+async function settleTimeoutWin(io: Server, b: { playerA: string; playerB: string; userA: number; userB: number; lastActorSocketId: string | null }) {
+  const winnerSock = b.lastActorSocketId!;
+  const winnerIsA = winnerSock === b.playerA;
+  const winnerTg = winnerIsA ? b.userA : b.userB;
+  const loserTg = winnerIsA ? b.userB : b.userA;
+  try {
+    const db = getDb();
+    const rows = await db.select({ id: users.id, tg: users.tg_id }).from(users);
+    const byTg = new Map(rows.map((r: any) => [r.tg, r.id]));
+    const wId = byTg.get(winnerTg);
+    const lId = byTg.get(loserTg);
+    if (wId) await updateOrCreateRating(db, wId, 10, true);
+    if (lId) await updateOrCreateRating(db, lId, -5, false);
+  } catch (e) {
+    console.error('[pvp] timeout rating error:', e);
+  }
+  io.sockets.sockets.get(winnerSock)?.emit('pvp_timeout', { won: true });
+  const loserSock = winnerIsA ? b.playerB : b.playerA;
+  io.sockets.sockets.get(loserSock)?.emit('pvp_timeout', { won: false });
 }
 
 export function initPvP(io: Server, socket: Socket) {
   if (!sweepTimer) {
-    sweepTimer = setInterval(() => sweepBattles(io), 60_000);
+    sweepTimer = setInterval(() => sweepBattles(io), 30_000);
     sweepTimer.unref?.();
   }
 
@@ -83,6 +124,8 @@ export function initPvP(io: Server, socket: Socket) {
       fromName: socket.data.user?.firstName || socket.data.user?.username || 'Тренер',
       fromId: socket.data.user?.tgId,
     });
+    // Вызов висит максимум минуту: без ответа вызывающий не ждёт в AFK вечно
+    pendingChallenges.set(socket.id, { partnerUserId, at: Date.now() });
   });
 
   // ── pvp_accept ──
@@ -115,7 +158,11 @@ export function initPvP(io: Server, socket: Socket) {
       userA: challengerUserId,
       userB: myUserId,
       startedAt: Date.now(),
+      lastActivityAt: Date.now(),
+      lastActorSocketId: null,
     });
+    pendingChallenges.delete(socket.id);
+    pendingChallenges.delete(challenger.socketId);
 
     // Обоим: кто первый ходит (инициатор = first)
     const challengerName = challengerSocket.data.user?.firstName || challengerSocket.data.user?.username || 'Оппонент';
@@ -126,6 +173,7 @@ export function initPvP(io: Server, socket: Socket) {
 
   // ── pvp_decline ──
   socket.on('pvp_decline', (fromId: number) => {
+    pendingChallenges.delete(socket.id);
     const challenger = getOnlinePlayerByUserId(fromId);
     if (!challenger) return;
     const challengerSocket = io.sockets.sockets.get(challenger.socketId);
@@ -139,6 +187,8 @@ export function initPvP(io: Server, socket: Socket) {
     const found = getBattleForSocket(data?.battleId, socket.id);
     if (!found) return; // не участник боя
     const { battle } = found;
+    battle.lastActivityAt = Date.now();
+    battle.lastActorSocketId = socket.id;
 
     // ── Валидация типа действия ──
     const validTypes = ['attack', 'switch', 'surrender', 'mon_data', 'fainted'];
@@ -267,6 +317,7 @@ export function initPvP(io: Server, socket: Socket) {
 
   // ── disconnect → очистка PvP ──
   socket.on('disconnect', () => {
+    pendingChallenges.delete(socket.id);
     for (const [battleId, battle] of activeBattles) {
       if (battle.playerA === socket.id || battle.playerB === socket.id) {
         const otherSocketId = battle.playerA === socket.id ? battle.playerB : battle.playerA;

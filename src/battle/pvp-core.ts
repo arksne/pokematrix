@@ -290,12 +290,16 @@ export function doPvPAttack(moveIdx) {
  *
  * ГДЕ ВЫЗЫВАЕТСЯ: из обработчика socket → 'pvp_result'
  */
-export function endPvP(won) {
+export function endPvP(won, announce = true) {
   showToast(won ? '🏆 Победа в PvP!' : '💀 Поражение в PvP...', !won);
   if (won) checkAchievement('pvp_win');
   // Награда теперь выдается сервером (слушаем pvp_reward)
   document.getElementById('pvp-modal').style.display = 'none';
-  state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: won ? 'win' : 'lose' } });
+  // announce=false — бой уже закрыт сервером (AFK-таймаут): pvp_end не шлём,
+  // иначе будет двойное начисление и лишний цикл
+  if (announce) {
+    state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: won ? 'win' : 'lose' } });
+  }
   state.pvpBattleId = null;
   autoSave();
 }

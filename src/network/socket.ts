@@ -246,6 +246,16 @@ export function initTradeSocket() {
     showToast(`${data.fromName} отклонил вызов`, true);
   });
 
+  // Вызов протух (60с без ответа): не висим в AFK
+  state.socket.on('pvp_challenge_timeout', () => {
+    showToast('Вызов истёк: оппонент не ответил', true);
+  });
+
+  // AFK-финал с сервера: победитель уже определён, pvp_end НЕ шлём
+  state.socket.on('pvp_timeout', (data) => {
+    endPvP(!!data?.won, false);
+  });
+
   state.socket.on('pvp_start', (data) => {
     openPvPArena(data.battleId, data.opponent, data.first || false);
   });
