@@ -50,6 +50,10 @@ let trainersAllData = [];
 // /avatars/<id>.png. Раньше список проверял значение по форме ПУТИ
 // (/avatars/x.png) — ID под неё не подходит никогда, и вместо картинки
 // огромным текстом печатался сам ID («gentleman», «trainer_m»).
+// Блок G1: новый SVG-пак (src/data/avatars.ts) — inline-SVG без файлов.
+// Приоритет: SVG-пак → PNG-белый список → строгая форма пути → эмодзи.
+import { AVATARS, getAvatarById, isAvatarId } from '../data/avatars.js';
+
 const TRAINER_AVATAR_FILES = new Set([
   'trainer_f', 'trainer_m', 'ninja', 'sailor', 'super_nerd', 'beauty', 'gentleman',
 ]);
@@ -62,10 +66,16 @@ const TRAINER_AVATAR_RU: Record<string, string> = {
   super_nerd: 'Заучка', beauty: 'Красотка', gentleman: 'Джентльмен',
 };
 
-/** Круглый аватар: PNG если есть, под ним эмодзи-заглушка. Никогда не текст. */
+/** Круглый аватар: SVG-пак → PNG → эмодзи-заглушка. Никогда не текст. */
 export function trainerAvatarHtml(raw: unknown, size = 40): string {
   const id = typeof raw === 'string' ? raw : '';
   const circle = `width:${size}px;height:${size}px;border-radius:50%;`;
+  // G1: SVG-пак — inline, без файлов. id строго из белого списка пака,
+  // поэтому XSS через него невозможен (svg — статическая строка из кода).
+  if (isAvatarId(id)) {
+    const def = getAvatarById(id)!;
+    return `<span style="position:relative;display:inline-block;${circle}overflow:hidden;flex:0 0 auto;">${def.svg}</span>`;
+  }
   const bg = 'background:linear-gradient(135deg,#2a5298,#1e3c72);';
   const fs = `font-size:${Math.round(size * 0.55)}px;`;
   const emoji = TRAINER_AVATAR_EMOJI[id] || '👤';
@@ -81,8 +91,10 @@ export function trainerAvatarHtml(raw: unknown, size = 40): string {
     `<img src="${src}" alt="" onerror="this.remove()" style="position:absolute;inset:0;${circle}object-fit:cover;"></span>`;
 }
 
-/** Подпись для селектов: «🤵 Джентльмен». */
+/** Подпись для селектов: «🤵 Джентльмен» (SVG-пак — «🖼 Имя»). */
 export function trainerAvatarLabel(id: string): string {
+  const svgDef = getAvatarById(id);
+  if (svgDef) return `🖼 ${svgDef.name}`;
   return `${TRAINER_AVATAR_EMOJI[id] || '👤'} ${TRAINER_AVATAR_RU[id] || id}`;
 }
 
@@ -215,14 +227,15 @@ export function initTrainersTab() {
 // ── showAccountPanel: отображение панели настроек аккаунта ──
 // Заполняет все поля формы: аватар, имя, Telegram ID, поле ввода ника, выбор аватара
 export function showAccountPanel() {
-  const AVATAR_IDS = ['trainer_f', 'trainer_m', 'ninja', 'sailor', 'super_nerd', 'beauty', 'gentleman'];
+  // G1: сначала SVG-пак (26), затем legacy PNG — один источник для селекта.
+  const AVATAR_IDS = [...AVATARS.map((a) => a.id), 'trainer_f', 'trainer_m', 'ninja', 'sailor', 'super_nerd', 'beauty', 'gentleman'];
   const saved = localStorage.getItem(lsKey('avatar')) || '👤';
 
-  // Аватар — картинкой, а не текстом ID (было: огромная надпись «gentleman»)
+  // Аватар — картинкой/SVG, а не текстом ID (было: огромная надпись «gentleman»)
   const avatarBox = document.getElementById('account-avatar');
   if (avatarBox) {
     avatarBox.textContent = '';
-    avatarBox.innerHTML = trainerAvatarHtml(TRAINER_AVATAR_FILES.has(saved) ? saved : '', 64);
+    avatarBox.innerHTML = trainerAvatarHtml(isAvatarId(saved) || TRAINER_AVATAR_FILES.has(saved) ? saved : '', 64);
   }
 
   // Отображаем имя: никнейм → Telegram first_name → 'Тренер'
@@ -248,6 +261,17 @@ export function showAccountPanel() {
       opt.textContent = trainerAvatarLabel(id);
       sel.appendChild(opt);
     });
-    if (TRAINER_AVATAR_FILES.has(saved)) sel.value = saved;
+    if (isAvatarId(saved) || TRAINER_AVATAR_FILES.has(saved)) sel.value = saved;
+  }
+
+  // Вход на арену из «Аккаунта» — чтобы не бегать за жетоном в Поке-Центр
+  // каждый раз (жетон покупается в маркете, а вход теперь жмётся отсюда).
+  const arenaBtn = document.getElementById('btn-account-arena');
+  if (arenaBtn) {
+    arenaBtn.onclick = () => {
+      import('./pvp-arena.js')
+        .then((pa) => pa.openPvpArenaLobby())
+        .catch((e) => console.error('[arena] арена не открылась', e));
+    };
   }
 }

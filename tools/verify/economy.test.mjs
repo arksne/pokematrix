@@ -137,6 +137,132 @@ const sockB = await connect(tokenB, 'B');
   sB.close();
 }
 
+// ══════════════════════ M-18: PvP-Арена ══════════════════════
+// E6: бой с арены идёт по тому же протоколу (challenge/accept/start/
+// attack → hp_update/fainted → pvp_end/lose → pvp_reward), жетон сгорает
+// при входе, награда — со стриком (pvp_reward расширен, E5 не ломается).
+// E7: без жетона на арену нельзя (arena_join_rejected NO_TOKEN).
+{
+ try {
+  const A2_ID = 111000021, B2_ID = 111000022;
+  const tA2 = await login(A2_ID, 'pvp_arena_a');
+  const tB2 = await login(B2_ID, 'pvp_arena_b');
+  const arenaSave = () => {
+    const s = testSave();
+    s.saveData.inventory = { credit: 50000, arenaToken: 2, pokeBall: 5 };
+    s.saveData.myTeam = [testMon('arena-mon-1')];
+    return s;
+  };
+  await api('/api/save', { method: 'POST', token: tA2, body: arenaSave() });
+  await api('/api/save', { method: 'POST', token: tB2, body: arenaSave() });
+  const sA2 = await connect(tA2, 'AA');
+  const sB2 = await connect(tB2, 'AB');
+
+  // Вход по жетону: A входит, затем B.
+  // Лобби НЕ ловим первым попавшимся broadcast: A получает «лобби из одного
+  // себя» от своей же регистрации, и событие может прийти до того, как тест
+  // успел подписаться (буфер сокета). Поэтому собираем ВСЕ снимки и отдельно
+  // просим свежий — так проверка детерминирована и не зависит от тайминга.
+  const seen = [];
+  const collect = (l) => { if (Array.isArray(l)) seen.push(l); };
+  sA2.on('arena_lobby', collect);
+  const joinedA = onceEvent(sA2, 'arena_joined', 4000);
+  sA2.emit('arena_join');
+  const jA = await joinedA;
+  const joinedB = onceEvent(sB2, 'arena_joined', 4000);
+  sB2.emit('arena_join');
+  const jB = await joinedB;
+  const snapP = onceEvent(sA2, 'arena_lobby', 4000);
+  sA2.emit('arena_lobby_request');
+  const lobby = await snapP;
+  sA2.off('arena_lobby', collect);
+  const snapshots = [...seen, ...(Array.isArray(lobby) ? [lobby] : [])];
+  const bothInLobby = (l) => Array.isArray(l)
+    && l.some((e) => e.userId === A2_ID) && l.some((e) => e.userId === B2_ID);
+  const lobbyOk = !!jA && !!jB && snapshots.some(bothInLobby);
+  check('E6a', 'Арена: вход по жетону, лобби видит обоих', lobbyOk,
+    !jA ? 'A не вошёл' : !jB ? 'B не вошёл'
+      : `снимки: [${snapshots.map((l) => l.length).join(',')}]`);
+
+  // Жетон сгорает при входе (было 2 → стало 1).
+  const sdA2 = asObject((await api('/api/save', { method: 'GET', token: tA2 })).json?.saveData);
+  check('E6b', 'Арена: жетон сгорает при входе', sdA2.inventory?.arenaToken === 1,
+    `arenaToken=${sdA2.inventory?.arenaToken}`);
+
+  // Бой по тому же протоколу, но с флагом арены.
+  let protoOk = false;
+  let rewardOk = false;
+  const chRecv = onceEvent(sB2, 'pvp_challenge_received', 4000);
+  sA2.emit('pvp_challenge', { userId: B2_ID, arena: true });
+  const chAr = await chRecv;
+  if (chAr?.arena === true) {
+    const stA = onceEvent(sA2, 'pvp_start', 4000);
+    const stB = onceEvent(sB2, 'pvp_start', 4000);
+    sB2.emit('pvp_accept', { fromId: A2_ID, arena: true });
+    const [evA, evB] = await Promise.all([stA, stB]);
+    const bidA = evA?.battleId;
+    const bidB = evB?.battleId;
+    if (bidA && bidA === bidB) {
+      const atkRecv = onceEvent(sB2, 'pvp_opponent_action', 4000);
+      sA2.emit('pvp_action', { battleId: bidA, action: { type: 'attack', moveName: 'tackle', dmg: 8, crit: false, lvl: 5, atk: 60, power: 40 } });
+      const atk = await atkRecv;
+      if (atk?.type === 'attack') {
+        const hpRecv = onceEvent(sA2, 'pvp_opponent_action', 4000);
+        sB2.emit('pvp_action', { battleId: bidB, action: { type: 'hp_update', hp: 0, maxHp: 50, fainted: true } });
+        const hp = await hpRecv;
+        const faintRecv = onceEvent(sA2, 'pvp_opponent_action', 4000);
+        sB2.emit('pvp_action', { battleId: bidB, action: { type: 'fainted' } });
+        const faint = await faintRecv;
+        protoOk = hp?.type === 'hp_update' && faint?.type === 'fainted';
+      }
+      const rewardRecv = onceEvent(sA2, 'pvp_reward', 5000);
+      sB2.emit('pvp_end', { battleId: bidB, action: { type: 'lose' } });
+      const reward = await rewardRecv;
+      rewardOk = !!reward && reward.money >= 500 && reward.arena === true
+        && (reward.streak || 0) >= 1 && Array.isArray(reward.items) && reward.items.length > 0;
+      check('E6d', 'Арена: победитель получает pvp_reward со стриком и предметами',
+        rewardOk, reward ? `money=${reward.money} streak=${reward.streak} items=${reward.items?.length}` : 'pvp_reward не пришёл');
+    }
+  }
+  check('E6c', 'Арена: бой идёт по тому же протоколу (attack/hp_update/fainted)',
+    chAr?.arena === true && protoOk,
+    !chAr ? 'вызов не дошёл' : `arena=${chAr?.arena}, sync=${protoOk}`);
+
+  // Таблица лидеров арены видит победу.
+  const lead = await api('/api/arena/leaders', { token: tA2 });
+  const entries = lead.json?.entries || [];
+  check('E6e', 'Арена: таблица лидеров отдаёт победу',
+    lead.status === 200 && entries.some((e) => e.userId === A2_ID && (e.wins || 0) >= 1),
+    lead.status !== 200 ? `HTTP ${lead.status}` : `записей: ${entries.length}`);
+
+  sA2.close();
+  sB2.close();
+ } catch (err) {
+  // Раньше исключение внутри блока глушило все E6-проверки: в отчёте оставалось
+  // только «ПРОВАЛЕНО: E6a» без единого сообщения, где именно сломалось.
+  check('E6a', 'Арена: вход по жетону, лобби видит обоих', false, `исключение: ${err?.message || err}`);
+  check('E6c', 'Арена: бой идёт по тому же протоколу', false, 'блок не дошёл');
+  check('E6d', 'Арена: победитель получает pvp_reward со стриком', false, 'блок не дошёл');
+  check('E6e', 'Арена: таблица лидеров отдаёт победу', false, 'блок не дошёл');
+ }
+}
+
+// ── E7: без жетона на арену нельзя ──
+{
+  const C_ID = 111000023;
+  const tC = await login(C_ID, 'pvp_arena_c');
+  await api('/api/save', { method: 'POST', token: tC, body: testSave() }); // жетона нет
+  const sC = await connect(tC, 'AC');
+  const rejP = onceEvent(sC, 'arena_join_rejected', 3000);
+  const okP = onceEvent(sC, 'arena_joined', 3000);
+  sC.emit('arena_join');
+  const [rej, okJoin] = await Promise.all([rejP, okP]);
+  check('E7', 'Арена: без жетона вход отклоняется (NO_TOKEN)',
+    !!rej && okJoin === null && /NO_TOKEN/.test(rej.reason || ''),
+    rej ? `reason=${rej.reason}` : 'отклонения не было');
+  sC.close();
+}
+
 // ══════════════════════ Трейд ══════════════════════
 {
   const t1 = await login(222000001, 'trade_1');

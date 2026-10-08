@@ -254,13 +254,17 @@ export function initTradeSocket() {
 
   // PvP handlers
   state.socket.on('pvp_challenge_received', (data) => {
-    showConfirmModal('⚔ Вызов на бой!', `Тренер ${data.fromName} вызывает вас на битву!`, () => {
+    // M-18: вызов с арены помечен флагом — принятие тем же флагом,
+    // иначе сервер заведёт обычный бой (без стрика и призов).
+    const arena = data?.arena === true;
+    const title = arena ? '⚔ Вызов на бой (АРЕНА)!' : '⚔ Вызов на бой!';
+    showConfirmModal(title, `Тренер ${data.fromName} вызывает вас на битву!`, () => {
       if (!state.myTeam.some(m => m.currentHp > 0)) {
         showToast('Нужен хотя бы один живой покемон!', true);
         state.socket.emit('pvp_decline', data.fromId);
         return;
       }
-      state.socket.emit('pvp_accept', data.fromId);
+      state.socket.emit('pvp_accept', arena ? { fromId: data.fromId, arena: true } : data.fromId);
     }, () => { state.socket.emit('pvp_decline', data.fromId); });
   });
 
@@ -279,7 +283,41 @@ export function initTradeSocket() {
   });
 
   state.socket.on('pvp_start', (data) => {
+    // M-18: бой с арены — тот же протокол, призы и стрик посчитает сервер.
+    if (data?.arena === true) showToast('⚔ Бой на арене! Победа даст приз за стрик.', false);
     openPvPArena(data.battleId, data.opponent, data.first || false);
+  });
+
+  // ── M-18: Арена — лобби и вход ──
+  // Ленивые импорты: pvp-arena.ts тоже лениво тянет socket (цикл).
+  state.socket.on('arena_lobby', (lobby) => {
+    state.arenaLobby = Array.isArray(lobby) ? lobby : [];
+    import('../ui/pvp-arena.js').then((m) => {
+      m.renderArenaLobby();
+      m.renderArenaStatus();
+    }).catch(() => {});
+  });
+  state.socket.on('arena_joined', () => {
+    showToast('🎟️ Вы на арене! Жетон сгорел.', false);
+    import('../ui/pvp-arena.js').then((m) => m.onArenaJoined()).catch(() => {});
+  });
+  state.socket.on('arena_join_rejected', (data) => {
+    const reason = data?.reason === 'NO_TOKEN'
+      ? 'На арену — только с жетоном! Купите жетон в маркете.'
+      : 'Не удалось войти на арену.';
+    showToast(reason, true);
+  });
+  state.socket.on('pvp_challenge_rejected', (data) => {
+    if (data?.reason === 'NOT_IN_ARENA') showToast('Оба бойца должны быть на арене!', true);
+  });
+  // Сброс стрика проигравшего (победа/сдача соперника уже сеттлится сервером).
+  state.socket.on('pvp_arena_update', (data) => {
+    if (data?.arena === true && typeof data.streak === 'number') {
+      state.pvpStreak = data.streak;
+      state.pvpLosses = (state.pvpLosses || 0) + 1;
+      import('../ui/pvp-arena.js').then((m) => m.renderArenaStatus()).catch(() => {});
+      autoSave();
+    }
   });
 
   state.socket.on('pvp_opponent_action', (action) => {
@@ -378,12 +416,32 @@ export function initTradeSocket() {
   });
 
   // ── pvp_reward: server-authoritative награда за PvP победу ──
-  state.socket.on('pvp_reward', (data: { money: number }) => {
+  // M-18: бой с арены присылает расширенный пакет
+  // { money, items, streak, best, wins, arena: true } — деньги и предметы
+  // уже лежат в серверном сейве, клиент зеркалит их в свой.
+  state.socket.on('pvp_reward', (data: { money: number; items?: Array<{ id: string; qty: number }>; streak?: number; best?: number; wins?: number; arena?: boolean }) => {
     if (data.money) {
       state.inventory['credit'] = (state.inventory['credit'] || 0) + data.money;
       updateMoneyDisplay();
       store.emit('money:changed');
-      showToast(`🏆 +${data.money}¥ за победу в PvP!`, false);
+      if (data.arena === true) {
+        // Предметы приза — через addItem (проверяет ITEMS, шлёт inventory:changed).
+        for (const item of data.items || []) {
+          if (item?.id && item.qty > 0) addItem(item.id, item.qty);
+        }
+        // Серверный стрик — в поверхностные метрики тренеркарты (блок G).
+        if (typeof data.streak === 'number') state.pvpStreak = data.streak;
+        if (typeof data.best === 'number') state.pvpBestStreak = Math.max(state.pvpBestStreak || 0, data.best);
+        state.pvpWins = (state.pvpWins || 0) + 1;
+        showToast(`🏆 Арена: +${data.money}¥, стрик ${data.streak}! Приз уже в рюкзаке.`, false);
+        import('../ui/pvp-arena.js').then((m) => {
+          m.renderArenaStatus();
+          void m.refreshArenaLeaders();
+        }).catch(() => {});
+        autoSave();
+      } else {
+        showToast(`🏆 +${data.money}¥ за победу в PvP!`, false);
+      }
     }
   });
 }

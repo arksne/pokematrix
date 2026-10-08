@@ -59,6 +59,14 @@ export const state: Record<string, any> = {
   achievements: [] as Array<string>, // ID разблокированных достижений
   battleWins: 0,                     // Побед в боях (ачивка trainer_100)
 
+  // ── Блок G: тренеркарта (поверхностные метрики + аватар) ──
+  // Только счётчики, БЕЗ детальных списков/историй (решение G2).
+  trainerAvatar: '' as string,       // id из src/data/avatars.ts (пусто = дефолт)
+  pvpWins: 0,                        // Побед в PvP (поверхностно)
+  pvpLosses: 0,                      // Поражений в PvP (поверхностно)
+  pvpStreak: 0,                      // Текущий стрик: +N победы / -N поражения
+  pvpBestStreak: 0,                  // Лучший победный стрик
+
   // ── Daycare / Breeding ───────────────────────────────────
   daycareMons: [] as Array<any>,  // Покемоны в питомнике
   transport: null as any,         // Рейс C3: {vehicle, from, to, departAt, arriveAt} | null
@@ -124,6 +132,10 @@ export const state: Record<string, any> = {
   pvpOppMon: null as any,          // Покемон оппонента
   pvpMyTurn: false,                // Флаг: мой ход
   pvpMovesDetailed: [] as Array<any>, // Детали атак в PvP
+  // ── M-18: PvP-Арена ──────────────────────────────────────
+  inArena: false,                  // Я на арене (вошёл по жетону)
+  arenaLobby: [] as Array<any>,    // Кто на арене: [{ userId, username, inBattle }]
+  arenaLeaders: [] as Array<any>,  // Таблица лидеров арены (с сервера)
   lastProfileOpen: 0,              // Timestamp последнего открытия профиля
   lastSocketAction: 0,             // Timestamp последнего socket-действия
   activeCraftCategory: null as string | null, // Активная категория крафта

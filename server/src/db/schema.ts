@@ -69,6 +69,23 @@ export const battleRatings = pgTable('battle_ratings', {
 });
 
 /**
+ * M-18: статистика PvP-Арены (сервер — истина, клиент её не пишет).
+ *   wins   — всего побед на арене
+ *   streak — текущий победный стрик (поражение/сдача → 0)
+ *   best   — лучший стрик
+ * Призы за стрик считает pvp_end по той же таблице, что
+ * src/battle/arena.ts (arenaRewardForStreak).
+ */
+export const arenaStats = pgTable('arena_stats', {
+  id: serial('id').primaryKey(),
+  user_id: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  wins: integer('wins').default(0),
+  streak: integer('streak').default(0),
+  best: integer('best').default(0),
+  updated_at: text('updated_at'),
+});
+
+/**
  * История сохранений. Заполняется автоматически перед каждой перезаписью
  * save_data, если прежний сейв содержал покемонов. Нужна потому, что клиент
  * присылает save_data целиком: любая ошибка на его стороне перетирает весь

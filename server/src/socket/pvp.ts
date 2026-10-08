@@ -15,7 +15,7 @@ import type { Server, Socket } from 'socket.io';
 import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
 import { getDb } from '../db/index.js';
-import { users, battleRatings } from '../db/schema.js';
+import { users, battleRatings, arenaStats } from '../db/schema.js';
 import { eq, sql } from 'drizzle-orm';
 
 /** Ограничивает число целым значением в диапазоне [min, max]. */
@@ -25,7 +25,8 @@ function clampInt(value: unknown, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 // Активные PvP-сессии: battleId → { playerA, playerB }
-const activeBattles = new Map<string, { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null }>();
+// arena=true — бой с PvP-Арены (M-18): награда со стриком, а не базовые 500.
+const activeBattles = new Map<string, { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null; arena: boolean }>();
 
 /** Сколько живёт бой без активности. */
 const BATTLE_TTL_MS = 10 * 60 * 1000;
@@ -33,8 +34,62 @@ const BATTLE_TTL_MS = 10 * 60 * 1000;
 const CHALLENGE_TTL_MS = 60 * 1000;
 /** Без ходов столько: AFK-сторона проигрывает ( было: висело до 10-мин TTL ). */
 const INACTIVITY_TTL_MS = 90 * 1000;
-/** Ожидающие вызовы: socketId вызывающего → { кому, когда }. */
-const pendingChallenges = new Map<string, { partnerUserId: number; at: number }>();
+/** Ожидающие вызовы: socketId вызывающего → { кому, когда, арена ли }. */
+const pendingChallenges = new Map<string, { partnerUserId: number; at: number; arena: boolean }>();
+
+// ── M-18: PvP-Арена ──────────────────────────────────────────
+// Участники арены: socket.id → { tgId, имя, когда вошёл }.
+// Вход — только с жетоном arenaToken (сгорает при входе, списывает сервер).
+// Бои арены идут по тому же протоколу challenge/accept/start/action/end.
+const arenaMembers = new Map<string, { userId: number; username: string; joinedAt: number }>();
+
+/** ID жетона участия (паритет с src/battle/arena.ts). */
+const ARENA_TOKEN_ID = 'arenaToken';
+
+/**
+ * Приз за победу при данном стрике.
+ * ЗЕРКАЛО src/battle/arena.ts (arenaRewardForStreak): цифры менять в обоих
+ * местах. Стрик 1 деньгами равен обычному PvP (+500) — E5b не ломается.
+ */
+function arenaRewardForStreak(streak: number): { money: number; items: Array<{ id: string; qty: number }> } {
+  const tier = !Number.isFinite(streak) || streak < 1 ? 1 : Math.min(5, Math.floor(streak));
+  switch (tier) {
+    case 1: return { money: 500, items: [{ id: 'potion', qty: 1 }] };
+    case 2: return { money: 800, items: [{ id: 'superPotion', qty: 1 }] };
+    case 3: return { money: 1200, items: [{ id: 'greatBall', qty: 2 }] };
+    case 4: return { money: 2000, items: [{ id: 'ultraBall', qty: 2 }] };
+    default: return { money: 3000, items: [{ id: 'rareCandy', qty: 1 }] };
+  }
+}
+
+/** Снимок лобби арены: кто ждёт, кто дерётся. */
+function arenaLobbyList() {
+  const inBattleUsers = new Set<number>();
+  for (const b of activeBattles.values()) {
+    if (b.arena) { inBattleUsers.add(b.userA); inBattleUsers.add(b.userB); }
+  }
+  return [...arenaMembers.values()].map((m) => ({
+    userId: m.userId,
+    username: m.username,
+    inBattle: inBattleUsers.has(m.userId),
+  }));
+}
+
+/** Разослать лобби всем (вход/выход/старт/конец боя меняют флаги). */
+function broadcastArenaLobby(io: Server) {
+  if (arenaMembers.size === 0) return;
+  io.emit('arena_lobby', arenaLobbyList());
+}
+
+/** Прочитать или создать строку статистики арены (внутри транзакции). */
+async function readOrCreateArenaRow(tx: any, userId: number) {
+  const existing = (await tx.select().from(arenaStats).where(eq(arenaStats.user_id, userId)).limit(1))[0];
+  if (existing) return existing;
+  await tx.insert(arenaStats).values({
+    user_id: userId, wins: 0, streak: 0, best: 0, updated_at: new Date().toISOString(),
+  });
+  return { user_id: userId, wins: 0, streak: 0, best: 0 };
+}
 /** Потолок одновременных боёв на процесс — защита от роста памяти. */
 const MAX_ACTIVE_BATTLES = 300;
 
@@ -48,7 +103,7 @@ let sweepTimer: NodeJS.Timeout | null = null;
 function getBattleForSocket(
   battleId: unknown,
   socketId: string,
-): { battle: { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null }; isPlayerA: boolean } | null {
+): { battle: { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null; arena: boolean }; isPlayerA: boolean } | null {
   if (typeof battleId !== 'string' || !battleId) return null;
   const battle = activeBattles.get(battleId);
   if (!battle) return null;
@@ -79,6 +134,9 @@ async function sweepBattles(io: Server) {
       io.sockets.sockets.get(b.playerB)?.emit('pvp_opponent_left', 'Бой прерван');
     }
   }
+  // Арена: флаги inBattle могли измениться — обновить лобби.
+  // AFK-финал стрик не трогает (рейтинг без денег, как раньше).
+  broadcastArenaLobby(io);
 }
 
 /** AFK-победа активной стороне: рейтинг без денег. */
@@ -110,9 +168,22 @@ export function initPvP(io: Server, socket: Socket) {
   }
 
   // ── pvp_challenge ──
-  socket.on('pvp_challenge', (partnerUserId: number) => {
+  // M-18: вызов с арены — { userId, arena: true }. Число (старый клиент,
+  // E-тесты) — обычный бой вне арены.
+  socket.on('pvp_challenge', (raw: number | { userId?: unknown; arena?: unknown }) => {
+    const partnerUserId = typeof raw === 'number' ? raw : Number((raw as any)?.userId);
+    const wantArena = typeof raw === 'object' && raw !== null && (raw as any).arena === true;
     const myUserId = socket.data.user?.tgId;
-    if (!myUserId || partnerUserId === myUserId) return; // не вызываем себя
+    if (!myUserId || !Number.isFinite(partnerUserId) || partnerUserId === myUserId) return; // не вызываем себя
+
+    // Бой с арены — только между участниками арены (оба вошли по жетону).
+    if (wantArena) {
+      const partnerInArena = [...arenaMembers.values()].some((m) => m.userId === partnerUserId);
+      if (!arenaMembers.has(socket.id) || !partnerInArena) {
+        socket.emit('pvp_challenge_rejected', { reason: 'NOT_IN_ARENA' });
+        return;
+      }
+    }
 
     // Ищем по userId (стабильный идентификатор, не socket.id)
     const partner = getOnlinePlayerByUserId(partnerUserId);
@@ -123,15 +194,19 @@ export function initPvP(io: Server, socket: Socket) {
     partnerSocket.emit('pvp_challenge_received', {
       fromName: socket.data.user?.firstName || socket.data.user?.username || 'Тренер',
       fromId: socket.data.user?.tgId,
+      ...(wantArena ? { arena: true } : {}),
     });
     // Вызов висит максимум минуту: без ответа вызывающий не ждёт в AFK вечно
-    pendingChallenges.set(socket.id, { partnerUserId, at: Date.now() });
+    pendingChallenges.set(socket.id, { partnerUserId, at: Date.now(), arena: wantArena });
   });
 
   // ── pvp_accept ──
-  socket.on('pvp_accept', (fromId: number) => {
+  // M-18: принятие боя с арены — { fromId, arena: true } (число = старый формат).
+  socket.on('pvp_accept', (raw: number | { fromId?: unknown; arena?: unknown }) => {
+    const fromId = typeof raw === 'number' ? raw : Number((raw as any)?.fromId);
+    const acceptArena = typeof raw === 'object' && raw !== null && (raw as any).arena === true;
     const myUserId = socket.data.user?.tgId;
-    if (!myUserId || typeof fromId !== 'number') return;
+    if (!myUserId || !Number.isFinite(fromId)) return;
 
     // Бой с самим собой. Раньше проверки не было: pvp_accept со своим tgId
     // находил себя же, создавал бой с playerA === playerB, и повторяя
@@ -151,6 +226,15 @@ export function initPvP(io: Server, socket: Socket) {
       if (oldest) activeBattles.delete(oldest[0]);
     }
 
+    // M-18: бой аренный, только если вызов был с арены (с любой стороны
+    // флаг) И оба до сих пор на арене (жетон уже сожжён при входе).
+    const pendingArena = [...pendingChallenges.values()].some(
+      (p) => p.arena && (p.partnerUserId === myUserId || p.partnerUserId === challengerUserId),
+    );
+    const arena = (acceptArena || pendingArena)
+      && arenaMembers.has(challenger.socketId)
+      && arenaMembers.has(socket.id);
+
     const battleId = `pvp_${socket.id}_${challenger.socketId}_${Date.now()}`;
     activeBattles.set(battleId, {
       playerA: challenger.socketId,
@@ -160,6 +244,7 @@ export function initPvP(io: Server, socket: Socket) {
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
       lastActorSocketId: null,
+      arena,
     });
     pendingChallenges.delete(socket.id);
     pendingChallenges.delete(challenger.socketId);
@@ -167,8 +252,70 @@ export function initPvP(io: Server, socket: Socket) {
     // Обоим: кто первый ходит (инициатор = first)
     const challengerName = challengerSocket.data.user?.firstName || challengerSocket.data.user?.username || 'Оппонент';
     const acceptorName = socket.data.user?.firstName || socket.data.user?.username || 'Оппонент';
-    challengerSocket.emit('pvp_start', { battleId, opponent: acceptorName, first: true });
-    socket.emit('pvp_start', { battleId, opponent: challengerName, first: false });
+    challengerSocket.emit('pvp_start', { battleId, opponent: acceptorName, first: true, ...(arena ? { arena: true } : {}) });
+    socket.emit('pvp_start', { battleId, opponent: challengerName, first: false, ...(arena ? { arena: true } : {}) });
+    if (arena) broadcastArenaLobby(io);
+  });
+
+  // ── M-18: вход/выход с арены ──
+  // Жетон arenaToken сгорает ПРИ ВХОДЕ (1 жетон = 1 сессия, бои внутри
+  // бесплатны). Проверка и списание — в транзакции: два параллельных
+  // arena_join с одним жетоном дают ровно один вход.
+  socket.on('arena_join', async () => {
+    const tgId = socket.data.user?.tgId;
+    if (!tgId) return;
+    if (arenaMembers.has(socket.id)) {
+      socket.emit('arena_joined', { ok: true, already: true });
+      return;
+    }
+    try {
+      const db = getDb();
+      const consumed = await db.transaction(async (tx) => {
+        const row = (await tx.select({ id: users.id, save_data: users.save_data })
+          .from(users)
+          .where(eq(users.tg_id, tgId))
+          .for('update')
+          .limit(1))[0];
+        if (!row) return false;
+        const sd: any = parseSaveStrict(row.save_data, row.id);
+        if (!sd.inventory) sd.inventory = {};
+        if ((sd.inventory[ARENA_TOKEN_ID] || 0) < 1) return false;
+        sd.inventory[ARENA_TOKEN_ID] -= 1;
+        if (sd.inventory[ARENA_TOKEN_ID] <= 0) delete sd.inventory[ARENA_TOKEN_ID];
+        await tx.update(users)
+          .set({
+            save_data: JSON.stringify(stampSave(sd)),
+            money: sd.inventory.credit || 0,
+            save_version: sql`${users.save_version} + 1`,
+          })
+          .where(eq(users.id, row.id));
+        return true;
+      });
+      if (!consumed) {
+        // E7: без жетона на арену нельзя.
+        socket.emit('arena_join_rejected', { reason: 'NO_TOKEN' });
+        return;
+      }
+      arenaMembers.set(socket.id, {
+        userId: tgId,
+        username: socket.data.user?.firstName || socket.data.user?.username || 'Тренер',
+        joinedAt: Date.now(),
+      });
+      socket.emit('arena_joined', { ok: true });
+      broadcastArenaLobby(io);
+    } catch (e) {
+      console.error('[pvp] arena_join error:', e);
+      socket.emit('arena_join_rejected', { reason: 'ERROR' });
+    }
+  });
+
+  socket.on('arena_leave', () => {
+    if (arenaMembers.delete(socket.id)) broadcastArenaLobby(io);
+  });
+
+  // Текущий снимок лобби по запросу (клиент спрашивает при открытии вкладки).
+  socket.on('arena_lobby_request', () => {
+    socket.emit('arena_lobby', arenaLobbyList());
   });
 
   // ── pvp_decline ──
@@ -282,6 +429,73 @@ export function initPvP(io: Server, socket: Socket) {
       const wId = winnerTg ? byTg.get(winnerTg) : undefined;
       const lId = loserTg ? byTg.get(loserTg) : undefined;
 
+      // ── M-18: финал боя С АРЕНЫ: стрик + нарастающий приз ──
+      // Протокол тот же (E6), но pvp_reward расширен: { money, items, streak,
+      // best, wins, arena: true }. Обычные бои (в т.ч. E5) идут старым путём.
+      if (battle.arena && wId && lId) {
+        const settled = await db.transaction(async (tx) => {
+          // Рейтинг обоим — как в обычном бою.
+          await updateOrCreateRating(tx, wId, 10, true);
+          await updateOrCreateRating(tx, lId, -5, false);
+
+          // Стрик победителя +1, лучший/всего — вверх.
+          const wSt: any = await readOrCreateArenaRow(tx, wId);
+          const streak = (Number(wSt.streak) || 0) + 1;
+          const best = Math.max(Number(wSt.best) || 0, streak);
+          const wins = (Number(wSt.wins) || 0) + 1;
+          await tx.update(arenaStats).set({
+            wins, streak, best, updated_at: new Date().toISOString(),
+          }).where(eq(arenaStats.user_id, wId));
+          const reward = arenaRewardForStreak(streak);
+
+          // Деньги + предметы победителю.
+          const wRow = (await tx.select({ id: users.id, save_data: users.save_data })
+            .from(users)
+            .where(eq(users.id, wId))
+            .for('update')
+            .limit(1))[0];
+          if (wRow) {
+            const sd: any = parseSaveStrict(wRow.save_data, wId);
+            if (!sd.inventory) sd.inventory = {};
+            sd.inventory.credit = (sd.inventory.credit || 0) + reward.money;
+            for (const item of reward.items) {
+              sd.inventory[item.id] = (sd.inventory[item.id] || 0) + item.qty;
+            }
+            await tx.update(users)
+              .set({
+                save_data: JSON.stringify(stampSave(sd)),
+                money: sd.inventory.credit || 0,
+                save_version: sql`${users.save_version} + 1`,
+              })
+              .where(eq(users.id, wId));
+          }
+
+          // Стрик проигравшего сбрасывается (поражение/сдача = 0).
+          const lSt: any = await readOrCreateArenaRow(tx, lId);
+          if ((Number(lSt.streak) || 0) !== 0) {
+            await tx.update(arenaStats).set({
+              streak: 0, updated_at: new Date().toISOString(),
+            }).where(eq(arenaStats.user_id, lId));
+          }
+          return { reward, streak, best, wins };
+        });
+
+        const winnerSock = winnerIsSender ? socket : opponentSocket;
+        winnerSock?.emit('pvp_reward', {
+          money: settled.reward.money,
+          items: settled.reward.items,
+          streak: settled.streak,
+          best: settled.best,
+          wins: settled.wins,
+          arena: true,
+        });
+        // Проигравший узнаёт о сбросе стрика (клиент обновит счётчик).
+        const loserSock = winnerIsSender ? opponentSocket : socket;
+        loserSock?.emit('pvp_arena_update', { streak: 0, arena: true });
+        broadcastArenaLobby(io);
+        return;
+      }
+
       // ── Server-authoritative рейтинг обоим ──
       if (wId) await updateOrCreateRating(db, wId, 10, true);
       if (lId) await updateOrCreateRating(db, lId, -5, false);
@@ -328,6 +542,7 @@ export function initPvP(io: Server, socket: Socket) {
   // ── disconnect → очистка PvP ──
   socket.on('disconnect', () => {
     pendingChallenges.delete(socket.id);
+    if (arenaMembers.delete(socket.id)) broadcastArenaLobby(io);
     for (const [battleId, battle] of activeBattles) {
       if (battle.playerA === socket.id || battle.playerB === socket.id) {
         const otherSocketId = battle.playerA === socket.id ? battle.playerB : battle.playerA;
@@ -338,6 +553,8 @@ export function initPvP(io: Server, socket: Socket) {
         activeBattles.delete(battleId);
       }
     }
+    // Арена: вышедший мог драться — обновить флаги inBattle в лобби.
+    broadcastArenaLobby(io);
   });
 }
 

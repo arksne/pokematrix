@@ -32,6 +32,7 @@ import sitemoveRoutes from './routes/sitemove.js';
 import dropsRoutes from './routes/drops.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import battleRoutes from './routes/battle.js';
+import arenaRoutes from './routes/arena.js';
 import adminRoutes from './routes/admin.js';
 import clientErrorRoutes from './routes/client-error.js';
 import featuresRoutes from './routes/features.js';
@@ -195,6 +196,7 @@ async function main() {
   app.use('/api/drops', dropsRoutes);
   app.use('/api/leaderboard', leaderboardRoutes);
   app.use('/api/battle', battleRoutes);
+  app.use('/api/arena', arenaRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/admin', adminRoutes);  // backward compat for client admin panel
   app.use('/api/features', featuresRoutes);  // публичные фичи (читает каждый клиент)

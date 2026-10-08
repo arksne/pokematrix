@@ -171,6 +171,10 @@ export function getFullSaveData() {
     pokedexCaught: Array.from(state.pokedexCaught),
     quests: state.quests, questProgress: state.questProgress, completedQuests: state.completedQuests, npcQuestProgress: state.npcQuestProgress, completedNPCQuests: state.completedNPCQuests, tutorialStep: state.tutorialStep,
     achievements: state.achievements || [], battleWins: state.battleWins || 0,
+    // Блок G: поверхностные метрики тренеркарты + выбранная аватарка.
+    trainerAvatar: state.trainerAvatar || '',
+    pvpWins: state.pvpWins || 0, pvpLosses: state.pvpLosses || 0,
+    pvpStreak: state.pvpStreak || 0, pvpBestStreak: state.pvpBestStreak || 0,
     visitedLocations: Array.from(state.visitedLocations), itemsUsedInBattle: state.itemsUsedInBattle, itemHistory: state.itemHistory,
     pcBoxes: state.pcBoxes.map(box => box.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
@@ -216,6 +220,12 @@ export function validateGameState() {
   // НЕ добавляем все 1300+ предметов с нулём — getItemQty() и так возвращает 0 для отсутствующих
   // Ensure credit exists (it IS money)
   if (!('credit' in state.inventory)) state.inventory['credit'] = 500;
+  // Блок G: дефолты поверхностных метрик тренеркарты (числа, не списки).
+  if (typeof state.trainerAvatar !== 'string') state.trainerAvatar = '';
+  if (typeof state.pvpWins !== 'number') state.pvpWins = 0;
+  if (typeof state.pvpLosses !== 'number') state.pvpLosses = 0;
+  if (typeof state.pvpStreak !== 'number') state.pvpStreak = 0;
+  if (typeof state.pvpBestStreak !== 'number') state.pvpBestStreak = 0;
   // Validate team pokemon have required fields
   for (let i = state.myTeam.length - 1; i >= 0; i--) {
     const m = state.myTeam[i];
@@ -329,6 +339,12 @@ export async function loadGame() {
     state.completedNPCQuests = data.completedNPCQuests || [];
     state.achievements = data.achievements || [];
     state.battleWins = data.battleWins || 0;
+    // Блок G: аватар + PvP-счётчики (только числа).
+    if (typeof data.trainerAvatar === 'string') state.trainerAvatar = data.trainerAvatar;
+    if (typeof data.pvpWins === 'number') state.pvpWins = data.pvpWins;
+    if (typeof data.pvpLosses === 'number') state.pvpLosses = data.pvpLosses;
+    if (typeof data.pvpStreak === 'number') state.pvpStreak = data.pvpStreak;
+    if (typeof data.pvpBestStreak === 'number') state.pvpBestStreak = data.pvpBestStreak;
     state.tutorialStep = data.tutorialStep || 0;
     state.visitedLocations = new Set(data.visitedLocations || []);
     state.itemsUsedInBattle = data.itemsUsedInBattle || 0;
@@ -834,6 +850,12 @@ export async function applyCloudSave(data) {
   state.completedNPCQuests = data.completedNPCQuests || state.completedNPCQuests;
   state.achievements = data.achievements || state.achievements;
   state.battleWins = data.battleWins || state.battleWins;
+  // Блок G: аватар + PvP-счётчики (только числа, без списков).
+  if (typeof data.trainerAvatar === 'string') state.trainerAvatar = data.trainerAvatar;
+  if (typeof data.pvpWins === 'number') state.pvpWins = data.pvpWins;
+  if (typeof data.pvpLosses === 'number') state.pvpLosses = data.pvpLosses;
+  if (typeof data.pvpStreak === 'number') state.pvpStreak = data.pvpStreak;
+  if (typeof data.pvpBestStreak === 'number') state.pvpBestStreak = data.pvpBestStreak;
   state.tutorialStep = data.tutorialStep || state.tutorialStep;
   state.visitedLocations = new Set(data.visitedLocations || []);
   state.itemsUsedInBattle = data.itemsUsedInBattle || state.itemsUsedInBattle;

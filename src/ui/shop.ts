@@ -61,7 +61,8 @@ ITEMS.forEach(item => {
 // ── getShopItems: получение списка товаров для локации ────
 // Принимает locId — ID локации (например, 'pallet-town', 'viridian-city')
 // Возвращает массив объектов с id, icon, name, price для отображения в магазине
-function getShopItems(locId) {
+// ЭКСПОРТ для тестов (shops-assort): ассортимент обязан различаться по locId.
+export function getShopItems(locId) {
   // Получаем состояние магазина из глобального состояния
   // locationShopStock — объект вида { locId: ['pokeball', 'potion', ...] }
   // Это ассортимент, который сервер устанавливает для каждой локации

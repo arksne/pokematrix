@@ -2,10 +2,13 @@
 // trade-center.ts — ТОРГОВЫЙ ЦЕНТР (Trade Center)
 // ─────────────────────────────────────────────────────────────
 // Открывает панель торгового центра — список доступных для обмена
-// и PvP-тренеров в сети. Инициализирует Socket.IO для обмена.
+// тренеров в сети. ТОЛЬКО ОБМЕН (M-18): PvP-вызовы отсюда убраны —
+// вызов на бой теперь из тренеркарты (social/trainer-profile.ts,
+// кнопка «Вызвать») и со вкладки «PvP-Арена» (ui/pvp-arena.ts).
+// Инициализирует Socket.IO для обмена.
 //
 // ЗАВИСИМОСТИ:
-//   state   — глобальное состояние (onlinePlayersList, myTeam, lastSocketAction)
+//   state   — глобальное состояние (onlinePlayersList, lastSocketAction)
 //   config  — SOCKET_COOLDOWN (задержка между запросами)
 //   dom     — showToast
 //   socket  — initTradeSocket (инициализация сокета)
@@ -65,7 +68,7 @@ export function openTradeCenter() {
 // Для каждого игрока в onlinePlayersList создаёт строку с:
 //   - Именем тренера
 //   - Кнопкой "Трейд" (отправить запрос на обмен)
-//   - Кнопкой "⚔" (отправить PvP-вызов)
+// PvP-кнопки здесь НЕТ (M-18): бой вызывают из тренеркарты или с арены.
 // Использует SOCKET_COOLDOWN для предотвращения спама
 export function renderTradePlayerList() {
   const list = document.getElementById('trade-players-list');
@@ -116,35 +119,7 @@ export function renderTradePlayerList() {
       }, 5000);
     };
 
-    // ── Кнопка "⚔" (PvP-вызов) ──
-    const battleBtn = document.createElement('button');
-    battleBtn.className = 'trade-btn';
-    battleBtn.style.background = '#ff3b30';  // Красная
-    battleBtn.textContent = '⚔';
-    battleBtn.onclick = () => {
-      const now = Date.now();
-      if (now - state.lastSocketAction < SOCKET_COOLDOWN) {
-        showToast('Слишком часто!', true); return;
-      }
-      state.lastSocketAction = now;
-      // Проверяем, есть ли живые покемоны
-      if (state.myTeam.length === 0 || !state.myTeam.some(m => m.currentHp > 0)) {
-        showToast('Нужен хотя бы один живой покемон!', true);
-        return;
-      }
-      state.socket.emit('pvp_challenge', p.userId);  // Отправляем PvP-вызов (по userId)
-      battleBtn.textContent = '✓';
-      battleBtn.disabled = true;
-      battleBtn.style.opacity = '0.5';
-      setTimeout(() => {
-        battleBtn.textContent = '⚔';
-        battleBtn.disabled = false;
-        battleBtn.style.opacity = '1';
-      }, 5000);
-    };
-
     btnWrap.appendChild(tradeBtn);
-    btnWrap.appendChild(battleBtn);
     row.appendChild(nameSpan);
     row.appendChild(btnWrap);
     list.appendChild(row);

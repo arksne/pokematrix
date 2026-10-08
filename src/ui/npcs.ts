@@ -33,6 +33,8 @@ import { appendToLog } from '../battle/core.js';           // Запись в б
 import { openPC } from './pc.js';                          // Открытие PC
 import { openBreedBoxes } from './daycare.js';
 import { NPC_DATA } from '../data/npc.js';                  // Статические данные NPC
+// Платное лечение (M-24): та же цена, что кнопка центра
+import { HEAL_PRICE, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
 
 // ── renderNPCQuests: отрисовка списка квестов NPC ───────
 // Принимает npc — объект NPC из NPC_DATA
@@ -204,25 +206,27 @@ export function openNPCDialog(npcId: string) {
   // Удаляем старые дополнительные кнопки (чтобы не дублировались)
   actionsContainer.querySelectorAll('.npc-action-extra').forEach(b => b.remove());
 
-  // ── NPC: Медсестра Джой (лечение) ──
+  // ── NPC: Медсестра Джой (лечение, M-24: ПЛАТНО — как кнопка центра) ──
   if (npcId === 'joy_pokecenter') {
     const btnHeal = document.createElement('button');
     btnHeal.className = 'tma-btn npc-action-extra';
     btnHeal.style.backgroundColor = '#34c759';  // Зелёная
-    btnHeal.innerText = '🏥 Вылечить команду';
+    btnHeal.innerText = `🏥 Вылечить команду (¥${HEAL_PRICE.toLocaleString()})`;
     btnHeal.onclick = () => {
-      // Полное лечение всей команды
-      state.myTeam.forEach((mon: any) => {
-        const baseHp = mon.apiData.stats[0].base_stat;
-        const curLvl = mon.baseLevel + mon.candiesEaten;
-        mon.maxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * curLvl) + curLvl + 10;
-        mon.currentHp = mon.maxHp;       // Полное HP
-        mon.status = null;                // Снимаем статус
-        mon.sleepTurns = 0;               // Сбрасываем сон
-        mon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };  // Сбрасываем стадии
-        if (mon.movesPP) mon.movesPP.forEach((pp: any) => { if (pp) pp.current = pp.max; });  // Восстанавливаем PP
-      });
-      showToast('Ваша команда полностью вылечена!', false);
+      if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
+      // Лечить нечего — бесплатно
+      if (!teamNeedsHeal(state.myTeam)) {
+        showToast('Все покемоны уже здоровы!', false);
+        modal.style.display = 'none';
+        return;
+      }
+      // Деньги вперёд: не хватает — не лечим
+      if (!tryChargeHeal()) {
+        showToast(`Лечение стоит ¥${HEAL_PRICE.toLocaleString()}! Не хватает кредитов.`, true);
+        return;
+      }
+      applyTeamHeal(state.myTeam);
+      showToast(`Ваша команда полностью вылечена! (−¥${HEAL_PRICE.toLocaleString()})`, false);
       modal.style.display = 'none';  // Закрываем модалку
       store.emit('save');
     };

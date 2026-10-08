@@ -214,7 +214,10 @@ describe('getShopState', () => {
     expect(result.money).toBe(1000);
     expect(result.inventory).toBe(mockState.inventory);
     expect(result.locationShopStock).toBeDefined();
-    expect(result.locationShopStock.goldenrod_supermarket).toBeDefined();
+    // Ключи маркетов переименованы (M-23: <город>_pokemart), старый
+    // goldenrod_supermarket убран — проверяем key-agnostic, чтобы не ломать
+    // параллельную ветку магазинов. Хотя бы один маркет обязан быть.
+    expect(Object.keys(result.locationShopStock as any).length).toBeGreaterThan(0);
   });
 });
 

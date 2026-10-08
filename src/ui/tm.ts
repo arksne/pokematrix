@@ -31,6 +31,7 @@ import { showToast, showSelectionModal } from '../utils/dom.js';              //
 import { fetchPokeAPI } from '../utils/api.js';            // HTTP-клиент для PokeAPI
 import { fetchSiteMoveDetail } from '../data/sitemove.js';  // детали атак — с сайта лиги
 import { fetchSiteLearnset, moveNameToSlug } from '../data/learnset.js';
+import type { SiteLearnset } from '../data/learnset.js';
 import { state } from '../game/state.js';                  // Баланс для учителя
 
 // ── Тиры ТМ по силе атаки (B5): слабая <60 — 200к, средняя ≤90 — 2М, топ >90 — 20М.
@@ -46,6 +47,141 @@ export function tmTierAllows(itemId: string, power: number | null): boolean {
   if (!tier) return false;
   if (power == null) return true;
   return power <= tier.maxPower;
+}
+
+// ── НОМЕРНЫЕ ТМ (M-23): tm01…tm100 учат КОНКРЕТНУЮ атаку ──
+// Номер диска = номер ТМ в site-списке вида (`/api/learnset` → поле
+// `tm: [[номер, атака]]`). Диск одноразовый: сгорает при обучении.
+// Дженерик-диски (tm/tmWeak/tmMid/tmTop) остаются репитером забытого
+// (openMoveRelearner выше) — их механика не меняется.
+
+/** 'tm01' → 1, 'tm100' → 100, всё остальное → null. */
+export function tmNumberFromItemId(itemId: string): number | null {
+  const m = /^tm(\d{1,3})$/.exec(itemId || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Какая атака записана на номерном диске для этого вида.
+ * Возвращает имя атаки из site learnset или null (вид её не учит).
+ * Чистая функция — для тестов (мок fetch → fetchSiteLearnset → сюда).
+ */
+export function resolveNumberedTMMove(
+  learnset: SiteLearnset | null,
+  itemId: string,
+): string | null {
+  const no = tmNumberFromItemId(itemId);
+  if (no == null || !learnset?.tm?.length) return null;
+  const hit = learnset.tm.find(([n]) => n === no);
+  return hit ? hit[1] : null;
+}
+
+// ── writeMoveToSlot: записать атаку в слот + PP (без UI, без оплаты) ──
+// Общая сердцевина teachMoveToSlot и applyNumberedTM.
+export function writeMoveToSlot(mon: any, moveData: any, i: number) {
+  // URL по слагу имени (у деталей с сайта нет числового id)
+  const slug = moveNameToSlug(moveData.name);
+  const moveUrl = `https://pokeapi.co/api/v2/move/${slug}/`;
+
+  if (!mon.apiData.moves[i]) {
+    mon.apiData.moves[i] = { move: { name: moveData.name, url: moveUrl } };
+  } else {
+    mon.apiData.moves[i].move.name = moveData.name;
+    mon.apiData.moves[i].move.url = moveUrl;
+  }
+
+  if (!mon.movesPP) mon.movesPP = [];
+  mon.movesPP[i] = { current: moveData.pp || 30, max: moveData.pp || 30 };
+}
+
+/**
+ * Применить номерной ТМ: проверка → сгорание диска → запись в слот.
+ * Без DOM (тестируемо в node). Возвращает { ok } или { ok:false, reason }:
+ *   'no-item' — диска нет, 'known' — атаку уже знает.
+ */
+export function applyNumberedTM(
+  mon: any,
+  itemId: string,
+  moveData: any,
+  slot: number,
+): { ok: boolean; reason?: string } {
+  if (!mon || slot < 0 || slot > 3) return { ok: false, reason: 'bad-slot' };
+  if (getItemQty(itemId) <= 0) return { ok: false, reason: 'no-item' };
+  const slug = moveNameToSlug(moveData?.name || '');
+  const known = new Set(
+    (mon.apiData?.moves || []).filter(Boolean).map((m: any) => moveNameToSlug(m.move.name)),
+  );
+  if (slug && known.has(slug)) return { ok: false, reason: 'known' };
+  if (!removeItem(itemId)) return { ok: false, reason: 'no-item' };
+  writeMoveToSlot(mon, moveData, slot);
+  return { ok: true };
+}
+
+// ── openNumberedTM: использование номерного диска из рюкзака ──
+// Тянет site learnset вида, находит атаку под номер диска, показывает её
+// и открывает выбор слота с прямым сгоранием диска (без учителя).
+export async function openNumberedTM(itemId: string) {
+  if (getTeamState().currentPokemonIndex === null) {
+    return showToast('Сначала выберите покемона во вкладке "Команда"!', true);
+  }
+  if (getItemQty(itemId) <= 0) return showToast('У вас нет такого TM-диска!', true);
+
+  const mon = getTeamState().myTeam[getTeamState().currentPokemonIndex];
+  const modal = document.getElementById('tm-modal');
+  if (!modal) return;
+
+  const no = tmNumberFromItemId(itemId);
+  document.getElementById('tm-pokemon-name').innerText =
+    `${mon.nickname || mon.apiData.name} (Lv${mon.baseLevel + mon.candiesEaten}) — 💿 TM${String(no).padStart(2, '0')}`;
+
+  const currentList = document.getElementById('tm-current-list');
+  currentList.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const row = document.createElement('div');
+    row.className = 'tm-current-move';
+    const nm = mon.apiData.moves[i]?.move?.name || '-';
+    row.innerText = `${i + 1}. ${nm}`;
+    currentList.appendChild(row);
+  }
+
+  const availableList = document.getElementById('tm-available-list');
+  availableList.innerHTML = '<div class="tm-loading">Читаем диск...</div>';
+  modal.style.display = 'flex';
+
+  try {
+    const species = mon.apiData?.species?.name || mon.apiData?.name || '';
+    const ls = await fetchSiteLearnset(species).catch(() => null);
+    const moveName = resolveNumberedTMMove(ls, itemId);
+    if (!moveName) {
+      availableList.innerHTML = '<div class="tm-empty">Этот покемон не может выучить атаку с диска</div>';
+      return;
+    }
+    const detail = await fetchSiteMoveDetail(moveNameToSlug(moveName)).catch(() => null);
+    if (!detail) {
+      availableList.innerHTML = '<div class="tm-error">Не удалось прочитать диск</div>';
+      return;
+    }
+    const known = new Set(
+      (mon.apiData.moves || []).filter(Boolean).map((m: any) => moveNameToSlug(m.move.name)),
+    );
+    if (known.has(moveNameToSlug(detail.name))) {
+      availableList.innerHTML = '<div class="tm-empty">Покемон уже знает эту атаку — диск цел</div>';
+      return;
+    }
+    availableList.innerHTML = '';
+    const moveEl = document.createElement('div');
+    moveEl.className = 'tm-move-cell';
+    const powStr = detail.power ?? '—';
+    moveEl.innerText = `💿 TM${String(no).padStart(2, '0')} ${detail.name} (${powStr} | ${detail.damage_class?.name || '?'}) — одноразовый`;
+    moveEl.addEventListener('click', () => {
+      showSlotPicker(mon, detail, 'tm', { directConsume: itemId });
+    });
+    availableList.appendChild(moveEl);
+  } catch (e) {
+    availableList.innerHTML = '<div class="tm-error">Ошибка чтения диска</div>';
+  }
 }
 
 // ── openMoveRelearner: открыть интерфейс повторного изучения атак ──
@@ -272,10 +408,11 @@ export function swapMoveSlots(mon, a, b, rerender?) {
 //   mon — объект покемона
 //   moveData — данные атаки из PokeAPI
 //   payItemId — каким диском платим (по умолчанию legacy 'tm')
+//   opts.directConsume — номерной ТМ: сразу сжечь этот диск без модалки оплаты
 // Показывает 4 кнопки (по одной на слот) + "Отмена" + порядок (▲▼, H5).
 // При выборе слота — выбор оплаты: TM-диск или Учитель за 1.5М (H3/H4).
 // При выборе — заменяет атаку в слоте, тратит оплату, сохраняет.
-export function showSlotPicker(mon, moveData, payItemId = 'tm', opts?: { teacherOnly?: boolean }) {
+export function showSlotPicker(mon, moveData, payItemId = 'tm', opts?: { teacherOnly?: boolean; directConsume?: string }) {
   const picker = document.getElementById('tm-slot-picker');
   picker.style.display = 'block';
   picker.innerHTML = '<h4>Выберите слот для замены:</h4>';
@@ -313,7 +450,28 @@ export const TEACHER_PRICE = 1500000;
 // ── pickPaymentAndTeach: выбор оплаты (TM-диск или учитель) и обучение ──
 // H3: забытые атаки возвращаются учителем ИЛИ диском. Учитель — 1.5М с баланса.
 // teacherOnly (ветка учителя): сразу charge 1.5М без модалки выбора.
-export function pickPaymentAndTeach(mon, moveData, i, payItemId = 'tm', opts?: { teacherOnly?: boolean }) {
+export function pickPaymentAndTeach(mon, moveData, i, payItemId = 'tm', opts?: { teacherOnly?: boolean; directConsume?: string }) {
+  // Номерной ТМ (M-23): одноразовый — сжигаем диск сразу, без выбора оплаты.
+  if (opts?.directConsume) {
+    const r = applyNumberedTM(mon, opts.directConsume, moveData, i);
+    if (!r.ok) {
+      showToast(
+        r.reason === 'known' ? 'Покемон уже знает эту атаку!' : 'Нет такого TM-диска!',
+        true,
+      );
+      return;
+    }
+    updateInventoryDisplay();
+    refreshProfileUI();
+    document.getElementById('tm-slot-picker').style.display = 'none';
+    document.getElementById('tm-modal').style.display = 'none';
+    autoSave();
+    showToast(
+      `${mon.nickname || mon.apiData.name} выучил ${moveData.name}! Диск ${opts.directConsume.toUpperCase()} сгорел.`,
+      false,
+    );
+    return;
+  }
   if (opts?.teacherOnly) {
     const balance = state.inventory?.credit || 0;
     if (balance < TEACHER_PRICE) {
@@ -356,23 +514,7 @@ export function pickPaymentAndTeach(mon, moveData, i, payItemId = 'tm', opts?: {
 
 // ── teachMoveToSlot: записать атаку в слот (после оплаты) ──
 function teachMoveToSlot(mon, moveData, i) {
-  // URL по слагу имени (у деталей с сайта нет числового id)
-  const slug = moveNameToSlug(moveData.name);
-  const moveUrl = `https://pokeapi.co/api/v2/move/${slug}/`;
-
-  // Записываем новую атаку в слот
-  if (!mon.apiData.moves[i]) {
-    // Слот пуст — создаём новый объект
-    mon.apiData.moves[i] = { move: { name: moveData.name, url: moveUrl } };
-  } else {
-    // Слот занят — заменяем имя и URL
-    mon.apiData.moves[i].move.name = moveData.name;
-    mon.apiData.moves[i].move.url = moveUrl;
-  }
-
-  // Устанавливаем PP для новой атаки
-  if (!mon.movesPP) mon.movesPP = [];
-  mon.movesPP[i] = { current: moveData.pp || 30, max: moveData.pp || 30 };
+  writeMoveToSlot(mon, moveData, i);
 
   // Обновляем UI
   updateInventoryDisplay();

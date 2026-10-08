@@ -156,13 +156,25 @@ export async function openTrainerProfile(userId) {
     // путь принимается только строго по форме /avatars/<имя>.png, иначе в
     // innerHTML попадает эмодзи. Без этой проверки строка вида
     // '/avatars/x" onerror="...' из БД стала бы stored XSS.
+    // Блок G1: SVG-пак имеет приоритет — id из белого списка пака рисуем
+    // inline-SVG, иначе старая логика PNG/эмодзи.
     if (avatarEl) {
       const rawAvatar = typeof p.avatar === 'string' ? p.avatar : '';
-      const isAvatarPath = /^\/avatars\/[a-z0-9_-]+\.png$/.test(rawAvatar);
-      avatarEl.innerHTML = isAvatarPath
-        ? `<img src="${escHtml(rawAvatar)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
-        : `<span style="font-size:1.5rem;">${escHtml(rawAvatar || '👤')}</span>`;
+      const { isAvatarId: isSvgAvatar, getAvatarById: getSvgAvatar } = await import('../data/avatars.js');
+      if (isSvgAvatar(rawAvatar)) {
+        avatarEl.innerHTML = `<span style="display:inline-flex;width:100%;height:100%;border-radius:50%;overflow:hidden;">${getSvgAvatar(rawAvatar)!.svg}</span>`;
+      } else {
+        const isAvatarPath = /^\/avatars\/[a-z0-9_-]+\.png$/.test(rawAvatar);
+        avatarEl.innerHTML = isAvatarPath
+          ? `<img src="${escHtml(rawAvatar)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+          : `<span style="font-size:1.5rem;">${escHtml(rawAvatar || '👤')}</span>`;
+      }
     }
+
+    // Вызов на бой живёт в #modal-trainer-actions (кнопка «⚔ Вызвать» ниже) —
+    // он доступен любому онлайн-тренеру, в том числе не в лобби арены.
+    // Отдельного пустого контейнера под арену не нужно: дублировать кнопку
+    // вызова в двух местах — значит со временем они разъедутся.
 
     const actionsDiv = document.getElementById('modal-trainer-actions');
     const onlinePlayer = state.onlinePlayersList.find(op => op.userId === userId);
@@ -183,6 +195,8 @@ export async function openTrainerProfile(userId) {
         state.socket.emit('trade_request', onlinePlayer.userId);
         showToast('Запрос на обмен отправлен!', false);
       };
+      // M-18: вызов на бой — ИЗ ТРЕНЕРКАРТЫ (обычный бой, базовые +500).
+      // Бой с призами за стрик — только с вкладки «PvP-Арена».
       battleBtn.onclick = () => {
         const now = Date.now();
         if (now - state.lastSocketAction < SOCKET_COOLDOWN) { showToast('Слишком часто! Подождите...', true); return; }

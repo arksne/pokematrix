@@ -33,14 +33,15 @@ import { getSpriteUrl } from '../utils/sprite.js';
 import { autoSave } from '../game/save.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { checkAchievement } from '../ui/achievements.js';
-import { openTradeCenter } from '../ui/trade-center.js';
 
 /**
- * showPvpPanel — открыть панель PvP (список тренеров для вызова).
- * Использует Trade Center UI, где есть кнопка PvP-вызова.
+ * showPvpPanel — открыть панель PvP (M-18: вкладка «PvP-Арена»).
+ * Раньше открывала торговый центр (там была кнопка ⚔); трейд остался
+ * только в ПЦ, а вызовы — из тренеркарты и с арены.
  */
-export function showPvpPanel() {
-  openTradeCenter();
+export async function showPvpPanel() {
+  const { openPvpArenaLobby } = await import('../ui/pvp-arena.js');
+  openPvpArenaLobby();
 }
 
 /**

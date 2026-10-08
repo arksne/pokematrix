@@ -61,6 +61,8 @@ import { openNPCDialog, checkNPCQuestProgress, checkTutorialProgress } from './n
 import { showToast } from '../utils/dom.js';          // Всплывающие уведомления
 import { autoSave } from '../game/save.js';            // Автосохранение
 import { API_BASE } from '../game/config.js';          // Базовый URL сервера
+// Платное лечение (M-24): цена + проверка денег + сам хил
+import { HEAL_PRICE, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
 
 // ── ЛЕНИВЫЙ ИМПОРТ (циклические зависимости) ────────────
 
@@ -265,40 +267,36 @@ export function arriveTransport() {
   showToast('Прибыли!', false);
 }
 
-// ── healTeam: лечение всей команды в покецентре ─────────
-// Восстанавливает HP, снимает статусы, восстанавливает PP
-// Вызывается кнопкой "🏥 Вылечить команду"
+// ── healTeam: лечение всей команды в покецентре (M-24: ПЛАТНО) ──
+// Стоит фикс HEAL_PRICE (см. heal.ts). Здоровая команда — бесплатно
+// (лечить нечего, деньги не трогаем). Без денег — отказ тостом, не лечит.
 export function healTeam() {
   if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
 
-  let healed = false;  // Флаг: был ли хотя бы один покемон вылечен
-  state.myTeam.forEach(mon => {
-    if (!mon || !mon.apiData) return;  // Пропускаем невалидных
+  // Лечить нечего — бесплатно, как раньше
+  if (!teamNeedsHeal(state.myTeam)) {
+    const msg = 'Все покемоны уже здоровы!';
+    const descEl = document.getElementById('loc-desc');
+    const oldText = descEl.innerText;
+    descEl.innerText = msg;
+    descEl.style.color = 'var(--tma-accent)';
+    setTimeout(() => {
+      descEl.innerText = oldText;
+      descEl.style.color = '';
+    }, 2000);
+    return;
+  }
 
-    // Пересчитываем maxHp по текущим данным
-    const baseHp = mon.apiData.stats[0].base_stat;
-    const curLvl = mon.baseLevel + mon.candiesEaten;
-    const newMaxHp = Math.floor(
-      0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * curLvl
-    ) + curLvl + 10;
+  // Деньги вперёд: не хватает — не лечим
+  if (!tryChargeHeal()) {
+    showToast(`Лечение стоит ¥${HEAL_PRICE.toLocaleString()}! Не хватает кредитов.`, true);
+    return;
+  }
 
-    // Если хоть что-то изменилось — ставим флаг healed
-    if (mon.currentHp < newMaxHp || mon.status || mon.maxHp !== newMaxHp) healed = true;
-
-    mon.maxHp = newMaxHp;       // Обновляем макс HP
-    mon.currentHp = newMaxHp;   // Полное HP
-    mon.status = null;           // Снимаем статус
-    mon.sleepTurns = 0;          // Сбрасываем счётчик сна
-    mon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };  // Сбрасываем стадии статов
-
-    // Восстанавливаем PP всех атак
-    if (mon.movesPP) mon.movesPP.forEach(pp => {
-      if (pp && pp.current < pp.max) { pp.current = pp.max; healed = true; }
-    });
-  });
+  applyTeamHeal(state.myTeam);
 
   // Сообщение в зависимости от того, было ли лечение
-  const msg = healed ? 'Сестра Джой вылечила всю команду!' : 'Все покемоны уже здоровы!';
+  const msg = `Сестра Джой вылечила всю команду! (−¥${HEAL_PRICE.toLocaleString()})`;
   // Временно меняем текст описания локации (меняем на 2 секунды)
   const descEl = document.getElementById('loc-desc');
   const oldText = descEl.innerText;
@@ -311,7 +309,8 @@ export function healTeam() {
 
   autoSave();  // Сохраняем игру
 
-  // Обновляем UI: перерисовываем сетку команды и профиль
+  // Обновляем UI: деньги (списали HEAL_PRICE), сетка команды и профиль
+  updateMoneyDisplay();
   getProfileModule().then(pm => pm.renderTeamGrid());
   getProfileModule().then(pm => pm.refreshProfileUI());
 }
@@ -514,11 +513,26 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   };
     actionsContainer.appendChild(btnTrade);
 
-    // Кнопка "Вылечить команду"
+    // Кнопка "PvP-Арена" (M-18): жетон участия + призы за серию побед.
+    // Раньше модуль арены существовал, но был НИКУДА не подключён — игрок
+    // не мог на неё попасть. Отдельная кнопка, не внутри «Обменника»: трейд
+    // живёт в Поке-Центре, арена — везде, где есть жетон.
+    const btnArena = document.createElement('button');
+    btnArena.className = 'btn-use';
+    btnArena.style.backgroundColor = '#ff3b30';
+    btnArena.innerText = '⚔️ PvP-Арена';
+    btnArena.onclick = () => {
+      import('./pvp-arena.js')
+        .then(pa => pa.openPvpArenaLobby())
+        .catch((e) => console.error('[arena] арена не открылась', e));
+    };
+    actionsContainer.appendChild(btnArena);
+
+    // Кнопка "Вылечить команду" (M-24: платно — цена в подписи)
     const btnHeal = document.createElement('button');
     btnHeal.className = 'btn-use';
     btnHeal.style.backgroundColor = '#34c759';  // Зелёный
-    btnHeal.innerText = '🏥 Вылечить команду';
+    btnHeal.innerText = `🏥 Вылечить команду (¥${HEAL_PRICE.toLocaleString()})`;
     btnHeal.onclick = () => healTeam();
     actionsContainer.appendChild(btnHeal);
 

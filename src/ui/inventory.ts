@@ -66,7 +66,8 @@ import { refreshProfileUI, saveActiveMonData } from './profile.js';
 // openCrafting — открывает интерфейс крафта (ремёсла)
 import { openCrafting } from './crafting.js';
 // openMoveRelearner — открывает модалку повторного изучения атак (TM/развитие)
-import { openMoveRelearner } from './tm.js';
+// openNumberedTM — номерной диск tm01…tm100: учит КОНКРЕТНУЮ атаку (M-23)
+import { openMoveRelearner, openNumberedTM } from './tm.js';
 // hatchEgg — вылупляет яйцо (проверяет readyTime и добавляет покемона в команду)
 import { hatchEgg } from './daycare.js';
 import { breedRarity } from './daycare.js';
@@ -686,6 +687,14 @@ export async function useItem(itemId) {
   // Берём текущего покемона (если нужен)
   const mon = needsPokemon ? getTeamState().myTeam[getTeamState().currentPokemonIndex] : null;
   if (needsPokemon && !mon) return showToast('Покемон не найден!', true);
+
+  // ── Номерные ТМ (M-23): tm01…tm100 учат КОНКРЕТНУЮ атаку из site learnset ──
+  // Одноразовые (сгорают). Проверки qty/isUsable/выбора покемона — выше.
+  // Дженерик-диски (tm/tmWeak/tmMid/tmTop) идут в switch ниже (репитер).
+  if (/^tm\d+$/.test(itemId)) {
+    await openNumberedTM(itemId);
+    return;
+  }
 
   // ── Огромный switch-case по ID предмета ──
   switch (itemId) {
