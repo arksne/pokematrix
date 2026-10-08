@@ -674,23 +674,56 @@ export let renderLocation = function(locId: any) {
   const descTab = document.getElementById('loc-tab-desc');
   if (descTab) descTab.style.display = 'block';
 
-  // ── Кнопка "Назад" из сервисных локаций (покецентр, магазин) ──
-  const isServiceLoc = locId === 'pokecenter' || locId.endsWith('_pokecenter')
-    || locId === 'pokemart' || locId.endsWith('_pokemart')
-    || locId === 'pokemarket' || locId.endsWith('_pokemarket')
-    || locId.endsWith('_supermarket') || locId.endsWith('_shop');
-  if (isServiceLoc && state.lastLocation) {
+  // ── Хлебные крошки текущей позиции (F3) ──
+  // Показывают, где игрок: регион › локация (+ откуда пришёл).
+  // Элемент создаётся один раз и обновляется при каждом рендере.
+  {
+    let crumbs = document.getElementById('loc-breadcrumbs');
+    if (!crumbs) {
+      crumbs = document.createElement('div');
+      crumbs.id = 'loc-breadcrumbs';
+      crumbs.style.cssText = 'font-size:0.75rem;color:#888;margin-bottom:4px;';
+      const anchor = document.getElementById('loc-name');
+      if (anchor?.parentElement) anchor.parentElement.insertBefore(crumbs, anchor);
+    }
+    crumbs.innerHTML = '';
+    const regionSpan = document.createElement('span');
+    regionSpan.textContent = `🗺️ ${REGIONS[state.currentRegion]?.name || state.currentRegion}`;
+    const sep = document.createElement('span');
+    sep.textContent = ' › ';
+    sep.style.color = '#555';
+    const cur = document.createElement('strong');
+    cur.textContent = loc.name;
+    cur.style.color = '#fff';
+    crumbs.append(regionSpan, sep, cur);
+    if (state.lastLocation && state.lastLocation !== locId) {
+      const prevLoc = getLocation(state.lastLocation);
+      if (prevLoc) {
+        const sep2 = document.createElement('span');
+        sep2.textContent = ' · ↩ ';
+        sep2.style.color = '#555';
+        const back = document.createElement('span');
+        back.textContent = prevLoc.name;
+        crumbs.append(sep2, back);
+      }
+    }
+  }
+
+  // ── Кнопка "Назад" (F3): возврат к предыдущей локации ──
+  // Раньше была только для сервисных локаций и "съедала" lastLocation
+  // (обнуляла после возврата). Теперь — универсальная для любой локации:
+  // renderLocation сам обновляет lastLocation при переходе, поэтому кнопка
+  // работает как переключатель туда/обратно. Кнопки «➔ Название» ниже — без изменений.
+  if (state.lastLocation && state.lastLocation !== locId) {
     const backLoc = getLocation(state.lastLocation);
     if (backLoc) {
       const btnBack = document.createElement('button');
+      btnBack.id = 'btn-back';
       btnBack.className = 'btn-nav';
       btnBack.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:var(--tma-accent)';
-      btnBack.innerHTML = `<span>↩ ${backLoc.name}</span>`;
-      btnBack.onclick = () => {
-        renderLocation(state.lastLocation);  // Возвращаемся
-        state.lastLocation = null;            // Сбрасываем
-      };
-      navContainer.appendChild(btnBack);
+      btnBack.textContent = `↩ Назад: ${backLoc.name}`;
+      btnBack.onclick = () => { renderLocation(state.lastLocation); };
+      navContainer.prepend(btnBack);
     }
   }
 

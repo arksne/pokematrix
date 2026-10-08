@@ -74,6 +74,12 @@ const readWorld = (page) => page.evaluate(() => ({
   navLabels: [...document.querySelectorAll('#nav-buttons button')].map((b) => b.innerText.trim()),
   mapItems: document.querySelectorAll('.map-loc-item').length,
   mapVisible: getComputedStyle(document.getElementById('map-container')).display !== 'none',
+  // L3/F2: новая карта — вкладки регионов и SVG-граф узлами
+  mapTabs: [...document.querySelectorAll('.map-region-tab')].map((b) => b.innerText.trim()),
+  mapNodes: document.querySelectorAll('.map-node').length,
+  // F3: кнопка «Назад» и хлебные крошки позиции
+  backBtn: document.getElementById('btn-back')?.innerText.trim() ?? '',
+  crumbs: document.getElementById('loc-breadcrumbs')?.innerText.trim() ?? '',
 }));
 
 const browser = await chromium.launch({
@@ -123,6 +129,9 @@ const withMap = await readWorld(page);
 t('W7', 'карта свёрнута на старте и открывается по кнопке',
   mapWasHidden && withMap.mapVisible, `была скрыта: ${mapWasHidden}, стала видна: ${withMap.mapVisible}`);
 t('W8', 'карта наполнена списком локаций', withMap.mapItems > 0, `элементов: ${withMap.mapItems}`);
+t('W8b', 'вкладки регионов Канто/Джото есть', withMap.mapTabs.some((l) => /Канто/.test(l)) && withMap.mapTabs.some((l) => /Джото/.test(l)),
+  `вкладки: ${withMap.mapTabs.join(' | ')}`);
+t('W8c', 'граф карты отрисован узлами', withMap.mapNodes > 0, `узлов: ${withMap.mapNodes}`);
 
 // Кнопки действий зависят от типа локации: в Голденрод-Сити их нет, они есть в
 // покемен-центре. Проверяем там, где они должны быть.
@@ -134,6 +143,9 @@ t('W9', 'в покемен-центре появились кнопки дейс
   `кнопок: ${atCenter.actions}${atCenter.actionLabels.length ? ` (${atCenter.actionLabels.join(', ')})` : ''}`);
 t('W10', 'в покемен-центре есть кнопка обмена',
   atCenter.actionLabels.some((l) => /Обмен/i.test(l)), atCenter.actionLabels.join(', '));
+t('W10b', 'после перехода есть кнопка «Назад»', /Назад/.test(atCenter.backBtn), `«${atCenter.backBtn}»`);
+t('W10c', 'хлебные крошки показывают позицию', atCenter.crumbs.length > 0 && /›/.test(atCenter.crumbs),
+  `«${atCenter.crumbs}»`);
 
 // ── Застревание в тренировочной зоне ────────────────────────────────────
 // Гейт раньше делал голый return. Прод с этим и был заперт: сохранённая

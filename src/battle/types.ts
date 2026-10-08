@@ -160,6 +160,11 @@ export interface MoveData {
     max_hits?: number;
     min_turns?: number;
     max_turns?: number;
+    // Конвенция движка (не PokeAPI): damage — фикс. урон (0 = super-fang,
+    // половина HP цели), ohko — мгновенное убийство. В moves_db.json этих
+    // полей нет — см. special-moves.ts (isOhkoMove/getFixedDamage).
+    damage?: number | null;
+    ohko?: boolean;
   };
   stat_changes?: Array<{
     change: number;

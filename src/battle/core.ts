@@ -50,6 +50,7 @@ import { getAbilityNameRu } from '../data/abilities.js';                 // Ру
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy } from './logic.js';
+import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder } from './special-moves.js';
 import { calculateStat as calculateStatShared } from './stats.js';
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
 import { store } from '../game/store.js';
@@ -570,10 +571,8 @@ function playerMovesFirst(playerMove, enemyMove): boolean {
 
   const pSpe = getEffectiveSpeed(S.activePlayerMon, false);
   const eSpe = getEffectiveSpeed(S.activeWild, true);
-  // При равенстве скорости порядок случаен — решение из спецификации. Раньше
-  // игрок всегда ходил первым, что давало ему бесплатное преимущество.
-  if (pSpe === eSpe) return Math.random() < 0.5;
-  return pSpe > eSpe;
+  // Сравнение — чистое ядро в special-moves.ts (тестируется без DOM/S).
+  return decideMoveOrder(pPrio, pSpe, ePrio, eSpe) === 'player';
 }
 
 /**
@@ -608,19 +607,10 @@ export function filterMovesByLevel(moveDetails, level) {
 }
 
 /**
- * getMultiHitCount — количество ударов для multi-hit атак (Bullet Seed, Rock Blast, etc.)
+ * getMultiHitCount — переехал в special-moves.ts (чистый, тестируемый,
+ * rand инжектится). Здесь — реэкспорт для совместимости.
  */
-function getMultiHitCount(move) {
-  const minH = move.meta?.min_hits;
-  const maxH = move.meta?.max_hits;
-  if (!minH || !maxH || minH < 2 || maxH < minH) return 1;
-  if (minH === maxH) return minH;
-  const r = Math.random();
-  if (r < 3/8) return 2;
-  if (r < 6/8) return 3;
-  if (r < 7/8) return 4;
-  return 5;
-}
+export { getMultiHitCount } from './special-moves.js';
 
 /**
  * applyWeatherChip — урон от погоды (sandstorm, hail) 1/16 max HP в конце хода.
@@ -853,7 +843,16 @@ function handlePlayerStatusEffects(move) {
   // move.meta.healing — процент от макс HP (например 50 для Recover)
   const healPct = move.meta?.healing;
   if (healPct) {
-    const healAmount = Math.floor(S.activePlayerMon.maxHp * healPct / 100);
+    // Отрицательное лечение (clangorous-soul −33): не лечит, а срезает HP
+    // ценой за бафф. Раньше попадало в «HP уже полное» без среза.
+    if (healPct < 0) {
+      const cost = calcHpCost(S.activePlayerMon.maxHp, healPct);
+      S.activePlayerMon.currentHp = Math.max(1, S.activePlayerMon.currentHp - cost);
+      updatePlayerHpUI();
+      appendToLog(`${S.activePlayerMon.apiData.name} тратит ${cost} HP на усиление!`, false, 'system');
+      return true;
+    }
+    const healAmount = calcHealAmount(S.activePlayerMon.maxHp, healPct);
     if (healAmount > 0) {
       S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + healAmount);
       updatePlayerHpUI();
@@ -993,7 +992,15 @@ function handleEnemyStatusEffects(move) {
   // 1. Healing for enemy
   const healPct = move.meta?.healing;
   if (healPct) {
-    const healAmount = Math.floor(S.wildMaxHP * healPct / 100);
+    // Отрицательное лечение врага (зеркально игроку): срез HP за бафф.
+    if (healPct < 0) {
+      const cost = calcHpCost(S.wildMaxHP, healPct);
+      S.wildCurHP = Math.max(1, S.wildCurHP - cost);
+      updateWildHpUI();
+      appendToLog(`${S.activeWild.name} тратит ${cost} HP на усиление!`, false, 'system');
+      return true;
+    }
+    const healAmount = calcHealAmount(S.wildMaxHP, healPct);
     if (healAmount > 0 && S.wildCurHP < S.wildMaxHP) {
       S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + healAmount);
       updateWildHpUI();
@@ -3200,7 +3207,9 @@ async function useMove(moveIndex) {
   // ═══ 9b. TWO-TURN MOVE (заряд/выпуск) ═══
   // Проверяем: уже заряжено? Если да — выпускаем атаку.
   // Если нет и атака требует зарядки — заряжаем и завершаем ход.
-  const isCharge = move.meta?.category?.name === 'charge';
+  // isChargeMove: meta.category 'charge' или имя в CHARGE_MOVES
+  // (solar-beam, skull-bash... — в moves_db категории charge нет).
+  const isCharge = isChargeMove(move);
   if (S.playerChargedMove) {
     // ═══ ВЫПУСК ═══ Уже заряжено — очищаем заряд и продолжаем с этой атакой
     if (move.name === S.playerChargedMove.name) {
@@ -3224,8 +3233,16 @@ async function useMove(moveIndex) {
   // ═══ 10. ОСНОВНАЯ ЛОГИКА АТАКИ ═══
   appendToLog(`${S.activePlayerMon.apiData.name} использует ${move.name}!`);
 
-  // ─── 10a. STATUS MOVES (без power) ───
-  if (!power) {
+  // ─── 10a. STATUS MOVES (без урона) ───
+  // Ветка выбирается НЕ по `!power`: power-null, но дамажащие (фикс. урон,
+  // OHKO) идут в урон. Несработавший endeavor (fixed null) остаётся здесь.
+  // Раньше все они падали в «ничего не произошло».
+  const playerFixedDmg = !power ? getFixedDamage(move, {
+    attackerLevel: S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten,
+    defenderCurrentHp: S.wildCurHP,
+    attackerCurrentHp: S.activePlayerMon.currentHp,
+  }) : null;
+  if (!power && playerFixedDmg == null && !isOhkoMove(move)) {
     // 10a-i: Наложение статуса (Toxic, Thunder Wave, Will-O-Wisp, Spore...)
     const ailment = move.meta?.ailment?.name;
     if (ailment && ailment !== 'none' && ailment !== 'unknown') {
@@ -3385,9 +3402,7 @@ async function useMove(moveIndex) {
       // Drain / Recoil per hit
       if (move.meta?.drain) {
         if (move.meta.drain > 0) {
-          const drainPct = move.meta.drain / 100;
-          let heal = Math.floor(hitDmg * drainPct);
-          if (S.activePlayerMon.heldItem === 'bigRoot') heal = Math.floor(heal * 1.3);
+          const heal = calcDrainHeal(hitDmg, move.meta.drain, S.activePlayerMon.heldItem === 'bigRoot');
           if (heal > 0) {
             S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
             updatePlayerHpUI();
@@ -3397,8 +3412,7 @@ async function useMove(moveIndex) {
           const rhAbil = String(abilityOf(S.activePlayerMon, false) || '')
             .toLowerCase().replace(/[^a-z0-9]/g, '');
           if (rhAbil !== 'rockhead') {
-            const rPct = Math.abs(move.meta.drain) / 100;
-            const rd = Math.max(1, Math.floor(hitDmg * rPct));
+            const rd = calcRecoilDamage(hitDmg, move.meta.drain);
             S.activePlayerMon.currentHp -= rd;
             if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
             updatePlayerHpUI();
@@ -4027,8 +4041,9 @@ async function runEnemyTurnBody() {
   }
 
   // ═══ 3b. TWO-TURN MOVE CHARGE ═══
-  // Если атака требует зарядки — заряжаем и завершаем ход врага
-  if (!isChargeRelease && chosenMove.meta?.category?.name === 'charge') {
+  // Если атака требует зарядки — заряжаем и завершаем ход врага.
+  // isChargeMove — та же проверка, что у игрока (симметрия).
+  if (!isChargeRelease && isChargeMove(chosenMove)) {
     S.enemyChargedMove = chosenMove;
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} заряжает ${enemyMoveName}!`);
     await finishEnemyTurn();
@@ -4044,6 +4059,9 @@ async function runEnemyTurnBody() {
   );
   // Hustle: 20% additional miss chance for physical moves
   const wildAbilityName = abilityOf(S.activeWild, true);
+  // Serene Grace врага: ×2 к шансам вторичных эффектов, как у игрока.
+  // Раньше враг множитель не получал — асимметрия сторон.
+  const wildSereneGrace = String(wildAbilityName || '').toLowerCase().replace(/[^a-z0-9]/g, '') === 'serenegrace' ? 2 : 1;
   if (enemyAcc.hit && wildAbilityName === 'hustle' && chosenMove.damage_class?.name === 'physical') {
     if (Math.random() * 100 < 20) {
       enemyAcc = { hit: false, message: 'Атака промахнулась из-за Hustle!' };
@@ -4059,7 +4077,14 @@ async function runEnemyTurnBody() {
     : chosenMove.power;
 
   // ═══ 5. СТАТУС-АТАКА ВРАГА (без урона) ═══
-  if (!power) {
+  // Та же маршрутизация, что у игрока: power-null, но дамажащие
+  // (фикс. урон, OHKO) идут в урон, а не в «ничего не произошло».
+  const enemyFixedDmg = !power ? getFixedDamage(chosenMove, {
+    attackerLevel: S.wildLvl,
+    defenderCurrentHp: S.activePlayerMon.currentHp,
+    attackerCurrentHp: S.wildCurHP,
+  }) : null;
+  if (!power && enemyFixedDmg == null && !isOhkoMove(chosenMove)) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}!`);
     handleEnemyStatusEffects(chosenMove); // Лечение, барьеры, статы, статусы
     await finishEnemyTurn();
@@ -4174,15 +4199,12 @@ async function runEnemyTurnBody() {
     // Drain / Recoil per hit
     if (chosenMove.meta?.drain) {
       if (chosenMove.meta.drain > 0) {
-        const drainPct = chosenMove.meta.drain / 100;
-        let heal = Math.floor(hitDmg * drainPct);
-        if (S.activeWild.heldItem === 'bigRoot') heal = Math.floor(heal * 1.3);
+        const heal = calcDrainHeal(hitDmg, chosenMove.meta.drain, S.activeWild.heldItem === 'bigRoot');
         if (heal > 0) {
           S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
         }
       } else {
-        const rPct = Math.abs(chosenMove.meta.drain) / 100;
-        let rd = Math.max(1, Math.floor(hitDmg * rPct));
+        const rd = calcRecoilDamage(hitDmg, chosenMove.meta.drain);
         S.wildCurHP -= rd;
         if (S.wildCurHP < 0) S.wildCurHP = 0;
         updateWildHpUI();
@@ -4229,7 +4251,7 @@ async function runEnemyTurnBody() {
 
     // ── Secondary status от атак врага (Sheer Force) ──
     if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.meta && chosenMove.meta.ailment && chosenMove.meta.ailment.name !== 'none' && chosenMove.meta.ailment.name !== 'unknown') {
-      const chance = chosenMove.meta.ailment_chance ?? 0;
+      const chance = effectiveSecondaryChance(chosenMove.meta.ailment_chance, wildSereneGrace);
       if (Math.random() * 100 < chance) {
         const statusMap = {
           'poison': 'psn', 'badly-poison': 'tox',
@@ -4247,13 +4269,13 @@ async function runEnemyTurnBody() {
     }
 
     // ── Flinch от атак врага (Sheer Force) ──
-    if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.meta?.flinch_chance && Math.random() * 100 < chosenMove.meta.flinch_chance) {
+    if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.meta?.flinch_chance && Math.random() * 100 < effectiveSecondaryChance(chosenMove.meta.flinch_chance, wildSereneGrace)) {
       S.activePlayerMon.flinch = true;
     }
 
     // ── Stat changes от дамажащих атак врага (Sheer Force) ──
     if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.stat_changes && chosenMove.stat_changes.length > 0) {
-      const scChance = chosenMove.meta?.stat_chance ?? 100;
+      const scChance = effectiveSecondaryChance(chosenMove.meta?.stat_chance ?? 100, wildSereneGrace);
       if (Math.random() * 100 < scChance) {
         const targetMap = { 'user': S.activeWild, 'selected-pokemon': S.activePlayerMon, 'all-opponents': S.activePlayerMon, 'all-other-pokemon': S.activePlayerMon };
         const moveTarget = chosenMove.target?.name || 'selected-pokemon';

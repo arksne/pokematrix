@@ -280,6 +280,81 @@ const sockB = await connect(tokenB, 'B');
   }
 }
 
+// ══════════════════════ K1: облако без лимитов (регрессия fab5099) ══════════════════════
+// Раньше Zod-потолок max(999999) + refine на ~400 ключей отбивал любой сейв
+// с credit > 1 млн статусом 422. Теперь потолок величины — int4 max
+// (2 147 483 647), лимита числа ключей нет. T11–T14 фиксируют это фактами.
+{
+  /** Инвентарь из n разных ключей (форма ключа — по схеме: латиница/цифры/_). */
+  const bulkInventory = (n, credit = 500) => {
+    const inv = { credit };
+    for (let i = 0; i < n; i++) inv[`k1bulk${String(i).padStart(4, '0')}`] = (i % 99) + 1;
+    return inv;
+  };
+  const postSave = (token, inventory) => api('/api/save', {
+    method: 'POST', token,
+    body: (() => {
+      const s = testSave();
+      s.saveData.inventory = inventory;
+      return s;
+    })(),
+  });
+  const getInventory = async (token) =>
+    asObject((await api('/api/save', { method: 'GET', token })).json?.saveData).inventory || {};
+
+  // ── T11: 500+ разных предметов — круговой обход целиком
+  {
+    const token = await login(333000011, 'k1_t11');
+    const sent = bulkInventory(520);
+    const r = await postSave(token, sent);
+    const got = r.status === 200 ? await getInventory(token) : null;
+    const allBack = !!got && Object.keys(sent).every((k) => got[k] === sent[k]);
+    check('T11', 'K1: сейв с 500+ разных предметов возвращается целиком',
+      r.status === 200 && allBack,
+      r.status !== 200 ? `POST HTTP ${r.status}` : `ключей: ${Object.keys(got).length}/521`);
+  }
+
+  // ── T12: credit = 1 млрд — принимается, GET возвращает
+  {
+    const token = await login(333000012, 'k1_t12');
+    const r = await postSave(token, { credit: 1_000_000_000, pokeBall: 5 });
+    const got = r.status === 200 ? await getInventory(token) : null;
+    check('T12', 'K1: credit 1_000_000_000 принимается (не 422), GET возвращает',
+      r.status === 200 && got?.credit === 1_000_000_000,
+      r.status !== 200 ? `POST HTTP ${r.status}` : `credit: ${got?.credit}`);
+  }
+
+  // ── T13: 600 ключей инвентаря — не 422
+  {
+    const token = await login(333000013, 'k1_t13');
+    const r = await postSave(token, bulkInventory(600));
+    check('T13', 'K1: сейв с 600 ключами инвентаря — не 422',
+      r.status === 200, `POST HTTP ${r.status}`);
+  }
+
+  // ── T14: потолок int4. 2_147_483_647 — ок; 3_000_000_000 — 422 без 500.
+  // Поведение по коду: Zod max(2_147_483_647) в save-data.ts отклоняет 3e9
+  // на валидации (422) — до клиппа money в routes/save.ts дело не доходит.
+  {
+    const token = await login(333000014, 'k1_t14');
+    const okMax = await postSave(token, { credit: 2_147_483_647 });
+    const gotMax = okMax.status === 200 ? await getInventory(token) : null;
+    check('T14', 'K1: credit 2_147_483_647 (потолок int4) принимается',
+      okMax.status === 200 && gotMax?.credit === 2_147_483_647,
+      okMax.status !== 200 ? `POST HTTP ${okMax.status}` : `credit: ${gotMax?.credit}`);
+
+    const over = await postSave(token, { credit: 3_000_000_000 });
+    check('T14b', 'K1: credit 3_000_000_000 отклоняется 422 (не 500), без потери сейва',
+      over.status === 422,
+      `POST HTTP ${over.status}${over.status === 500 ? ' — 500!' : ''}`);
+    if (over.status === 422) {
+      const kept = await getInventory(token);
+      check('T14c', 'K1: отклонённый сейв не затирает предыдущий',
+        kept?.credit === 2_147_483_647, `credit: ${kept?.credit}`);
+    }
+  }
+}
+
 // ══════════════════════ HTTP-контракт ══════════════════════
 {
   const r = await api('/api/definitely-not-a-route-12345');

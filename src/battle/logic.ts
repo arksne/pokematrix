@@ -73,6 +73,7 @@ export function getTypeMultiplier(attackType, defenderTypes) {
 
 import { getWeatherMultiplier } from '../data/weather.js';
 import { calculateStat as calculateStatShared } from './stats.js';
+import { isOhkoMove, getFixedDamage, hasFixedDamage } from './special-moves.js';
 export { getWeatherMultiplier };
 
 /**
@@ -268,7 +269,9 @@ export function isStatusImmune(ailment, target, checkAbilities = true) {
 }
 
 /**
- * Pure damage calculation. Returns { damage, isCrit, messageParts[] }.
+ * Pure damage calculation. Returns { damage, isCrit, messageParts[], messages[] }.
+ * messageParts и messages — один и тот же массив: messages читает core.ts
+ * (хит-модификаторы в логе), messageParts — исторический ключ.
  * Does NOT mutate anything.
  */
 /**
@@ -321,39 +324,51 @@ alwaysCrit = false,
   const power = move.power;
 
   // Атаки с фиксированным уроном ─
-  // Seismic Toss (урон = уровень атакующего), Night Shade и Sonic Boom (20),
-  // Dragon Rage (40). У них power === null, и раньше calculateDamage возвращал
-  // 0 — то есть атака попадала в «ничего не произошло» и не наносила урона вовсе.
+  // Seismic Toss (урон = уровень атакующего), Night Shade (уровень),
+  // Sonic Boom (20), Dragon Rage (40). У них power === null, и раньше
+  // calculateDamage возвращал 0 — то есть атака попадала в
+  // «ничего не произошло» и не наносила урона вовсе.
   // Super Fang — половина текущего HP цели, считается отдельно.
+  // ВАЖНО: в moves_db.json поля meta.damage НЕТ — для атак лиги урон
+  // определяется по имени через getFixedDamage (special-moves.ts).
   const targetHp = defenderCurrentHp !== undefined ? defenderCurrentHp : defender?.currentHp;
-  const fixed = move.meta?.damage;
+  let fixed = move.meta?.damage;
+  if ((fixed === undefined || fixed === null) && !power) {
+    fixed = getFixedDamage(move, {
+      attackerLevel,
+      defenderCurrentHp: targetHp,
+      attackerCurrentHp,
+    });
+  }
   if (fixed !== undefined && fixed !== null && !power) {
     if (fixed === 0) {
       // Super Fang: meta.damage === 0, урон равен половине текущего HP цели
       const dmg = Math.max(1, Math.floor((targetHp || 1) / 2));
       parts.push(`Фиксированный урон ${dmg}`);
-      return { damage: dmg, isCrit: false, messageParts: parts, isFixed: true };
+      return { damage: dmg, isCrit: false, messageParts: parts, messages: parts, isFixed: true };
     }
     const dmg = Math.max(1, Math.floor(fixed));
     parts.push(`Фиксированный урон ${dmg}`);
-    return { damage: dmg, isCrit: false, messageParts: parts, isFixed: true };
+    return { damage: dmg, isCrit: false, messageParts: parts, messages: parts, isFixed: true };
   }
 
-  if (!power) return { damage: 0, isCrit: false, messageParts: [] };
-
   // Атаки мгновенного убийства ─
-  // Fissure, Horn Drill, Guillotine, Sheer Cold: meta.ohko === true. Раньше они
-  // считались обычной атакой без power, то есть тоже ничего не делали.
-  if (move.meta?.ohko) {
+  // Fissure, Horn Drill, Guillotine, Sheer Cold. Проверка стоит ДО
+  // `if (!power)`, потому что у OHKO power === null — иначе они всегда
+  // возвращали 0. Метка — meta.category.name === 'ohko' (в moves_db нет
+  // поля meta.ohko, см. isOhkoMove).
+  if (isOhkoMove(move)) {
     if (defenderAbilityName === 'battle-armor' || defenderAbilityName === 'shell-armor') {
       parts.push(`${defender?.name || 'Противник'} защищён бронёй`);
-      return { damage: 0, isCrit: false, messageParts: parts, ohkoBlocked: true };
+      return { damage: 0, isCrit: false, messageParts: parts, messages: parts, ohkoBlocked: true };
     }
     if (typeof targetHp === 'number' && targetHp > 0) {
       parts.push('Мгновенное убийство');
-      return { damage: targetHp, isCrit: false, messageParts: parts, isOHKO: true };
+      return { damage: targetHp, isCrit: false, messageParts: parts, messages: parts, isOHKO: true };
     }
   }
+
+  if (!power) return { damage: 0, isCrit: false, messageParts: [], messages: [] };
 
   const isPhysical = move.damage_class?.name === 'physical';
   const attackStatName = isPhysical ? 'attack' : 'special-attack';
@@ -581,8 +596,10 @@ alwaysCrit = false,
 export function checkSuckerPunchFail(move, enemyChosenMove) {
   if (move.name !== 'sucker-punch') return false;
   if (!enemyChosenMove) return false; // no enemy move info = default to fail (conservative)
-  // Sucker punch fails if opponent uses a non-damaging move
-  if (!enemyChosenMove.power) return true;
+  // Sucker punch fails if opponent uses a non-damaging move. Power-null, но
+  // дамажащие (seismic-toss, night-shade, super-fang, endeavor, OHKO) —
+  // дамажат, Sucker Punch против них срабатывает.
+  if (!enemyChosenMove.power && !isOhkoMove(enemyChosenMove) && !hasFixedDamage(enemyChosenMove)) return true;
   return false;
 }
 
