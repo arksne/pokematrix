@@ -48,14 +48,14 @@ export const VALID_ITEM_IDS = [
 /** Белый список предметов: только эти itemId могут попасть в инвентарь. */
 export const VALID_ITEM_ID_SET: ReadonlySet<string> = new Set(VALID_ITEM_IDS);
 
-// ── Схема IV ──
+// ── Схема IV (шкала 0–50, решение хозяина, блок C5) ──
 const ivSchema = z.object({
-  hp: z.number().int().min(0).max(31).default(0),
-  atk: z.number().int().min(0).max(31).default(0),
-  def: z.number().int().min(0).max(31).default(0),
-  spa: z.number().int().min(0).max(31).default(0),
-  spd: z.number().int().min(0).max(31).default(0),
-  spe: z.number().int().min(0).max(31).default(0),
+  hp: z.number().int().min(0).max(50).default(0),
+  atk: z.number().int().min(0).max(50).default(0),
+  def: z.number().int().min(0).max(50).default(0),
+  spa: z.number().int().min(0).max(50).default(0),
+  spd: z.number().int().min(0).max(50).default(0),
+  spe: z.number().int().min(0).max(50).default(0),
 });
 
 // Схема EV: 0..252. Должна быть отдельной от IV — ранее здесь стояла ivSchema

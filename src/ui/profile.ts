@@ -47,7 +47,7 @@ import { getPowerStars, getRarityStars } from '../utils/state.js';
 // getTypeGradient — CSS-градиент для фона на основе типов покемона
 // getSpriteUrl — URL спрайта покемона (анимированный или обычный)
 // getTypeColor — HEX-цвет для типа покемона
-import { getTypeGradient, getSpriteUrl, getTypeColor, getItemSpriteImg, trainingBadgeHtml, isShinyMon } from '../utils/sprite.js';
+import { getTypeGradient, getSpriteUrl, getTypeColor, getItemSpriteImg, trainingBadgeHtml, isShinyMon, typeBadgesHtml } from '../utils/sprite.js';
 import { genderIcon } from './daycare.js';
 import { openPokedex, showPokedexInfo } from './pokedex.js';
 // escHtml — экранирует HTML-спецсимволы (чтобы избежать XSS)
@@ -80,9 +80,10 @@ async function getBattleCore() {
   return battleCoreModule;
 }
 
-// ── renderTeamGrid: отрисовка сетки команды покемонов ────
-// Показывает до 6 слотов: заполненные (с покемонами) и пустые
-// Вызывается при открытии вкладки "Команда"
+// ── renderTeamGrid: компактные ряды команды (B1) + иконки типов (F5) ────
+// Ряд: спрайт, имя, уровень, HP-бар, иконки типов. Тап по ряду раскрывает
+// боевые данные (статы/гены/характер/атаки/EV/тренировка), кнопка
+// «Профиль» открывает полный профиль. Яйца и пустые слоты — как раньше.
 export function renderTeamGrid() {
   // Обновляем счётчик команды: "(3/6)"
   const teamCountEl = document.getElementById('team-count');
@@ -92,8 +93,9 @@ export function renderTeamGrid() {
   const grid = document.getElementById('team-grid');
   if (!grid) return;  // Если нет на странице — выходим
   grid.innerHTML = ''; // Очищаем сетку
+  grid.classList.add('team-list');
 
-  // Загружаем battle/core (асинхронно) — нужен для getStatusIcon
+  // Загружаем battle/core (асинхронно) — нужен для getStatusIcon/calculateStat
   getBattleCore().then(bc => {
     // Проходим по 6 слотам команды
     for (let i = 0; i < 6; i++) {
@@ -105,7 +107,7 @@ export function renderTeamGrid() {
         const curLvl = mon.baseLevel + mon.candiesEaten;  // Текущий уровень
         const statusIcon = bc.getStatusIcon(mon.status);    // Иконка статуса (если есть)
 
-        slot.className = 'team-slot';
+        slot.className = 'team-slot team-row';
 
         // ── Кнопки перестановки (▲/▼) ──
         // Показываем, только если в команде больше 1 покемона
@@ -120,7 +122,7 @@ export function renderTeamGrid() {
             </div>`
           : '';
 
-        // ── Типы покемона (для градиента фона) ──
+        // ── Типы покемона (для градиента фона + иконки F5) ──
         const types = mon.apiData.types;
         const typeBg = getTypeGradient(types);
 
@@ -144,37 +146,80 @@ export function renderTeamGrid() {
           const eggIvs = eggData.ivs || {};
           const geneDisplay = `h${eggIvs.hp || 0}a${eggIvs.atk || 0}d${eggIvs.def || 0}s${eggIvs.spe || 0}sa${eggIvs.spa || 0}sd${eggIvs.spd || 0}`;
           slot.innerHTML = `
-            <div class="team-sprite-wrap">
-              <img src="assets/egg.png" width="48" height="48" class="sprite-pixel">
+            <div class="team-row-main">
+              <div class="team-sprite-wrap">
+                <img src="assets/egg.png" width="48" height="48" class="sprite-pixel">
+              </div>
+              <div class="team-row-info">
+                <div class="slot-name">Яйцо</div>
+                <div class="slot-lvl fs-065">${ready ? 'Вылупляется...' : `Вылупится через ~${remaining} мин`}</div>
+                <div class="slot-lvl" style="font-size:0.6rem;color:#4682B4">${geneDisplay}</div>
+              </div>
             </div>
-            <div class="slot-name">Яйцо</div>
-            <div class="slot-lvl fs-065">${ready ? 'Вылупляется...' : `Вылупится через ~${remaining} мин`}</div>
-            <div class="slot-lvl" style="font-size:0.6rem;color:#4682B4">${geneDisplay}</div>
           `;
         } else {
-          // ── Обычный покемон ──
+          // ── Обычный покемон: компактный ряд ──
           const pwStars2 = getPowerStars(mon);    // Звёзды мощи
           const rStars2 = getRarityStars(mon);     // Звёзды редкости
+          const hpPct = mon.maxHp > 0
+            ? Math.max(0, Math.min(100, Math.round((mon.currentHp / mon.maxHp) * 100)))
+            : 0;
+          const hpColor = hpPct > 50 ? '#34c759' : hpPct > 20 ? '#ff9500' : '#ff3b30';
+          const typeIcons = typeBadgesHtml(types, 20);
+          // ── Боевые данные для раскрывашки ──
+          const natureName = natures[mon.natureIdx || 0]?.name || '-';
+          const iv = mon.ivs || {};
+          const geneStr = `h${iv.hp ?? 0}a${iv.atk ?? 0}d${iv.def ?? 0}s${iv.spe ?? 0}sa${iv.spa ?? 0}sd${iv.spd ?? 0}`;
+          const ev = mon.evs || {};
+          const evStr = `HP:${ev.hp || 0} Атк:${ev.atk || 0} Защ:${ev.def || 0} СА:${ev.spa || 0} СЗ:${ev.spd || 0} Ск:${ev.spe || 0}`;
+          const movesStr = (mon.apiData.moves || []).slice(0, 4)
+            .map((m: any) => m?.move?.name || '-').join(', ') || '-';
+          const st = trainingStages[mon.trainingStage];
+          const trainStr = (mon.trainingStage > 0 && st)
+            ? `<span style="color:${st.color};font-weight:700;">${escHtml(st.name)} (+${st.pct}%)${mon.trainingStat ? ` · ${escHtml(mon.trainingStat)} ✓` : ''}</span>`
+            : 'нет';
+          let statsStr = `HP ${mon.currentHp}/${mon.maxHp}`;
+          try {
+            const s = (n: string) => bc.calculateStat(mon, n, false);
+            statsStr = `HP ${mon.currentHp}/${mon.maxHp} · Атк ${s('attack')} · Защ ${s('defense')} · СА ${s('special-attack')} · СЗ ${s('special-defense')} · Ск ${s('speed')}`;
+          } catch { /* fallback выше */ }
           slot.innerHTML = `
             ${reorderHtml}
             <button class="team-dex-btn" data-index="${i}" title="Покедекс">📖</button>
-            <div class="team-sprite-wrap" style="position:relative;">
-              <img src="${getSpriteUrl(mon)}" alt="sprite" style="background:${typeBg};">
-              ${trainingBadgeHtml(mon, 22)}
-              ${mon.heldItem ? `<span class="team-held-badge" title="Держит: ${mon.heldItem}" style="position:absolute;right:2px;bottom:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.55);display:inline-flex;align-items:center;justify-content:center;">${getItemSpriteImg(mon.heldItem, 16)}</span>` : ''}
+            <div class="team-row-main">
+              <div class="team-sprite-wrap" style="position:relative;">
+                <img src="${getSpriteUrl(mon)}" alt="sprite" style="background:${typeBg};">
+                ${trainingBadgeHtml(mon, 22)}
+                ${mon.heldItem ? `<span class="team-held-badge" title="Держит: ${mon.heldItem}" style="position:absolute;right:2px;bottom:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.55);display:inline-flex;align-items:center;justify-content:center;">${getItemSpriteImg(mon.heldItem, 16)}</span>` : ''}
+              </div>
+              <div class="team-row-info">
+                <div class="slot-name">${isShinyMon(mon) ? '✨' : ''}${escHtml(mon.nickname || mon.apiData.name)} ${genderIcon(mon)} ${statusIcon} <span class="team-expand" title="Раскрыть">▾</span></div>
+                <div class="slot-lvl">${renderStars(pwStars2, rStars2)} Lvl ${curLvl} <span class="team-type-icons">${typeIcons}</span></div>
+                <div class="team-hp-bar"><div class="team-hp-fill" style="width:${hpPct}%;background:${hpColor};"></div></div>
+                <div class="slot-lvl">${mon.currentHp}/${mon.maxHp} HP</div>
+              </div>
+              <button class="team-profile-btn" data-index="${i}" title="Открыть профиль">Профиль →</button>
             </div>
-            <div class="slot-name">${isShinyMon(mon) ? '✨' : ''}${escHtml(mon.nickname || mon.apiData.name)} ${genderIcon(mon)} ${statusIcon}</div>
-            <div class="slot-lvl">${renderStars(pwStars2, rStars2)} Lvl ${curLvl} | ${mon.currentHp}/${mon.maxHp} HP</div>
+            <div class="team-detail" style="display:none;">
+              <div class="team-detail-row"><b>Статы:</b> <span>${escHtml(statsStr)}</span></div>
+              <div class="team-detail-row"><b>Гены:</b> <span style="font-family:monospace;">${escHtml(geneStr)}</span></div>
+              <div class="team-detail-row"><b>Характер:</b> <span>${escHtml(natureName)}</span></div>
+              <div class="team-detail-row"><b>Атаки:</b> <span>${escHtml(movesStr)}</span></div>
+              <div class="team-detail-row"><b>EV:</b> <span>${escHtml(evStr)}</span></div>
+              <div class="team-detail-row"><b>Тренировка:</b> <span>${trainStr}</span></div>
+            </div>
           `;
         }
         // Сохраняем индекс покемона в data-атрибуте
         slot.setAttribute('data-poke-index', String(i));
-        // При клике на слот (не на кнопку перестановки/покедекса) — открываем профиль
+        // Клик по ряду: кнопки — своё действие, иначе — раскрыть/свернуть детали
         slot.addEventListener('click', (e) => {
-          const dexBtn = (e.target as HTMLElement).closest('.team-dex-btn');
+          const target = e.target as HTMLElement;
+          if (target.closest('.team-move-btn')) return;  // Игнорируем клики по ▲/▼
+          const dexBtn = target.closest('.team-dex-btn');
           if (dexBtn) {
             // Кнопка 📖 — покедекс об этом виде, профиль не открываем
-            const idx = parseInt(dexBtn.getAttribute('data-index') || '0');
+            const idx = parseInt((dexBtn as HTMLElement).getAttribute('data-index') || '0');
             const m = state.myTeam[idx];
             const species = m?.apiData?.species?.name || m?.apiData?.name;
             if (species) {
@@ -183,8 +228,17 @@ export function renderTeamGrid() {
             }
             return;
           }
-          if ((e.target as HTMLElement).closest('.team-move-btn')) return;  // Игнорируем клики по ▲/▼
-          openPokemonProfile(i);
+          if (target.closest('.team-profile-btn')) {
+            openPokemonProfile(i);
+            return;
+          }
+          const detail = slot.querySelector('.team-detail') as HTMLElement | null;
+          const chev = slot.querySelector('.team-expand') as HTMLElement | null;
+          if (detail) {
+            const isOpen = detail.style.display !== 'none';
+            detail.style.display = isOpen ? 'none' : 'block';
+            if (chev) chev.innerText = isOpen ? '▾' : '▴';
+          }
         });
       } else {
         // ── Пустой слот ──
@@ -269,10 +323,8 @@ export function refreshProfileUI() {
     }
   }
 
-  // ── Типы покемона (значки с цветом) ──
-  const typesHtml = mon.apiData.types.map(t =>
-    `<span class="type-badge" style="background-color: ${getTypeColor(t.type.name)}">${t.type.name}</span>`
-  ).join('');
+  // ── Типы покемона (F5: маленькие бейджи-иконки, как в покедексе лиги) ──
+  const typesHtml = typeBadgesHtml(mon.apiData.types, 24);
   const pokeTypes = document.getElementById('poke-types');
   if (pokeTypes) pokeTypes.innerHTML = typesHtml;
 
@@ -652,7 +704,9 @@ export function initProfileEvents() {
 
 // ── updateStats: обновить отображение статов покемона ────
 // Использует calculateStat из battle/core.js для вычисления финальных статов
-// с учётом IV, EV, характера, тренировки
+// с учётом IV, EV, характера, тренировки.
+// A1–A3: тренированный стат (mon.trainingStat при trainingStage>0)
+// помечается ✓ цветом стадии из training.ts (НЕ зелёный/красный характера).
 export function updateStats() {
   if (state.currentPokemonIndex === null) return;
   const mon = state.myTeam[state.currentPokemonIndex];
@@ -666,6 +720,26 @@ export function updateStats() {
     { name: 'special-defense', el: 'val-spd' },
     { name: 'speed', el: 'val-spe' }
   ];
+  // trainingStat хранится коротким ключом (atk/def/spa/spd/spe), без HP.
+  const TRAIN_KEY_TO_API: Record<string, string> = {
+    atk: 'attack', def: 'defense', spa: 'special-attack', spd: 'special-defense', spe: 'speed',
+  };
+  const API_TO_LABEL: Record<string, string> = {
+    attack: 'label-atk', defense: 'label-def', 'special-attack': 'label-spa',
+    'special-defense': 'label-spd', speed: 'label-spe',
+  };
+  const trainedApi = (mon.trainingStage > 0 && mon.trainingStat)
+    ? (TRAIN_KEY_TO_API[mon.trainingStat] || null)
+    : null;
+  const stageColor = (mon.trainingStage > 0 && trainingStages[mon.trainingStage])
+    ? trainingStages[mon.trainingStage].color
+    : null;
+  const stageName = (mon.trainingStage > 0 && trainingStages[mon.trainingStage])
+    ? trainingStages[mon.trainingStage].name
+    : '';
+  const stagePct = (mon.trainingStage > 0 && trainingStages[mon.trainingStage])
+    ? trainingStages[mon.trainingStage].pct
+    : 0;
 
   // Загружаем battle/core (лениво) для calculateStat
   getBattleCore().then(bc => {
@@ -673,7 +747,30 @@ export function updateStats() {
       // Вычисляем финальный стат через чистую формулу из core.ts
       const val = bc.calculateStat(mon, s.name, false);
       const el = document.getElementById(s.el);
-      if (el) el.innerText = String(val);
+      if (el) {
+        if (trainedApi === s.name && stageColor) {
+          el.innerHTML = `${val} <span style="color:${stageColor};font-weight:700;" title="Тренировка: ${escHtml(stageName)} (+${stagePct}%)">✓</span>`;
+          el.style.color = stageColor;
+          el.title = `Тренировка: ${stageName} (+${stagePct}%)`;
+        } else {
+          el.innerText = String(val);
+          el.style.color = '';
+          el.title = '';
+        }
+      }
+      const labelId = API_TO_LABEL[s.name];
+      if (labelId) {
+        const labelEl = document.getElementById(labelId);
+        if (labelEl) {
+          if (trainedApi === s.name && stageColor) {
+            labelEl.style.color = stageColor;
+            labelEl.title = `Тренировка: ${stageName} (+${stagePct}%) ✓`;
+          } else {
+            labelEl.style.color = '';
+            labelEl.title = '';
+          }
+        }
+      }
     });
   });
 }

@@ -120,7 +120,7 @@ async function main() {
   }
 
   // ── Body parsers ─────────────────────────────────────────
-  app.use(express.json({ limit: '5mb' }));  // save_data может быть большим
+  app.use(express.json({ limit: '25mb' }));  // K1a: большие сейвы (много предметов)
   app.use(express.urlencoded({ extended: true }));
 
   // ── Static files (в продакшне — собранный клиент) ────────

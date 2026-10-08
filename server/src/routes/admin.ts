@@ -277,7 +277,7 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
         const exp = Math.pow(level, 3);
         const expToNext = Math.pow(level + 1, 3);
         const baseHp = pokeData.stats[0].base_stat;
-        const iv = maxIV ? 31 : Math.floor(Math.random() * 32);
+        const iv = maxIV ? 50 : Math.floor(Math.random() * 51);
         const maxHp = Math.floor(0.01 * (2 * baseHp + iv) * level) + level + 10;
 
         const newMon: any = {
@@ -289,7 +289,7 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
           maxHp,
           currentHp: maxHp,
           ivs: maxIV
-            ? { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 }
+            ? { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 }
             : { hp: iv, atk: iv, def: iv, spa: iv, spd: iv, spe: iv },
           evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
           baseLevel: level,

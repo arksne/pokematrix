@@ -467,6 +467,21 @@ export function cloudSave() {
   doCloudSave();
 }
 
+let saveHeartbeatOn = false;
+/**
+ * startSaveHeartbeat — раз в минуту досылает грязный сейв (K1 «железно»).
+ * Вызывать один раз при старте игры.
+ */
+export function startSaveHeartbeat() {
+  if (saveHeartbeatOn) return;
+  saveHeartbeatOn = true;
+  setInterval(() => {
+    try {
+      if (state.saveDirty && state.tgToken) cloudSave();
+    } catch { /* следующий тик повторит */ }
+  }, 60000);
+}
+
 /** Все покемоны игрока: команда, ПК, питомник, яйца. */
 export function totalPokemonCount(): number {
   const pc = (state.pcBoxes || []).reduce((n, box) => n + (box?.length || 0), 0);
@@ -656,14 +671,23 @@ export async function doCloudSave(attempt = 0) {
     localStorage.setItem(lsKey('save_sync'), String(state.lastCloudSync));
     const btnSync = document.getElementById('btn-cloud-sync');
     if (btnSync) { btnSync.textContent = '☁️✓'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 1500); }
-  } catch (e) {
-    console.warn(`Cloud save failed (attempt ${attempt + 1}/${MAX_RETRIES})`, e.message);
+  } catch (e: any) {
+    const reason = e?.message || String(e);
+    console.warn(`Cloud save failed (attempt ${attempt + 1}/${MAX_RETRIES})`, reason);
     if (attempt < MAX_RETRIES - 1) {
       state.saveRetryCount = attempt + 1;
       const delay = RETRY_DELAYS[attempt];
       state.cloudSaveTimer = setTimeout(() => doCloudSave(attempt + 1), delay);
     } else {
       state.saveRetryCount = MAX_RETRIES;
+      // K1 «железно»: молчания больше нет. saveDirty остаётся true, heartbeat
+      // и следующий autoSave подхватят. Показываем причину и ставим длинный
+      // повтор (2 мин) — сеть может вернуться сама.
+      showToast(`☁️ Не сохранено (${reason.slice(0, 80)}). Повторю автоматически.`, true);
+      if (state.cloudSaveTimer) clearTimeout(state.cloudSaveTimer);
+      state.cloudSaveTimer = setTimeout(() => {
+        if (state.saveDirty) doCloudSave(0);
+      }, 120000);
       // Облако — единственный источник (спека 8.1): провал виден, пока не
       // починится. Раньше значок через 3с возвращался в «Авто», и игрок думал,
       // что всё сохранено, хотя прогресс жил только в памяти до рефреша.

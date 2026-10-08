@@ -60,6 +60,7 @@ vi.mock('../../data/items.js', () => ({
     { id: 'loveBall', category: 'balls' },
     { id: 'darkBall', category: 'balls' },
     { id: 'superDarkBall', category: 'balls' },
+    { id: 'credit', category: 'currency' },
   ],
 }));
 
@@ -151,17 +152,17 @@ describe('addItem / removeItem', () => {
     expect(store.removeItem('stimulator')).toBe(false);
   });
 
-  it('addItem enforces category limits', () => {
-    // healing max stack = 20
+  it('addItem: лимитов категорий больше нет (K1a)', () => {
+    // healing раньше резался на 20 — теперь влезает всё
     for (let i = 0; i < 4; i++) store.addItem('superStimulator', 5);
     expect(store.getItemQty('superStimulator')).toBe(20);
     store.addItem('superStimulator', 1);
-    expect(store.getItemQty('superStimulator')).toBe(20);
+    expect(store.getItemQty('superStimulator')).toBe(21);
   });
 
-  it('addItem enforces bag limit of 1000 (excl credit)', () => {
-    // Fill using existing items with max per-slot limits
-    // Evolution stones (max 5) — 11 items × 5 = 55
+  it('addItem: сумка без лимита, всё влезает (K1a)', () => {
+    // Fill using existing items (лимитов больше нет — всё влезает целиком)
+    // Evolution stones — 11 items × 5 = 55
     const stoneIds = ['fireStone', 'waterStone', 'leafStone', 'thunderStone',
       'moonStone', 'sunStone', 'shinyStone', 'everstone', 'amurit',
       'deepSeaTooth', 'deepSeaScale'];
@@ -203,8 +204,7 @@ describe('addItem / removeItem', () => {
     for (const id of craftIds) store.addItem(id, 99);
     // 425 + 495 = 920
 
-    // Balls (max 99). 8 balls × 99 = 792. 920 + 792 = 1712, but bag caps at 1000.
-    // Only the first ball item will fill the remaining 80 slots.
+    // Balls. 8 balls × 99 = 792. K1a: лимита сумки больше нет — всё влезает.
     store.addItem('pokeball', 99);
     store.addItem('greatBall', 99);
     store.addItem('ultraBall', 99);
@@ -213,9 +213,13 @@ describe('addItem / removeItem', () => {
     store.addItem('loveBall', 99);
     store.addItem('darkBall', 99);
     store.addItem('superDarkBall', 99);
-    // Bag should be at or very near capacity
-    expect(store.getTotalItems()).toBeLessThanOrEqual(1000);
-    expect(store.getTotalItems()).toBeGreaterThanOrEqual(990);
+    // Bag should hold everything: 920 + 792 = 1712
+    expect(store.getTotalItems()).toBe(1712);
+  });
+
+  it('addItem: лимита сумки нет (K1a) — тысячи предметов влезают', () => {
+    store.addItem('pokeball', 5000);
+    expect(store.getItemQty('pokeball')).toBe(5000);
   });
 });
 
@@ -308,9 +312,9 @@ describe('getMaxStack', () => {
     expect(max).toBeGreaterThanOrEqual(99);
   });
 
-  it('returns 999 for items without category limit', () => {
+  it('returns int4 max for items without category limit', () => {
     const max = store.getMaxStack('credit');
-    expect(max).toBe(999);
+    expect(max).toBe(2147483647);
   });
 });
 

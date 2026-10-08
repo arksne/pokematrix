@@ -31,7 +31,7 @@ import { state, lsKey, generateUID } from './state.js';
 import { store } from './store.js';
 import { REGIONS } from '../data/regions.js';
 import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress } from '../battle/core.js';
-import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents, totalPokemonCountOf, totalPokemonCount, cloudUnreachable, clearLocalGameKeys } from './save.js';
+import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents, totalPokemonCountOf, totalPokemonCount, cloudUnreachable, clearLocalGameKeys, startSaveHeartbeat } from './save.js';
 import { authTelegram } from './auth.js';
 import { initAppNav } from '../ui/nav.js';
 import { renderTrainerCard } from '../ui/trainer-card.js';
@@ -397,6 +397,7 @@ initGymEvents();
     setInterval(updateTimeOfDay, 30000);
 
     startBreedingCheck();
+    startSaveHeartbeat();  // K1: минутный досыл грязного сейва
 
     document.getElementById('btn-notifications').addEventListener('click', openNotifications);
     document.getElementById('btn-close-notif').addEventListener('click', () => { document.getElementById('notif-modal').style.display = 'none'; });
@@ -591,7 +592,7 @@ export { getTrainerId } from './state.js';
 
 export function makeMon(apiData: any, trainerId: string, level: number): any {
   const baseHp = apiData.stats?.[0]?.base_stat ?? 50;
-  const maxHp = Math.floor(0.01 * (2 * baseHp + 30) * level) + level + 10;
+  const maxHp = Math.floor(0.01 * (2 * baseHp + 50) * level) + level + 10;
   return {
     uid: generateUID(),
     originalTrainer: trainerId,
@@ -599,7 +600,7 @@ export function makeMon(apiData: any, trainerId: string, level: number): any {
     apiData,
     maxHp,
     currentHp: maxHp,
-    ivs: { hp: 31, attack: 31, defense: 31, spa: 31, spd: 31, spe: 31 },
+    ivs: { hp: 50, attack: 50, defense: 50, spa: 50, spd: 50, spe: 50 },
     evs: { hp: 0, attack: 0, defense: 0, spa: 0, spd: 0, spe: 0 },
     baseLevel: level,
     exp: Math.pow(level, 3),

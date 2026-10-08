@@ -81,22 +81,24 @@ class GameStore {
 
   // ── Item helpers ──────────────────────────────
 
-  /** Общий лимит рюкзака: не больше 1000 предметов (кроме credit) */
-  static MAX_BAG = 1000;
+  /** K1a: лимита рюкзака больше нет — сохраняет как есть, сколько есть.
+   *  Число оставлено для совместимости тостов, фактически бесконечно. */
+  static MAX_BAG = Number.MAX_SAFE_INTEGER;
 
-  /** Per-category max stack. Items not listed default to 999. */
+  /** Per-category max stack. K1a: потолки подняты до серверного int4 max,
+   *  чтобы клиент никогда не врал «рюкзак полон» раньше сервера. */
   static CATEGORY_LIMITS = {
-    balls: 99,
-    healing: 20,
-    statusCure: 20,
-    ppRecovery: 20,
-    vitamins: 99,
-    evolutionStones: 5,
-    berries: 20,
-    training: 10,
-    battle: 10,
-    crafting: 99,
-    tickets: 10,
+    balls: 2147483647,
+    healing: 2147483647,
+    statusCure: 2147483647,
+    ppRecovery: 2147483647,
+    vitamins: 2147483647,
+    evolutionStones: 2147483647,
+    berries: 2147483647,
+    training: 2147483647,
+    battle: 2147483647,
+    crafting: 2147483647,
+    tickets: 2147483647,
   };
 
   /** Max stack for a given item. Reads item.maxStack, then category default, then 999. */
@@ -104,7 +106,7 @@ class GameStore {
     const def = ITEMS.find(i => i.id === itemId);
     if (!def) return 999;
     if (def.maxStack) return def.maxStack;
-    return GameStore.CATEGORY_LIMITS[def.category] || 999;
+    return GameStore.CATEGORY_LIMITS[def.category] || 2147483647;
   }
 
   /** Сумма всех предметов в рюкзаке (кроме credit) */

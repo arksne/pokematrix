@@ -504,4 +504,161 @@ export const NPC_DATA = {
   'melen_albert_quest': { id: 'melen_albert_quest', name: 'Альберт', sprite: '🕵️', location: 'melen_albert_house', dialog: { greet: 'Я Альберт. Моя племянница пропала! Банда захватила город... Нужно действовать за пределами закона.', default: 'Банда всё ещё там. Нужно больше подготовки.', quest_offer: 'Для спасения племянницы нужен {target} {item}.', quest_complete: 'Племянница спасена! Вы настоящий герой!', quest_incomplete: 'Племянница всё ещё в плену...' }, quests: [{ id: 'mel_albert_1', type: 'defeat_x', targetItem: null, targetQty: 5, desc: 'Победите 5 членов банды в Мелене', rewardMoney: 2000, rewardItem: 'fullRestore', rewardQty: 3, prereqQuest: 'sum_pantir_story' }, { id: 'mel_albert_2', type: 'collect_items', targetItem: 'crystalShard', targetQty: 3, desc: 'Принесите 3 осколка для взлома убежища банды', rewardMoney: 3000, rewardItem: 'waterStone', rewardQty: 2, prereqQuest: 'mel_albert_1' }] },
   'estaire_officer_jes_quest': { id: 'estaire_officer_jes_quest', name: 'Офицер Джес (расследование)', sprite: '👮‍♀️', location: 'estaire_city', dialog: { greet: 'Офицер Джес. Команда R похитила Батискафиш! Нужно расследование. У вас ранг выше 650?', default: 'Расследование продолжается. Команда R где-то рядом.', quest_offer: 'Для расследования нужен {target} {item}.', quest_complete: 'Дело раскрыто! Батискафиш в безопасности.', quest_incomplete: 'Расследование не закончено...' }, quests: [{ id: 'est_bati_1', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 локации для расследования похищения', rewardMoney: 3000, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null }] },
 
+  // ─────────────────────────────────────────────────────────────
+  // I1. 36 больших квестов: битвы с NPC, сбор, прокачка, яйца,
+  // ловля видов, зал, торговля, тренировки (9 NPC x 4, цепочки).
+  // Типы — только из QUEST_TYPES (catch_x/defeat_x/earn_money/
+  // explore/use_item/collect_items): движок засчитывает
+  // collect_items через checkNPCQuestProgress (инвентарь), остальные
+  // типы — как принято в файле, с нарративом под механику
+  // (спарринги/зал → defeat_x, рынки → explore/earn_money,
+  // выгул яйца → explore, уход за малышами → use_item).
+  // Награды — только существующие предметы + умеренные деньги
+  // (макс 15000 за квест; без masterBall/rareCandy/evBrace).
+  // ─────────────────────────────────────────────────────────────
+  'i1_warhall_sensei': {
+    id: 'i1_warhall_sensei', name: 'Мастер Дайго', sprite: '⚔️', location: 'warhall_samurai_gym',
+    dialog: {
+      greet: 'Додзё Вархолла приветствует тебя. Клинок тупится без спаррингов — готов ли ты к пути самурая?',
+      default: 'Возвращайся, когда жаждешь боя. Додзё открыто для стойких.',
+      quest_offer: 'Спарринг ждёт: одолей {target} соперников. Докажи дух!',
+      quest_complete: 'Достойный бой! Забирай награду, самурай.',
+      quest_incomplete: 'Спарринги не закончены. Ученики уже разминаются...',
+    },
+    quests: [
+      { id: 'i1_spar_1', type: 'defeat_x', targetItem: null, targetQty: 8, desc: 'Одержите 8 побед в спаррингах с учениками додзё Вархолла', rewardMoney: 1500, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: null },
+      { id: 'i1_spar_2', type: 'defeat_x', targetItem: null, targetQty: 15, desc: 'Одержите 15 побед над тренерами додзё Вархолла', rewardMoney: 4000, rewardItem: 'hyperPotion', rewardQty: 2, prereqQuest: 'i1_spar_1' },
+      { id: 'i1_spar_3', type: 'defeat_x', targetItem: null, targetQty: 25, desc: 'Одержите 25 побед в тяжёлых спаррингах с мастерами Вархолла', rewardMoney: 9000, rewardItem: 'maxRevive', rewardQty: 2, prereqQuest: 'i1_spar_2' },
+      { id: 'i1_spar_4', type: 'earn_money', targetItem: null, targetQty: 15000, desc: 'Заработайте ¥15 000 призовых на арене Вархолла', rewardMoney: 6000, rewardItem: 'ppUp', rewardQty: 1, prereqQuest: 'i1_spar_3' },
+    ],
+  },
+  'i1_flourence_herbalist': {
+    id: 'i1_flourence_herbalist', name: 'Травница Лия', sprite: '🌿', location: 'flourence_greenhouse',
+    dialog: {
+      greet: 'Оранжерея Флауренции дышит, но запасы мазей иссякли. Поможешь с травами и ягодами?',
+      default: 'Цветы любят заботу, а зелья — точные пропорции. Заходи!',
+      quest_offer: 'Для снадобья нужно {target} {item}. Лес отблагодарит.',
+      quest_complete: 'Какое сырьё! Мазь выйдет отменной. Держи награду.',
+      quest_incomplete: 'Сырьё ещё не собрано. Ягоды ждут в траве...',
+    },
+    quests: [
+      { id: 'i1_herb_1', type: 'collect_items', targetItem: 'oranBerry', targetQty: 5, desc: 'Соберите 5 Ягод Оран для целебной мази', rewardMoney: 1200, rewardItem: 'potion', rewardQty: 4, prereqQuest: null },
+      { id: 'i1_herb_2', type: 'collect_items', targetItem: 'sitrusBerry', targetQty: 5, desc: 'Соберите 5 Ягод Ситрус для отвара', rewardMoney: 2500, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: 'i1_herb_1' },
+      { id: 'i1_herb_3', type: 'collect_items', targetItem: 'lumBerry', targetQty: 3, desc: 'Соберите 3 Ягоды Люм для противоядия', rewardMoney: 5000, rewardItem: 'fullHeal', rewardQty: 4, prereqQuest: 'i1_herb_2' },
+      { id: 'i1_herb_4', type: 'collect_items', targetItem: 'superPotion', targetQty: 4, desc: 'Подготовьте 4 Супер-зелья для экспедиции в болота', rewardMoney: 8000, rewardItem: 'leafStone', rewardQty: 1, prereqQuest: 'i1_herb_3' },
+    ],
+  },
+  'i1_academy_mentor': {
+    id: 'i1_academy_mentor', name: 'Наставник Вера', sprite: '🎓', location: 'goldenrod_academy',
+    dialog: {
+      greet: 'Академия Голденрода растит чемпионов, а не зевак. Возьмёшься за программу прокачки?',
+      default: 'Уровни сами не растут: бои, уход, контракты. Ты на верном пути.',
+      quest_offer: 'Программа требует: {target} {item}. Не подведи группу!',
+      quest_complete: 'Группа гордится тобой! Вот стипендия Академии.',
+      quest_incomplete: 'Программа не выполнена. Тренируйся дальше!',
+    },
+    quests: [
+      { id: 'i1_level_1', type: 'catch_x', targetItem: null, targetQty: 6, desc: 'Поймайте 6 покемонов для тренировочной группы Академии', rewardMoney: 2000, rewardItem: 'greatBall', rewardQty: 5, prereqQuest: null },
+      { id: 'i1_level_2', type: 'use_item', targetItem: null, targetQty: 6, desc: 'Используйте 6 предметов в бою, закаляя команду', rewardMoney: 3500, rewardItem: 'expCandyM', rewardQty: 3, prereqQuest: 'i1_level_1' },
+      { id: 'i1_level_3', type: 'defeat_x', targetItem: null, targetQty: 20, desc: 'Одержите 20 побед, прокачав команду до 30+ уровня', rewardMoney: 8000, rewardItem: 'expCandyL', rewardQty: 2, prereqQuest: 'i1_level_2' },
+      { id: 'i1_level_4', type: 'earn_money', targetItem: null, targetQty: 20000, desc: 'Заработайте ¥20 000 на контрактах Академии', rewardMoney: 8000, rewardItem: 'luckyEgg', rewardQty: 1, prereqQuest: 'i1_level_3' },
+    ],
+  },
+  'i1_daycare_nanny': {
+    id: 'i1_daycare_nanny', name: 'Няня Оливия', sprite: '🥚', location: 'pokecenter',
+    dialog: {
+      greet: 'Питомник переполнен: пары подобраны, инкубатор тёплый. Поможешь вывести и выходить малышей?',
+      default: 'Яйцам нужны тепло и прогулки, малышам — корм и забота.',
+      quest_offer: 'Малышам нужно {target} {item}. Не дай инкубатору остыть!',
+      quest_complete: 'Смотри, скорлупа треснула! Ты чудо-няня. Держи награду.',
+      quest_incomplete: 'Инкубатор ещё гудит... Выгул не окончен.',
+    },
+    quests: [
+      { id: 'i1_hatch_1', type: 'catch_x', targetItem: null, targetQty: 4, desc: 'Поймайте 4 покемонов для племенной пары питомника', rewardMoney: 1800, rewardItem: 'pokeBall', rewardQty: 6, prereqQuest: null },
+      { id: 'i1_hatch_2', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 маршрута выгула с яйцом в инкубаторе', rewardMoney: 3000, rewardItem: 'ovalStone', rewardQty: 1, prereqQuest: 'i1_hatch_1' },
+      { id: 'i1_hatch_3', type: 'collect_items', targetItem: 'oranBerry', targetQty: 8, desc: 'Соберите 8 Ягод Оран для кормления малышей', rewardMoney: 4500, rewardItem: 'expCandyM', rewardQty: 2, prereqQuest: 'i1_hatch_2' },
+      { id: 'i1_hatch_4', type: 'use_item', targetItem: null, targetQty: 8, desc: 'Используйте 8 предметов ухода, выхаживая вылупившихся малышей', rewardMoney: 10000, rewardItem: 'everstone', rewardQty: 1, prereqQuest: 'i1_hatch_3' },
+    ],
+  },
+  'i1_summer_ranger': {
+    id: 'i1_summer_ranger', name: 'Рейнджер Нала', sprite: '🔭', location: 'summer',
+    dialog: {
+      greet: 'Саванна Саммера кишит неизученными видами. Институту нужна большая перепись — возьмёшься?',
+      default: 'Покедекс сам не заполнится. Саванна ждёт наблюдательных!',
+      quest_offer: 'Каталогу не хватает {target} {item}. Бинокль наготове?',
+      quest_complete: 'Какой экземпляр! Каталог пополнен. Держи снаряжение.',
+      quest_incomplete: 'Перепись не окончена. Следы ведут вглубь саванны...',
+    },
+    quests: [
+      { id: 'i1_dex_1', type: 'catch_x', targetItem: null, targetQty: 8, desc: 'Поймайте 8 покемонов саванны для каталога института', rewardMoney: 2500, rewardItem: 'greatBall', rewardQty: 6, prereqQuest: null },
+      { id: 'i1_dex_2', type: 'catch_x', targetItem: null, targetQty: 15, desc: 'Поймайте 15 разных видов для Покедекса', rewardMoney: 6000, rewardItem: 'ultraBall', rewardQty: 4, prereqQuest: 'i1_dex_1' },
+      { id: 'i1_dex_3', type: 'catch_x', targetItem: null, targetQty: 25, desc: 'Поймайте 25 покемонов — большая перепись саванны', rewardMoney: 12000, rewardItem: 'timerBall', rewardQty: 4, prereqQuest: 'i1_dex_2' },
+      { id: 'i1_dex_4', type: 'explore', targetItem: null, targetQty: 6, desc: 'Исследуйте 6 дальних локаций в поисках редких видов', rewardMoney: 10000, rewardItem: 'abilityCapsule', rewardQty: 1, prereqQuest: 'i1_dex_3' },
+    ],
+  },
+  'i1_olivine_coach': {
+    id: 'i1_olivine_coach', name: 'Тренер прибоя Кора', sprite: '🌊', location: 'olivineStadium',
+    dialog: {
+      greet: 'Водный стадион Оливина гудит: претенденты рвутся к лидеру. Станешь нашим спарринг-партнёром?',
+      default: 'Прибой точит скалы, а бои точат мастерство. Жду на помосте!',
+      quest_offer: 'Стадиону нужно {target} {item}. Трибуны уже шумят!',
+      quest_complete: 'Трибуны ревут! Ты украшение стадиона. Держи приз.',
+      quest_incomplete: 'Бои не окончены. Разминка ещё идёт...',
+    },
+    quests: [
+      { id: 'i1_gym_1', type: 'defeat_x', targetItem: null, targetQty: 10, desc: 'Одержите 10 побед над претендентами Водного стадиона', rewardMoney: 2500, rewardItem: 'superPotion', rewardQty: 4, prereqQuest: null },
+      { id: 'i1_gym_2', type: 'defeat_x', targetItem: null, targetQty: 20, desc: 'Одержите 20 побед в рейтинговых боях стадиона', rewardMoney: 7000, rewardItem: 'hyperPotion', rewardQty: 3, prereqQuest: 'i1_gym_1' },
+      { id: 'i1_gym_3', type: 'earn_money', targetItem: null, targetQty: 25000, desc: 'Заработайте ¥25 000 призовых Водного стадиона', rewardMoney: 9000, rewardItem: 'waterStone', rewardQty: 1, prereqQuest: 'i1_gym_2' },
+      { id: 'i1_gym_4', type: 'explore', targetItem: null, targetQty: 5, desc: 'Посетите 5 стадионов Лиги для обмена опытом', rewardMoney: 12000, rewardItem: 'mysticWater', rewardQty: 1, prereqQuest: 'i1_gym_3' },
+    ],
+  },
+  'i1_celadon_trader': {
+    id: 'i1_celadon_trader', name: 'Торговец Марко', sprite: '💼', location: 'celadonCity',
+    dialog: {
+      greet: 'Целадон живёт торговлей: цены скачут, караваны идут. Хочешь сколотить капитал честной сделкой?',
+      default: 'Купи дёшево, продай дорого — и не забудь про оборотный запас!',
+      quest_offer: 'Сделка требует {target} {item}. Рынок не ждёт!',
+      quest_complete: 'Сделка закрыта в плюс! Ты прирождённый купец.',
+      quest_incomplete: 'Сделка ещё не закрыта. Рынки шумят без тебя...',
+    },
+    quests: [
+      { id: 'i1_trade_1', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 рынка Канто для изучения цен', rewardMoney: 1500, rewardItem: 'quickBall', rewardQty: 4, prereqQuest: null },
+      { id: 'i1_trade_2', type: 'earn_money', targetItem: null, targetQty: 10000, desc: 'Заработайте ¥10 000 торговлей и перепродажей', rewardMoney: 4000, rewardItem: 'repeatBall', rewardQty: 4, prereqQuest: 'i1_trade_1' },
+      { id: 'i1_trade_3', type: 'earn_money', targetItem: null, targetQty: 30000, desc: 'Заработайте ¥30 000 на крупной торговой сделке', rewardMoney: 8000, rewardItem: 'moonStone', rewardQty: 1, prereqQuest: 'i1_trade_2' },
+      { id: 'i1_trade_4', type: 'collect_items', targetItem: 'potion', targetQty: 8, desc: 'Подготовьте оборотный запас: 8 Зелий для лавки', rewardMoney: 10000, rewardItem: 'luxuryBall', rewardQty: 3, prereqQuest: 'i1_trade_3' },
+    ],
+  },
+  'i1_training_master': {
+    id: 'i1_training_master', name: 'Мастер тренировок Рэй', sprite: '🏋️', location: 'goldenrodCity_trainingGrounds',
+    dialog: {
+      greet: 'Тренировочная зона Голденрода: пот, зелья и спарринги. Выдержишь мою изнуряющую программу?',
+      default: 'Отдых — тоже тренировка. Но только после спаррингов!',
+      quest_offer: 'Программа требует {target} {item}. Полотенце не забудь!',
+      quest_complete: 'Мышцы и команда крепнут на глазах! Держи пайку.',
+      quest_incomplete: 'Программа не выполнена. Круг ещё не закрыт...',
+    },
+    quests: [
+      { id: 'i1_train_1', type: 'use_item', targetItem: null, targetQty: 5, desc: 'Используйте 5 предметов в тренировочных боях зоны', rewardMoney: 1500, rewardItem: 'potion', rewardQty: 5, prereqQuest: null },
+      { id: 'i1_train_2', type: 'defeat_x', targetItem: null, targetQty: 12, desc: 'Одержите 12 побед в тренировочных спаррингах', rewardMoney: 4500, rewardItem: 'expCandyM', rewardQty: 3, prereqQuest: 'i1_train_1' },
+      { id: 'i1_train_3', type: 'use_item', targetItem: null, targetQty: 10, desc: 'Используйте 10 витаминов и зелий в изнуряющих тренировках', rewardMoney: 8000, rewardItem: 'hpUp', rewardQty: 1, prereqQuest: 'i1_train_2' },
+      { id: 'i1_train_4', type: 'earn_money', targetItem: null, targetQty: 18000, desc: 'Заработайте ¥18 000 инструктором тренировочной зоны', rewardMoney: 9000, rewardItem: 'iron', rewardQty: 1, prereqQuest: 'i1_train_3' },
+    ],
+  },
+  'i1_archipelago_captain': {
+    id: 'i1_archipelago_captain', name: 'Капитан Бриз', sprite: '⚓', location: 'il_de_far',
+    dialog: {
+      greet: 'Южный Архипелаг зовёт: лагуны, пираты и контракты на доставку. Поднимешься на борт?',
+      default: 'Море любит упорных. Карта, компас — и вперёд!',
+      quest_offer: 'Рейс требует {target} {item}. Попутного ветра!',
+      quest_complete: 'Рейс завершён без потерь! Доля команды — твоя.',
+      quest_incomplete: 'Рейс не окончен. Штормит у дальних рифов...',
+    },
+    quests: [
+      { id: 'i1_sea_1', type: 'explore', targetItem: null, targetQty: 5, desc: 'Посетите 5 островов Южного Архипелага', rewardMoney: 3000, rewardItem: 'diveBall', rewardQty: 4, prereqQuest: null },
+      { id: 'i1_sea_2', type: 'catch_x', targetItem: null, targetQty: 12, desc: 'Поймайте 12 водных покемонов в лагунах', rewardMoney: 6500, rewardItem: 'netBall', rewardQty: 5, prereqQuest: 'i1_sea_1' },
+      { id: 'i1_sea_3', type: 'defeat_x', targetItem: null, targetQty: 18, desc: 'Одержите 18 побед над пиратами и дикими стаями', rewardMoney: 10000, rewardItem: 'maxEther', rewardQty: 2, prereqQuest: 'i1_sea_2' },
+      { id: 'i1_sea_4', type: 'earn_money', targetItem: null, targetQty: 40000, desc: 'Заработайте ¥40 000 на морских контрактах и доставке', rewardMoney: 15000, rewardItem: 'sunStone', rewardQty: 1, prereqQuest: 'i1_sea_3' },
+    ],
+  },
+
 };

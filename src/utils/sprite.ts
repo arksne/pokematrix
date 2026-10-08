@@ -58,6 +58,33 @@ export function getTypeColor(type) {
   return TYPE_COLORS[type] || '#777';
 }
 
+/** Эмодзи-значок типа (локально, без внешних ассетов; как иконки лиги). */
+export const TYPE_EMOJI = {
+  normal: '🤍', fire: '🔥', water: '💧', electric: '⚡',
+  grass: '🌿', ice: '❄️', fighting: '🥊', poison: '☠️',
+  ground: '⛰️', flying: '🕊️', psychic: '🔮', bug: '🐛',
+  rock: '🪨', ghost: '👻', dragon: '🐉', dark: '🌑',
+  steel: '⚙️', fairy: '✨', stellar: '🌟', unknown: '❓',
+};
+
+export function getTypeEmoji(type) {
+  return TYPE_EMOJI[type] || TYPE_EMOJI.unknown;
+}
+
+/** Маленький бейдж-иконка типа: цветной кружок с эмодзи (title = имя типа). */
+export function typeBadgeHtml(typeName, size = 22) {
+  const color = getTypeColor(typeName);
+  const emoji = getTypeEmoji(typeName);
+  const fs = Math.round(size * 0.6);
+  return `<span class="type-badge type-badge-icon" title="${typeName}" style="background-color:${color};width:${size}px;height:${size}px;min-width:${size}px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:${fs}px;line-height:1;">${emoji}</span>`;
+}
+
+/** Ряд бейджей-иконок для списка типов PokeAPI [{type:{name}}]. */
+export function typeBadgesHtml(types, size = 22) {
+  if (!types || types.length === 0) return '';
+  return types.map((t) => typeBadgeHtml(t?.type?.name || 'unknown', size)).join('');
+}
+
 export function getTypeGradient(types) {
   if (!types || types.length === 0) return 'radial-gradient(circle at 50% 50%, #1a3050 0%, #0d1b2a 100%)';
   const c1 = getTypeColor(types[0].type.name);

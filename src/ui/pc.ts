@@ -26,7 +26,7 @@ import { state } from '../game/state.js';
 // store — центральная event-система (emit('team:render') и emit('save') при закрытии PC)
 import { store } from '../game/store.js';
 // showToast — всплывающее уведомление; showConfirmModal — модалка подтверждения (Да/Нет)
-import { showToast, showConfirmModal } from '../utils/dom.js';
+import { showToast, showConfirmModal, showSelectionModal } from '../utils/dom.js';
 // getStatusIcon — иконка статуса (☠️🔥⚡💤❄️) из battle/core.ts
 import { getStatusIcon } from '../battle/core.js';
 // getTypeColor — hex-цвет типа покемона; getSpriteUrl — URL спрайта покемона
@@ -208,18 +208,43 @@ function renderPCSlots(view: string) {
         </div>
         <button class="btn-use" class="btn-use-pc">В PC</button>
       `;
-      // Кнопка "В PC" — переместить из команды в первый бокс
+      // Кнопка "В PC" — переместить из команды в выбранный бокс (C2)
       div.querySelector('button')!.onclick = () => {
         if (state.myTeam.length <= 1) { showToast('Нельзя оставить команду пустой!', true); return; }
-        // Если боксов нет — создаём первый
-        const targetBox = state.pcBoxes.length > 0 ? 0 : (state.pcBoxes.push([]), 0);
-        const movedMon = state.myTeam.splice(i, 1)[0]; // Удаляем из команды
-        state.pcBoxes[targetBox].push(movedMon);        // Добавляем в бокс
-        // Если покемон был активным в бою — переназначаем на первого живого
-        if (typeof (battle as any).state.activePlayerMon !== 'undefined' && (battle as any).state.activePlayerMon && (battle as any).state.activePlayerMon === mon && state.myTeam.length > 0) {
-          (battle as any).state.activePlayerMon = state.myTeam[0];
+        const moveToBox = (targetBox: number) => {
+          const movedMon = state.myTeam.splice(i, 1)[0]; // Удаляем из команды
+          state.pcBoxes[targetBox].push(movedMon);        // Добавляем в бокс
+          // Если покемон был активным в бою — переназначаем на первого живого
+          if (typeof (battle as any).state.activePlayerMon !== 'undefined' && (battle as any).state.activePlayerMon && (battle as any).state.activePlayerMon === movedMon && state.myTeam.length > 0) {
+            (battle as any).state.activePlayerMon = state.myTeam[0];
+          }
+          openPC(); // Перерисовываем PC
+        };
+        // Если боксов нет — создаём первый и кладём туда
+        if (state.pcBoxes.length === 0) {
+          state.pcBoxes.push([]);
+          moveToBox(0);
+          return;
         }
-        openPC(); // Перерисовываем PC
+        // Один бокс — кладём сразу без лишнего клика
+        if (state.pcBoxes.length === 1) {
+          moveToBox(0);
+          return;
+        }
+        // Несколько боксов — выбор целевого
+        const items = state.pcBoxes.map((box: any, bi: number) => ({
+          label: `Бокс ${bi + 1} (${(box || []).length})`,
+          subtitle: (box || []).length === 0 ? 'пустой' : `${(box || []).length} пок.`,
+        }));
+        items.push({ label: '+ Новый бокс', subtitle: 'создать и переместить туда' });
+        showSelectionModal('В какой бокс переместить?', items, (pick: number) => {
+          if (pick === items.length - 1) {
+            state.pcBoxes.push([]);
+            moveToBox(state.pcBoxes.length - 1);
+          } else {
+            moveToBox(pick);
+          }
+        }, true);
       };
       container.appendChild(div);
     });
@@ -231,7 +256,9 @@ function renderPCSlots(view: string) {
     const box = state.pcBoxes[boxIdx];
     if (!box) return;
 
-    // ── Информация о разведении (если в боксе есть пара) ──
+    // ── Информация о разведении (legacy-пара, если вдруг есть) ──
+    // C1: подсказка «пара ещё не образовалась» удалена — разведение теперь
+    // только в «Боксах разведения» (питомник), а PC-боксы — просто хранилище.
     const pair = state.breedingPairs.find((p: any) => p.boxIdx === boxIdx);
     if (pair) {
       // Пара найдена — показываем таймер до появления яйца (в минутах)
@@ -240,16 +267,6 @@ function renderPCSlots(view: string) {
       progressDiv.style.cssText = 'text-align:center;padding:8px;margin-bottom:8px;background:#ff950022;border:1px solid #ff9500;border-radius:8px;font-size:0.9rem;';
       progressDiv.innerText = `❤️ Пара найдена! Яйцо через ~${remaining} мин.`;
       container.appendChild(progressDiv);
-    } else {
-      // Нет пары — проверяем, есть ли 2+ покемона, подходящих для разведения
-      const breedable = box.filter((m: any) => m.apiData);
-      if (breedable.length >= 2) {
-        const hintDiv = document.createElement('div');
-        hintDiv.className = 'text-muted';
-        hintDiv.style.cssText = 'text-align:center;padding:6px;margin-bottom:8px;font-size:0.8rem;border:1px dashed #555;border-radius:8px;';
-        hintDiv.innerText = '💕 В этом боксе есть покемоны, но пара ещё не образовалась. Попробуйте переместить их или закройте/откройте PC.';
-        container.appendChild(hintDiv);
-      }
     }
 
     // ── Отображение яиц в этом боксе ──

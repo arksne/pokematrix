@@ -99,9 +99,9 @@ export function isLegendaryMon(m: any): boolean {
 export function isStarterMon(m: any): boolean {
   return STARTER_SET.has(monSpecies(m));
 }
-/** Перфект: все IV 31. Двойной перфект пары → шайни 1/128 (A6). */
+/** Перфект: все IV 50. Двойной перфект пары → шайни 1/128 (A6). */
 export function isDoublePerfect(m1: any, m2: any): boolean {
-  const perfect = (m: any) => !!m?.ivs && ['hp', 'atk', 'def', 'spa', 'spd', 'spe'].every((s) => m.ivs[s] === 31);
+  const perfect = (m: any) => !!m?.ivs && ['hp', 'atk', 'def', 'spa', 'spd', 'spe'].every((s) => m.ivs[s] === 50);
   return perfect(m1) && perfect(m2);
 }
 
@@ -464,7 +464,7 @@ export async function checkBreeding() {
       const bestIV = (stat: string) => {
         const best = Math.max(m1.ivs?.[stat] ?? 0, m2.ivs?.[stat] ?? 0);
         const delta = (Math.random() < 0.5 ? -1 : 1) * (Math.random() < 0.5 ? 1 : 2);
-        return Math.min(31, Math.max(0, best + delta));
+        return Math.min(50, Math.max(0, best + delta));
       };
       const eggIvs = {
         hp: bestIV('hp'),
@@ -485,7 +485,7 @@ export async function checkBreeding() {
         readyTime: now + hatchMs,
         parent1Uid: m1.uid,
         parent2Uid: m2.uid,
-        // A6: двойной перфект (все 31 у обоих) — шайни 1/128 вместо 1/1024
+        // A6: двойной перфект (все 50 у обоих) — шайни 1/128 вместо 1/1024
         shinyBoost: isDoublePerfect(m1, m2),
         notified: false, // Я3: уведомление о готовности — один раз, автовылупа нет
       };
@@ -616,11 +616,11 @@ export async function hatchEgg(egg: any) {
       maxHp: 50, currentHp: 50,                // Начальное HP
       // Шайни: 1/128 при двойном перфекте родителей (A6), иначе 1/1024 как в природе
       isShiny: egg.shinyBoost ? Math.random() < 1 / 128 : Math.random() < 1 / 1024,
-      // IV: наследованные от родителей (или случайные)
+      // IV: наследованные от родителей (или случайные 0–50)
       ivs: eggData.ivs || {
-        hp: Math.floor(Math.random()*32), atk: Math.floor(Math.random()*32),
-        def: Math.floor(Math.random()*32), spa: Math.floor(Math.random()*32),
-        spd: Math.floor(Math.random()*32), spe: Math.floor(Math.random()*32)
+        hp: Math.floor(Math.random()*51), atk: Math.floor(Math.random()*51),
+        def: Math.floor(Math.random()*51), spa: Math.floor(Math.random()*51),
+        spd: Math.floor(Math.random()*51), spe: Math.floor(Math.random()*51)
       },
       evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },  // EV = 0
       baseLevel: 1, exp: 0, expToNext: 8,                        // Уровень 1

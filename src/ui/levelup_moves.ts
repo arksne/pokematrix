@@ -196,7 +196,7 @@ export function offerLearnMove(pokemon, move) {
             📥 В резерв (не учить сейчас)
           </button>
         </div>
-        <button class="confirm-btn confirm-btn-no" id="learn-skip" style="width:100%;margin-top:8px;">Пропустить</button>
+        <button class="confirm-btn confirm-btn-no" id="learn-skip" style="width:100%;margin-top:8px;">В резерв (потом)</button>
       </div>
     `;
     document.body.appendChild(modal);
@@ -253,17 +253,31 @@ modal.querySelectorAll('.replace-slot').forEach(btn => {
       resolve(false);  // Атака не выучена, но сохранена
     });
 
-    // ── Обработчик: пропустить ──
-    modal.querySelector('#learn-skip')!.addEventListener('click', () => {
-      appendToLogLazy(`${monName}: пропустил изучение ${pretty}.`, false, 'system');
+    // ── Обработчик: пропустить (L1: пропущенная падает в резерв, не теряется) ──
+    const sendToReserve = async () => {
+      if (!pokemon.learnableMoves) pokemon.learnableMoves = [];
+      if (!pokemon.learnableMoves.some(m => moveNameToSlug(m.name) === moveSlug)) {
+        const d = await detailOf();
+        pokemon.learnableMoves.push({
+          name: moveSlug,
+          url,
+          power: d?.power || 0,
+          type: d?.type?.name || 'normal',
+        });
+      }
+    };
+    modal.querySelector('#learn-skip')!.addEventListener('click', async () => {
+      await sendToReserve();
+      appendToLogLazy(`${monName}: пропустил изучение ${pretty} — упало в резерв.`, false, 'system');
       cleanup();
-      resolve(false);  // Атака проигнорирована
+      resolve(false);  // Атака не выучена, но сохранена
     });
 
-    // ── Обработчик: клик по затемнённому фону = пропустить ──
-    modal.addEventListener('click', (e) => {
+    // ── Обработчик: клик по затемнённому фону = пропустить (тоже в резерв) ──
+    modal.addEventListener('click', async (e) => {
       if (e.target === modal) {
-        appendToLogLazy(`${monName}: пропустил изучение ${pretty}.`, false, 'system');
+        await sendToReserve();
+        appendToLogLazy(`${monName}: пропустил изучение ${pretty} — упало в резерв.`, false, 'system');
         cleanup();
         resolve(false);
       }

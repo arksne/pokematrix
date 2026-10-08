@@ -46,7 +46,7 @@ export function randomStarter(): string {
 // Асинхронно:
 //   1. Загружает данные покемона из PokeAPI
 //   2. Фильтрует атаки (только до 5 уровня)
-//   3. Создаёт объект покемона с IV 30-31, базовым уровнем 5
+//   3. Создаёт объект покемона с IV 49-50, базовым уровнем 5
 //   4. Добавляет в команду (или PC если команда полна)
 //   5. Регистрирует как пойманного в покедексе
 //   6. Отправляет запрос на сервер для регистрации
@@ -90,8 +90,8 @@ export async function giveStarterMon(pokemonName: string) {
     const exp = Math.pow(baseLevel, 3);
     const expToNext = Math.pow(baseLevel + 1, 3);  // EXP до следующего уровня
     const baseHp = starterData.stats[0].base_stat;  // Базовый HP из PokeAPI
-    // Начальный maxHp (без EV, IV=30, уровень=5)
-    const maxHp = Math.floor(0.01 * (2 * baseHp + 30) * baseLevel) + baseLevel + 10;
+    // Начальный maxHp (без EV, IV=49, уровень=5)
+    const maxHp = Math.floor(0.01 * (2 * baseHp + 49) * baseLevel) + baseLevel + 10;
 
     // ── 4. Создание объекта покемона ──
     const newMon: any = {
@@ -102,8 +102,8 @@ export async function giveStarterMon(pokemonName: string) {
       apiData: starterData,                          // Данные из PokeAPI (статы, типы, способности, спрайты)
       maxHp,                                         // Максимум HP
       currentHp: maxHp,                              // Текущий HP = полный
-      // IV (индивидуальные значения): почти максимальные (30-31)
-      ivs: { hp: 30, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 },
+      // IV (индивидуальные значения): почти максимальные (49-50)
+      ivs: { hp: 49, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 },
       // EV (очки усилий): все 0
       evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
       baseLevel: baseLevel,                          // Базовый уровень
@@ -129,7 +129,7 @@ export async function giveStarterMon(pokemonName: string) {
       learnableMoves: []                             // Атаки в резерве (пока пусто)
     };
 
-    // Пересчёт maxHp с учётом IV=30 и EV=0
+    // Пересчёт maxHp с учётом IV=49 и EV=0
     newMon.maxHp = Math.floor(
       0.01 * (2 * starterData.stats[0].base_stat + newMon.ivs.hp + Math.floor(0.25 * newMon.evs.hp)) * newMon.baseLevel
     ) + newMon.baseLevel + 10;

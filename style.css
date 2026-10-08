@@ -468,6 +468,116 @@ body::before {
   transform: none;
 }
 
+/* B1: компактные ряды команды — одна колонка, ряд: спрайт + инфо + HP-бар */
+.team-grid.team-list {
+  grid-template-columns: 1fr;
+}
+.team-slot.team-row {
+  text-align: left;
+  padding: 8px 10px;
+}
+.team-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.team-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.team-row-info .slot-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.team-expand {
+  margin-left: auto;
+  color: var(--tma-text-muted);
+  font-size: 0.8rem;
+}
+.team-type-icons {
+  display: inline-flex;
+  gap: 4px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.type-badge-icon {
+  text-transform: none;
+}
+.team-hp-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.12);
+  overflow: hidden;
+  max-width: 220px;
+}
+.team-hp-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.team-row .team-sprite-wrap img {
+  width: 48px;
+  height: 48px;
+}
+.team-profile-btn {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--tma-border);
+  background: var(--tma-bg);
+  color: var(--tma-text);
+  cursor: pointer;
+}
+.team-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tma-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+}
+.team-detail-row {
+  display: flex;
+  gap: 6px;
+}
+.team-detail-row b {
+  flex-shrink: 0;
+  color: var(--tma-text-muted);
+  font-weight: 600;
+}
+.team-reorder {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.team-move-btn {
+  padding: 2px 10px;
+  font-size: 0.7rem;
+  border-radius: 6px;
+  border: 1px solid var(--tma-border);
+  background: var(--tma-bg);
+  color: var(--tma-text-muted);
+  cursor: pointer;
+}
+.team-dex-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--tma-border);
+  background: var(--tma-bg);
+  cursor: pointer;
+}
+
 /* Pokemon Profile Styles (Reused) */
 .search-bar { display: flex; gap: 10px; margin-bottom: 15px; }
 .search-bar input { flex: 1; padding: 12px 15px; border: none; border-radius: var(--radius); background-color: var(--tma-card-bg); font-size: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); outline: none; }

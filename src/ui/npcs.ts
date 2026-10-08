@@ -4,7 +4,7 @@
 // Отвечает за UI-диалоги с NPC: отображение списка квестов NPC
 // в модальном окне, отслеживание прогресса по квестам (включая
 // обучающие туториалы), а также специальные действия NPC
-// (лечение покемонов, открытие PC, депозит в питомнике).
+// (лечение покемонов, открытие PC, боксы разведения).
 //
 // ЗАВИСИМОСТИ:
 //   state       — глобальное состояние (квесты, команда, инвентарь)
@@ -15,7 +15,7 @@
 //   notifications — addNotification (колокольчик)
 //   core        — appendToLog (боевой лог)
 //   pc          — openPC
-//   daycare     — openDaycareDeposit
+//   daycare     — openBreedBoxes
 //   NPC_DATA    — статические данные NPC
 //
 // ИСПОЛЬЗУЕТСЯ В: location.ts (клик по NPC на карте)
@@ -31,7 +31,7 @@ import { showToast } from '../utils/dom.js';              // Всплывающ�
 import { addNotification } from './notifications.js';      // Системные уведомления (колокольчик)
 import { appendToLog } from '../battle/core.js';           // Запись в боевой лог
 import { openPC } from './pc.js';                          // Открытие PC
-import { openDaycareDeposit, openBreedBoxes } from './daycare.js';
+import { openBreedBoxes } from './daycare.js';
 import { NPC_DATA } from '../data/npc.js';                  // Статические данные NPC
 
 // ── renderNPCQuests: отрисовка списка квестов NPC ───────
@@ -229,7 +229,9 @@ export function openNPCDialog(npcId: string) {
     actionsContainer.insertBefore(btnHeal, document.getElementById('btn-close-npc'));
   }
 
-  // ── NPC: Питомник (PC + депозит) ──
+  // ── NPC: Питомник (PC + боксы разведения) ──
+  // C3: кнопки смотрителя-депозита больше нет (openDaycareDeposit удалён из
+  // диалога) — разведение только через боксы (openBreedBoxes).
   if (npcId === 'daycare_pokecenter') {
     // Кнопка "Открыть PC"
     const btnDeposit = document.createElement('button');
@@ -241,21 +243,6 @@ export function openNPCDialog(npcId: string) {
       openPC();  // Открываем PC-терминал
     };
     actionsContainer.insertBefore(btnDeposit, document.getElementById('btn-close-npc'));
-
-    // Кнопка "Оставить в Питомнике"
-    const btnDaycare = document.createElement('button');
-    btnDaycare.className = 'tma-btn npc-action-extra';
-    btnDaycare.style.backgroundColor = '#ff9500';  // Оранжевая
-    btnDaycare.innerText = '🥚 Оставить в Питомнике';
-    btnDaycare.onclick = () => {
-      if (state.myTeam.length < 2) {
-        showToast('Нужно минимум 2 покемона в команде!', true);
-        return;
-      }
-      openDaycareDeposit();  // Открываем депозит питомника
-      modal.style.display = 'none';
-    };
-    actionsContainer.insertBefore(btnDaycare, document.getElementById('btn-close-npc'));
 
     // Кнопка "Боксы разведения" (A1): 3 бокса, пару кладёт игрок вручную
     const btnBreed = document.createElement('button');

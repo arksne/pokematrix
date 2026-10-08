@@ -153,13 +153,13 @@ describe('breedRarity', () => {
 });
 
 describe('isDoublePerfect', () => {
-  const perfect = () => ({ ivs: { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 } });
+  const perfect = () => ({ ivs: { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 } });
   it('двойной перфект: true', () => {
     expect(isDoublePerfect(perfect(), perfect())).toBe(true);
   });
   it('один не перфект: false', () => {
     const almost = perfect();
-    almost.ivs.atk = 30;
+    almost.ivs.atk = 49;
     expect(isDoublePerfect(perfect(), almost)).toBe(false);
   });
   it('без ivs: false, без падения', () => {

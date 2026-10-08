@@ -39,7 +39,7 @@ import { renderTeamGrid } from './profile.js';          // Обновление 
 //   level — уровень (по умолчанию 1)
 //   opts — { isShiny, natureIdx }
 // Загружает данные из PokeAPI, создаёт объект покемона с ПОВЫШЕННЫМИ IV
-// (24-31, но никогда не все 31 — спека 2.3) и СЛУЧАЙНЫМ характером,
+// (43-50, но никогда не все 50 — спека 2.3) и СЛУЧАЙНЫМ характером,
 // добавляет в команду (или в PC при полной команде), возвращает созданный
 // объект или null при ошибке
 export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {}) {
@@ -50,13 +50,13 @@ export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {
     const pokeData = await res.json();
 
     const baseHp = pokeData.stats[0].base_stat;
-    // Повышенные IV (спека 2.3): 24-31 каждый, но никогда не все 31 —
+    // Повышенные IV (спека 2.3): 43-50 каждый, но никогда не все 50 —
     // идеальные гены гриндятся в природе, а не выдаются за зал.
-    const rollBoosted = () => 24 + Math.floor(Math.random() * 8);
+    const rollBoosted = () => 43 + Math.floor(Math.random() * 8);
     const ivs = { hp: rollBoosted(), atk: rollBoosted(), def: rollBoosted(), spa: rollBoosted(), spd: rollBoosted(), spe: rollBoosted() };
-    if (Object.values(ivs).every(v => v === 31)) {
+    if (Object.values(ivs).every(v => v === 50)) {
       const keys = Object.keys(ivs);
-      ivs[keys[Math.floor(Math.random() * keys.length)]] = 30;
+      ivs[keys[Math.floor(Math.random() * keys.length)]] = 49;
     }
     const maxHp = Math.floor(0.01 * (2 * baseHp + ivs.hp) * level) + level + 10;
 

@@ -343,12 +343,12 @@ async function restoreBattleState() {
         S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
       }
 
-      // ── IVs дикого (если нет — генерируем случайные) ──
+      // ── IVs дикого (если нет — генерируем случайные 0–50) ──
       if (!S.activeWild.wildIVs) {
         S.activeWild.wildIVs = {
-          hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
-          def: Math.floor(Math.random() * 32), spa: Math.floor(Math.random() * 32),
-          spd: Math.floor(Math.random() * 32), spe: Math.floor(Math.random() * 32)
+          hp: Math.floor(Math.random() * 51), atk: Math.floor(Math.random() * 51),
+          def: Math.floor(Math.random() * 51), spa: Math.floor(Math.random() * 51),
+          spd: Math.floor(Math.random() * 51), spe: Math.floor(Math.random() * 51)
         };
       }
 
@@ -463,7 +463,7 @@ function renderBattleUI() {
 }
 
 /**
- * Максимальное значение IV — 31 в основной игре, здесь 70 для разнообразия.
+ * Максимальное значение IV — 50 (решение хозяина, блок C5).
  * IV (Individual Values) — индивидуальные значения, влияют на статы.
  */
 
@@ -472,7 +472,7 @@ function renderBattleUI() {
  *
  * ЧТО ДЕЛАЕТ:
  *   1. Берёт базовый стат из PokeAPI
- *   2. Применяет IV (0-31 для игрока, 0-31 для дикого)
+ *   2. Применяет IV (0-50 для игрока, 0-50 для дикого)
  *   3. Применяет EV (только для покемонов игрока)
  *   4. Применяет натуру (buff/nerf, только не-HP)
  *   5. Применяет стат-стадии (-6 до +6, множитель 2/2..8/2)
@@ -2211,12 +2211,12 @@ async function startHunt(encountersArray) {
     } catch (e) { /* keep defaults */ }
 
     S.activeWild.wildIVs = {
-      hp: Math.floor(Math.random() * 32),
-      atk: Math.floor(Math.random() * 32),
-      def: Math.floor(Math.random() * 32),
-      spa: Math.floor(Math.random() * 32),
-      spd: Math.floor(Math.random() * 32),
-      spe: Math.floor(Math.random() * 32)
+      hp: Math.floor(Math.random() * 51),
+      atk: Math.floor(Math.random() * 51),
+      def: Math.floor(Math.random() * 51),
+      spa: Math.floor(Math.random() * 51),
+      spd: Math.floor(Math.random() * 51),
+      spe: Math.floor(Math.random() * 51)
     };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
@@ -4529,10 +4529,10 @@ function initEncounterEvents() {
             newMon.happiness = 200;
           }
 
-          // DarkBall: +5 to all IVs (max 31)
+          // DarkBall: +5 to all IVs (max 50)
           if (item === 'darkBall') {
             for (const s of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) {
-              newMon.ivs[s] = Math.min(31, newMon.ivs[s] + 5);
+              newMon.ivs[s] = Math.min(50, newMon.ivs[s] + 5);
             }
           }
 
@@ -4812,7 +4812,7 @@ function initEncounterEvents() {
 //   - Команда должна быть 4+ живых, без дублирования типов
 //   - Уровень покемонов не выше макс уровня лидера
 //   - EXP за gym не даётся (кроме элиты и чемпиона)
-//   - Gym/Elite покемоны имеют 31 IV во всех статах
+//   - Gym/Elite покемоны имеют 50 IV во всех статах
 //   - Gym лидеры дают бейджи и награды
 //
 // ПОРЯДОК ВЫЗОВА:
@@ -4973,7 +4973,7 @@ async function startGymBattle(locId) {
  *
  * ЕСЛИ ЕСТЬ СЛЕДУЮЩИЙ ПОКЕМОН:
  *   - Загружает данные из PokeAPI
- *   - Устанавливает Perfect IVs (31) для всех статов
+ *   - Устанавливает Perfect IVs (50) для всех статов
  *   - Применяет тренировочный бонус лидера (если есть trainingStage)
  *   - Умный выбор атак: STAB > coverage > статус-атаки
  *   - Рендерит UI, проверяет Intimidate
@@ -5045,7 +5045,7 @@ async function startGymNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона гима
 
     // Perfect IVs for gym leader pokemon
-    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
+    S.activeWild.wildIVs = { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
 
     // Apply gym leader training boost
     const leaderData = GS.gymLeaders[S.gymLeaderKey];
@@ -5307,7 +5307,7 @@ async function startEliteNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона элиты
 
     // Perfect IVs для Elite Four (как у gym лидеров)
-    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
+    S.activeWild.wildIVs = { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;
@@ -5419,7 +5419,7 @@ async function startChampionNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона чемпиона
 
     // Perfect IVs для Чемпиона (как у gym лидеров)
-    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
+    S.activeWild.wildIVs = { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;

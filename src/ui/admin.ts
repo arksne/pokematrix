@@ -534,9 +534,9 @@ export function initAdminPanel() {
     return id;
   };
   const rndIV = () => ({
-    hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
-    def: Math.floor(Math.random() * 32), spa: Math.floor(Math.random() * 32),
-    spd: Math.floor(Math.random() * 32), spe: Math.floor(Math.random() * 32),
+    hp: Math.floor(Math.random() * 51), atk: Math.floor(Math.random() * 51),
+    def: Math.floor(Math.random() * 51), spa: Math.floor(Math.random() * 51),
+    spd: Math.floor(Math.random() * 51), spe: Math.floor(Math.random() * 51),
   });
 
   // 🥚 Готовое яйцо: сразу идёт в вылупление реальным путём (hatchEgg → PokeAPI)

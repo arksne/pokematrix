@@ -29,7 +29,7 @@ function mon(over = {}) {
         { base_stat: 81, stat: { name: 'speed' } },
       ],
     },
-    ivs: { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 },
+    ivs: { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 },
     evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
     natureIdx: 3, // Adamant: +atk, -spa
     ...over,
@@ -66,8 +66,8 @@ describe('trainingPercent — тренировка наконец применя
 describe('calculateStat — единая формула', () => {
   it('считает HP по стандартной формуле', () => {
     const gyarados = mon();
-    // floor(0.01 * (2*95 + 31 + 0) * 50) + 50 + 10
-    expect(calculateStat(gyarados, 'hp')).toBe(Math.floor(0.01 * 221 * 50) + 60);
+    // floor(0.01 * (2*95 + 50 + 0) * 50) + 50 + 10
+    expect(calculateStat(gyarados, 'hp')).toBe(Math.floor(0.01 * 240 * 50) + 60);
   });
 
   it('учитывает природу: Adamant +atk, -spa', () => {
@@ -101,7 +101,7 @@ describe('calculateStat — единая формула', () => {
     // Раньше wild и player считались разными копиями формулы. Проверяем, что
     // базовая часть и IV одинаковы. Природа к диким не применяется by design,
     // поэтому у wild natureIdx не задан, а у игрока выставлен нейтральный.
-    const ivs = { hp: 31, atk: 31, def: 0, spa: 0, spd: 0, spe: 0 };
+    const ivs = { hp: 50, atk: 50, def: 0, spa: 0, spd: 0, spe: 0 };
     const player = mon({ ivs, natureIdx: 0 });
     const wild = {
       stats: player.apiData.stats,
@@ -154,13 +154,13 @@ describe('calculateStat — boolean вместо { isWild }', () => {
       { base_stat: 135, stat: { name: 'special-defense' } },
       { base_stat: 55, stat: { name: 'speed' } },
     ],
-    wildIVs: { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 },
+    wildIVs: { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 },
   };
 
   it('boolean true считается как дикий (статы вида, а не запасные 50)', () => {
-    // HP = floor(0.01 * (2*255 + 31) * 50) + 50 + 10 = 330
+    // HP = floor(0.01 * (2*255 + 50) * 50) + 50 + 10 = 340
     const hp = calculateStat(wild, 'hp', true);
-    expect(hp).toBe(330);
+    expect(hp).toBe(340);
   });
 
   it('старое поведение (запасные 50) больше не возвращается', () => {
@@ -175,8 +175,8 @@ describe('calculateStat — boolean вместо { isWild }', () => {
   });
 
   it('атака дикого считается по своему виду (10), а не по 50', () => {
-    // floor((floor((2*10 + 31) * 50 / 100) + 5) * 1) = floor(25.5 + 5) = 30
-    expect(calculateStat(wild, 'attack', true)).toBe(30);
+    // floor((floor((2*10 + 50) * 50 / 100) + 5) * 1) = floor(35 + 5) = 40
+    expect(calculateStat(wild, 'attack', true)).toBe(40);
   });
 
   it('свой покемон по-прежнему берёт статы из apiData.stats', () => {
@@ -188,10 +188,10 @@ describe('calculateStat — boolean вместо { isWild }', () => {
         ],
       },
       baseLevel: 50,
-      ivs: { hp: 31, atk: 31 },
+      ivs: { hp: 50, atk: 50 },
       evs: { hp: 0, atk: 0 },
     };
-    expect(calculateStat(own, 'hp', false)).toBe(330);
-    expect(calculateStat(own, 'hp', { isWild: false })).toBe(330);
+    expect(calculateStat(own, 'hp', false)).toBe(340);
+    expect(calculateStat(own, 'hp', { isWild: false })).toBe(340);
   });
 });
