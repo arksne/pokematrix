@@ -70,7 +70,7 @@ const REGION_START: Record<string, string> = {
 // Дальше стартовой зоны — только после сдачи обучения (tutorial_6).
 // Дублируется здесь, чтобы map.ts не тянул тяжёлый location.ts (циклы импорта).
 const STARTER_AREA = new Set([
-  'goldenrodCity', 'pokemart', 'pokecenter',
+  'goldenrodCity', 'goldenrodCity_pokemart', 'goldenrodCity_pokecenter',
   'goldenrodStadium', 'goldenrodCity_trainingGrounds',
 ]);
 function isGateOpen(): boolean {

@@ -42,6 +42,10 @@ import { activeQuestIds, rollQuestDrops } from '../data/quest-drops.js';  // I3:
 import { locationGateReason } from './location-gate.js';
 import { npcSpots, type NpcSpot } from './npc-anchors.js';
 import { specialMechanic, nextFloor } from '../battle/special-loc.js';  // M-4: этажи башен
+// Иконки и «сервисность» подлокаций живут в map.ts — единый источник, чтобы
+// кнопка в локации и узел на карте не разъезжались. Цикла импортов нет:
+// map.ts не тянет location.ts.
+import { isServiceLoc, iconFor } from './map.js';
 // MONSTER_DROP_TABLE — таблица дропов: { speciesName: [{item, chance, qty}, ...] }
 import { MONSTER_DROP_TABLE } from '../data/drops.js';
 // ITEMS — массив всех предметов игры
@@ -196,7 +200,7 @@ export function travelToRegion(targetRegion: string, targetLoc: string, ticketIt
 // все 6 шагов обучения (tutorial_6 в сданных). Стартовый город и его
 // сервисы доступны всегда.
 const STARTER_AREA = new Set([
-  'goldenrodCity', 'pokemart', 'pokecenter',
+  'goldenrodCity', 'goldenrodCity_pokemart', 'goldenrodCity_pokecenter',
   'goldenrodStadium', 'goldenrodCity_trainingGrounds',
 ]);
 export function isTutorialGateOpen(): boolean {
@@ -497,10 +501,10 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   actionsContainer.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:4px';
 
   // ── Кнопка магазина ──
-  // Если локация заканчивается на _pokemarket, _supermarket или _shop
-  if (locId.endsWith('_pokemarket') || locId === 'pokemarket' ||
-      locId.endsWith('_pokemart') || locId === 'pokemart' ||
-      locId.endsWith('_supermarket') || locId.endsWith('_shop')) {
+  // Если локация — маркет. isServiceLoc из map.ts — тот же источник истины,
+  // что и у навигации, иначе кнопка «Магазин» появлялась в местах, которых
+  // на карте нет.
+  if (isServiceLoc(locId) && /pokemart|pokemarket|supermarket|shop/i.test(locId)) {
     const btnShop = document.createElement('button');
     btnShop.className = 'btn-use';
     btnShop.style.backgroundColor = '#ff9500';  // Оранжевый
@@ -717,69 +721,76 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   }
 
   // ── НАВИГАЦИОННЫЕ КНОПКИ ──
+  // Одна сетка на три осмысленные группы (раньше группы определялись префиксом
+  // id, из-за чего «в городе» выглядело случайным набором, а сервисы города
+  // дублировались ещё и отдельными кнопками действий выше):
+  //   🚪 Соседи      — куда уйти пешком (другие города, маршруты, пещеры);
+  //   🏙 Внутри     — сервисы и подлокации самого города (центр, маркет, вокзал);
+  //   ⬅️ Назад /➡️ Вперёд — история переходов.
   const navContainer = document.getElementById('nav-buttons');
   navContainer.innerHTML = '';
   navContainer.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:4px';
 
-  // Разделяем ссылки на внешние и под-локации
-  // subLinks — начинаются с locId + '_' (например, 'pallet-town_shop')
-  // extLinks — всё остальное (соседние города, маршруты)
-  const subLinks: Array<{id: string, loc: any}> = [];
-  const extLinks: Array<{id: string, loc: any}> = [];
-  loc.links.forEach(linkId => {
-    const linkLoc = getLocation(linkId);
-    if (!linkLoc) return;
-    if (linkId.startsWith(locId + '_')) subLinks.push({ id: linkId, loc: linkLoc });
-    else extLinks.push({ id: linkId, loc: linkLoc });
-  });
+  // Переход с учётом гейтов и отметки «посещено». Один обработчик на оба
+  // списка — раньше он был продублирован в двух местах и разъехался.
+  const goTo = (linkId: string) => {
+    if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
+    if (!state.visitedLocations.has(linkId)) {
+      state.visitedLocations.add(linkId);
+      getBattleCore().then(bc => bc.checkQuestProgress('explore'));
+      if (state.visitedLocations.size >= 20) checkAchievement('explorer');
+    }
+    renderLocation(linkId);
+  };
 
-  // ── Внешние ссылки (соседние города/маршруты) ──
-  extLinks.forEach(({ id: linkId, loc: linkLoc }) => {
+  /** Классификация ссылки: сервис города или обычный сосед. */
+  const isInnerOf = (linkId: string) => linkId.startsWith(`${locId}_`) || isServiceLoc(linkId);
+
+  // Собираем уникальные (в links исторически встречались повторы) и режем
+  // текущую локу — кнопка «перейти в самого себя» бессмысленна.
+  const seen = new Set<string>();
+  const neighbors: Array<{ id: string; loc: any }> = [];
+  const inner: Array<{ id: string; loc: any }> = [];
+  for (const linkId of loc.links || []) {
+    if (!linkId || linkId === locId || seen.has(linkId)) continue;
+    const linkLoc = getLocation(linkId);
+    if (!linkLoc) continue;
+    seen.add(linkId);
+    (isInnerOf(linkId) ? inner : neighbors).push({ id: linkId, loc: linkLoc });
+  }
+
+  /** Заголовок группы. */
+  const groupTitle = (text: string) => {
+    const sep = document.createElement('div');
+    sep.style.cssText = 'grid-column:1/-1;font-size:11px;color:#888;text-align:left;padding:6px 2px 2px;font-weight:600';
+    sep.innerText = text;
+    navContainer.appendChild(sep);
+  };
+
+  /** Кнопка перехода. */
+  const navButton = ({ id, loc: linkLoc }: { id: string; loc: any }, arrow: string) => {
     const btn = document.createElement('button');
     btn.className = 'btn-nav';
     btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
-    btn.innerHTML = `<span>➔ ${linkLoc.name}</span>`;
-    btn.onclick = () => {
-      // Отслеживание исследования: если локация новая — проверяем квест
-      if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
-      if (!state.visitedLocations.has(linkId)) {
-        state.visitedLocations.add(linkId);
-        getBattleCore().then(bc => bc.checkQuestProgress('explore'));
-        if (state.visitedLocations.size >= 20) checkAchievement('explorer');
-      }
-      renderLocation(linkId);  // Переходим в новую локацию
-    };
-    navContainer.appendChild(btn);
-  });
+    const isTraining = id.includes('trainingGrounds');
+    const icon = isTraining ? '🥋' : iconFor(id);
+    // Имя ПОДЛОКАЦИИ, а не текущего города (иначе все кнопки «Голденрод-Сити»)
+    const label = isTraining ? `${linkLoc.name} (до 15 ур.)` : linkLoc.name;
+    btn.innerHTML = `<span>${icon} ${arrow} ${label}</span>`;
+    btn.onclick = () => goTo(id);
+    return btn;
+  };
 
-  // ── Под-локации (внутри города) ──
-  if (subLinks.length > 0) {
-    // Разделитель
-    const sep = document.createElement('div');
-    sep.style.cssText = 'grid-column:1/-1;font-size:11px;color:#888;text-align:center;padding:4px 0 2px';
-    sep.innerText = '🏙 В городе';
-    navContainer.appendChild(sep);
+  // ── Соседи (пешком наружу) ──
+  if (neighbors.length > 0) {
+    groupTitle('🚪 Куда можно уйти');
+    neighbors.forEach((n) => navContainer.appendChild(navButton(n, '➔')));
+  }
 
-    subLinks.forEach(({ id: linkId, loc: linkLoc }) => {
-      const btn = document.createElement('button');
-      btn.className = 'btn-nav';
-      const isTraining = linkId.includes('trainingGrounds');
-      btn.style.cssText = `flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:${isTraining ? '#34c759' : '#555'}`;
-      const icon = isTraining ? '🥋' : '🏠';
-      // Имя ПОДЛОКАЦИИ, а не текущего города (иначе все кнопки «Голденрод-Сити»)
-      const label = isTraining ? `${linkLoc.name} (до 15 ур.)` : linkLoc.name;
-      btn.innerHTML = `<span>${icon} ${label}</span>`;
-      btn.onclick = () => {
-        if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
-        if (!state.visitedLocations.has(linkId)) {
-          state.visitedLocations.add(linkId);
-          getBattleCore().then(bc => bc.checkQuestProgress('explore'));
-          if (state.visitedLocations.size >= 20) checkAchievement('explorer');
-        }
-        renderLocation(linkId);
-      };
-      navContainer.appendChild(btn);
-    });
+  // ── Внутри города: сервисы и подлокации ──
+  if (inner.length > 0) {
+    groupTitle('🏙 Внутри');
+    inner.forEach((n) => navContainer.appendChild(navButton(n, '·')));
   }
 
   // ── Информация о диких покемонах (вкладка "Дикие") ──

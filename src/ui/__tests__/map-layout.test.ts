@@ -71,7 +71,7 @@ describe('isMapLocked', () => {
   it('стартовая зона открыта, остальное закрыто до туториала', () => {
     // state по умолчанию: tutorialStep 0, completedNPCQuests [] → гейт закрыт
     expect(isMapLocked('goldenrodCity')).toBe(false);
-    expect(isMapLocked('pokecenter')).toBe(false);
+    expect(isMapLocked('goldenrodCity_pokecenter')).toBe(false);
     expect(isMapLocked('palletTown')).toBe(true);
     expect(isMapLocked('pewterStadium')).toBe(true);
   });

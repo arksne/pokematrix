@@ -52,7 +52,7 @@ export const NPC_DATA = {
   },
   // Nurse Joy in Pokemon Center
   'joy_pokecenter': {
-    id: 'joy_pokecenter', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'pokecenter',
+    id: 'joy_pokecenter', name: 'Сестра Джой', sprite: '👩‍⚕️', location: 'goldenrodCity_pokecenter',
     dialog: {
       greet: 'Добро пожаловать в Покецентр! Я могу вылечить ваших покемонов.',
       default: 'Ваши покемоны в порядке? Заходите если нужна помощь.',
@@ -62,7 +62,7 @@ export const NPC_DATA = {
 
   // Daycare in Pokemon Center
   'daycare_pokecenter': {
-    id: 'daycare_pokecenter', name: 'Смотритель Питомника', sprite: '👴', location: 'pokecenter',
+    id: 'daycare_pokecenter', name: 'Смотритель Питомника', sprite: '👴', location: 'goldenrodCity_pokecenter',
     dialog: {
       greet: 'Добро пожаловать в Питомник! Здесь ваши покемоны могут набираться опыта.',
       default: 'Покемоны растут пока вы путешествуете. Оставьте пару — они поднимут уровень!',
@@ -565,7 +565,7 @@ export const NPC_DATA = {
     ],
   },
   'i1_daycare_nanny': {
-    id: 'i1_daycare_nanny', name: 'Няня Оливия', sprite: '🥚', location: 'pokecenter',
+    id: 'i1_daycare_nanny', name: 'Няня Оливия', sprite: '🥚', location: 'goldenrodCity_pokecenter',
     dialog: {
       greet: 'Питомник переполнен: пары подобраны, инкубатор тёплый. Поможешь вывести и выходить малышей?',
       default: 'Яйцам нужны тепло и прогулки, малышам — корм и забота.',
