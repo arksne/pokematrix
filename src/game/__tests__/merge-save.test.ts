@@ -101,8 +101,7 @@ describe('getFullSaveData: персист флагов', () => {
     }
   });
 
-  it('isShiny и EV-лок переживают сейв (команда и боксы)', () => {
-    const prevTeam = state.myTeam;
+  it('isShiny и EV-лок переживают сейв (команда и боксы)', () => {    const prevTeam = state.myTeam;
     const prevPc = state.pcBoxes;
     const prevInv = state.inventory;
     try {
@@ -137,6 +136,42 @@ describe('getFullSaveData: персист флагов', () => {
       expect(data.myTeam[0].evVitMigrated).toBe(true);
       expect(data.pcBoxes[0][0].isShiny).toBe(true);
       expect(data.pcBoxes[0][0].evsLocked).toBe(false);
+    } finally {
+      state.myTeam = prevTeam;
+      state.pcBoxes = prevPc;
+      state.inventory = prevInv;
+    }
+  });
+
+  it('K2: уровень после конфет переживает сейв (baseLevel + candiesEaten)', () => {
+    const prevTeam = state.myTeam;
+    const prevPc = state.pcBoxes;
+    const prevInv = state.inventory;
+    try {
+      // Как после 3 редких конфет: baseLevel тот же, candiesEaten вырос
+      state.myTeam = [{
+        uid: 'k2', originalTrainer: 't', createdAt: 1, caughtLocation: 'x',
+        apiData: null, maxHp: 50, currentHp: 50,
+        ivs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        baseLevel: 5, candiesEaten: 3, evPool: 12,
+      }];
+      state.pcBoxes = [[]];
+      state.inventory = { credit: 500 };
+      state.badges = [];
+      state.pokedexSeen = new Set();
+      state.pokedexCaught = new Set();
+      state.visitedLocations = new Set();
+      state.daycareMons = [];
+      state.breedingPairs = [];
+      state.eggs = [];
+      state.notifications = [];
+      const data = getFullSaveData();
+      // Эффективный уровень после F5 = baseLevel + candiesEaten = 8
+      expect(data.myTeam[0].baseLevel).toBe(5);
+      expect(data.myTeam[0].candiesEaten).toBe(3);
+      expect(data.myTeam[0].baseLevel + data.myTeam[0].candiesEaten).toBe(8);
+      expect(data.myTeam[0].evPool).toBe(12);
     } finally {
       state.myTeam = prevTeam;
       state.pcBoxes = prevPc;
