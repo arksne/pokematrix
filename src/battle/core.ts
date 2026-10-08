@@ -79,6 +79,7 @@ import { addNotification } from '../ui/notifications.js';                // Ув
 // Экспортируется для тестов (могут создать свой через BattleStateMachine.create())
 import { BattleStateMachine, BattlePhase, recoverStuckTurn, leaveBattleToIdle } from './state-machine.js';
 import { getEncounterRate } from '../data/encounter.js';  // листовой модуль — цикла нет
+import { specialMechanic, towerLevel, encounterRateFor } from './special-loc.js';  // M-4: механики пещер/башен
 
 /** Singleton state machine — единый автомат фаз для всего боя */
 export const battle = new BattleStateMachine();
@@ -1901,7 +1902,9 @@ function getWildLevel() {
   // ── Если локация задаёт min/max уровень — используем его ──
   if (loc && loc.wildMinLvl !== undefined && loc.wildMaxLvl !== undefined) {
     const range = loc.wildMaxLvl - loc.wildMinLvl + 1;
-    return Math.floor(Math.random() * range) + loc.wildMinLvl;
+    const base = Math.floor(Math.random() * range) + loc.wildMinLvl;
+    // M-4: башня/руины — каждый подъём на этаж добавляет уровень врагу.
+    return towerLevel(base, GS.towerFloor || 0, specialMechanic(loc)?.perFloorLvl);
   }
 
   // Johto routes early
@@ -2035,7 +2038,10 @@ function startAutoHunt() {
     updateHuntBtn();
     // Плотность энкаунтеров по локации (H1): кастом админки →
     // encounterRate данных локи → дефолт 0.20.
-    const huntRate = getEncounterRate(GS.currentLocationId);
+    // M-4: в тёмной пещере ночью звери реже (darkRate), а в башне — то же.
+    const locHere = store.getLocation(GS.currentLocationId);
+    const mech = specialMechanic(locHere);
+    const huntRate = encounterRateFor(getEncounterRate(GS.currentLocationId), mech, GS.isDaytime !== false);
     // 20% base chance every tick — базовый шанс найти покемона
     if (Math.random() < huntRate) {
       const pkmName = pickWeightedEncounter(enc);

@@ -36,7 +36,8 @@
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 import { REGIONS } from '../data/regions.js';
 import { state } from '../game/state.js';
-import { isQuestActive } from '../data/quest-drops.js';
+import { activeQuestIds } from '../data/quest-drops.js';
+import { locationGateReason } from './location-gate.js';
 import { showToast } from '../utils/dom.js';
 
 // ── СОСТОЯНИЕ МОДУЛЯ И CALLBACK'И ────────────────────────
@@ -81,22 +82,32 @@ export function isMapLocked(locId: string): boolean {
 }
 
 // ── Иконка и тип узла по id ─────────────────────────────
-// ── isServiceLoc: сервисная подлокация (маркет/центр) ──
+// ── isServiceLoc: сервисная подлокация (маркет/центр/вокзал/причал) ──
 // Сервисы НЕ рисуются узлами графа (иначе каша из 40+ точек): они доступны
 // кнопками внутри города (инфо-модалка + навигация локации).
 export function isServiceLoc(locId: string): boolean {
   if (!locId) return false;
+  const l = locId.toLowerCase();
   return locId === 'pokemart' || locId === 'pokecenter'
-    || locId.endsWith('_pokemart') || locId.endsWith('_pokecenter');
+    || l.endsWith('_pokemart') || l.endsWith('_pokecenter')
+    // Транспорт (M-6): посадка — на вокзале/причале, отдельной точкой.
+    // Суффиксы бывают и без подчёркивания (goldenrodStation, vermilionPier),
+    // поэтому проверяем хвост имени, а не '_station'.
+    || l.endsWith('station') || l.endsWith('pier') || l.endsWith('dock');
 }
 
 // ── serviceSubsOf: подлокации-сервисы города ──
+// Вокзал/причал — тоже сервис: это единственная точка посадки на рейс,
+// но игрок приходит туда пешком из города, а не телепортом.
 export function serviceSubsOf(allLocs: Record<string, any>, cityId: string): string[] {
-  return [`${cityId}_pokemart`, `${cityId}_pokecenter`].filter((id) => !!allLocs?.[id]);
+  return [`${cityId}_pokemart`, `${cityId}_pokecenter`, `${cityId}_station`, `${cityId}_pier`]
+    .filter((id) => !!allLocs?.[id]);
 }
 
 export function iconFor(locId: string): string {
   const l = locId.toLowerCase();
+  if (l.includes('station')) return '🚉';                          // Вокзал
+  if (l.includes('pier') || l.includes('dock')) return '⛴️';       // Причал
   if (l.includes('stadium')) return '⚔️';                        // Стадион
   if (l.includes('pokecenter')) return '🏥';                      // Поке-центр
   if (l.includes('pokemart') || l.includes('pokemarket')
@@ -106,6 +117,8 @@ export function iconFor(locId: string): string {
 }
 export function kindFor(locId: string): string {
   const l = locId.toLowerCase();
+  if (l.includes('station')) return 'station';
+  if (l.includes('pier') || l.includes('dock')) return 'pier';
   if (l.includes('stadium')) return 'stadium';
   if (l.includes('pokecenter')) return 'center';
   if (l.includes('pokemart') || l.includes('pokemarket')
@@ -208,15 +221,19 @@ function travelToLoc(locId: string) {
     showLocationInfo(locId);
     return;
   }
-  // Квест-гейт: точка открывается только взятым/пройденным квестом
-  {
-    const gate = findLocField(locId, 'requiresQuest');
-    if (gate && !isQuestActive(gate)) {
-      showToast('Сюда пускают только по квесту. Ищите квестодателя!', true);
-      showLocationInfo(locId);
-      return;
+// Гейт открытия (бейджи/квест) — та же логика, что в ui/location.ts:
+    // если пройти нельзя, не «переезжаем молча», а объясняем.
+    {
+      const reason = locationGateReason(findLocField(locId, null), {
+        activeQuests: activeQuestIds(),
+        badges: (state.badges || []).length,
+      });
+      if (reason) {
+        showToast(reason, true);
+        showLocationInfo(locId);
+        return;
+      }
     }
-  }
   selectedLoc = locId;
   exploredLocs.add(locId);
   try { onTravelTo?.(locId); }
@@ -231,11 +248,17 @@ function findLocLinks(locId: string): string[] {
   return [];
 }
 
-function findLocField(locId: string, field: string): any {
+function findLoc(locId: string): any {
   for (const region of Object.values(REGIONS) as any[]) {
-    if (region.locations?.[locId]) return region.locations[locId]?.[field];
+    if (region.locations?.[locId]) return region.locations[locId];
   }
   return undefined;
+}
+
+/** Поле локации; field=null — сама локация. */
+function findLocField(locId: string, field: string | null): any {
+  const loc = findLoc(locId);
+  return field === null ? loc : loc?.[field];
 }
 
 /** Чистая проверка: можно ли идти из current в target (только по связям). */

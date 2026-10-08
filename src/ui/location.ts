@@ -38,13 +38,16 @@ import { REGIONS } from '../data/regions.js';       // Все регионы с 
 import { gymLeaders } from '../data/gyms.js';
 // NPC_DATA — объект { npcId: { name, sprite, location, dialog, ... } }
 import { NPC_DATA } from '../data/npc.js';
-import { activeQuestIds, rollQuestDrops, isQuestActive } from '../data/quest-drops.js';  // I3: дроп и гейты по квестам
+import { activeQuestIds, rollQuestDrops } from '../data/quest-drops.js';  // I3: дроп и гейты по квестам
+import { locationGateReason } from './location-gate.js';
+import { npcSpots, type NpcSpot } from './npc-anchors.js';
+import { specialMechanic, nextFloor } from '../battle/special-loc.js';  // M-4: этажи башен
 // MONSTER_DROP_TABLE — таблица дропов: { speciesName: [{item, chance, qty}, ...] }
 import { MONSTER_DROP_TABLE } from '../data/drops.js';
 // ITEMS — массив всех предметов игры
 import { ITEMS } from '../data/items.js';
 // TRANSPORT_HUBS — хабы транспорта: { locId: [{targetRegion, targetLoc, label, ticket}, ...] }
-import { TRANSPORT_HUBS } from '../data/transport.js';
+import { TRANSPORT_TICKETS, routesFrom, routeFrom } from '../data/transport.js';
 // Погода: getDailyWeather(локация) → 'sunny'/'rain'/'fog'/etc.
 //         WEATHER_ICONS — иконки погоды
 //         WEATHER_NAMES — названия погоды
@@ -219,13 +222,16 @@ function tutorialGateToast(): boolean {
   return false;
 }
 
-// ── Транспорт C3: паром 3ч/300к, поезд 2ч/500к ────────────
+// ── Транспорт: паром 3ч, поезд 2ч ────────────────────────
 // Билет сгорает при посадке. Поезд и паром — отдельные локи без выходов:
 // сильные энкаунтеры, дроп и редкие виды. Состояние в state.transport,
 // переживает рефреши через сейв.
+//
+// Посадка только на вокзале/причале (M-6): маршруты описаны в
+// data/transport.ts, поездка — между РЕГИОНАМИ (Канто ↔ Джото).
 const TRANSPORTS = {
-  train: { ticket: 'trainTicket', rideLoc: 'trainRide', to: 'ecruteakCity', ms: 2 * 3600 * 1000, label: 'поезд' },
-  ferry: { ticket: 'ferryTicket', rideLoc: 'seaFerryRide', to: 'cianwoodCity', ms: 3 * 3600 * 1000, label: 'паром' },
+  train: { ticket: TRANSPORT_TICKETS.train.ticket, ms: TRANSPORT_TICKETS.train.ms, label: TRANSPORT_TICKETS.train.label },
+  ferry: { ticket: TRANSPORT_TICKETS.ferry.ticket, ms: TRANSPORT_TICKETS.ferry.ms, label: TRANSPORT_TICKETS.ferry.label },
 };
 
 /** Чистый статус рейса (для UI и тестов): none aboard arrived. */
@@ -235,22 +241,34 @@ export function transportStatus(tr: any, now = Date.now()) {
   return { phase: 'aboard', msLeft: tr.arriveAt - now };
 }
 
-export function boardTransport(vehicle: 'train' | 'ferry') {
+/**
+ * Посадка на рейс из вокзала/причала.
+ * `locId` — текущая локация; если из неё рейса нет, отказ (посадка не
+ * teleport'ится: игрок обязан дойти пешком до вокзала/причала).
+ */
+export function boardTransport(vehicle: 'train' | 'ferry', locId?: string) {
   const t = TRANSPORTS[vehicle];
-  if (!t) return;
+  if (!t) return false;
+  const here = locId ?? state.currentLocationId;
+  const route = routeFrom(here);
+  if (!route || route.vehicle !== vehicle) {
+    showToast('Здесь нет посадки. Иди к вокзалу или причалу.', true);
+    return false;
+  }
   if ((state.inventory?.[t.ticket] || 0) <= 0) {
     showToast('Нужен билет! Купи в маркете.', true);
-    return;
+    return false;
   }
   store.removeItem(t.ticket);
   const now = Date.now();
   state.transport = {
-    vehicle, from: state.currentLocationId, to: t.to,
+    vehicle, from: here, to: route.to,
     departAt: now, arriveAt: now + t.ms,
   };
-  renderLocation(t.rideLoc);
+  renderLocation(route.rideLoc);
   autoSave();
   showToast(`Ты сел на ${t.label}! В пути лови сильных покемонов.`, false);
+  return true;
 }
 
 export function arriveTransport() {
@@ -262,7 +280,12 @@ export function arriveTransport() {
   }
   const to = state.transport.to;
   state.transport = null;
-  travelToRegion('johto', to);
+  // Регион прибытия берём из самой локации, а не «всегда johto»: поезд
+  // Голденрод → Саффрон привозит в Канто, и раньше игрок оказывался
+  // в джотовском регионе с кантовской локацией (ломал currentRegion,
+  // карту и кулдауны погоды/времени суток).
+  const region = getRegionOfLocation(to) || state.currentRegion || 'johto';
+  travelToRegion(region, to);
   autoSave();
   showToast('Прибыли!', false);
 }
@@ -365,11 +388,15 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
     }
   }
 
-  // ── Квест-гейт: локация открывается только взятым/пройденным квестом ──
+  // ── Квест-гейт локации (M-17): бейджи и/или квест ──
+  // Логика в ui/location-gate.ts (чистая, общая с картой и тестами).
   {
-    const gate = (getLocation(locId) as any)?.requiresQuest;
-    if (gate && !isQuestActive(gate)) {
-      showToast('Сюда пускают только по квесту. Ищите квестодателя!', true);
+    const reason = locationGateReason(getLocation(locId), {
+      activeQuests: activeQuestIds(),
+      badges: (state.badges || []).length,
+    });
+    if (reason) {
+      showToast(reason, true);
       return state.currentLocationId;
     }
   }
@@ -384,6 +411,24 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   const nav = navStep(state.currentLocationId, state.lastLocation, (state as any).locForward, locId, via);
   state.lastLocation = nav.last;
   (state as any).locForward = nav.fwd;
+  // ── M-4: этаж башни/руин ──
+  // Вход в башню = подъём на этаж (враги сильнее), выход наружу = сброс.
+  // Один вход — один подъём: рендер локации (открытие меню, смена вкладки)
+  // этаж не двигает, иначе любой перерисовка качала бы силу врагов.
+  {
+    const prevId = state.currentLocationId;
+    const mech = specialMechanic(getLocation(locId));
+    const step = nextFloor(prevId, locId, mech);
+    if (step > 0) {
+      state.towerFloor = Math.min(
+        specialMechanic(getLocation(locId))?.floors ?? 10,
+        (state.towerFloor || 0) + step,
+      );
+    } else if (!mech) {
+      state.towerFloor = 0; // вышли из башни
+    }
+  }
+
   state.currentLocationId = nav.current;   // Устанавливаем текущую локацию
 
   const loc = getLocation(locId);             // Получаем данные локации
@@ -464,17 +509,20 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
     actionsContainer.appendChild(btnShop);
   }
 
-  // ── Транспорт C3: посадка и прибытие ──
-  // Вокзал/причал: кнопка посадки (съедает билет). Рейс: обратный отсчёт
-  // + кнопка прибытия (активна по истечении 2ч поезд / 3ч паром).
-  if (locId === 'goldenrodStation' || locId === 'olivinePier') {
-    const isTrain = locId === 'goldenrodStation';
-    const btnBoard = document.createElement('button');
-    btnBoard.className = 'btn-use';
-    btnBoard.style.backgroundColor = '#5856d6';
-    btnBoard.innerText = isTrain ? '🚂 Сесть на поезд (Голденрод → Экрутик)' : '⛴ Сесть на паром (Оливин → Цианвуд)';
-    btnBoard.onclick = () => boardTransport(isTrain ? 'train' : 'ferry');
-    actionsContainer.appendChild(btnBoard);
+  // ── Транспорт M-6: посадка на вокзале/причале ──
+  // Кнопки посадки рисуются по маршрутам из data/transport.ts: одна точка
+  // посадки на рейс, в городе их нет (там кнопка «вокзал/причал» в навигации).
+  // Рейс: обратный отсчёт + кнопка прибытия (2ч поезд / 3ч паром).
+  {
+    const routes = routesFrom(locId);
+    routes.forEach((route) => {
+      const btnBoard = document.createElement('button');
+      btnBoard.className = 'btn-use';
+      btnBoard.style.backgroundColor = route.vehicle === 'train' ? '#5856d6' : '#007aff';
+      btnBoard.innerText = route.label;
+      btnBoard.onclick = () => boardTransport(route.vehicle, locId);
+      actionsContainer.appendChild(btnBoard);
+    });
   }
   if (locId === 'trainRide' || locId === 'seaFerryRide') {
     const st = transportStatus(state.transport, Date.now());
@@ -589,26 +637,83 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   if (loc.dayEncounters && state.isDaytime) huntEncounters = loc.dayEncounters;
   else if (loc.nightEncounters && !state.isDaytime) huntEncounters = loc.nightEncounters;
 
+  // M-4: башня/руины — показываем этаж, иначе рост силы врагов выглядит багом
+  const mech = specialMechanic(loc);
+  if (mech?.kind === 'tower') {
+    const floor = Math.max(1, state.towerFloor || 1);
+    const descEl = document.getElementById('loc-desc');
+    if (descEl && !descEl.dataset.towerNote) {
+      descEl.dataset.towerNote = '1';
+      const note = document.createElement('div');
+      note.style.cssText = 'margin-top:6px;color:var(--tma-accent);font-weight:600';
+      note.textContent = `🗝 Этаж ${floor} из ${mech.floors ?? 10} — чем выше, тем сильнее звери. Выйдешь наружу — начнёшь с первого.`;
+      descEl.appendChild(note);
+    }
+  }
+
   // ── Панель NPC ──
+  // M-10: NPC стоят в ФИКСИРОВАННЫХ точках на картинке локации. Позиция
+  // считается из id (src/ui/npc-anchors.ts), поэтому не прыгает при любом
+  // изменении порядка в данных. Если у локации нет картинки (image: ''),
+  // точки не на чем рисовать — остаётся список-кнопка (как раньше).
   const npcPanel = document.getElementById('npc-panel');
   const npcButtons = document.getElementById('npc-buttons');
+  const locImage = document.getElementById('loc-image');
   npcButtons.innerHTML = '';
   npcButtons.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:4px';
+  if (locImage) {
+    locImage.querySelectorAll('.npc-anchor').forEach((el) => el.remove());
+  }
 
   // Находим всех NPC для этой локации
   let npcsHere = Object.values(NPC_DATA).filter(n => n.location === locId);
   if (npcsHere.length > 0) {
-    npcPanel.style.display = 'block';  // Показываем панель NPC
-    npcsHere.forEach(npc => {
-      const npcBtn = document.createElement('button');
-      npcBtn.className = 'btn-nav';
-      npcBtn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
-      npcBtn.innerHTML = `<span>${npc.sprite} ${npc.name}</span>`;
-      npcBtn.onclick = () => openNPCDialog(npc.id);  // Открыть диалог
-      npcButtons.appendChild(npcBtn);
+    const spots = npcSpots(npcsHere.map((n: any) => n.id));
+    npcsHere.forEach((npc: any, i: number) => {
+      const spot = spots[i];
+      const hasBg = !!loc.image;
+      if (locImage && hasBg) {
+        // Маркер поверх картинки: ::after у .location-image имеет z-index 1,
+        // поэтому маркер обязан быть выше.
+        const pin = document.createElement('button');
+        pin.className = 'npc-anchor';
+        pin.type = 'button';
+        pin.style.cssText = [
+          'position:absolute',
+          `left:${spot.x}%`,
+          `top:${spot.y}%`,
+          'transform:translate(-50%,-100%)',
+          'z-index:3',
+          'background:transparent',
+          'border:0',
+          'padding:0',
+          'cursor:pointer',
+          'filter:drop-shadow(0 2px 3px rgba(0,0,0,0.6))',
+        ].join(';');
+        pin.title = npc.name;
+        pin.innerHTML = `<span style="font-size:1.5rem;line-height:1">${npc.sprite || '🧑‍🏫'}</span>`;
+        pin.onclick = () => openNPCDialog(npc.id);
+        locImage.appendChild(pin);
+        // Кнопка в списке остаётся мелкой (для доступности/мелких экранов).
+        npcButtons.appendChild(makeNpcListButton(npc, spot));
+        return;
+      }
+      npcButtons.appendChild(makeNpcListButton(npc, null));
     });
+    npcPanel.style.display = 'block';  // Показываем панель NPC
   } else {
     npcPanel.style.display = 'none';  // Нет NPC — прячем панель
+  }
+
+  /** Кнопка NPC для списка (и дубль маркера для мелких экранов). */
+  function makeNpcListButton(npc: any, spot: NpcSpot | null): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.className = 'btn-nav';
+    btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
+    const where = spot ? ` <span style="opacity:.6;font-size:.75em">(${spot.x}%, ${spot.y}%)</span>` : '';
+    btn.innerHTML = `<span>${npc.sprite} ${npc.name}${where}</span>`;
+    btn.onclick = () => openNPCDialog(npc.id);
+    return btn;
   }
 
   // ── НАВИГАЦИОННЫЕ КНОПКИ ──
@@ -771,18 +876,10 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
     navContainer.prepend(row);
   }
 
-  // ── Кнопки транспорта (межрегиональные хаб) ──
-  const hubs = TRANSPORT_HUBS[locId];
-  if (hubs) {
-    hubs.forEach(hub => {
-      const btn = document.createElement('button');
-      btn.className = 'btn-nav';
-      btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:var(--tma-accent)';
-      btn.innerHTML = `<span>🎫 ${hub.label}</span>`;
-      btn.onclick = () => travelToRegion(hub.targetRegion, hub.targetLoc, hub.ticket);
-      navContainer.appendChild(btn);
-    });
-  }
+  // Мгновенных кнопок рейса в городах больше нет (M-6): уехать можно
+  // только с вокзала/причала, кнопка посадки рисуется выше по маршруту.
+  // Оставляем проверку на будущее: если в TRANSPORT_HUBS снова появится
+  // город — это снова станет дублем, и тест об этом напомнит.
 
   autoSave();  // Сохраняем игру (новая локация)
 };
@@ -908,11 +1005,11 @@ export function processMonsterDrop(pokemonName: string) {
 }
 
 // ── updateMoneyDisplay: обновление отображения денег ────
-// Раньше показывало деньги в заголовке, теперь только в инвентаре
-// Функция сохранена для обратной совместимости (вызывается из других модулей)
+// Денег в заголовке больше нет (счётчик живёт в инвентаре), поэтому искать
+// `money-display` в разметке бессмысленно — элемента там не существует, и
+// проверка DOM-контракта справедливо ругалась на пустой getElementById.
+// Осталась реальная работа функции: ачивка «Богач».
 export function updateMoneyDisplay() {
-  const el = document.getElementById('money-display');
-  if (el) el.textContent = '¥' + ((state.inventory?.credit || 0).toLocaleString());
   // Ачивка «Богач»: баланс достигал ¥100,000 (разовая, назад не отбирается)
   if ((state.inventory?.credit || 0) >= 100000) checkAchievement('money_100k');
 }

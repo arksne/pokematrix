@@ -172,6 +172,7 @@ export const saveDataSchema = z.object({
   locForward: z.string().nullable().optional(),
   visitedLocations: z.any().optional(),
   isDaytime: z.boolean().optional(),
+  towerFloor: z.number().int().min(0).max(999).optional(),
   moveTypeCache: z.any().optional(),
   trainerNickname: z.string().max(32).optional(),
   expShareActive: z.boolean().optional(),

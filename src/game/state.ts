@@ -32,6 +32,7 @@ export const state: Record<string, any> = {
   locForward: null as string | null,  // Вперёд после «назад» (кнопка → справа)
   visitedLocations: new Set<string>(), // Set посещённых локаций (для карты/путешествий)
   isDaytime: true,                 // bool: день или ночь (влияет на покемонов)
+  towerFloor: 0,                   // M-4: этаж башни/руин (0 = первый)
   moveTypeCache: new Map<string, string>(), // Кеш: название атаки → её тип
 
   // ── Игрок ────────────────────────────────────────────────

@@ -28,10 +28,19 @@ let token = null;
   check('R1', 'EV = 252 принимается', first.status === 200 && evRes.status === 200,
     `первое=${first.status}, с EV=252: ${evRes.status}`);
 
+  // IV теперь 0..50 (решение хозяина: «гены 0–50, перфект 50»).
+  // Старая проверка ждала 422 на IV=32 и молчала на новой шкале — поэтому
+  // проверяем ОБЕ границы: 50 проходит, 51 отклоняется.
+  const maxIv = testSave();
+  maxIv.saveData.myTeam[0].ivs = { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
+  const maxIvRes = await api('/api/save', { method: 'POST', token, body: maxIv });
+  check('R2a', 'IV = 50 (максимум новой шкалы) принимается', maxIvRes.status === 200,
+    `HTTP ${maxIvRes.status}`);
+
   const badIv = testSave();
-  badIv.saveData.myTeam[0].ivs = { hp: 32, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+  badIv.saveData.myTeam[0].ivs = { hp: 51, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
   const ivRes = await api('/api/save', { method: 'POST', token, body: badIv });
-  check('R2', 'IV = 32 отклоняется (лимит IV = 31)', ivRes.status === 422, `HTTP ${ivRes.status}`);
+  check('R2b', 'IV = 51 отклоняется (лимит IV = 50)', ivRes.status === 422, `HTTP ${ivRes.status}`);
 }
 
 // ── R3: ежедневная награда и её кулдаун переживают обычное сохранение

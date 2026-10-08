@@ -52,6 +52,12 @@ export interface LocationDef {
   bossLvl?: number;
   /** Локация открывается только взятым/пройденным квестом (id) */
   requiresQuest?: string;
+  /** Сколько значков нужно для входа (секретные места силы) */
+  requiresBadges?: number;
+  /** Своя механика особой локации: башня (этажи) или тёмная пещера */
+  mechanic?: { kind: 'tower' | 'dark'; floors?: number; perFloorLvl?: number; darkRate?: number };
+  /** Зона блуждающих легенд: входа и выхода нет намеренно */
+  roaming?: boolean;
 }
 
 /** Регион */

@@ -147,7 +147,7 @@ export function getFullSaveData() {
     // покемона.
     dropLog: state.dropLog,
     starterGiven: state.starterGiven === true || totalPokemonCount() > 0,
-    currentLocationId: state.currentLocationId, currentRegion: state.currentRegion,
+    currentLocationId: state.currentLocationId, currentRegion: state.currentRegion, towerFloor: state.towerFloor || 0,
     inventory: { ...state.inventory },
     money: state.inventory['credit'] || 0, badges: state.badges, trainerNickname: state.trainerNickname,
     myTeam: state.myTeam.map(m => ({
@@ -284,6 +284,7 @@ export async function loadGame() {
     state.lastCloudSync = parseInt(localStorage.getItem(lsKey('save_sync')) || '0');
 
     state.currentLocationId = data.currentLocationId || 'goldenrodCity';
+  state.towerFloor = Number.isFinite(data.towerFloor) ? Math.max(0, Math.floor(data.towerFloor)) : 0;
     state.currentRegion = data.currentRegion || 'johto';
     // Migrate old region keys
     if (state.currentRegion === 'tevas_islands') state.currentRegion = 'johto' // was southern_archipelago;

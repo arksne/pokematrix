@@ -77,8 +77,15 @@ const readWorld = (page) => page.evaluate(() => ({
   // L3/F2: новая карта — вкладки регионов и SVG-граф узлами
   mapTabs: [...document.querySelectorAll('.map-region-tab')].map((b) => b.innerText.trim()),
   mapNodes: document.querySelectorAll('.map-node').length,
-  // F3: кнопка «Назад» и хлебные крошки позиции
-  backBtn: document.getElementById('btn-back')?.innerText.trim() ?? '',
+  // Навигация: кнопки «Назад» больше нет (хозяин попросил убрать) —
+  // теперь две стрелки: «← прошлая» слева и «вперёд →» справа.
+  navRow: (() => {
+    const nav = document.getElementById('nav-buttons');
+    const btns = nav ? [...nav.querySelectorAll('button')] : [];
+    const first = btns[0]?.innerText.trim() ?? '';
+    const last = btns[btns.length - 1]?.innerText.trim() ?? '';
+    return { first, last, labels: btns.map((b) => b.innerText.trim()), count: btns.length };
+  })(),
   crumbs: document.getElementById('loc-breadcrumbs')?.innerText.trim() ?? '',
 }));
 
@@ -143,7 +150,11 @@ t('W9', 'в покемен-центре появились кнопки дейс
   `кнопок: ${atCenter.actions}${atCenter.actionLabels.length ? ` (${atCenter.actionLabels.join(', ')})` : ''}`);
 t('W10', 'в покемен-центре есть кнопка обмена',
   atCenter.actionLabels.some((l) => /Обмен/i.test(l)), atCenter.actionLabels.join(', '));
-t('W10b', 'после перехода есть кнопка «Назад»', /Назад/.test(atCenter.backBtn), `«${atCenter.backBtn}»`);
+t('W10b', 'после перехода навигация: «←» слева и «→» справа (без кнопки «Назад»)',
+  /^←/.test(atCenter.navRow.first)
+  && atCenter.navRow.labels.some((l) => /→/.test(l))
+  && !atCenter.navRow.labels.some((l) => /Назад/.test(l)),
+  `кнопки: ${atCenter.navRow.labels.join(' | ')}`);
 t('W10c', 'хлебные крошки показывают позицию', atCenter.crumbs.length > 0 && /›/.test(atCenter.crumbs),
   `«${atCenter.crumbs}»`);
 

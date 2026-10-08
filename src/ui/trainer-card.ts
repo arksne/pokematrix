@@ -257,7 +257,11 @@ function renderTrainerProgress(): void {
   try {
     if (typeof document === 'undefined') return;
     const doc = document as any;
-    let box = doc.getElementById('trainer-card-progress') || doc.getElementById('trainer-progress');
+    // Контейнер прогресса создаётся кодом (`trainer-card-progress`), поэтому
+    // ищем только его. Раньше здесь стоял ещё и `trainer-progress` — элемента
+    // с таким id не существует ни в разметке, ни в коде: это был мёртвый
+    // getElementById, на который ругался аудит DOM-контракта.
+    let box = doc.getElementById('trainer-card-progress');
     if (!box) {
       try {
         box = doc.createElement('div');
