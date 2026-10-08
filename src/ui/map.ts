@@ -80,6 +80,20 @@ export function isMapLocked(locId: string): boolean {
 }
 
 // ── Иконка и тип узла по id ─────────────────────────────
+// ── isServiceLoc: сервисная подлокация (маркет/центр) ──
+// Сервисы НЕ рисуются узлами графа (иначе каша из 40+ точек): они доступны
+// кнопками внутри города (инфо-модалка + навигация локации).
+export function isServiceLoc(locId: string): boolean {
+  if (!locId) return false;
+  return locId === 'pokemart' || locId === 'pokecenter'
+    || locId.endsWith('_pokemart') || locId.endsWith('_pokecenter');
+}
+
+// ── serviceSubsOf: подлокации-сервисы города ──
+export function serviceSubsOf(allLocs: Record<string, any>, cityId: string): string[] {
+  return [`${cityId}_pokemart`, `${cityId}_pokecenter`].filter((id) => !!allLocs?.[id]);
+}
+
 export function iconFor(locId: string): string {
   const l = locId.toLowerCase();
   if (l.includes('stadium')) return '⚔️';                        // Стадион
@@ -120,7 +134,8 @@ const PAD_Y = 56;
 
 export function computeLayout(regionKey: string): MapLayout {
   const locs: Record<string, any> = (REGIONS as any)[regionKey]?.locations ?? {};
-  const ids = Object.keys(locs);
+  // Сервисы — не узлы: иначе граф тонет в маркетах/центрах
+  const ids = Object.keys(locs).filter((id) => !isServiceLoc(id));
 
   // Неориентированная смежность (только внутри региона) + направленные рёбра
   const adj: Record<string, Set<string>> = {};
@@ -130,6 +145,7 @@ export function computeLayout(regionKey: string): MapLayout {
     const links: string[] = Array.isArray(locs[id]?.links) ? locs[id].links : [];
     for (const link of links) {
       if (!locs[link]) continue;              // Кросс-региональный сервис (pokecenter и т.п.) — не рисуем чужое
+      if (isServiceLoc(link)) continue;       // Сервисы — не узлы графа
       adj[id].add(link);
       adj[link].add(id);
       edges.push({ from: id, to: link });
@@ -319,6 +335,20 @@ function renderGraph(regionKey: string) {
     label.textContent = short;
     g.appendChild(label);
 
+    // Бейдж сервисов: город с маркетом/центром внутри (сами сервисы не узлы)
+    const subs = serviceSubsOf(locs, id);
+    if (subs.length > 0) {
+      const svc = document.createElementNS(NS, 'text');
+      svc.setAttribute('y', '46');
+      svc.setAttribute('text-anchor', 'middle');
+      svc.setAttribute('font-size', '10');
+      svc.textContent = '🛒🏥';
+      const svcTitle = document.createElementNS(NS, 'title');
+      svcTitle.textContent = 'Внутри: маркет и центр (кнопки — в навигации локации)';
+      svc.appendChild(svcTitle);
+      g.appendChild(svc);
+    }
+
     const title = document.createElementNS(NS, 'title');
     const linksCount = (loc.links || []).length;
     const encCount = loc.encounters?.length || 0;
@@ -374,8 +404,9 @@ export function updateLocList(regionKey: string) {
 // Двойной клик по узлу/строке; переход — одинарный клик.
 export function showLocationInfo(locId: string) {
   let loc: any = null;
+  let regionLocs: Record<string, any> = {};
   for (const region of Object.values(REGIONS) as any[]) {
-    if (region.locations?.[locId]) { loc = region.locations[locId]; break; }
+    if (region.locations?.[locId]) { loc = region.locations[locId]; regionLocs = region.locations; break; }
   }
   if (!loc) return;
 
@@ -415,7 +446,8 @@ export function showLocationInfo(locId: string) {
           ${loc.hasWater ? '<span style="background:rgba(90,200,250,0.15);color:#5ac8fa;padding:3px 10px;border-radius:20px;font-size:0.7rem;">🌊 Вода</span>' : ''}
         </div>
         ${linkNames ? `<div style="font-size:0.75rem;color:#888;"><span style="color:#666;">🔗 Связано с:</span> ${escapeHtml(linkNames)}</div>` : ''}
-        <button id="map-info-go" style="margin-top:12px;width:100%;padding:9px;border-radius:10px;border:none;background:#4a9eff;color:#fff;font-weight:700;font-size:0.85rem;cursor:pointer;">➔ Перейти: ${escapeHtml(loc.name)}</button>
+        <div id="map-info-services" style="display:flex;gap:6px;margin-top:10px;"></div>
+        <button id="map-info-go" style="margin-top:8px;width:100%;padding:9px;border-radius:10px;border:none;background:#4a9eff;color:#fff;font-weight:700;font-size:0.85rem;cursor:pointer;">➔ Перейти: ${escapeHtml(loc.name)}</button>
       </div>
     </div>
   `;
@@ -429,6 +461,19 @@ export function showLocationInfo(locId: string) {
   });
   const goBtn = document.getElementById('map-info-go');
   if (goBtn) goBtn.onclick = () => { modal.remove(); travelToLoc(locId); };
+  // Сервисы города — быстрые кнопки (сами они не узлы графа)
+  const svcBox = document.getElementById('map-info-services');
+  if (svcBox) {
+    for (const subId of serviceSubsOf(regionLocs, locId)) {
+      const sub = regionLocs[subId];
+      const b = document.createElement('button');
+      b.style.cssText = 'flex:1;padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:0.8rem;cursor:pointer;';
+      b.textContent = `${iconFor(subId)} ${sub?.name || subId}`;
+      b.onclick = () => { modal.remove(); travelToLoc(subId); };
+      svcBox.appendChild(b);
+    }
+    if (!svcBox.hasChildNodes()) svcBox.remove();
+  }
 }
 
 // ── showRegionMap: отобразить карту для региона ─────────

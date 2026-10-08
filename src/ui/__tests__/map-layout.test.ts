@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLayout, iconFor, kindFor, isMapLocked } from '../map.js';
+import { computeLayout, iconFor, kindFor, isMapLocked, isServiceLoc, serviceSubsOf } from '../map.js';
 import { REGIONS } from '../../data/regions.js';
 
 /**
@@ -9,8 +9,8 @@ import { REGIONS } from '../../data/regions.js';
  */
 describe('computeLayout', () => {
   for (const regionKey of ['kanto', 'johto']) {
-    it(`${regionKey}: все локации получили позиции`, () => {
-      const ids = Object.keys((REGIONS as any)[regionKey].locations);
+    it(`${regionKey}: все НЕсервисные локации получили позиции`, () => {
+      const ids = Object.keys((REGIONS as any)[regionKey].locations).filter((id) => !isServiceLoc(id));
       const layout = computeLayout(regionKey);
       expect(Object.keys(layout.positions).sort()).toEqual([...ids].sort());
       // Слои покрывают все узлы без дублей
@@ -32,7 +32,7 @@ describe('computeLayout', () => {
       const layout = computeLayout(regionKey);
       const start = regionKey === 'kanto' ? 'palletTown' : 'goldenrodCity';
       for (const link of locs[start].links) {
-        if (!locs[link]) continue; // кросс-региональный сервис
+        if (!locs[link] || isServiceLoc(link)) continue; // кросс-регион и сервисы — не узлы
         expect(layout.positions[link].layer).toBe(1);
       }
     });
@@ -77,8 +77,7 @@ describe('isMapLocked', () => {
   });
 });
 
-describe('F4: подлокации сервисов у каждого города', () => {
-  const cities = ['celadonCity', 'ceruleanCity', 'fuchsiaCity', 'palletTown',
+describe('F4: подлокации сервисов у каждого города', () => {  const cities = ['celadonCity', 'ceruleanCity', 'fuchsiaCity', 'palletTown',
     'vermilionCity', 'viridianCity', 'pewterCity', 'lavenderTown', 'saffronCity',
     'blackthornCity', 'cherrygroveCity', 'cianwoodCity', 'ecruteakCity',
     'newBarkTown', 'olivineCity', 'violetCity', 'azaleaTown', 'goldenrodCity',
@@ -112,5 +111,37 @@ describe('F4: подлокации сервисов у каждого город
       }
       expect(findLoc(`${city}_pokecenter`).hasHeal).toBe(true);
     }
+  });
+});
+
+describe('граф без сервисов (чистка каши)', () => {
+  it('isServiceLoc опознаёт сервисы', () => {
+    expect(isServiceLoc('pokemart')).toBe(true);
+    expect(isServiceLoc('pokecenter')).toBe(true);
+    expect(isServiceLoc('celadonCity_pokemart')).toBe(true);
+    expect(isServiceLoc('celadonCity_pokecenter')).toBe(true);
+    expect(isServiceLoc('celadonCity')).toBe(false);
+    expect(isServiceLoc('route1')).toBe(false);
+  });
+
+  it('сервисов нет ни в позициях, ни в рёбрах', () => {
+    for (const regionKey of ['kanto', 'johto']) {
+      const layout = computeLayout(regionKey);
+      for (const id of Object.keys(layout.positions)) {
+        expect(isServiceLoc(id), id).toBe(false);
+      }
+      for (const e of layout.edges) {
+        expect(isServiceLoc(e.from), `edge ${e.from}`).toBe(false);
+        expect(isServiceLoc(e.to), `edge ${e.to}`).toBe(false);
+      }
+    }
+  });
+
+  it('serviceSubsOf находит обе подлокации города', () => {
+    const locs = { ...(REGIONS as any).kanto.locations, ...(REGIONS as any).johto.locations };
+    expect(serviceSubsOf(locs, 'celadonCity').sort()).toEqual(
+      ['celadonCity_pokecenter', 'celadonCity_pokemart'].sort(),
+    );
+    expect(serviceSubsOf(locs, 'route1')).toEqual([]);
   });
 });
