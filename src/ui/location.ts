@@ -343,11 +343,10 @@ export let renderLocation = function(locId: any) {
   // то есть снова в этот return. Только ручная правка сейва.
   //
   // Теперь гейт отправляет игрока в обычную локацию и говорит почему.
-  // Проверяется настоящий уровень (baseLevel), а не уровень с конфетами:
-  // конфеты — это не опыт, и прибавлять их к уровню означало выкидывать
-  // новичка из зоны за обычное кормление.
+  // Уровень считается ЭФФЕКТИВНЫЙ (baseLevel + candiesEaten) — как везде в UI:
+  // иначе покемон 15+2 конфеты (17 на экране) проходил в зону новичков.
   if (locId === 'goldenrodCity_trainingGrounds' && state.myTeam.length > 0) {
-    const maxLvl = Math.max(...state.myTeam.map((m: any) => m.baseLevel || 0));
+    const maxLvl = Math.max(...state.myTeam.map((m: any) => (m.baseLevel || 0) + (m.candiesEaten || 0)));
     if (maxLvl > 15) {
       state.currentLocationId = 'goldenrodCity';
       locId = 'goldenrodCity';

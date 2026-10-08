@@ -2990,7 +2990,12 @@ async function useMove(moveIndex) {
 
   // ═══ 3. ASSAULT VEST ═══
   // Не позволяет использовать статус-атаки (без power)
-  const power = move.power;
+  // Knock Off: ×1.5 к силе, если у цели есть предмет (канон; сам предмет
+  // снимается ниже, после урона — блок KNOCK OFF).
+  let power = move.power;
+  if ((move.name === 'knock-off' || move.name === 'knockoff') && S.activeWild?.heldItem) {
+    power = Math.floor(power * 1.5);
+  }
   if (!power && S.activePlayerMon.heldItem === 'assaultVest') {
     appendToLog('Штурмовой жилет не позволяет использовать статус-атаки!');
     return;
@@ -3535,6 +3540,15 @@ async function useMove(moveIndex) {
       updateWildHpUI();
     }
 
+    // Knock Off игрока — сбивает предмет дикого (канон: ×1.5 уже учтены выше).
+    // Раньше атака вообще не была реализована: била как обычная, предмет оставался.
+    if (move.name === 'knock-off' || move.name === 'knockoff') {
+      if (S.activeWild?.heldItem) {
+        appendToLog(`${S.activeWild.name} лишается предмета!`, false, 'system');
+        S.activeWild.heldItem = null;
+      }
+    }
+
     updateWildHpUI();
 
     // Итог по многоударной атаке. Для одиночного удара строка уже напечатана
@@ -4040,7 +4054,9 @@ async function runEnemyTurnBody() {
     await finishEnemyTurn();
     return;
   }
-  const power = chosenMove.power;
+  const power = (chosenMove.name === 'knock-off' || chosenMove.name === 'knockoff') && S.activePlayerMon?.heldItem
+    ? Math.floor(chosenMove.power * 1.5)  // Knock Off: ×1.5 если у цели есть предмет (канон)
+    : chosenMove.power;
 
   // ═══ 5. СТАТУС-АТАКА ВРАГА (без урона) ═══
   if (!power) {
@@ -4163,7 +4179,6 @@ async function runEnemyTurnBody() {
         if (S.activeWild.heldItem === 'bigRoot') heal = Math.floor(heal * 1.3);
         if (heal > 0) {
           S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
-          updateWildHpUI();
         }
       } else {
         const rPct = Math.abs(chosenMove.meta.drain) / 100;
@@ -4271,6 +4286,14 @@ async function runEnemyTurnBody() {
         S.activePlayerMon.currentHp = 1;
         appendToLog(`Ложный Удар оставляет ${S.activePlayerMon.apiData.name} 1 HP!`, false, 'system');
         updatePlayerHpUI();
+      }
+    }
+
+    // Knock Off врага — сбивает предмет игрока (канон: ×1.5 учтены в power выше).
+    if (chosenMove.name === 'knock-off' || chosenMove.name === 'knockoff') {
+      if (S.activePlayerMon?.heldItem) {
+        appendToLog(`${S.activePlayerMon.apiData.name} лишается предмета!`, false, 'system');
+        S.activePlayerMon.heldItem = null;
       }
     }
 
