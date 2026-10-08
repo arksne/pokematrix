@@ -314,7 +314,46 @@ export function initTradeSocket() {
       }
       state.pvpMyTurn = true;
       updatePvPUI();
-      if (state.pvpMyMon && state.pvpMyMon.currentHp <= 0) endPvP(false);
+      // Синхронизация HP: атакующий иначе не узнает о нокауте (mon_data
+      // шлётся один раз при старте) и вечно ждёт чужого хода.
+      const fainted = !!state.pvpMyMon && state.pvpMyMon.currentHp <= 0;
+      if (state.socket && state.pvpBattleId) {
+        state.socket.emit('pvp_action', {
+          battleId: state.pvpBattleId,
+          action: {
+            type: 'hp_update',
+            hp: state.pvpMyMon ? state.pvpMyMon.currentHp : 0,
+            maxHp: state.pvpMyMon ? state.pvpMyMon.maxHp : 1,
+            fainted,
+          },
+        });
+        if (fainted) {
+          state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: { type: 'fainted' } });
+        }
+      }
+      if (fainted) endPvP(false);
+    }
+    if (action.type === 'hp_update') {
+      // Живой бар оппонента + конец боя: оппонент упал — победа.
+      const oppHpEl = document.getElementById('pvp-opp-hp');
+      const oppHpFill = document.getElementById('pvp-opp-hp-fill');
+      if (typeof action.hp === 'number' && typeof action.maxHp === 'number' && action.maxHp > 0) {
+        if (oppHpEl) oppHpEl.textContent = `${action.hp}/${action.maxHp}`;
+        if (oppHpFill) oppHpFill.style.width = `${Math.max(0, (action.hp / action.maxHp) * 100)}%`;
+      }
+      if (action.fainted) {
+        if (state.pvpOppMon) state.pvpOppMon.currentHp = 0;
+        endPvP(true);
+      }
+      return;
+    }
+    if (action.type === 'fainted') {
+      // Оппонент упал — победа (награда придёт через pvp_reward / pvp_end).
+      if (state.pvpOppMon) state.pvpOppMon.currentHp = 0;
+      const oppHpEl = document.getElementById('pvp-opp-hp');
+      if (oppHpEl) oppHpEl.textContent = '0 (нокаут)';
+      endPvP(true);
+      return;
     }
     if (action.type === 'surrender') {
       showToast('🏆 Соперник сдался! Победа!', false);
@@ -325,6 +364,12 @@ export function initTradeSocket() {
       autoSave();
     }
     if (action.type === 'win' || action.type === 'lose') {
+      // 'lose' от оппонента = ОН проиграл → победили мы (награда уже выдана
+      // сервером через pvp_reward при сеттле его pvp_end). 'win' в свой адрес
+      // в норме не приходит (бой удалён первым pvp_end), но закрываемся тоже.
+      if (action.type === 'lose') {
+        showToast('🏆 Соперник повержен! Победа!', false);
+      }
       const pvpModal = document.getElementById('pvp-modal');
       if (pvpModal) pvpModal.style.display = 'none';
       state.pvpBattleId = null;

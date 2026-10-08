@@ -83,6 +83,60 @@ const sockB = await connect(tokenB, 'B');
   }
 }
 
+// ── E5: нокаут в PvP виден обеим сторонам, награда доходит (L4) ──
+// Протокол: A бьёт → B присылает hp_update{fainted} + fainted → A видит
+// победу; B шлёт pvp_end{lose} → сервер сеттлит победу A (+500 + pvp_reward).
+{
+  const tA = await login(111000011, 'pvp_e5a');
+  const tB = await login(111000012, 'pvp_e5b');
+  const sA = await connect(tA, 'EA');
+  const sB = await connect(tB, 'EB');
+
+  const chRecv = onceEvent(sB, 'pvp_challenge_received', 3000);
+  sA.emit('pvp_challenge', 111000012);
+  const ch = await chRecv;
+  const stA = onceEvent(sA, 'pvp_start', 4000);
+  const stB = onceEvent(sB, 'pvp_start', 4000);
+  sB.emit('pvp_accept', 111000011);
+  const [evA, evB] = await Promise.all([stA, stB]);
+  const bidA = evA?.battleId;
+  const bidB = evB?.battleId;
+  const sameBattle = !!bidA && bidA === bidB;
+
+  let hpSyncOk = false;
+  let faintedOk = false;
+  let rewardOk = false;
+  if (sameBattle) {
+    // A бьёт как настоящий клиент (поле lvl, dmg в допуске: lvl5/atk60/power40)
+    const atkRecv = onceEvent(sB, 'pvp_opponent_action', 4000);
+    sA.emit('pvp_action', { battleId: bidA, action: { type: 'attack', moveName: 'tackle', dmg: 8, crit: false, lvl: 5, atk: 60, power: 40 } });
+    const atk = await atkRecv;
+    // B отвечает hp_update с нокаутом + fainted
+    if (atk && atk.type === 'attack') {
+      const hpRecv = onceEvent(sA, 'pvp_opponent_action', 4000);
+      sB.emit('pvp_action', { battleId: bidB, action: { type: 'hp_update', hp: 0, maxHp: 50, fainted: true } });
+      const hp = await hpRecv;
+      hpSyncOk = !!hp && hp.type === 'hp_update' && hp.fainted === true;
+      const faintRecv = onceEvent(sA, 'pvp_opponent_action', 4000);
+      sB.emit('pvp_action', { battleId: bidB, action: { type: 'fainted' } });
+      const faint = await faintRecv;
+      faintedOk = !!faint && faint.type === 'fainted';
+    }
+    // B сдаёт бой поражением → сервер должен наградить A
+    const rewardRecv = onceEvent(sA, 'pvp_reward', 5000);
+    sB.emit('pvp_end', { battleId: bidB, action: { type: 'lose' } });
+    const reward = await rewardRecv;
+    rewardOk = !!reward && reward.money === 500;
+  }
+  check('E5', 'PvP: нокаут синхронизируется (hp_update + fainted)', sameBattle && hpSyncOk && faintedOk,
+    !sameBattle ? 'бой не создался' : `hp_update: ${hpSyncOk}, fainted: ${faintedOk}`);
+  check('E5b', 'PvP: победитель получает +500 через чужой lose', rewardOk,
+    rewardOk ? '+500 дошло' : 'pvp_reward не пришёл');
+
+  sA.close();
+  sB.close();
+}
+
 // ══════════════════════ Трейд ══════════════════════
 {
   const t1 = await login(222000001, 'trade_1');

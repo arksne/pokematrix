@@ -191,7 +191,7 @@ export function initPvP(io: Server, socket: Socket) {
     battle.lastActorSocketId = socket.id;
 
     // ── Валидация типа действия ──
-    const validTypes = ['attack', 'switch', 'surrender', 'mon_data', 'fainted'];
+    const validTypes = ['attack', 'switch', 'surrender', 'mon_data', 'fainted', 'hp_update'];
     if (data.action?.type && !validTypes.includes(data.action.type)) {
       console.warn(`[pvp] Invalid action type from ${socket.id}: ${data.action.type}`);
       return;
@@ -205,7 +205,10 @@ export function initPvP(io: Server, socket: Socket) {
     const action = data.action;
     if (action?.type === 'attack' && typeof action.dmg === 'number') {
       const myUserId = socket.data.user?.tgId;
-      const myLevel = clampInt(action.level, 1, 100);
+      // Клиент шлёт `lvl` (pvp-core.ts doPvPAttack); читаем оба имени, иначе
+      // уровень падал в 1 и ЛЮБОЙ урон >6 отбивался как читерский — настоящие
+      // бои висли: оппонент не получал ход, оба ждали «хода противника».
+      const myLevel = clampInt(action.lvl ?? action.level, 1, 100);
       const power = clampInt(action.power, 1, 250);
       // Атака берётся из сейма отправителя; при недоступности — консервативный минимум.
       const atk = clampInt(action.atk, 1, 1000);
@@ -231,6 +234,15 @@ export function initPvP(io: Server, socket: Socket) {
   });
 
   // ── pvp_end ──
+  // Сеттлит ОБЕ стороны по ПЕРВОМУ pvp_end (бой уже удалён выше, повторный
+  // pvp_end второго участника никого не найдёт и молча выйдет — двойных
+  // наград нет).
+  //
+  // Раньше награждался только отправитель 'win', а 'lose' проигравшего никого
+  // не награждал: победитель, добивший оппонента, не узнавал о конце боя
+  // (HP не синхронизировались) и вечно ждал чужого хода, а награда не приходила.
+  // Теперь: 'win' → победитель отправитель; 'lose'/'surrender' → победитель
+  // оппонент. Рейтинг пишется обоим, +500 и pvp_reward — победителю.
   socket.on('pvp_end', async (data: { battleId?: unknown; action?: any }) => {
     const battleId = data?.battleId;
     const found = getBattleForSocket(battleId, socket.id);
@@ -243,9 +255,11 @@ export function initPvP(io: Server, socket: Socket) {
     activeBattles.delete(battleId);
 
     const actionType = data?.action?.type;
-    // surrender — это ПОРАЖЕНИЕ отправителя. Раньше он трактовался как победа
-    // наравне с 'win', то есть можно было сдаться и получить +500 кредитов.
+    // surrender/lose — это ПОРАЖЕНИЕ отправителя (победитель — оппонент).
+    // Раньше surrender трактовался как победа наравне с 'win', то есть можно
+    // было сдаться и получить +500 кредитов.
     const senderWon = actionType === 'win';
+    const winnerIsSender = senderWon;
 
     const opponentSocketId = socket.id === battle.playerA ? battle.playerB : battle.playerA;
     const opponentSocket = io.sockets.sockets.get(opponentSocketId);
@@ -257,58 +271,54 @@ export function initPvP(io: Server, socket: Socket) {
 
     try {
       const db = getDb();
-      const senderUserId = socket.data.user?.userId;
-      // Оппонента берём из боя, а не из сокета: сокет мог уже отвалиться.
-      const oppUserId = battle.userA === socket.data.user?.tgId ? battle.userB : battle.userA;
-      const oppRow = oppUserId
-        ? (await db.select({ id: users.id }).from(users).where(eq(users.tg_id, oppUserId)).limit(1))[0]
-        : undefined;
-      const oppDbId = oppRow?.id;
+      // tgId обоих — из боя (сокет оппонента мог уже отвалиться).
+      const senderTg = socket.data.user?.tgId;
+      const oppTg = battle.userA === senderTg ? battle.userB : battle.userA;
+      const winnerTg = winnerIsSender ? senderTg : oppTg;
+      const loserTg = winnerIsSender ? oppTg : senderTg;
 
-      if (senderUserId) {
-        // ── Server-authoritative рейтинг ──
-        const senderDelta = senderWon ? 10 : -5;
-        await updateOrCreateRating(db, senderUserId, senderDelta, senderWon);
+      const rows = await db.select({ id: users.id, tg: users.tg_id }).from(users);
+      const byTg = new Map(rows.map((r: any) => [r.tg, r.id]));
+      const wId = winnerTg ? byTg.get(winnerTg) : undefined;
+      const lId = loserTg ? byTg.get(loserTg) : undefined;
 
-        if (oppDbId) {
-          const oppWon = !senderWon;
-          const oppDelta = oppWon ? 10 : -5;
-          await updateOrCreateRating(db, oppDbId, oppDelta, oppWon);
-        }
+      // ── Server-authoritative рейтинг обоим ──
+      if (wId) await updateOrCreateRating(db, wId, 10, true);
+      if (lId) await updateOrCreateRating(db, lId, -5, false);
 
-        // ── Server-authoritative награда (+500 победителю) ──
-        if (senderWon) {
-          // Раньше чтение и запись save_data шли без транзакции: два
-          // одновременных pvp_end перечитывали один и тот же сейв, и вторая
-          // запись затирала первую вместе с её кредитами. Строка пользователя
-          // теперь блокируется на всё время транзакции, и economy делает то же
-          // самое, поэтому клиентский POST /save между чтением и записью тоже
-          // не может потеряться.
-          await db.transaction(async (tx) => {
-            const userRow = (await tx.select({ id: users.id, save_data: users.save_data })
-              .from(users)
-              .where(eq(users.id, senderUserId))
-              .for('update')
-              .limit(1))[0];
+      // ── Server-authoritative награда (+500 победителю) ──
+      if (wId) {
+        // Раньше чтение и запись save_data шли без транзакции: два
+        // одновременных pvp_end перечитывали один и тот же сейв, и вторая
+        // запись затирала первую вместе с её кредитами. Строка пользователя
+        // теперь блокируется на всё время транзакции, и economy делает то же
+        // самое, поэтому клиентский POST /save между чтением и записью тоже
+        // не может потеряться.
+        await db.transaction(async (tx) => {
+          const userRow = (await tx.select({ id: users.id, save_data: users.save_data })
+            .from(users)
+            .where(eq(users.id, wId))
+            .for('update')
+            .limit(1))[0];
 
-            if (!userRow) return;
+          if (!userRow) return;
 
-            const sd: any = parseSaveStrict(userRow.save_data, senderUserId);
-            if (!sd.inventory) sd.inventory = {};
-            sd.inventory.credit = (sd.inventory.credit || 0) + 500;
+          const sd: any = parseSaveStrict(userRow.save_data, wId);
+          if (!sd.inventory) sd.inventory = {};
+          sd.inventory.credit = (sd.inventory.credit || 0) + 500;
 
-            await tx.update(users)
-              .set({
-                save_data: JSON.stringify(stampSave(sd)),
-                money: sd.inventory.credit || 0,
-                save_version: sql`${users.save_version} + 1`,
-              })
-              .where(eq(users.id, senderUserId));
+          await tx.update(users)
+            .set({
+              save_data: JSON.stringify(stampSave(sd)),
+              money: sd.inventory.credit || 0,
+              save_version: sql`${users.save_version} + 1`,
+            })
+            .where(eq(users.id, wId));
 
-            // Уведомляем победителя о награде
-            socket.emit('pvp_reward', { money: 500 });
-          });
-        }
+          // Уведомляем победителя о награде (если онлайн)
+          const winnerSock = winnerIsSender ? socket : opponentSocket;
+          winnerSock?.emit('pvp_reward', { money: 500 });
+        });
       }
     } catch (e) {
       console.error('[pvp] rating/reward save error:', e);

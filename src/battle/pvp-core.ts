@@ -62,11 +62,11 @@ export function showPvpPanel() {
  * ОТКУДА ВЫЗЫВАЕТСЯ: из обработчика socket → 'pvp_start'
  */
 export function openPvPArena(battleId, opponent, myFirst) {
+  const alive = state.myTeam.find(m => m.currentHp > 0);
+  if (!alive) { showToast('Нет живых покемонов!', true); return; }
   state.pvpBattleId = battleId;
   state.pvpOpponentName = opponent;
   state.pvpMyTurn = myFirst;
-  const alive = state.myTeam.find(m => m.currentHp > 0);
-  if (!alive) { showToast('Нет живых покемонов!', true); return; }
   state.pvpMyMon = alive;
 
   // ── Создание модалки (если ещё не создана) ──
