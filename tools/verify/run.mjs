@@ -452,6 +452,12 @@ async function main() {
           // PGlite отдаёт одно соединение по pg-wire. С пулом больше одного
           // параллельные запросы рвали его с ECONNRESET, и чат отвечал 500.
           DB_POOL_MAX: '1',
+          // Стенд: десятки регистраций/сейвов с одного IP (127.0.0.1) за минуту.
+          // Продовые лимиты (30 auth / 60 write в минуту) душили бы сам стенд 429.
+          RATE_LIMIT_AUTH: '1000',
+          RATE_LIMIT_WRITE: '1000',
+          RATE_LIMIT_LOG: '1000',
+          RATE_LIMIT_PROXY: '1000',
 
     },
     stdio: ['ignore', out, err],
