@@ -28,7 +28,8 @@ export const state: Record<string, any> = {
   // ── Локация / Навигация ──────────────────────────────────
   currentLocationId: 'goldenrodCity',  // ID текущей локации (где игрок сейчас)
   currentRegion: 'johto',          // Регион (kanto, johto)
-  lastLocation: null,              // Последняя посещённая локация (для возврата)
+  lastLocation: null,              // Последняя посещённая локация (кнопка ← слева)
+  locForward: null as string | null,  // Вперёд после «назад» (кнопка → справа)
   visitedLocations: new Set<string>(), // Set посещённых локаций (для карты/путешествий)
   isDaytime: true,                 // bool: день или ночь (влияет на покемонов)
   moveTypeCache: new Map<string, string>(), // Кеш: название атаки → её тип

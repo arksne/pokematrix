@@ -96,6 +96,17 @@ async function getBattleCore() {
 // Ключ для sessionStorage, где кэшируется конфигурация дропов с сервера
 export const DROP_CONFIG_CACHE_KEY = 'pokematrix_drop_config_cache';
 
+// ── navStep: чистая история навигации ←/→ (для тестов и renderLocation) ──
+export function navStep(
+  current: string | null, last: string | null, fwd: string | null,
+  target: string, via?: 'back' | 'forward',
+): { current: string; last: string | null; fwd: string | null } {
+  if (via === 'back') return { current: target, last, fwd: current };
+  if (via === 'forward') return { current: target, last, fwd };
+  if (current && current !== target) return { current: target, last: current, fwd: null };
+  return { current: target, last, fwd };
+}
+
 // ── getLocation: поиск локации по ID во всех регионах ───
 // Принимает locId — строковый ID локации (например, 'pallet-town')
 // Возвращает объект локации или null если не найдена
@@ -333,7 +344,7 @@ export function setBeforeRenderLocation(fn: (locId: string) => void) {
 // Строит всю панель локации: фон, описание, погода, кнопки действий,
 // NPC, навигация, транспорт, дикие покемоны
 // Принимает locId — ID локации
-export let renderLocation = function(locId: any) {
+export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   // ── Гейт: тренировочная зона только для новичков ──
   //
   // Раньше здесь стоял просто `return`. Из-за этого игрок, чей покемон дорог
@@ -367,11 +378,14 @@ export let renderLocation = function(locId: any) {
   // ── Пре-рендер хук (если зарегистрирован) ──
   if (_beforeRenderLocation) _beforeRenderLocation(locId);
 
-  // ── Сохраняем предыдущую локацию для навигации "Назад" ──
-  if (state.currentLocationId && state.currentLocationId !== locId) {
-    state.lastLocation = state.currentLocationId;
-  }
-  state.currentLocationId = locId;           // Устанавливаем текущую локацию
+  // ── История навигации: ← слева (назад), → справа (вперёд) ──
+  // Обычный переход: назад = откуда пришли, вперёд сбрасывается.
+  // «Назад»: вперёд = где были, lastLocation не трогаем.
+  // «Вперёд»: ничего не трогаем (возврат по уже записанному).
+  const nav = navStep(state.currentLocationId, state.lastLocation, (state as any).locForward, locId, via);
+  state.lastLocation = nav.last;
+  (state as any).locForward = nav.fwd;
+  state.currentLocationId = nav.current;   // Устанавливаем текущую локацию
 
   const loc = getLocation(locId);             // Получаем данные локации
   if (!loc) return;                           // Если локация не найдена — выходим
@@ -720,22 +734,27 @@ export let renderLocation = function(locId: any) {
     }
   }
 
-  // ── Кнопка "Назад" (F3): возврат к предыдущей локации ──
-  // Раньше была только для сервисных локаций и "съедала" lastLocation
-  // (обнуляла после возврата). Теперь — универсальная для любой локации:
-  // renderLocation сам обновляет lastLocation при переходе, поэтому кнопка
-  // работает как переключатель туда/обратно. Кнопки «➔ Название» ниже — без изменений.
-  if (state.lastLocation && state.lastLocation !== locId) {
-    const backLoc = getLocation(state.lastLocation);
-    if (backLoc) {
-      const btnBack = document.createElement('button');
-      btnBack.id = 'btn-back';
-      btnBack.className = 'btn-nav';
-      btnBack.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:var(--tma-accent)';
-      btnBack.textContent = `↩ Назад: ${backLoc.name}`;
-      btnBack.onclick = () => { renderLocation(state.lastLocation); };
-      navContainer.prepend(btnBack);
-    }
+  // ── Навигация ←/→: прошедшая слева, вперёд справа ──
+  // Вместо одной кнопки «Назад»: две стрелки по краям.
+  {
+    const row = document.createElement('div');
+    row.style.cssText = 'grid-column:1/-1;display:flex;gap:4px;';
+    const mkBtn = (label: string, target: string | null, dir: 'back' | 'forward') => {
+      const b = document.createElement('button');
+      b.className = 'btn-nav';
+      b.style.cssText = 'flex:1;min-width:fit-content;padding:6px 10px;font-size:13px;';
+      b.textContent = label;
+      if (!target) { (b as HTMLButtonElement).disabled = true; b.style.opacity = '0.4'; }
+      else b.onclick = () => { renderLocation(target, dir); };
+      return b;
+    };
+    const backId = (state.lastLocation && state.lastLocation !== locId) ? state.lastLocation : null;
+    const backLoc = backId ? getLocation(backId) : null;
+    const fwdId = (state as any).locForward || null;
+    const fwdLoc = fwdId ? getLocation(fwdId) : null;
+    row.appendChild(mkBtn(backLoc ? `← ${backLoc.name}` : '←', backId, 'back'));
+    row.appendChild(mkBtn(fwdLoc ? `${fwdLoc.name} →` : '→', fwdId, 'forward'));
+    navContainer.prepend(row);
   }
 
   // ── Кнопки транспорта (межрегиональные хаб) ──
