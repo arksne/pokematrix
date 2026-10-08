@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLayout, iconFor, kindFor, isMapLocked, isServiceLoc, serviceSubsOf } from '../map.js';
+import { computeLayout, iconFor, kindFor, isMapLocked, isServiceLoc, serviceSubsOf, canTravelTo } from '../map.js';
 import { REGIONS } from '../../data/regions.js';
 
 /**
@@ -143,5 +143,22 @@ describe('граф без сервисов (чистка каши)', () => {
       ['celadonCity_pokecenter', 'celadonCity_pokemart'].sort(),
     );
     expect(serviceSubsOf(locs, 'route1')).toEqual([]);
+  });
+});
+
+describe('магии нет: переход только по связям', () => {
+  it('сосед — можно, дальняя — нельзя', () => {
+    expect(canTravelTo('celadonCity', 'route7')).toBe(true);
+    expect(canTravelTo('celadonCity', 'pewterCity')).toBe(false);
+  });
+
+  it('в свой маркет/центр из города — можно', () => {
+    expect(canTravelTo('celadonCity', 'celadonCity_pokemart')).toBe(true);
+    expect(canTravelTo('celadonCity', 'celadonCity_pokecenter')).toBe(true);
+  });
+
+  it('без текущей позиции и на месте — можно', () => {
+    expect(canTravelTo(null, 'pewterCity')).toBe(true);
+    expect(canTravelTo('celadonCity', 'celadonCity')).toBe(true);
   });
 });

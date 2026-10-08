@@ -127,8 +127,8 @@ export interface MapLayout {
   width: number;
   height: number;
 }
-const H_SPACING = 190;
-const V_SPACING = 66;
+const H_SPACING = 230;
+const V_SPACING = 84;
 const PAD_X = 100;
 const PAD_Y = 56;
 
@@ -194,9 +194,17 @@ export function computeLayout(regionKey: string): MapLayout {
 }
 
 // ── travelToLoc: клик по узлу/строке — переход ──────────
+// Магии нет: идти можно только в СВЯЗАННУЮ локацию (links текущей).
+// Далекая точка — инфо-модалка + подсказка идти по связям.
 function travelToLoc(locId: string) {
   if (isMapLocked(locId)) {
     showToast('Сначала пройдите обучение у Профессора Оука!', true);
+    return;
+  }
+  const current = state.currentLocationId as string | null;
+  if (current && current !== locId && !canTravelTo(current, locId)) {
+    showToast('Слишком далеко — идите по связям от текущей локации.', true);
+    showLocationInfo(locId);
     return;
   }
   selectedLoc = locId;
@@ -204,6 +212,19 @@ function travelToLoc(locId: string) {
   try { onTravelTo?.(locId); }
   catch (e) { console.error('[map] переход не удался:', e); }
   refreshGraphState();
+}
+
+function findLocLinks(locId: string): string[] {
+  for (const region of Object.values(REGIONS) as any[]) {
+    if (region.locations?.[locId]) return region.locations[locId].links || [];
+  }
+  return [];
+}
+
+/** Чистая проверка: можно ли идти из current в target (только по связям). */
+export function canTravelTo(currentId: string | null, targetId: string): boolean {
+  if (!currentId || currentId === targetId) return true;
+  return findLocLinks(currentId).includes(targetId);
 }
 
 // ── refreshGraphState: лёгкое обновление подсветки ──────
@@ -240,7 +261,7 @@ function renderGraph(regionKey: string) {
   svg.setAttribute('class', 'map-svg');
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', `Карта региона ${(REGIONS as any)[regionKey]?.name ?? regionKey}`);
-  (svg as any).style.cssText = 'width:100%;height:auto;display:block;background:rgba(0,0,0,0.3);border-radius:12px;';
+  (svg as any).style.cssText = 'min-width:760px;height:auto;display:block;background:rgba(0,0,0,0.3);border-radius:12px;';
 
   // Маркер стрелки для направленных связей
   const defs = document.createElementNS(NS, 'defs');
@@ -517,8 +538,11 @@ export function openMap() {
   });
 
   // ── Граф региона (SVG) ──
+  // Горизонтальный скролл вместо ужатия: иначе 90+ узлов сплющиваются
+  // в нечитаемую кашу. Узлы фиксированного размера, подписи читаемы.
   const graphWrap = document.createElement('div');
   graphWrap.id = 'map-canvas-wrap';
+  graphWrap.style.cssText = 'overflow-x:auto;overflow-y:hidden;max-width:100%;';
   container.appendChild(graphWrap);
 
   // ── Список-индекс локаций ──
