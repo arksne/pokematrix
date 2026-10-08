@@ -624,7 +624,8 @@ export let renderLocation = function(locId: any) {
       const isTraining = linkId.includes('trainingGrounds');
       btn.style.cssText = `flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:${isTraining ? '#34c759' : '#555'}`;
       const icon = isTraining ? '🥋' : '🏠';
-      const label = isTraining ? `${loc.name} (до 15 ур.)` : loc.name;
+      // Имя ПОДЛОКАЦИИ, а не текущего города (иначе все кнопки «Голденрод-Сити»)
+      const label = isTraining ? `${linkLoc.name} (до 15 ур.)` : linkLoc.name;
       btn.innerHTML = `<span>${icon} ${label}</span>`;
       btn.onclick = () => {
         if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
