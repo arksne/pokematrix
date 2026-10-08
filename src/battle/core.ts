@@ -56,7 +56,7 @@ import { selectEnemyMove } from './ai.js';                               // AI: 
 import { store } from '../game/store.js';
 import { checkAchievement } from '../ui/achievements.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
 import { state } from '../game/state.js';                                 // state — глобальное состояние игры (инвентарь, команда, локация)
-import { generateUID, getTrainerId } from '../utils/state.js';           // generateUID — уникальный ID для пойманного покемона; getTrainerId — ID тренера
+import { generateUID, getTrainerId, LEGENDARY_SET } from '../utils/state.js';           // generateUID — уникальный ID для пойманного покемона; getTrainerId — ID тренера
 import { itemCategory } from '../utils/items.js';                        // itemCategory(id) → категория предмета (healing, ball, statusCure...)
 import { getHeldItemName } from '../ui/inventory.js';                    // getHeldItemName — русское название предмета для сообщений
 import { WEATHER_ICONS, WEATHER_NAMES, getDailyWeather } from '../data/weather.js'; // Погода: конфиги, иконки, имена, дневная погода по локации, множитель урона
@@ -2198,9 +2198,20 @@ async function startHunt(encountersArray) {
     S.activeWild = await fetchPokeAPI(`pokemon/${pkmName.toLowerCase()}`);
     GS.pokedexSeen.add(S.activeWild.name);
     S.wildLvl = presetLvl || getWildLevel();
+    // Боссы секретных мест: легенды там 100 уровня (бьют ради дропа)
+    {
+      const locDef = (store.getLocation(GS.currentLocationId) as any);
+      if (locDef?.noCatch && LEGENDARY_SET.has((S.activeWild.name || '').toLowerCase())) {
+        S.wildLvl = locDef.bossLvl || 100;
+      }
+    }
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.activeWild.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+    // Неловимые: супер-редкие (легенды/мифики) + локации с noCatch (секретные
+    // места силы). Таких бьют ради дропа, в болл не взять.
+    S.activeWild.uncatchable = LEGENDARY_SET.has((S.activeWild.name || '').toLowerCase())
+      || !!(store.getLocation(GS.currentLocationId) as any)?.noCatch;
   // Шайни: базовый шанс 1/1024 (спека 1.5.1), shiny_boost (админка) — ×10
   const shinyRate = (1 / 1024) * (GS.serverFeatures?.shiny_boost ? 10 : 1);
   S.activeWild.isShiny = (Math.random() < shinyRate);
@@ -4487,6 +4498,12 @@ function initEncounterEvents() {
         return appendToLog('Нельзя ловить в бою с лидером!');
       }
       if (ballCfg.qty <= 0) return showToast(`У вас нет ${ballCfg.label}ов!`, true);
+
+      // Неловимый (легенда или noCatch-локация): болл не тратим, сразу говорим
+      if (S.activeWild.uncatchable) {
+        appendToLog(`${S.activeWild.name} нельзя поймать! Его можно только победить ради дропа.`, false, 'system');
+        return;
+      }
 
       ballCfg.dec(); // Уменьшаем количество в инвентаре
       store.updateInventoryDisplay();

@@ -36,6 +36,7 @@
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 import { REGIONS } from '../data/regions.js';
 import { state } from '../game/state.js';
+import { isQuestActive } from '../data/quest-drops.js';
 import { showToast } from '../utils/dom.js';
 
 // ── СОСТОЯНИЕ МОДУЛЯ И CALLBACK'И ────────────────────────
@@ -207,6 +208,15 @@ function travelToLoc(locId: string) {
     showLocationInfo(locId);
     return;
   }
+  // Квест-гейт: точка открывается только взятым/пройденным квестом
+  {
+    const gate = findLocField(locId, 'requiresQuest');
+    if (gate && !isQuestActive(gate)) {
+      showToast('Сюда пускают только по квесту. Ищите квестодателя!', true);
+      showLocationInfo(locId);
+      return;
+    }
+  }
   selectedLoc = locId;
   exploredLocs.add(locId);
   try { onTravelTo?.(locId); }
@@ -219,6 +229,13 @@ function findLocLinks(locId: string): string[] {
     if (region.locations?.[locId]) return region.locations[locId].links || [];
   }
   return [];
+}
+
+function findLocField(locId: string, field: string): any {
+  for (const region of Object.values(REGIONS) as any[]) {
+    if (region.locations?.[locId]) return region.locations[locId]?.[field];
+  }
+  return undefined;
 }
 
 /** Чистая проверка: можно ли идти из current в target (только по связям). */

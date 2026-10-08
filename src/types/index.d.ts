@@ -46,6 +46,12 @@ export interface LocationDef {
   shopType?: string;
   wildMinLvl?: number;
   wildMaxLvl?: number;
+  /** Ловить здесь нельзя (секретные места силы) */
+  noCatch?: boolean;
+  /** Уровень боссов-локации (легенды на noCatch-локах) */
+  bossLvl?: number;
+  /** Локация открывается только взятым/пройденным квестом (id) */
+  requiresQuest?: string;
 }
 
 /** Регион */

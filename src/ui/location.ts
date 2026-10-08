@@ -38,7 +38,7 @@ import { REGIONS } from '../data/regions.js';       // Все регионы с 
 import { gymLeaders } from '../data/gyms.js';
 // NPC_DATA — объект { npcId: { name, sprite, location, dialog, ... } }
 import { NPC_DATA } from '../data/npc.js';
-import { activeQuestIds, rollQuestDrops } from '../data/quest-drops.js';  // I3: дроп только в квесте
+import { activeQuestIds, rollQuestDrops, isQuestActive } from '../data/quest-drops.js';  // I3: дроп и гейты по квестам
 // MONSTER_DROP_TABLE — таблица дропов: { speciesName: [{item, chance, qty}, ...] }
 import { MONSTER_DROP_TABLE } from '../data/drops.js';
 // ITEMS — массив всех предметов игры
@@ -352,6 +352,15 @@ export let renderLocation = function(locId: any) {
       state.currentLocationId = 'goldenrodCity';
       locId = 'goldenrodCity';
       showToast('Тренировочная зона только для новичков (покемоны до 15 уровня) — вы в Голденроде', true);
+    }
+  }
+
+  // ── Квест-гейт: локация открывается только взятым/пройденным квестом ──
+  {
+    const gate = (getLocation(locId) as any)?.requiresQuest;
+    if (gate && !isQuestActive(gate)) {
+      showToast('Сюда пускают только по квесту. Ищите квестодателя!', true);
+      return state.currentLocationId;
     }
   }
 
