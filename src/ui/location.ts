@@ -38,6 +38,7 @@ import { REGIONS } from '../data/regions.js';       // Все регионы с 
 import { gymLeaders } from '../data/gyms.js';
 // NPC_DATA — объект { npcId: { name, sprite, location, dialog, ... } }
 import { NPC_DATA } from '../data/npc.js';
+import { activeQuestIds, rollQuestDrops } from '../data/quest-drops.js';  // I3: дроп только в квесте
 // MONSTER_DROP_TABLE — таблица дропов: { speciesName: [{item, chance, qty}, ...] }
 import { MONSTER_DROP_TABLE } from '../data/drops.js';
 // ITEMS — массив всех предметов игры
@@ -853,6 +854,11 @@ export function processMonsterDrop(pokemonName: string) {
     if (drop100 || Math.random() < entry.chance) {
       drops.push({ item: entry.item, qty: entry.qty });
     }
+  }
+
+  // I3: квестовые предметы — только пока взят нужный квест
+  for (const qd of rollQuestDrops(activeQuestIds(), null, drop100 ? () => 0 : Math.random)) {
+    drops.push(qd);
   }
 
   return drops;
