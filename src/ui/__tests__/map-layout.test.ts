@@ -46,10 +46,10 @@ describe('computeLayout', () => {
       }
     });
 
-    it(`${regionKey}: детерминирована (два вызова совпадают)`, () => {
-      expect(computeLayout(regionKey)).toEqual(computeLayout(regionKey));
-    });
-  }
+  it(`${regionKey}: детерминирована (два вызова совпадают)`, () => {
+    expect(computeLayout(regionKey)).toEqual(computeLayout(regionKey));
+  });
+}
 });
 
 describe('iconFor/kindFor', () => {
@@ -74,5 +74,43 @@ describe('isMapLocked', () => {
     expect(isMapLocked('pokecenter')).toBe(false);
     expect(isMapLocked('palletTown')).toBe(true);
     expect(isMapLocked('pewterStadium')).toBe(true);
+  });
+});
+
+describe('F4: подлокации сервисов у каждого города', () => {
+  const cities = ['celadonCity', 'ceruleanCity', 'fuchsiaCity', 'palletTown',
+    'vermilionCity', 'viridianCity', 'pewterCity', 'lavenderTown', 'saffronCity',
+    'blackthornCity', 'cherrygroveCity', 'cianwoodCity', 'ecruteakCity',
+    'newBarkTown', 'olivineCity', 'violetCity', 'azaleaTown', 'goldenrodCity',
+    'mahoganyTown'];
+  const locsOf = (regionKey: string) => (REGIONS as any)[regionKey].locations;
+  const findLoc = (id: string) => locsOf('kanto')[id] || locsOf('johto')[id];
+
+  it('у каждого города есть маркет и центр', () => {
+    for (const city of cities) {
+      expect(findLoc(`${city}_pokemart`), city).toBeTruthy();
+      expect(findLoc(`${city}_pokecenter`), city).toBeTruthy();
+    }
+  });
+
+  it('двусторонние связи город ↔ подлокации', () => {
+    for (const city of cities) {
+      const cityLinks = findLoc(city).links || [];
+      expect(cityLinks, `${city} → subs`).toEqual(
+        expect.arrayContaining([`${city}_pokemart`, `${city}_pokecenter`]),
+      );
+      for (const sub of [`${city}_pokemart`, `${city}_pokecenter`]) {
+        expect(findLoc(sub).links, `${sub} → city`).toContain(city);
+      }
+    }
+  });
+
+  it('подлокации без энкаунтеров, центр лечит', () => {
+    for (const city of cities) {
+      for (const sub of [`${city}_pokemart`, `${city}_pokecenter`]) {
+        expect(findLoc(sub).encounters).toEqual([]);
+      }
+      expect(findLoc(`${city}_pokecenter`).hasHeal).toBe(true);
+    }
   });
 });
