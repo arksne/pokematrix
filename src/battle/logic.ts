@@ -322,6 +322,11 @@ alwaysCrit = false,
     // Контратаки (L2-остаток): урон, полученный атакующим с прошлого хода.
     lastTakenDmg = undefined,
     lastTakenCat = undefined,
+    // Проход-741: заряды stockpile атакующего (spit-up).
+    stock = undefined,
+    // Проход-741: смена типа (transform/conversion/soak/...).
+    attackerTypesOverride = undefined,
+    defenderTypesOverride = undefined,
   }) {
   const parts = [];
   const power = move.power;
@@ -340,7 +345,10 @@ alwaysCrit = false,
     fixed = getFixedDamage(move, {
       attackerLevel,
       defenderCurrentHp: targetHp,
+      defenderMaxHp,
       attackerCurrentHp,
+      attackerMaxHp,
+      stock,
       lastTakenDmg,
       lastTakenCat,
     });
@@ -418,9 +426,9 @@ alwaysCrit = false,
   // 0.5, из-за чего ожог был и уроном, и дебаффом одновременно.
   let baseDmg = Math.floor((((2 * attackerLevel / 5 + 2) * power * (A / D)) / 50) + 2);
 
-  // STAB
+  // STAB (attackerTypes — оверрайд смены типа: transform/conversion/...)
   let stab = 1.0;
-  const atkTypes = attacker.apiData?.types || attacker.types || [];
+  const atkTypes = attackerTypesOverride || attacker.apiData?.types || attacker.types || [];
   atkTypes.forEach(t => {
     const tn = t.type?.name || t;
     if (tn === move.type?.name) stab = 1.5;
@@ -430,7 +438,7 @@ alwaysCrit = false,
     stab = 2.0;
   }
 
-  const typeMult = getTypeMultiplier(move.type?.name, defender.apiData?.types || defender.types || []);
+  const typeMult = getTypeMultiplier(move.type?.name, defenderTypesOverride || defender.apiData?.types || defender.types || []);
   const weatherMult = getWeatherMultiplier(move.type?.name, weather);
   const randMod = 0.85 + Math.random() * 0.15;  // Всегда случайно, даже при гарантированном крите
 

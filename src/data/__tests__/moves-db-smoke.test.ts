@@ -174,9 +174,10 @@ describe('moves_db.json: особые механики (аудит L2)', () => {
         expect(db[s].site.power, `${s}: ohko без power`).toBeNull();
       }
       if ((m.healing || 0) !== 0) {
-        // Лечение — в себя/своих. Исключения: heal-pulse и floral-healing
-        // целят 'selected-pokemon' (в сингле по канону лечили бы врага) —
-        // движок упрощает до самолечения с обеих сторон (см. отчёт L2).
+        // Лечение — в себя/своих. Исключение: heal-pulse целит
+        // 'selected-pokemon' и по канону лечит ЦЕЛЬ (в диком бою — дикого);
+        // движок так и делает, с явным логом (проход-741). floral-healing
+        // в сингле лечит себя — упрощение оставлено.
         const t = db[s].fx.target?.name;
         const ok = t === 'user' || t === 'user-and-allies'
           || ((s === 'heal-pulse' || s === 'floral-healing') && t === 'selected-pokemon');

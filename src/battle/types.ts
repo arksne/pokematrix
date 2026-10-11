@@ -137,6 +137,26 @@ playerReflectTurns: 0,
   enemyChosenMove: null,
   playerChargedMove: null,
   enemyChargedMove: null,
+  // Проход-741: поле боя и последние ходы.
+  terrain: null,
+  tailwindP: 0,
+  tailwindW: 0,
+  trickRoomTurns: 0,
+  weatherTurns: 0,
+  lastMoveUsed: null,
+  lastMoveUsedDetail: null,
+  lastPlayerMove: null,
+  lastPlayerMoveDetail: null,
+  lastWildMove: null,
+  lastWildMoveDetail: null,
+  pendingHeal: null,
+  playerActedRound: -1,
+  wildTookHit: false,
+  playerTookHit: false,
+  imprisonP: [],
+  imprisonW: [],
+  lastTakenByPlayer: null,
+  lastTakenByWild: null,
 };
 
 /** PokeAPI move data (subset used by battle system) */
@@ -272,4 +292,22 @@ export interface BattleStateData {
   // Metal Burst ({ dmg, cat } или null, если бить нечем).
   lastTakenByPlayer?: { dmg: number; cat: string | null } | null;
   lastTakenByWild?: { dmg: number; cat: string | null } | null;
+  wildTookHit?: boolean;   // дикий получал прямой урон в этом ходу (для endure)
+  playerTookHit?: boolean; // игрок получал прямой урон в этом ходу (для endure)
+  // Проход-741: поле боя и последние ходы (для copycat/mirror-move/sketch).
+  terrain?: { kind: string; turns: number } | null;
+  tailwindP?: number;   // ходы попутного ветра игрока
+  tailwindW?: number;   // ходы попутного ветра дикого/лидера
+  trickRoomTurns?: number;
+  weatherTurns?: number; // ходы вызванной погоды (0/undefined — погода локации)
+  lastMoveUsed?: string | null;      // слаг последней атаки в бою
+  lastMoveUsedDetail?: any | null;
+  lastPlayerMove?: string | null;
+  lastPlayerMoveDetail?: any | null;
+  lastWildMove?: string | null;
+  lastWildMoveDetail?: any | null;
+  pendingHeal?: 'full' | 'fullpp' | null; // healing-wish/lunar-dance для входящего
+  playerActedRound?: number; // раунд последнего хода игрока (для вражеского me-first)
+  imprisonP?: string[];  // ходы, запрещённые дикому (imprison игрока)
+  imprisonW?: string[];  // ходы, запрещённые игроку (imprison дикого)
 }
