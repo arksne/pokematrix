@@ -33,6 +33,14 @@ import { itemDef } from '../game/state.js';            // Название пр�
 import { autoSave } from '../game/save.js';              // Автосохранение
 import { renderTeamGrid } from './profile.js';          // Обновление сетки команды
 
+// ── isFirstGymWin: первая ли это победа (N4) ────
+// Значок и богатая награда (шини + предметы) — только за первую победу.
+// Реванш разрешён всегда (опыт и фан), но без значка и без награды:
+// иначе залы превращаются в ферму шини. Чистая функция для тестов.
+export function isFirstGymWin(badges: unknown, badgeName: string): boolean {
+  return Array.isArray(badges) && !badges.includes(badgeName);
+}
+
 // ── createAndGivePokemon: создать покемона через PokeAPI ────
 // Принимает:
 //   pokemonName — имя вида (например, 'charizard')

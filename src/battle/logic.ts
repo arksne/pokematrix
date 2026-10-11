@@ -316,9 +316,12 @@ alwaysCrit = false,
     // атака и сп. атака вдвое слабее).
     attackerCurrentHp = undefined,
     attackerMaxHp = undefined,
-    // Slow Start: первые пять ходов атака вдвое ниже. Флаг считает движок,
-    // потому что счётчик ходов живёт в бою, а не в данных покемона.
+// Slow Start: первые пять ходов атака вдвое ниже. Флаг считает движок,
+    // потому что счётчик ходов живёт в бою, а не данных покемона.
     attackerSlowStart = false,
+    // Контратаки (L2-остаток): урон, полученный атакующим с прошлого хода.
+    lastTakenDmg = undefined,
+    lastTakenCat = undefined,
   }) {
   const parts = [];
   const power = move.power;
@@ -338,6 +341,8 @@ alwaysCrit = false,
       attackerLevel,
       defenderCurrentHp: targetHp,
       attackerCurrentHp,
+      lastTakenDmg,
+      lastTakenCat,
     });
   }
   if (fixed !== undefined && fixed !== null && !power) {

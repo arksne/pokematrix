@@ -50,7 +50,7 @@ import { getAbilityNameRu } from '../data/abilities.js';                 // Ру
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy } from './logic.js';
-import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder } from './special-moves.js';
+import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, normMoveName } from './special-moves.js';
 import { calculateStat as calculateStatShared } from './stats.js';
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
 import { store } from '../game/store.js';
@@ -565,6 +565,18 @@ function getEffectivePriority(move, mon, isWild) {
   return prio;
 }
 
+/**
+ * isQueuedMoveStale — протух ли заказанный ход (N1).
+ *
+ * Ход заказывал monBefore. Если к моменту его выполнения активный покемон
+ * сменился (faint + автозамена в handlePlayerFaint), старый moveIndex
+ * указывает уже в чужие слоты — выполнять такой ход нельзя: замена
+ * «использует атаку мёртвого» и тратит чужой PP. Чистая функция для тестов.
+ */
+export function isQueuedMoveStale(monBefore: any, monAfter: any): boolean {
+  return !!monBefore && monAfter !== monBefore;
+}
+
 function playerMovesFirst(playerMove, enemyMove): boolean {
   const pPrio = getEffectivePriority(playerMove, S.activePlayerMon, false);
   const ePrio = getEffectivePriority(enemyMove, S.activeWild, true);
@@ -840,6 +852,17 @@ function clearScreens() {
 function handlePlayerStatusEffects(move) {
   // Returns true if anything meaningful happened
 
+  // 0. Heal Pulse (L2-остаток): канон лечит ЦЕЛЬ — в диком бою это дикий.
+  // Выглядит как «лечит врага», поэтому лог обязан объяснять, иначе
+  // будет репорт «атака лечит противника — баг».
+  if (normMoveName(move.name) === 'heal-pulse') {
+    const amt = healPulseAmount(S.wildMaxHP);
+    S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + amt);
+    updateWildHpUI();
+    appendToLog(`${S.activePlayerMon.apiData.name} лечит противника на ${amt} HP (так работает Heal Pulse)!`, false, 'heal');
+    return true;
+  }
+
   // 1. Healing moves (Recover, Roost, Moonlight, Synthesis, etc.)
   // move.meta.healing — процент от макс HP (например 50 для Recover)
   const healPct = move.meta?.healing;
@@ -989,6 +1012,15 @@ function applyLeechSeedTick(seededIsPlayer: boolean) {
 function handleEnemyStatusEffects(move) {
   // Handle status moves used by gym enemy
   // Returns true if anything meaningful happened
+
+  // 0. Heal Pulse (L2-остаток): зеркально игроку — лечит НАШЕГО покемона.
+  if (normMoveName(move.name) === 'heal-pulse') {
+    const amt = healPulseAmount(S.activePlayerMon.maxHp);
+    S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + amt);
+    updatePlayerHpUI();
+    appendToLog(`${S.activeWild.name} лечит вашего покемона на ${amt} HP (так работает Heal Pulse)!`, false, 'heal');
+    return true;
+  }
 
   // 1. Healing for enemy
   const healPct = move.meta?.healing;
@@ -2975,7 +3007,7 @@ export function evBudget(mon): number {
 }
 
 async function useMove(moveIndex) {
-  const move = S.playerMovesDetailed[moveIndex];
+  let move = S.playerMovesDetailed[moveIndex];
   if (!move) return;
 
   // ═══ 1. PP CHECK ═══
@@ -3020,6 +3052,77 @@ async function useMove(moveIndex) {
   if ((move.name === 'knock-off' || move.name === 'knockoff') && S.activeWild?.heldItem) {
     power = Math.floor(power * 1.5);
   }
+
+  // ── L2-остаток: перезарядка (hyper-beam и семья) ──
+  // После удара — пропуск хода. Промах (0 ударов) флаг не ставит,
+  // поэтому проверка здесь ловит только честно заработанную перезарядку.
+  if (S.activePlayerMon.recharging) {
+    S.activePlayerMon.recharging = false;
+    appendToLog(`${S.activePlayerMon.apiData.name} перезаряжается!`, false, 'system');
+    document.getElementById('battle-main-menu').style.display = 'none';
+    saveBattleState();
+    setTimeout(() => { enemyTurn(); }, 1000);
+    return;
+  }
+
+  // ── L2-остаток: вес/скорость-атаки ──
+  // В данных у них power=null — без подстановки силы они падали в
+  // «Но ничего не произошло...». Копию кладём, кэш деталей не трогаем.
+  {
+    const eff = effectivePowerMove(move, S.activePlayerMon, S.activeWild,
+      getEffectiveSpeed(S.activePlayerMon, false), getEffectiveSpeed(S.activeWild, true), false);
+    if (eff !== move) {
+      move = eff;
+      power = eff.power;
+    }
+  }
+
+  // ── L2-остаток: Bide ──
+  // Ход 1 — затаился (урон копится), ход 2 — выпуск удвоенного.
+  // Состояние на самом покемоне: смена/смерть его сбрасывают сами.
+  if (normMoveName(move.name) === 'bide') {
+    const st = S.activePlayerMon.bide || { turns: 0, dmg: 0 };
+    if (st.turns <= 0) {
+      S.activePlayerMon.bide = { turns: BIDE_TURNS, dmg: 0 };
+      appendToLog(`${S.activePlayerMon.apiData.name} затаился!`, false, 'system');
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
+    st.turns -= 1;
+    if (st.turns > 0) {
+      S.activePlayerMon.bide = st;
+      appendToLog(`${S.activePlayerMon.apiData.name} продолжает терпеть...`, false, 'system');
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
+    S.activePlayerMon.bide = { turns: 0, dmg: 0 };
+    const rel = bideRelease(st.dmg);
+    if (rel == null) {
+      appendToLog(`${S.activePlayerMon.apiData.name} терпел зря — бить нечем!`, false, 'system');
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
+    // Выпуск: прямой урон без промаха (канон), дальше — общий финал хода.
+    S.wildCurHP = Math.max(0, S.wildCurHP - rel);
+    updateWildHpUI();
+    appendToLog(`${S.activePlayerMon.apiData.name} выпускает накопленное: −${rel} HP!`, false, 'dmg');
+    S.lastTakenByWild = { dmg: rel, cat: 'physical' };
+    document.getElementById('battle-main-menu').style.display = 'none';
+    if (S.wildCurHP === 0) {
+      await handleWildFaintRewards(S.battleType === 'wild');
+      return;
+    }
+    saveBattleState();
+    setTimeout(() => { enemyTurn(); }, 1000);
+    return;
+  }
+
   if (!power && S.activePlayerMon.heldItem === 'assaultVest') {
     appendToLog('Штурмовой жилет не позволяет использовать статус-атаки!');
     return;
@@ -3154,6 +3257,11 @@ async function useMove(moveIndex) {
 
       if (!playerMovesFirst(move, enemyMoveForOrder)) {
         document.getElementById('battle-main-menu').style.display = 'none';
+        // N1: чей ход заказан — фиксируем ДО хода врага. Если враг убил
+        // активного, handlePlayerFaint() тихо подменит S.activePlayerMon
+        // заменой, и старый moveIndex начнёт указывать в ЧУЖИЕ слоты:
+        // замена «использует атаку мёртвого». Ниже — отмена queued-хода.
+        const monBefore = S.activePlayerMon;
         try {
           await runEnemyTurnBody();
         } catch (e) {
@@ -3165,6 +3273,9 @@ async function useMove(moveIndex) {
         enemyAlreadyMoved = true;
         // Враг мог добить кого-то — тогда ход закончен, обработчики уже отработали.
         if (!S.activePlayerMon || S.activePlayerMon.currentHp <= 0 || S.wildCurHP <= 0) return;
+        // Замена вышла вместо упавшего — queued-атака мёртвого отменяется:
+        // замена обязана выбрать свою атаку сама.
+        if (isQueuedMoveStale(monBefore, S.activePlayerMon)) return;
       }
     }
 
@@ -3183,6 +3294,16 @@ async function useMove(moveIndex) {
   // Если первый раз используем атаку с Choice-предметом — блокируем её
   if (choiceItems.includes(S.activePlayerMon.heldItem)) {
     S.activePlayerMon.choiceLockedMove = moveIndex;
+  }
+
+  // ── 7b. L2-остаток: цель спряталась (fly/dig/dive) ──
+  // Достают только канонные контр-атаки (thunder — fly, earthquake — dig...).
+  if (S.activeWild.hiddenIn && !canHitHidden(move.name, S.activeWild.hiddenIn)) {
+    appendToLog(`${S.activePlayerMon.apiData.name} бьёт мимо — противник спрятался!`, false, 'system');
+    document.getElementById('battle-main-menu').style.display = 'none';
+    saveBattleState();
+    endTurn();
+    return;
   }
 
   // ═══ 8. ACCURACY CHECK ═══
@@ -3247,6 +3368,29 @@ async function useMove(moveIndex) {
     return;
   }
 
+  // ── 9c. L2-остаток: полунеуязвимость (fly/dig/dive/...) ──
+  // Ход 1 — спрятался (по нему не попасть, кроме контр-атак), ход 2 той же
+  // атакой — удар. Другая атака вместо выпуска — выходим из укрытия без удара
+  // (мягче канона, но без софтлока: иначе игрок застревает в небе навсегда).
+  {
+    const slug = normMoveName(move.name);
+    if (isSemiInvuln(move)) {
+      if (S.activePlayerMon.hiddenIn === slug) {
+        S.activePlayerMon.hiddenIn = null; // выпуск — бьём ниже обычным ходом
+      } else {
+        S.activePlayerMon.hiddenIn = slug;
+        appendToLog(`${S.activePlayerMon.apiData.name} ${hideVerb(slug)}`, false, 'system');
+        document.getElementById('battle-main-menu').style.display = 'none';
+        saveBattleState();
+        endTurn();
+        return;
+      }
+    } else if (S.activePlayerMon.hiddenIn) {
+      S.activePlayerMon.hiddenIn = null;
+      appendToLog(`${S.activePlayerMon.apiData.name} выходит из укрытия!`, false, 'system');
+    }
+  }
+
   // ═══ 10. ОСНОВНАЯ ЛОГИКА АТАКИ ═══
   appendToLog(`${S.activePlayerMon.apiData.name} использует ${move.name}!`);
 
@@ -3258,6 +3402,9 @@ async function useMove(moveIndex) {
     attackerLevel: S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten,
     defenderCurrentHp: S.wildCurHP,
     attackerCurrentHp: S.activePlayerMon.currentHp,
+    // L2-остаток: контратаки бьют от входящего с прошлого хода
+    lastTakenDmg: S.lastTakenByPlayer?.dmg,
+    lastTakenCat: S.lastTakenByPlayer?.cat,
   }) : null;
   if (!power && playerFixedDmg == null && !isOhkoMove(move)) {
     // 10a-i: Наложение статуса (Toxic, Thunder Wave, Will-O-Wisp, Spore...)
@@ -3350,7 +3497,13 @@ async function useMove(moveIndex) {
       critRateStage += 2;
     }
     const isPhysical = move.damage_class.name === 'physical';
-    const numHits = getMultiHitCount(move);
+    // L2-остаток: Beat Up бьёт по числу здоровых в команде (канон)
+    const beatSlug = normMoveName(move.name);
+    const beatParty = beatSlug === 'beat-up'
+      ? (GS.myTeam || []).filter((m: any) => m && (m.currentHp ?? 1) > 0 && !m.status) : null;
+    const numHits = beatSlug === 'beat-up'
+      ? Math.max(1, beatParty!.length)
+      : getMultiHitCount(move);
 
     // Sheer Force: убирает вторичные эффекты атак, даёт 1.3x урон (в calculateDamage)
     const playerSheerForce = playerAbilityName === 'sheer-force' &&
@@ -3359,12 +3512,17 @@ async function useMove(moveIndex) {
     // ═══ MULTI-HIT LOOP ═══
     let totalDmg = 0, hitsLanded = 0, lastCrit = false;
     const preWildHP = S.wildCurHP;
+    // L2-остаток: сила каждого удара Beat Up — по бьющему члену команды
+    const beatPowers = beatParty
+      ? beatParty.map((m: any) => beatUpPower(baseAttackOf(m, false)))
+      : null;
     for (let hi = 0; hi < numHits; hi++) {
       if (S.wildCurHP <= 0) break;
       if (hi > 0 && S.enemyProtectActive) break;
+      const hitMove = beatPowers ? { ...move, power: beatPowers[hi % beatPowers.length] } : move;
 
       const dmgResult = calculateDamage({
-        move, attacker: S.activePlayerMon, defender: S.activeWild,
+        move: hitMove, attacker: S.activePlayerMon, defender: S.activeWild,
         attackerLevel: curLvl, defenderLevel: S.wildLvl,
         isWildAttacker: false, isWildDefender: true,
         weather: S.currentWeather,
@@ -3383,6 +3541,9 @@ async function useMove(moveIndex) {
           attackerSlowStart: String(abilityOf(S.activePlayerMon, false) || '')
             .toLowerCase().replace(/[^a-z0-9]/g, '') === 'slowstart'
             && (S.activePlayerMon.slowStartTurns || 0) < 5,
+          // L2-остаток: контратаки бьют от входящего с прошлого хода
+          lastTakenDmg: S.lastTakenByPlayer?.dmg,
+          lastTakenCat: S.lastTakenByPlayer?.cat,
       });
       let hitDmg = dmgResult.damage;
       const bMod = applyBarrierMod(1, move, false, dmgResult.isCrit);
@@ -3590,6 +3751,17 @@ async function useMove(moveIndex) {
 
     // Berry auto-use after all hits
     if (S.wildCurHP > 0) checkBerryAutoUse(S.activeWild, false);
+
+    // L2-остаток: запоминаем входящий дикому — для Counter/Mirror Coat/
+    // Metal Burst и накопления Bide следующим ходом.
+    S.lastTakenByWild = { dmg: totalDmg, cat: move.damage_class?.name || null };
+    if (S.activeWild.bide && S.activeWild.bide.turns > 0) {
+      S.activeWild.bide.dmg += totalDmg;
+    }
+    // L2-остаток: hyper-beam и семья — перезарядка, если попали (hitsLanded>0)
+    if (hitsLanded > 0 && needsRecharge(move)) {
+      S.activePlayerMon.recharging = true;
+    }
   }
 
   document.getElementById('battle-main-menu').style.display = 'none';
@@ -4012,6 +4184,14 @@ async function runEnemyTurnBody() {
     return;
   }
 
+  // ── L2-остаток: перезарядка врага (hyper-beam и семья) ──
+  if (S.activeWild.recharging) {
+    S.activeWild.recharging = false;
+    appendToLog(`${S.activeWild.name} перезаряжается!`, false, 'system');
+    await finishEnemyTurn();
+    return;
+  }
+
   // ═══ 2d. TRUANT (враг) ═══
   const wildTruant = String(abilityOf(S.activeWild, true) || '')
     .toLowerCase().replace(/[^a-z0-9]/g, '') === 'truant';
@@ -4067,6 +4247,79 @@ async function runEnemyTurnBody() {
     return;
   }
 
+  // ── L2-остаток: Bide врага ──
+  // Зеркало игрока: 2 хода терпит, на третий бьёт удвоенным накопленным.
+  if (normMoveName(chosenMove.name) === 'bide') {
+    const st = S.activeWild.bide || { turns: 0, dmg: 0 };
+    if (st.turns <= 0) {
+      S.activeWild.bide = { turns: BIDE_TURNS, dmg: 0 };
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} затаился!`, false, 'system');
+      await finishEnemyTurn();
+      return;
+    }
+    st.turns -= 1;
+    if (st.turns > 0) {
+      S.activeWild.bide = st;
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} продолжает терпеть...`, false, 'system');
+      await finishEnemyTurn();
+      return;
+    }
+    S.activeWild.bide = { turns: 0, dmg: 0 };
+    const rel = bideRelease(st.dmg);
+    if (rel == null) {
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} терпел зря — бить нечем!`, false, 'system');
+      await finishEnemyTurn();
+      return;
+    }
+    S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - rel);
+    updatePlayerHpUI();
+    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} выпускает накопленное: −${rel} HP!`, false, 'dmg');
+    S.lastTakenByPlayer = { dmg: rel, cat: 'physical' };
+    if (S.activePlayerMon.currentHp <= 0) {
+      appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
+      handlePlayerFaint();
+      return;
+    }
+    await finishEnemyTurn();
+    return;
+  }
+
+  // ── L2-остаток: полунеуязвимость врага (fly/dig/dive/...) ──
+  // Зеркало игрока: ход 1 — спрятался, ход 2 той же атакой — удар.
+  {
+    const slug = normMoveName(chosenMove.name);
+    if (isSemiInvuln(chosenMove)) {
+      if (S.activeWild.hiddenIn === slug) {
+        S.activeWild.hiddenIn = null;
+      } else {
+        S.activeWild.hiddenIn = slug;
+        appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} ${hideVerb(slug)}`, false, 'system');
+        await finishEnemyTurn();
+        return;
+      }
+    } else if (S.activeWild.hiddenIn) {
+      S.activeWild.hiddenIn = null;
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} выходит из укрытия!`, false, 'system');
+    }
+  }
+
+  // ── L2-остаток: вес/скорость-атаки врага ──
+  // В данных у них power=null — без подстановки падали в «ничего не произошло».
+  {
+    const eff = effectivePowerMove(chosenMove, S.activeWild, S.activePlayerMon,
+      getEffectiveSpeed(S.activeWild, true), getEffectiveSpeed(S.activePlayerMon, false), true);
+    if (eff !== chosenMove) {
+      chosenMove = eff;
+    }
+  }
+
+  // ── 3c. L2-остаток: игрок спрятался (fly/dig/dive) ──
+  if (S.activePlayerMon.hiddenIn && !canHitHidden(chosenMove.name, S.activePlayerMon.hiddenIn)) {
+    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} бьёт мимо — противник спрятался!`, false, 'system');
+    await finishEnemyTurn();
+    return;
+  }
+
   // ═══ 4. ACCURACY CHECK ═══
   let enemyAcc = checkAccuracy(
     chosenMove,
@@ -4100,6 +4353,9 @@ async function runEnemyTurnBody() {
     attackerLevel: S.wildLvl,
     defenderCurrentHp: S.activePlayerMon.currentHp,
     attackerCurrentHp: S.wildCurHP,
+    // L2-остаток: контратаки бьют от входящего с прошлого хода
+    lastTakenDmg: S.lastTakenByWild?.dmg,
+    lastTakenCat: S.lastTakenByWild?.cat,
   }) : null;
   if (!power && enemyFixedDmg == null && !isOhkoMove(chosenMove)) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}!`);
@@ -4118,7 +4374,15 @@ async function runEnemyTurnBody() {
 
   // ═══ 7. РАСЧЁТ УРОНА (multi-hit) ═══
   const isPhysical = chosenMove.damage_class.name === 'physical';
-  const numHits = getMultiHitCount(chosenMove);
+  // L2-остаток: Beat Up дикого — один удар (команды нет); у тренера зала —
+  // по числу оставшихся (текущий + запас).
+  const eBeatSlug = normMoveName(chosenMove.name);
+  const eBeatHits = eBeatSlug === 'beat-up'
+    ? (S.battleType !== 'wild' && Array.isArray(S.gymTeamData)
+      ? Math.max(1, S.gymTeamData.length - (S.gymTeamIndex || 0))
+      : 1)
+    : 0;
+  const numHits = eBeatSlug === 'beat-up' ? eBeatHits : getMultiHitCount(chosenMove);
 
   // Sheer Force: убирает вторичные эффекты атак, даёт 1.3x урон (в calculateDamage)
   const enemySheerForce = wildAbilityName === 'sheer-force' &&
@@ -4161,6 +4425,9 @@ async function runEnemyTurnBody() {
         attackerSlowStart: String(abilityOf(S.activeWild, true) || '')
           .toLowerCase().replace(/[^a-z0-9]/g, '') === 'slowstart'
           && (S.activeWild.slowStartTurns || 0) < 5,
+        // L2-остаток: контратаки бьют от входящего с прошлого хода
+        lastTakenDmg: S.lastTakenByWild?.dmg,
+        lastTakenCat: S.lastTakenByWild?.cat,
     });
     let hitDmg = dmgResult.damage;
     const bMod = applyBarrierMod(1, chosenMove, true, dmgResult.isCrit); // Барьеры игрока
@@ -4340,6 +4607,17 @@ async function runEnemyTurnBody() {
     // выше — дублировать её не нужно.
   if (numHits > 1) {
     appendToLog(`Попал ${hitsLanded} раз(а), всего ${totalDmg} урона!`, false, 'dmg');
+  }
+
+  // L2-остаток: запоминаем входящий игроку — для Counter/Mirror Coat/
+  // Metal Burst и накопления Bide следующим ходом.
+  S.lastTakenByPlayer = { dmg: totalDmg, cat: chosenMove.damage_class?.name || null };
+  if (S.activePlayerMon.bide && S.activePlayerMon.bide.turns > 0) {
+    S.activePlayerMon.bide.dmg += totalDmg;
+  }
+  // L2-остаток: hyper-beam и семья — перезарядка, если попали (hitsLanded>0)
+  if (hitsLanded > 0 && needsRecharge(chosenMove)) {
+    S.activeWild.recharging = true;
   }
 
   // ═══ 9. УМЕНЬШЕНИЕ БАРЬЕРОВ ═══
@@ -5059,6 +5337,9 @@ async function startGymNextPokemon() {
   if (S.gymTeamIndex >= S.gymTeamData.length) {
     // ── ПОБЕДА НАД ВСЕЙ КОМАНДОЙ ЛИДЕРА — server-authoritative ──
     const leader = GS.gymLeaders[S.gymLeaderKey];
+    // N4: награда (значок + шини + предметы) — только за первую победу.
+    // Реванш: сервер ответит 409, выбор награды не показываем.
+    const firstWin = Array.isArray(state.badges) && !state.badges.includes(leader.badgeName);
 
     // Запрашиваем награду у сервера
     try {
@@ -5099,7 +5380,8 @@ async function startGymNextPokemon() {
     checkAchievement('beat_gym');
     GS.battleWins = (GS.battleWins || 0) + 1;
     if (GS.battleWins >= 100) checkAchievement('trainer_100');
-    setTimeout(() => store.showGymRewardSelection(S.gymLeaderKey), 300);
+    if (firstWin) setTimeout(() => store.showGymRewardSelection(S.gymLeaderKey), 300);
+    else appendToLog('Реванш засчитан. Награда выдаётся только за первую победу.', false, 'system');
     return;
   }
 

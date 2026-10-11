@@ -39,6 +39,31 @@ import { hatchEgg, checkBreeding, collectEgg } from './daycare.js';
 import { battle } from '../battle/core.js';
 
 /**
+ * moveMonBetweenBoxes — ручное перемещение покемона из бокса в бокс (N3).
+ *
+ * Чистая логика (для тестов): двигает элемент boxes[fromBox][index] в конец
+ * boxes[toBox]. Пустой исходный бокс удаляется — как в остальных перемещениях
+ * PC (в команду / при отпускании), иначе копятся боксы-призраки.
+ * Возвращает { ok } или { ok:false, reason } — покемон никуда не девается.
+ */
+export function moveMonBetweenBoxes(
+  boxes: any[][], fromBox: number, index: number, toBox: number,
+): { ok: boolean; reason?: string } {
+  const src = Array.isArray(boxes) ? boxes[fromBox] : undefined;
+  if (!src || index < 0 || index >= src.length) return { ok: false, reason: 'no-mon' };
+  if (fromBox === toBox) return { ok: false, reason: 'same-box' };
+  if (!Array.isArray(boxes[toBox])) return { ok: false, reason: 'no-box' };
+  const [mon] = src.splice(index, 1);
+  // Удаление пустого исходного сдвигает индексы правее — поправляем цель.
+  if (src.length === 0) {
+    boxes.splice(fromBox, 1);
+    if (toBox > fromBox) toBox -= 1;
+  }
+  boxes[toBox].push(mon);
+  return { ok: true };
+}
+
+/**
  * showPCInfoModal — показать модалку с подробной информацией о покемоне в PC.
  *
  * ЧТО ДЕЛАЕТ:
@@ -326,12 +351,35 @@ function renderPCSlots(view: string) {
         <div class="pc-slot-actions">
           <button class="btn-use" class="btn-use-info" title="Инфо">ℹ</button>
           <button class="btn-use" class="btn-use-team">В команду</button>
+          <button class="btn-use" class="btn-use-box" title="В другой бокс">📦</button>
           <button class="btn-use" class="btn-use-release">Отп.</button>
         </div>
       `;
       // ℹ — информация о покемоне
-      const [btnInfo, btnTeam, btnRelease] = div.querySelectorAll('button');
+      const [btnInfo, btnTeam, btnBox, btnRelease] = div.querySelectorAll('button');
       btnInfo.onclick = () => { showPCInfoModal(mon); };
+      // 📦 — вручную в другой бокс (N3): выбор целевого бокса или нового
+      btnBox.onclick = () => {
+        const items = state.pcBoxes.map((b: any, bi: number) => ({
+          label: bi === boxIdx ? `Бокс ${bi + 1} (текущий)` : `Бокс ${bi + 1} (${b.length})`,
+          subtitle: bi === boxIdx ? 'уже здесь' : 'переместить сюда',
+        }));
+        items.push({ label: '+ Новый бокс', subtitle: 'создать и переместить туда' });
+        showSelectionModal('В какой бокс переместить?', items, (pick: number) => {
+          let target = pick;
+          if (pick === items.length - 1) {
+            state.pcBoxes.push([]);
+            target = state.pcBoxes.length - 1;
+          }
+          const r = moveMonBetweenBoxes(state.pcBoxes, boxIdx, i, target);
+          if (!r.ok) {
+            showToast(r.reason === 'same-box' ? 'Он уже в этом боксе.' : 'Не получилось переместить.', true);
+            return;
+          }
+          store.emit('save');
+          openPC();
+        }, true);
+      };
       // "В команду" — переместить из бокса в команду
       btnTeam.onclick = () => {
         if (state.myTeam.length >= 6) { showToast('Команда полна (6/6)! Освободите место.', true); return; }

@@ -268,4 +268,8 @@ export interface BattleStateData {
   enemyChosenMove: MoveData | null;
   playerChargedMove: any | null;   // Two-turn move charging state — MoveData being charged, or null
   enemyChargedMove: any | null;    // Same for enemy
+  // L2-остаток: входящий урон с прошлого хода — для Counter/Mirror Coat/
+  // Metal Burst ({ dmg, cat } или null, если бить нечем).
+  lastTakenByPlayer?: { dmg: number; cat: string | null } | null;
+  lastTakenByWild?: { dmg: number; cat: string | null } | null;
 }

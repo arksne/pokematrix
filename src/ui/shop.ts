@@ -88,6 +88,41 @@ export function getShopItems(locId) {
     }));
 }
 
+// ── Этажи магазина (N2) ───────────────────────────────────
+// Предметов 1000+, одной простынёй листать невозможно. Этажи группируют
+// витрину по смыслу (решение хозяина: «этажи с определённым товаром»).
+// Чистые данные — ниже, тесты в shops-floors.test.ts.
+export const SHOP_FLOORS = [
+  { id: 'battle', label: '⚔️ Бой', cats: ['balls', 'healing', 'statusCure', 'ppRecovery', 'revival'] },
+  { id: 'growth', label: '🌱 Рост', cats: ['vitamins', 'training', 'evolutionStones'] },
+  { id: 'moves', label: '💿 Атаки', cats: ['tm'] },
+  { id: 'carry', label: '🎒 С собой', cats: ['battle', 'berries'] },
+  { id: 'misc', label: '📦 Разное', cats: ['tickets', 'other', 'valuable', 'crafting', 'mulch'] },
+] as const;
+
+/** Этаж категории товара. Неизвестная категория — на этаж «Разное». */
+export function floorOfCategory(cat: unknown): string {
+  const c = String(cat || '');
+  const hit = SHOP_FLOORS.find((f) => (f.cats as readonly string[]).includes(c));
+  return hit ? hit.id : 'misc';
+}
+
+/**
+ * Раскладка товаров по этажам. Возвращает только непустые этажи
+ * в порядке SHOP_FLOORS; каждый товар — ровно на одном этаже.
+ */
+export function groupShopItemsForFloors<T extends { id: string; category?: string }>(items: T[]): Array<{ floor: string; label: string; items: T[] }> {
+  const byFloor = new Map<string, typeof items>();
+  for (const it of items || []) {
+    const f = floorOfCategory((it as any).category);
+    if (!byFloor.has(f)) byFloor.set(f, []);
+    byFloor.get(f)!.push(it);
+  }
+  return SHOP_FLOORS
+    .filter((f) => (byFloor.get(f.id) || []).length > 0)
+    .map((f) => ({ floor: f.id, label: f.label, items: byFloor.get(f.id)! }));
+}
+
 // ── openShop: открыть модалку магазина ────────────────────
 // Принимает locId — ID локации (необязательный, берётся из dataset модалки)
 // Эта функция вызывается из location.ts при клике на кнопку "Магазин"
@@ -96,24 +131,27 @@ export function openShop(locId?) {
   const modal = document.getElementById('shop-modal');
   // Сохраняем ID локации в dataset модалки — он понадобится при переключении вкладок
   modal.dataset.shopLocId = locId || '';
-  // Находим контейнер, куда будем вставлять список предметов
-  const itemsContainer = document.getElementById('shop-items');
-  // Очищаем контейнер перед заполнением (убираем старые товары)
-  itemsContainer.innerHTML = '';
+  renderShopFloors(locId);
 
-  // Получаем список товаров для этой локации и для каждого создаём DOM-элемент
-  getShopItems(locId).forEach(item => {
-    // Создаём div-карточку одного товара
-    const div = document.createElement('div');
-    div.className = 'shop-item';  // CSS класс для стилизации
+  // Обновляем отображение денег — берём текущее значение из getShopState()
+  document.getElementById('shop-money-display').innerText = String(getShopState().money);
+  // Показываем модалку (меняем display с 'none' на 'flex')
+  modal.style.display = 'flex';
+}
 
-    // Заполняем HTML карточки:
-    //   shop-item-icon  — иконка предмета (спрайт 28×28)
-    //   shop-item-info  — блок с названием и ценой
-    //   shop-qty-wrap   — блок с input количества и кнопкой "Купить"
-    //   shop-qty-input  — числовой input, значение по умолчанию 1, макс 99
-    //   shop-buy-btn    — кнопка покупки, data-item хранит ID предмета
-    div.innerHTML = `
+/** Карточка одного товара (вынесена, чтобы этажи перерисовывали список). */
+function shopItemCard(item: { id: string; icon: string; name: string; price: number }): HTMLDivElement {
+  // Создаём div-карточку одного товара
+  const div = document.createElement('div');
+  div.className = 'shop-item';  // CSS класс для стилизации
+
+  // Заполняем HTML карточки:
+  //   shop-item-icon  — иконка предмета (спрайт 28×28)
+  //   shop-item-info  — блок с названием и ценой
+  //   shop-qty-wrap   — блок с input количества и кнопкой "Купить"
+  //   shop-qty-input  — числовой input, значение по умолчанию 1, макс 99
+  //   shop-buy-btn    — кнопка покупки, data-item хранит ID предмета
+  div.innerHTML = `
       <div class="shop-item-icon">${item.icon}</div>
       <div class="shop-item-info">
         <div class="shop-item-name">${item.name}</div>
@@ -124,14 +162,43 @@ export function openShop(locId?) {
         <button class="btn-use shop-buy-btn" data-item="${item.id}">Купить</button>
       </div>
     `;
-    // Добавляем карточку в контейнер
-    itemsContainer.appendChild(div);
-  });
+  return div;
+}
 
-  // Обновляем отображение денег — берём текущее значение из getShopState()
-  document.getElementById('shop-money-display').innerText = String(getShopState().money);
-  // Показываем модалку (меняем display с 'none' на 'flex')
-  modal.style.display = 'flex';
+/** Рисует кнопки этажей и товары выбранного этажа. */
+export function renderShopFloors(locId?: string, activeFloor?: string) {
+  // Находим контейнер, куда будем вставлять список предметов
+  const itemsContainer = document.getElementById('shop-items');
+  // Очищаем контейнер перед заполнением (убираем старые товары)
+  itemsContainer.innerHTML = '';
+  const floorsBar = document.getElementById('shop-floors');
+  if (floorsBar) floorsBar.innerHTML = '';
+
+  // getShopItems отдаёт витринные поля; категорию добираем из ITEMS —
+  // группировка идёт по смыслу, а не по алфавиту.
+  const byId = new Map(ITEMS.map((i: any) => [i.id, i.category]));
+  const goods = getShopItems(locId).map((g: any) => ({ ...g, category: byId.get(g.id) }));
+  const groups = groupShopItemsForFloors(goods);
+  const current = groups.some((g) => g.floor === activeFloor) ? activeFloor! : groups[0]?.floor;
+
+  if (floorsBar) {
+    groups.forEach((g) => {
+      const b = document.createElement('button');
+      b.className = 'btn-nav shop-floor-btn';
+      b.style.cssText = 'flex:1 1 auto;min-width:fit-content;padding:6px 8px;font-size:12px;'
+        + (g.floor === current ? 'border-color:var(--tma-accent);font-weight:700;' : '');
+      b.textContent = `${g.label} (${g.items.length})`;
+      b.onclick = () => renderShopFloors(locId, g.floor);
+      floorsBar.appendChild(b);
+    });
+  }
+
+  // Получаем список товаров выбранного этажа и для каждого создаём DOM-элемент
+  const shown = groups.find((g) => g.floor === current)?.items || [];
+  shown.forEach((item) => {
+    // Добавляем карточку в контейнер
+    itemsContainer.appendChild(shopItemCard(item));
+  });
 }
 
 // ── initShopEvents: инициализация событий магазина ────────

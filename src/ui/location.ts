@@ -45,6 +45,7 @@ import { specialMechanic, nextFloor } from '../battle/special-loc.js';  // M-4: 
 // кнопка в локации и узел на карте не разъезжались. Цикла импортов нет:
 // map.ts не тянет location.ts.
 import { isServiceLoc } from './map.js';
+import { isFirstGymWin } from './gym-reward.js';  // N4: реванш без повторной награды
 // MONSTER_DROP_TABLE — таблица дропов: { speciesName: [{item, chance, qty}, ...] }
 import { MONSTER_DROP_TABLE } from '../data/drops.js';
 // ITEMS — массив всех предметов игры
@@ -599,12 +600,16 @@ export let renderLocation = function(locId: any) {
   // Показываем ТОЛЬКО в стадионах (не в городах).
   // В городе есть навигация → стадион, а на стадионе — кнопка битвы.
   // Проверяем: есть ли прямо лидер для этого locId (gymLeaders ключи = stadiumId)
+  // N4: реванш разрешён всегда, но значок и награда — только за первую победу.
   const gymKey = gymLeaders[locId] ? locId : null;
-  if (gymKey && !state.badges.includes(gymLeaders[gymKey].badgeName)) {
+  if (gymKey) {
+    const rematch = !isFirstGymWin(state.badges, gymLeaders[gymKey].badgeName);
     const btnGym = document.createElement('button');
     btnGym.className = 'btn-use';
     btnGym.style.backgroundColor = '#af52de';  // Пурпурный
-    btnGym.innerText = `⚔ ${gymLeaders[gymKey].name} (${gymLeaders[gymKey].title})`;
+    btnGym.innerText = rematch
+      ? `⚔ ${gymLeaders[gymKey].name} (реванш, без награды)`
+      : `⚔ ${gymLeaders[gymKey].name} (${gymLeaders[gymKey].title})`;
     btnGym.onclick = () => getBattleCore().then(bc => bc.openGymModal(gymKey));
     actionsContainer.appendChild(btnGym);
   }
