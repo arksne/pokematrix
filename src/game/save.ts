@@ -196,7 +196,8 @@ export function getFullSaveData() {
       // Питомник раньше писался в сейв как есть, целиком, без белого списка —
       // это третий путь, через который полный apiData попадал в сохранение.
       mon: d.mon ? { ...d.mon, apiData: slimApiData(d.mon.apiData) } : d.mon,
-    })), lastLocation: state.lastLocation, locForward: (state as any).locForward || null, expShareActive: state.expShareActive,
+})),
+    lastLocation: state.lastLocation, expShareActive: state.expShareActive,
     transport: state.transport || null,
     customEncounterRates: state.customEncounterRates || {},
     // Боксы разведения (A1): мон целиком + slim apiData, как daycareMons
@@ -394,7 +395,6 @@ export async function loadGame() {
     state.breedingPairs = [];
     state.breedBoxes = Array.isArray(data.breedBoxes) ? data.breedBoxes : [];
     state.lastLocation = data.lastLocation || null;
-    (state as any).locForward = data.locForward || null;
     state.expShareActive = data.expShareActive || false;
     state.breedingPairs = data.breedingPairs || [];
     state.eggs = data.eggs || [];
@@ -838,7 +838,6 @@ export async function applyCloudSave(data) {
   state.breedBoxes = data.breedBoxes || state.breedBoxes;
   state.breedingPairs = [];
   state.lastLocation = data.lastLocation || state.lastLocation;
-  (state as any).locForward = data.locForward || (state as any).locForward || null;
   state.expShareActive = data.expShareActive || state.expShareActive;
   state.breedingPairs = data.breedingPairs || state.breedingPairs;
   state.eggs = wiped

@@ -45,7 +45,7 @@ import { specialMechanic, nextFloor } from '../battle/special-loc.js';  // M-4: 
 // Иконки и «сервисность» подлокаций живут в map.ts — единый источник, чтобы
 // кнопка в локации и узел на карте не разъезжались. Цикла импортов нет:
 // map.ts не тянет location.ts.
-import { isServiceLoc, iconFor } from './map.js';
+import { isServiceLoc } from './map.js';
 // MONSTER_DROP_TABLE — таблица дропов: { speciesName: [{item, chance, qty}, ...] }
 import { MONSTER_DROP_TABLE } from '../data/drops.js';
 // ITEMS — массив всех предметов игры
@@ -104,40 +104,6 @@ async function getBattleCore() {
 // ── КОНСТАНТЫ ────────────────────────────────────────────
 // Ключ для sessionStorage, где кэшируется конфигурация дропов с сервера
 export const DROP_CONFIG_CACHE_KEY = 'pokematrix_drop_config_cache';
-
-// ── splitNavLinks: чистая раскладка ссылок по группам (для тестов и renderLocation) ──
-// Возвращает id соседей и внутренних точек БЕЗ дублей, БЕЗ самого себя и БЕЗ
-// локаций из exclude (история ←/→: откуда пришёл и куда «вперёд» рисуются
-// стрелками, поэтому в списке соседей их быть не должно — иначе одна и та же
-// локация показывается дважды, а с крошками — трижды).
-export function splitNavLinks(
-  locId: string, links: string[] | null | undefined, exclude?: Array<string | null>,
-): { neighbors: string[]; inner: string[] } {
-  const neighbors: string[] = [];
-  const inner: string[] = [];
-  const seen = new Set<string>();
-  const skip = new Set((exclude || []).filter(Boolean) as string[]);
-  for (const linkId of links || []) {
-    if (!linkId || linkId === locId || seen.has(linkId) || skip.has(linkId)) continue;
-    const linkLoc = getLocation(linkId);
-    if (!linkLoc) continue;
-    seen.add(linkId);
-    if (linkId.startsWith(`${locId}_`) || isServiceLoc(linkId)) inner.push(linkId);
-    else neighbors.push(linkId);
-  }
-  return { neighbors, inner };
-}
-
-// ── navStep: чистая история навигации ←/→ (для тестов и renderLocation) ──
-export function navStep(
-  current: string | null, last: string | null, fwd: string | null,
-  target: string, via?: 'back' | 'forward',
-): { current: string; last: string | null; fwd: string | null } {
-  if (via === 'back') return { current: target, last, fwd: current };
-  if (via === 'forward') return { current: target, last, fwd };
-  if (current && current !== target) return { current: target, last: current, fwd: null };
-  return { current: target, last, fwd };
-}
 
 // ── getLocation: поиск локации по ID во всех регионах ───
 // Принимает locId — строковый ID локации (например, 'pallet-town')
@@ -393,7 +359,7 @@ export function setBeforeRenderLocation(fn: (locId: string) => void) {
 // Строит всю панель локации: фон, описание, погода, кнопки действий,
 // NPC, навигация, транспорт, дикие покемоны
 // Принимает locId — ID локации
-export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
+export let renderLocation = function(locId: any) {
   // ── Гейт: тренировочная зона только для новичков ──
   //
   // Раньше здесь стоял просто `return`. Из-за этого игрок, чей покемон дорог
@@ -431,13 +397,10 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   // ── Пре-рендер хук (если зарегистрирован) ──
   if (_beforeRenderLocation) _beforeRenderLocation(locId);
 
-  // ── История навигации: ← слева (назад), → справа (вперёд) ──
-  // Обычный переход: назад = откуда пришли, вперёд сбрасывается.
-  // «Назад»: вперёд = где были, lastLocation не трогаем.
-  // «Вперёд»: ничего не трогаем (возврат по уже записанному).
-  const nav = navStep(state.currentLocationId, state.lastLocation, (state as any).locForward, locId, via);
-  state.lastLocation = nav.last;
-  (state as any).locForward = nav.fwd;
+  // ── Сохраняем предыдущую локацию для навигации "Назад" ──
+  if (state.currentLocationId && state.currentLocationId !== locId) {
+    state.lastLocation = state.currentLocationId;
+  }
   // ── M-4: этаж башни/руин ──
   // Вход в башню = подъём на этаж (враги сильнее), выход наружу = сброс.
   // Один вход — один подъём: рендер локации (открытие меню, смена вкладки)
@@ -456,7 +419,7 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
     }
   }
 
-  state.currentLocationId = nav.current;   // Устанавливаем текущую локацию
+  state.currentLocationId = locId;           // Устанавливаем текущую локацию
 
   const loc = getLocation(locId);             // Получаем данные локации
   if (!loc) return;                           // Если локация не найдена — выходим
@@ -744,69 +707,69 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
   }
 
   // ── НАВИГАЦИОННЫЕ КНОПКИ ──
-  // Одна сетка на три осмысленные группы (раньше группы определялись префиксом
-  // id, из-за чего «в городе» выглядело случайным набором, а сервисы города
-  // дублировались ещё и отдельными кнопками действий выше):
-  //   🚪 Соседи      — куда уйти пешком (другие города, маршруты, пещеры);
-  //   🏙 Внутри     — сервисы и подлокации самого города (центр, маркет, вокзал);
-  //   ⬅️ Назад /➡️ Вперёд — история переходов.
   const navContainer = document.getElementById('nav-buttons');
   navContainer.innerHTML = '';
   navContainer.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:4px';
 
-  // Переход с учётом гейтов и отметки «посещено». Один обработчик на оба
-  // списка — раньше он был продублирован в двух местах и разъехался.
-  const goTo = (linkId: string) => {
-    if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
-    if (!state.visitedLocations.has(linkId)) {
-      state.visitedLocations.add(linkId);
-      getBattleCore().then(bc => bc.checkQuestProgress('explore'));
-      if (state.visitedLocations.size >= 20) checkAchievement('explorer');
-    }
-    renderLocation(linkId);
-  };
+  // Разделяем ссылки на внешние и под-локации
+  // subLinks — начинаются с locId + '_' (например, 'pallet-town_shop')
+  // extLinks — всё остальное (соседние города, маршруты)
+  const subLinks: Array<{id: string, loc: any}> = [];
+  const extLinks: Array<{id: string, loc: any}> = [];
+  loc.links.forEach(linkId => {
+    const linkLoc = getLocation(linkId);
+    if (!linkLoc) return;
+    if (linkId.startsWith(locId + '_')) subLinks.push({ id: linkId, loc: linkLoc });
+    else extLinks.push({ id: linkId, loc: linkLoc });
+  });
 
-  // Раскладка по группам — одной функцией (см. splitNavLinks выше).
-  // Из списков выкинуты откуда-пришёл и куда-«вперёд»: они уже нарисованы
-  // стрелками ←/→, дублировать их кнопками «➔ туда же» — та самая каша.
-  const { neighbors: neighborIds, inner: innerIds } = splitNavLinks(
-    locId, loc.links, [state.lastLocation, (state as any).locForward],
-  );
-  const neighbors = neighborIds.map((id) => ({ id, loc: getLocation(id) }));
-  const inner = innerIds.map((id) => ({ id, loc: getLocation(id) }));
-
-  /** Заголовок группы. */
-  const groupTitle = (text: string) => {
-    const sep = document.createElement('div');
-    sep.style.cssText = 'grid-column:1/-1;font-size:11px;color:#888;text-align:left;padding:6px 2px 2px;font-weight:600';
-    sep.innerText = text;
-    navContainer.appendChild(sep);
-  };
-
-  /** Кнопка перехода. */
-  const navButton = ({ id, loc: linkLoc }: { id: string; loc: any }, arrow: string) => {
+  // ── Внешние ссылки (соседние города/маршруты) ──
+  extLinks.forEach(({ id: linkId, loc: linkLoc }) => {
     const btn = document.createElement('button');
     btn.className = 'btn-nav';
     btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
-    const isTraining = id.includes('trainingGrounds');
-    const icon = isTraining ? '🥋' : iconFor(id);
-    // Имя ПОДЛОКАЦИИ, а не текущего города (иначе все кнопки «Голденрод-Сити»)
-    const label = isTraining ? `${linkLoc.name} (до 15 ур.)` : linkLoc.name;
-    btn.innerHTML = `<span>${icon} ${arrow} ${label}</span>`;
-    btn.onclick = () => goTo(id);
-    return btn;
-  };
+    btn.innerHTML = `<span>➔ ${linkLoc.name}</span>`;
+    btn.onclick = () => {
+      // Отслеживание исследования: если локация новая — проверяем квест
+      if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
+      if (!state.visitedLocations.has(linkId)) {
+        state.visitedLocations.add(linkId);
+        getBattleCore().then(bc => bc.checkQuestProgress('explore'));
+        if (state.visitedLocations.size >= 20) checkAchievement('explorer');
+      }
+      renderLocation(linkId);  // Переходим в новую локацию
+    };
+    navContainer.appendChild(btn);
+  });
 
-  // ── Соседи (пешком наружу) ──
-  if (neighbors.length > 0) {
-    groupTitle('🚪 Куда можно уйти');
-    neighbors.forEach((n) => navContainer.appendChild(navButton(n, '➔')));
-  }
+  // ── Под-локации (внутри города) ──
+  if (subLinks.length > 0) {
+    // Разделитель
+    const sep = document.createElement('div');
+    sep.style.cssText = 'grid-column:1/-1;font-size:11px;color:#888;text-align:center;padding:4px 0 2px';
+    sep.innerText = '🏙 В городе';
+    navContainer.appendChild(sep);
 
-  // ── Внутри города: сервисы и подлокации ──
-  if (inner.length > 0) {
-    groupTitle('🏙 Внутри');
-    inner.forEach((n) => navContainer.appendChild(navButton(n, '·')));
+    subLinks.forEach(({ id: linkId, loc: linkLoc }) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-nav';
+      const isTraining = linkId.includes('trainingGrounds');
+      btn.style.cssText = `flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:${isTraining ? '#34c759' : '#555'}`;
+      const icon = isTraining ? '🥋' : '🏠';
+      // Имя ПОДЛОКАЦИИ, а не текущего города (иначе все кнопки «Голденрод-Сити»)
+      const label = isTraining ? `${linkLoc.name} (до 15 ур.)` : linkLoc.name;
+      btn.innerHTML = `<span>${icon} ${label}</span>`;
+      btn.onclick = () => {
+        if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
+        if (!state.visitedLocations.has(linkId)) {
+          state.visitedLocations.add(linkId);
+          getBattleCore().then(bc => bc.checkQuestProgress('explore'));
+          if (state.visitedLocations.size >= 20) checkAchievement('explorer');
+        }
+        renderLocation(linkId);
+      };
+      navContainer.appendChild(btn);
+    });
   }
 
   // ── Информация о диких покемонах (вкладка "Дикие") ──
@@ -867,41 +830,36 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
     cur.textContent = loc.name;
     cur.style.color = '#fff';
     crumbs.append(regionSpan, sep, cur);
-    // «↩ откуда пришёл» здесь больше нет: это был третий показ той же
-    // локации (стрелка ← + кнопка соседа). Крошки — только «где я».
-  }
-
-  // ── Навигация ←/→: прошедшая слева, вперёд справа ──
-  // Вместо одной кнопки «Назад»: две стрелки по краям. Ряд рисуем только
-  // когда есть куда идти — две серые заглушки «←»/«→» на старте были мусором.
-  {
-    const backId = (state.lastLocation && state.lastLocation !== locId) ? state.lastLocation : null;
-    const backLoc = backId ? getLocation(backId) : null;
-    const fwdId = (state as any).locForward || null;
-    const fwdLoc = fwdId ? getLocation(fwdId) : null;
-    if (backLoc || fwdLoc) {
-      const row = document.createElement('div');
-      row.id = 'nav-history-row';
-      row.style.cssText = 'grid-column:1/-1;display:flex;gap:4px;';
-      const mkBtn = (label: string, target: string | null, dir: 'back' | 'forward') => {
-        const b = document.createElement('button');
-        b.className = 'btn-nav';
-        b.style.cssText = 'flex:1;min-width:fit-content;padding:6px 10px;font-size:13px;';
-        b.textContent = label;
-        if (!target) { (b as HTMLButtonElement).disabled = true; b.style.opacity = '0.4'; }
-        else b.onclick = () => { renderLocation(target, dir); };
-        return b;
-      };
-      row.appendChild(mkBtn(backLoc ? `← ${backLoc.name}` : '←', backId, 'back'));
-      row.appendChild(mkBtn(fwdLoc ? `${fwdLoc.name} →` : '→', fwdId, 'forward'));
-      navContainer.prepend(row);
+    if (state.lastLocation && state.lastLocation !== locId) {
+      const prevLoc = getLocation(state.lastLocation);
+      if (prevLoc) {
+        const sep2 = document.createElement('span');
+        sep2.textContent = ' · ↩ ';
+        sep2.style.color = '#555';
+        const back = document.createElement('span');
+        back.textContent = prevLoc.name;
+        crumbs.append(sep2, back);
+      }
     }
   }
 
-  // Мгновенных кнопок рейса в городах больше нет (M-6): уехать можно
-  // только с вокзала/причала, кнопка посадки рисуется выше по маршруту.
-  // Оставляем проверку на будущее: если в TRANSPORT_HUBS снова появится
-  // город — это снова станет дублем, и тест об этом напомнит.
+  // ── Кнопка "Назад" (F3): возврат к предыдущей локации ──
+  // Раньше была только для сервисных локаций и "съедала" lastLocation
+  // (обнуляла после возврата). Теперь — универсальная для любой локации:
+  // renderLocation сам обновляет lastLocation при переходе, поэтому кнопка
+  // работает как переключатель туда/обратно. Кнопки «➔ Название» ниже — без изменений.
+  if (state.lastLocation && state.lastLocation !== locId) {
+    const backLoc = getLocation(state.lastLocation);
+    if (backLoc) {
+      const btnBack = document.createElement('button');
+      btnBack.id = 'btn-back';
+      btnBack.className = 'btn-nav';
+      btnBack.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:var(--tma-accent)';
+      btnBack.textContent = `↩ Назад: ${backLoc.name}`;
+      btnBack.onclick = () => { renderLocation(state.lastLocation); };
+      navContainer.prepend(btnBack);
+    }
+  }
 
   autoSave();  // Сохраняем игру (новая локация)
 };

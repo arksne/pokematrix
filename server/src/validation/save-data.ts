@@ -169,7 +169,6 @@ export const saveDataSchema = z.object({
   currentLocationId: z.string().optional(),
   currentRegion: z.string().optional(),
   lastLocation: z.string().nullable().optional(),
-  locForward: z.string().nullable().optional(),
   visitedLocations: z.any().optional(),
   isDaytime: z.boolean().optional(),
   towerFloor: z.number().int().min(0).max(999).optional(),
