@@ -40,7 +40,6 @@ import { gymLeaders } from '../data/gyms.js';
 import { NPC_DATA } from '../data/npc.js';
 import { activeQuestIds, rollQuestDrops } from '../data/quest-drops.js';  // I3: дроп и гейты по квестам
 import { locationGateReason } from './location-gate.js';
-import { npcSpots, type NpcSpot } from './npc-anchors.js';
 import { specialMechanic, nextFloor } from '../battle/special-loc.js';  // M-4: этажи башен
 // Иконки и «сервисность» подлокаций живут в map.ts — единый источник, чтобы
 // кнопка в локации и узел на карте не разъезжались. Цикла импортов нет:
@@ -642,68 +641,27 @@ export let renderLocation = function(locId: any) {
   }
 
   // ── Панель NPC ──
-  // M-10: NPC стоят в ФИКСИРОВАННЫХ точках на картинке локации. Позиция
-  // считается из id (src/ui/npc-anchors.ts), поэтому не прыгает при любом
-  // изменении порядка в данных. Если у локации нет картинки (image: ''),
-  // точки не на чем рисовать — остаётся список-кнопка (как раньше).
+  // Обычный список кнопок: смайлики-маркеры поверх картинки убраны
+  // (хозяин не просил) — NPC открываются из списка, как раньше.
   const npcPanel = document.getElementById('npc-panel');
   const npcButtons = document.getElementById('npc-buttons');
-  const locImage = document.getElementById('loc-image');
   npcButtons.innerHTML = '';
   npcButtons.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:4px';
-  if (locImage) {
-    locImage.querySelectorAll('.npc-anchor').forEach((el) => el.remove());
-  }
 
   // Находим всех NPC для этой локации
   let npcsHere = Object.values(NPC_DATA).filter(n => n.location === locId);
   if (npcsHere.length > 0) {
-    const spots = npcSpots(npcsHere.map((n: any) => n.id));
-    npcsHere.forEach((npc: any, i: number) => {
-      const spot = spots[i];
-      const hasBg = !!loc.image;
-      if (locImage && hasBg) {
-        // Маркер поверх картинки: ::after у .location-image имеет z-index 1,
-        // поэтому маркер обязан быть выше.
-        const pin = document.createElement('button');
-        pin.className = 'npc-anchor';
-        pin.type = 'button';
-        pin.style.cssText = [
-          'position:absolute',
-          `left:${spot.x}%`,
-          `top:${spot.y}%`,
-          'transform:translate(-50%,-100%)',
-          'z-index:3',
-          'background:transparent',
-          'border:0',
-          'padding:0',
-          'cursor:pointer',
-          'filter:drop-shadow(0 2px 3px rgba(0,0,0,0.6))',
-        ].join(';');
-        pin.title = npc.name;
-        pin.innerHTML = `<span style="font-size:1.5rem;line-height:1">${npc.sprite || '🧑‍🏫'}</span>`;
-        pin.onclick = () => openNPCDialog(npc.id);
-        locImage.appendChild(pin);
-        // Кнопка в списке остаётся мелкой (для доступности/мелких экранов).
-        npcButtons.appendChild(makeNpcListButton(npc, spot));
-        return;
-      }
-      npcButtons.appendChild(makeNpcListButton(npc, null));
-    });
     npcPanel.style.display = 'block';  // Показываем панель NPC
+    npcsHere.forEach(npc => {
+      const npcBtn = document.createElement('button');
+      npcBtn.className = 'btn-nav';
+      npcBtn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
+      npcBtn.innerHTML = `<span>${npc.sprite} ${npc.name}</span>`;
+      npcBtn.onclick = () => openNPCDialog(npc.id);  // Открыть диалог
+      npcButtons.appendChild(npcBtn);
+    });
   } else {
     npcPanel.style.display = 'none';  // Нет NPC — прячем панель
-  }
-
-  /** Кнопка NPC для списка (и дубль маркера для мелких экранов). */
-  function makeNpcListButton(npc: any, spot: NpcSpot | null): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.className = 'btn-nav';
-    btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
-    const where = spot ? ` <span style="opacity:.6;font-size:.75em">(${spot.x}%, ${spot.y}%)</span>` : '';
-    btn.innerHTML = `<span>${npc.sprite} ${npc.name}${where}</span>`;
-    btn.onclick = () => openNPCDialog(npc.id);
-    return btn;
   }
 
   // ── НАВИГАЦИОННЫЕ КНОПКИ ──
