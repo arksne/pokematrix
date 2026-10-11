@@ -4444,6 +4444,7 @@ async function useMove(moveIndex) {
   S.lastMoveUsed = S.lastPlayerMove;
   S.lastMoveUsedDetail = move;
   S.playerActedRound = S.battleRound;
+  monVol(S.activePlayerMon).lastMove = S.lastPlayerMove; // для torment
 
   // ─── 10a. STATUS MOVES (без урона) ───
   // Ветка выбирается НЕ по `!power`: power-null, но дамажащие (фикс. урон,
@@ -5720,6 +5721,7 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
   S.lastWildMoveDetail = chosenMove;
   S.lastMoveUsed = S.lastWildMove;
   S.lastMoveUsedDetail = chosenMove;
+  monVol(S.activeWild).lastMove = S.lastWildMove; // для torment
     handleEnemyStatusEffects(chosenMove); // Лечение, барьеры, статы, статусы
     await finishEnemyTurn();
     return;
