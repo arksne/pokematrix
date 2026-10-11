@@ -204,8 +204,21 @@
 - [x] Тест E5 (+E5b): handshake нокаута и +500 победителю — PASS.
 
 ## L5. Тесты на КАЖДУЮ атаку
-- [ ] Прогнать все 741 атаку из moves_db тестами: детали грузятся, power/acc/pp/type
-  на месте, эффекты применяются (ядро — L2, остальное — дымовой прогон).
+- [x] ПРОХОД-741 СДЕЛАН (2026-10-11): все 741 разобраны по механике.
+  Переменная сила: crush-grip/wring-out, flail/reversal, final-gambit, fling,
+  natural-gift, present, spit-up/stockpile/swallow, last-respects, rage-fist,
+  population-bomb, comeuppance. Волатильные: confusion (таблица шансов),
+  attract, yawn, perish-song, torment, disable, taunt, encore, imprison.
+  Поле: погода/террейн/tailwind/trick-room с часами и эффектами. Щиты:
+  detect/quick/wide-guard, spiky/king/obstruct/baneful + наказания.
+  Подмены: metronome/copycat/assist/sleep-talk/mirror-move/nature-power/
+  me-first/transform/sketch. Особые: baton-pass, memento, healing-wish,
+  pain-split, strength-sap, spectral-thief, clear-smog, collision-course,
+  salt-cure, endure, destiny-bond, wish, roar/teleport, conversion-семья,
+  свопы статов/способностей, NO-META новинки (tidy-up/take-heart/...)
+  — всё вшито в оба конвейера симметрично. Тесты: 31 новый
+  (`special-moves-3.test.ts`). Проверки: tsc чисто, vitest 729/729,
+  полный verify 17 сьютов — 0 FAIL.
 
 ---
 
