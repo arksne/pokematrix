@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { navStep } from '../location.js';
+import { navStep, splitNavLinks } from '../location.js';
 
 describe('navStep: ← назад слева, → вперёд справа', () => {
   it('обычный переход: назад = откуда пришли, вперёд сброшен', () => {
@@ -36,5 +36,33 @@ describe('navStep: ← назад слева, → вперёд справа', ()
     expect(s).toEqual({ current: 'b', last: 'a', fwd: 'b' });
     step('c');              // новый путь — вперёд сброшен
     expect(s).toEqual({ current: 'c', last: 'b', fwd: null });
+  });
+});
+
+describe('splitNavLinks: откуда пришёл — только стрелкой, не кнопкой', () => {
+  // links золотого города: соседи + свой центр + свой маркет
+  const LINKS = ['route34', 'route35', 'goldenrodCity_pokecenter', 'goldenrodCity_pokemart', 'goldenrodStadium'];
+
+  it('без истории: все ссылки на месте, дублей и себя нет', () => {
+    const r = splitNavLinks('goldenrodCity', [...LINKS, 'route34', 'goldenrodCity', 'nope']);
+    expect(r.neighbors).toEqual(['route34', 'route35', 'goldenrodStadium']);
+    expect(r.inner).toEqual(['goldenrodCity_pokecenter', 'goldenrodCity_pokemart']);
+  });
+
+  it('откуда пришёл и куда «вперёд» — выкинуты из списков', () => {
+    const r = splitNavLinks('goldenrodCity', LINKS, ['route34', 'goldenrodCity_pokemart']);
+    expect(r.neighbors).toEqual(['route35', 'goldenrodStadium']);
+    expect(r.inner).toEqual(['goldenrodCity_pokecenter']);
+  });
+
+  it('exclude с null не ломает раскладку', () => {
+    const r = splitNavLinks('goldenrodCity', LINKS, [null, undefined as any]);
+    expect(r.neighbors).toHaveLength(3);
+    expect(r.inner).toHaveLength(2);
+  });
+
+  it('пустые и битые ссылки молча пропускаются', () => {
+    const r = splitNavLinks('goldenrodCity', [null as any, '', 'nope'], []);
+    expect(r).toEqual({ neighbors: [], inner: [] });
   });
 });

@@ -105,6 +105,29 @@ async function getBattleCore() {
 // Ключ для sessionStorage, где кэшируется конфигурация дропов с сервера
 export const DROP_CONFIG_CACHE_KEY = 'pokematrix_drop_config_cache';
 
+// ── splitNavLinks: чистая раскладка ссылок по группам (для тестов и renderLocation) ──
+// Возвращает id соседей и внутренних точек БЕЗ дублей, БЕЗ самого себя и БЕЗ
+// локаций из exclude (история ←/→: откуда пришёл и куда «вперёд» рисуются
+// стрелками, поэтому в списке соседей их быть не должно — иначе одна и та же
+// локация показывается дважды, а с крошками — трижды).
+export function splitNavLinks(
+  locId: string, links: string[] | null | undefined, exclude?: Array<string | null>,
+): { neighbors: string[]; inner: string[] } {
+  const neighbors: string[] = [];
+  const inner: string[] = [];
+  const seen = new Set<string>();
+  const skip = new Set((exclude || []).filter(Boolean) as string[]);
+  for (const linkId of links || []) {
+    if (!linkId || linkId === locId || seen.has(linkId) || skip.has(linkId)) continue;
+    const linkLoc = getLocation(linkId);
+    if (!linkLoc) continue;
+    seen.add(linkId);
+    if (linkId.startsWith(`${locId}_`) || isServiceLoc(linkId)) inner.push(linkId);
+    else neighbors.push(linkId);
+  }
+  return { neighbors, inner };
+}
+
 // ── navStep: чистая история навигации ←/→ (для тестов и renderLocation) ──
 export function navStep(
   current: string | null, last: string | null, fwd: string | null,
@@ -743,21 +766,14 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
     renderLocation(linkId);
   };
 
-  /** Классификация ссылки: сервис города или обычный сосед. */
-  const isInnerOf = (linkId: string) => linkId.startsWith(`${locId}_`) || isServiceLoc(linkId);
-
-  // Собираем уникальные (в links исторически встречались повторы) и режем
-  // текущую локу — кнопка «перейти в самого себя» бессмысленна.
-  const seen = new Set<string>();
-  const neighbors: Array<{ id: string; loc: any }> = [];
-  const inner: Array<{ id: string; loc: any }> = [];
-  for (const linkId of loc.links || []) {
-    if (!linkId || linkId === locId || seen.has(linkId)) continue;
-    const linkLoc = getLocation(linkId);
-    if (!linkLoc) continue;
-    seen.add(linkId);
-    (isInnerOf(linkId) ? inner : neighbors).push({ id: linkId, loc: linkLoc });
-  }
+  // Раскладка по группам — одной функцией (см. splitNavLinks выше).
+  // Из списков выкинуты откуда-пришёл и куда-«вперёд»: они уже нарисованы
+  // стрелками ←/→, дублировать их кнопками «➔ туда же» — та самая каша.
+  const { neighbors: neighborIds, inner: innerIds } = splitNavLinks(
+    locId, loc.links, [state.lastLocation, (state as any).locForward],
+  );
+  const neighbors = neighborIds.map((id) => ({ id, loc: getLocation(id) }));
+  const inner = innerIds.map((id) => ({ id, loc: getLocation(id) }));
 
   /** Заголовок группы. */
   const groupTitle = (text: string) => {
@@ -851,40 +867,35 @@ export let renderLocation = function(locId: any, via?: 'back' | 'forward') {
     cur.textContent = loc.name;
     cur.style.color = '#fff';
     crumbs.append(regionSpan, sep, cur);
-    if (state.lastLocation && state.lastLocation !== locId) {
-      const prevLoc = getLocation(state.lastLocation);
-      if (prevLoc) {
-        const sep2 = document.createElement('span');
-        sep2.textContent = ' · ↩ ';
-        sep2.style.color = '#555';
-        const back = document.createElement('span');
-        back.textContent = prevLoc.name;
-        crumbs.append(sep2, back);
-      }
-    }
+    // «↩ откуда пришёл» здесь больше нет: это был третий показ той же
+    // локации (стрелка ← + кнопка соседа). Крошки — только «где я».
   }
 
   // ── Навигация ←/→: прошедшая слева, вперёд справа ──
-  // Вместо одной кнопки «Назад»: две стрелки по краям.
+  // Вместо одной кнопки «Назад»: две стрелки по краям. Ряд рисуем только
+  // когда есть куда идти — две серые заглушки «←»/«→» на старте были мусором.
   {
-    const row = document.createElement('div');
-    row.style.cssText = 'grid-column:1/-1;display:flex;gap:4px;';
-    const mkBtn = (label: string, target: string | null, dir: 'back' | 'forward') => {
-      const b = document.createElement('button');
-      b.className = 'btn-nav';
-      b.style.cssText = 'flex:1;min-width:fit-content;padding:6px 10px;font-size:13px;';
-      b.textContent = label;
-      if (!target) { (b as HTMLButtonElement).disabled = true; b.style.opacity = '0.4'; }
-      else b.onclick = () => { renderLocation(target, dir); };
-      return b;
-    };
     const backId = (state.lastLocation && state.lastLocation !== locId) ? state.lastLocation : null;
     const backLoc = backId ? getLocation(backId) : null;
     const fwdId = (state as any).locForward || null;
     const fwdLoc = fwdId ? getLocation(fwdId) : null;
-    row.appendChild(mkBtn(backLoc ? `← ${backLoc.name}` : '←', backId, 'back'));
-    row.appendChild(mkBtn(fwdLoc ? `${fwdLoc.name} →` : '→', fwdId, 'forward'));
-    navContainer.prepend(row);
+    if (backLoc || fwdLoc) {
+      const row = document.createElement('div');
+      row.id = 'nav-history-row';
+      row.style.cssText = 'grid-column:1/-1;display:flex;gap:4px;';
+      const mkBtn = (label: string, target: string | null, dir: 'back' | 'forward') => {
+        const b = document.createElement('button');
+        b.className = 'btn-nav';
+        b.style.cssText = 'flex:1;min-width:fit-content;padding:6px 10px;font-size:13px;';
+        b.textContent = label;
+        if (!target) { (b as HTMLButtonElement).disabled = true; b.style.opacity = '0.4'; }
+        else b.onclick = () => { renderLocation(target, dir); };
+        return b;
+      };
+      row.appendChild(mkBtn(backLoc ? `← ${backLoc.name}` : '←', backId, 'back'));
+      row.appendChild(mkBtn(fwdLoc ? `${fwdLoc.name} →` : '→', fwdId, 'forward'));
+      navContainer.prepend(row);
+    }
   }
 
   // Мгновенных кнопок рейса в городах больше нет (M-6): уехать можно
