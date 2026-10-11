@@ -170,6 +170,10 @@
   Остаток (отдельные механики): counter/mirror-coat/bide/metal-burst,
   вес/скорость-урон, beat-up, fly/dig/dive, перезарядка hyper-beam, heal-pulse.
 - [x] L5. Дымовой тест всех 741 атак (moves-db-smoke, 17 тестов) + 36 тестов механик.
+- [x] False Swipe 11.10 — да, убивал: добивающий удар обнулял HP раньше
+  проверки (она видела только HP > 0). Плюс та же проверка сбрасывала слабый
+  удар до 1 HP. Теперь чистая `falseSwipeClamp(pre, cur)` в обоих конвейерах
+  + 3 теста.
 - [x] Повторный проход 11.10: остаток L2 закрыт — counter/mirror-coat/
   metal-burst (возврат входящего, запись урона обеими сторонами),
   low-kick/grass-knot/heavy-slam/heat-crash (вес), gyro/electro-ball

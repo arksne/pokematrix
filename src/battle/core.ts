@@ -50,7 +50,7 @@ import { getAbilityNameRu } from '../data/abilities.js';                 // Ру
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy } from './logic.js';
-import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, normMoveName } from './special-moves.js';
+import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, falseSwipeClamp, normMoveName } from './special-moves.js';
 import { calculateStat as calculateStatShared } from './stats.js';
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
 import { store } from '../game/store.js';
@@ -3720,16 +3720,17 @@ async function useMove(moveIndex) {
       appendToLog(`${S.activeWild.name} выдерживает удар благодаря Прочной Броне!`);
     }
 
-    // False Swipe — оставляет противнику ровно 1 HP.
-    // Раньше атака не была реализована: она наносила обычный урон и могла
-    // добить противника, то есть работала как обычная атака вдвое слабее.
+    // False Swipe — не добивает: оставляет противнику ровно 1 HP.
+    // Было два бага сразу: добивающий удар обнулял HP раньше этой проверки
+    // (она видела только HP > 0 — и False Swipe убивал), а слабый удар
+    // наоборот сбрасывал HP до 1, хотя должен был оставить как есть.
     if (move.name === 'false-swipe' || move.name === 'falseswipe') {
-      if (S.wildCurHP > 0 && S.wildCurHP < 1) S.wildCurHP = 1;
-      else if (S.wildCurHP > 0) {
-        S.wildCurHP = 1;
+      const clamped = falseSwipeClamp(preWildHP, S.wildCurHP);
+      if (clamped !== S.wildCurHP) {
+        S.wildCurHP = clamped;
         appendToLog(`Ложный Удар оставляет ${S.activeWild.name} 1 HP!`, false, 'system');
+        updateWildHpUI();
       }
-      updateWildHpUI();
     }
 
     // Knock Off игрока — сбивает предмет дикого (канон: ×1.5 уже учтены выше).
@@ -4585,11 +4586,11 @@ async function runEnemyTurnBody() {
   }
 
 // ─── AFTER ALL HITS ───
-    // False Swipe от врага — оставляет игроку ровно 1 HP.
-    // Раньше не был реализован: наносил обычный урон и мог добить.
+    // False Swipe от врага — не добивает (зеркало игрока).
     if (chosenMove.name === 'false-swipe' || chosenMove.name === 'falseswipe') {
-      if (S.activePlayerMon.currentHp > 0) {
-        S.activePlayerMon.currentHp = 1;
+      const clamped = falseSwipeClamp(prePlayerHP, S.activePlayerMon.currentHp);
+      if (clamped !== S.activePlayerMon.currentHp) {
+        S.activePlayerMon.currentHp = clamped;
         appendToLog(`Ложный Удар оставляет ${S.activePlayerMon.apiData.name} 1 HP!`, false, 'system');
         updatePlayerHpUI();
       }

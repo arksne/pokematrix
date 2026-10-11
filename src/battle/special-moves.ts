@@ -340,6 +340,15 @@ export function healPulseAmount(targetMaxHp: unknown): number {
   return m > 0 ? Math.floor(m / 2) : 0;
 }
 
+// ── False Swipe (L2): не добивает ─────────────────────────────
+// Канон: если удар довёл бы цель до 0 — остаётся 1 HP. Чистая функция:
+// preHp — HP до удара, curHp — после вычитания урона (уже обрезанное ≥0).
+export function falseSwipeClamp(preHp: unknown, curHp: unknown): number {
+  const pre = Math.floor(Number(preHp) || 0);
+  const cur = Math.floor(Number(curHp) || 0);
+  return pre > 0 && cur <= 0 ? 1 : cur;
+}
+
 // ── Bide (L2-остаток) ──────────────────────────────────────────
 // Два хода терпит (урон копится), на третий бьёт удвоенным накопленным.
 export const BIDE_TURNS = 2;

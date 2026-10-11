@@ -3,7 +3,7 @@ import {
   counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg,
   gyroBallPower, electroBallPower, beatUpHits, beatUpPower,
   isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount,
-  bideRelease, BIDE_TURNS,
+  bideRelease, BIDE_TURNS, falseSwipeClamp,
 } from '../special-moves.js';
 
 /** L2-остаток: проход по всем «таким» атакам — у каждой своя механика. */
@@ -133,6 +133,22 @@ describe('полунеуязвимость', () => {
     expect(canHitHidden('thunder', 'dive')).toBe(false);
     expect(canHitHidden('tackle', 'shadow-force')).toBe(false);
     expect(canHitHidden('tackle', null)).toBe(true);
+  });
+});
+
+describe('false-swipe не добивает', () => {
+  it('добивающий удар оставляет 1 HP', () => {
+    expect(falseSwipeClamp(50, 0)).toBe(1);
+    expect(falseSwipeClamp(1, 0)).toBe(1);
+  });
+
+  it('слабый удар HP не трогает (не сбрасывает до 1)', () => {
+    expect(falseSwipeClamp(50, 30)).toBe(30);
+    expect(falseSwipeClamp(50, 1)).toBe(1);
+  });
+
+  it('по мёртвому (0 до удара) — не воскрешает', () => {
+    expect(falseSwipeClamp(0, 0)).toBe(0);
   });
 });
 
