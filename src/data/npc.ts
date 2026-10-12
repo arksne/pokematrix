@@ -625,7 +625,7 @@ export const NPC_DATA = {
       { id: 'i1_trade_1', type: 'explore', targetItem: null, targetQty: 4, desc: 'Посетите 4 рынка Канто для изучения цен', rewardMoney: 1500, rewardItem: 'quickBall', rewardQty: 4, prereqQuest: null },
       { id: 'i1_trade_2', type: 'earn_money', targetItem: null, targetQty: 10000, desc: 'Заработайте ¥10 000 торговлей и перепродажей', rewardMoney: 4000, rewardItem: 'repeatBall', rewardQty: 4, prereqQuest: 'i1_trade_1' },
       { id: 'i1_trade_3', type: 'earn_money', targetItem: null, targetQty: 30000, desc: 'Заработайте ¥30 000 на крупной торговой сделке', rewardMoney: 8000, rewardItem: 'moonStone', rewardQty: 1, prereqQuest: 'i1_trade_2' },
-      { id: 'i1_trade_4', type: 'collect_items', targetItem: 'potion', targetQty: 8, desc: 'Подготовьте оборотный запас: 8 Зелий для лавки', rewardMoney: 10000, rewardItem: 'luxuryBall', rewardQty: 3, prereqQuest: 'i1_trade_3' },
+      { id: 'i1_trade_4', type: 'collect_items', targetItem: 'potion', targetQty: 8, desc: 'Подготовьте оборотный запас: 8 Зелий для лавки', rewardMoney: 10000, rewardItem: 'friendBall', rewardQty: 3, prereqQuest: 'i1_trade_3' },
     ],
   },
   'i1_training_master': {

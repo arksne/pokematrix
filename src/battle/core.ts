@@ -7114,10 +7114,16 @@ function initEncounterEvents() {
       }
       if (ballCfg.qty <= 0) return showToast(`У вас нет ${ballCfg.label}ов!`, true);
 
-      // Неловимый (легенда или noCatch-локация): болл не тратим, сразу говорим
+      // Неловимый (легенда или noCatch-локация): болл не тратим, сразу говорим.
+      // Сафари-болл проходит запрет ЛОКАЦИИ (секретные места с редкими),
+      // но не запрет ВИДА: легенды остаются только боссами ради дропа.
       if (S.activeWild.uncatchable) {
-        appendToLog(`${S.activeWild.name} нельзя поймать! Его можно только победить ради дропа.`, false, 'system');
-        return;
+        const speciesLocked = LEGENDARY_SET.has((S.activeWild.name || '').toLowerCase());
+        if (!(item === 'safariBall' && !speciesLocked)) {
+          appendToLog(`${S.activeWild.name} нельзя поймать! Его можно только победить ради дропа.`, false, 'system');
+          return;
+        }
+        appendToLog('Сафари-болл: запрет этого места не действует!', false, 'catch');
       }
 
       ballCfg.dec(); // Уменьшаем количество в инвентаре
@@ -7210,6 +7216,13 @@ function initEncounterEvents() {
           if (item === 'darkBall') {
             for (const s of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) {
               newMon.ivs[s] = Math.min(50, newMon.ivs[s] + 5);
+            }
+          }
+
+          // SuperDarkBall: x2 механика дарка — +10 to all IVs (max 50)
+          if (item === 'superDarkBall') {
+            for (const s of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) {
+              newMon.ivs[s] = Math.min(50, newMon.ivs[s] + 10);
             }
           }
 

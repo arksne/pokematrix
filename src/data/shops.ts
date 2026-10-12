@@ -1453,11 +1453,12 @@ export const TIER_BALLS: Record<number, string[]> = {
   3: [
     'greatBall', 'ultraBall', 'timerBall', 'duskBall', 'quickBall',
     'netBall', 'repeatBall', 'nestBall', 'sportBall', 'friendBall',
+    'loveBall',
   ],
   4: [
     'greatBall', 'ultraBall', 'timerBall', 'duskBall', 'quickBall',
     'netBall', 'repeatBall', 'nestBall', 'sportBall', 'friendBall',
-    'premierBall', 'luxuryBall', 'darkBall', 'superDarkBall',
+    'loveBall', 'premierBall', 'darkBall', 'superDarkBall', 'safariBall',
   ],
 };
 
