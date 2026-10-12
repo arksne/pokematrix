@@ -218,7 +218,7 @@ const sockB = await connect(tokenB, 'B');
       const rewardRecv = onceEvent(sA2, 'pvp_reward', 5000);
       sB2.emit('pvp_end', { battleId: bidB, action: { type: 'lose' } });
       const reward = await rewardRecv;
-      rewardOk = !!reward && reward.money >= 500 && reward.arena === true
+      rewardOk = !!reward && reward.money === 115000 && reward.arena === true
         && (reward.streak || 0) >= 1 && Array.isArray(reward.items) && reward.items.length > 0;
       check('E6d', 'Арена: победитель получает pvp_reward со стриком и предметами',
         rewardOk, reward ? `money=${reward.money} streak=${reward.streak} items=${reward.items?.length}` : 'pvp_reward не пришёл');
@@ -227,6 +227,11 @@ const sockB = await connect(tokenB, 'B');
   check('E6c', 'Арена: бой идёт по тому же протоколу (attack/hp_update/fainted)',
     chAr?.arena === true && protoOk,
     !chAr ? 'вызов не дошёл' : `arena=${chAr?.arena}, sync=${protoOk}`);
+
+  // Проигравший получил утешительные 10 000 (старт 50 000, жетон инжектом).
+  const sdB2 = asObject((await api('/api/save', { method: 'GET', token: tB2 })).json?.saveData);
+  check('E6f', 'Арена: проигравший получил утешительные 10 000',
+    sdB2.inventory?.credit === 60000, `credit=${sdB2.inventory?.credit}`);
 
   // Таблица лидеров арены видит победу.
   const lead = await api('/api/arena/leaders', { token: tA2 });
@@ -244,6 +249,7 @@ const sockB = await connect(tokenB, 'B');
   check('E6c', 'Арена: бой идёт по тому же протоколу', false, 'блок не дошёл');
   check('E6d', 'Арена: победитель получает pvp_reward со стриком', false, 'блок не дошёл');
   check('E6e', 'Арена: таблица лидеров отдаёт победу', false, 'блок не дошёл');
+  check('E6f', 'Арена: проигравший получил утешительные 10 000', false, 'блок не дошёл');
  }
 }
 

@@ -69,7 +69,7 @@ import { showToast } from '../utils/dom.js';          // Всплывающие 
 import { autoSave } from '../game/save.js';            // Автосохранение
 import { API_BASE } from '../game/config.js';          // Базовый URL сервера
 // Платное лечение (M-24): цена + проверка денег + сам хил
-import { HEAL_PRICE, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
+import { healCostForTeam, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
 
 // ── ЛЕНИВЫЙ ИМПОРТ (циклические зависимости) ────────────
 
@@ -284,7 +284,7 @@ export function arriveTransport() {
 }
 
 // ── healTeam: лечение всей команды в покецентре (M-24: ПЛАТНО) ──
-// Стоит фикс HEAL_PRICE (см. heal.ts). Здоровая команда — бесплатно
+// Цена = недостающее HP × 1 кр (см. heal.ts). Здоровая команда — бесплатно
 // (лечить нечего, деньги не трогаем). Без денег — отказ тостом, не лечит.
 export function healTeam() {
   if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
@@ -303,16 +303,19 @@ export function healTeam() {
     return;
   }
 
+  const cost = healCostForTeam(state.myTeam);
   // Деньги вперёд: не хватает — не лечим
-  if (!tryChargeHeal()) {
-    showToast(`Лечение стоит ¥${HEAL_PRICE.toLocaleString()}! Не хватает кредитов.`, true);
+  if (!tryChargeHeal(cost)) {
+    showToast(`Лечение стоит ¥${cost.toLocaleString()}! Не хватает кредитов.`, true);
     return;
   }
 
   applyTeamHeal(state.myTeam);
 
   // Сообщение в зависимости от того, было ли лечение
-  const msg = `Сестра Джой вылечила всю команду! (−¥${HEAL_PRICE.toLocaleString()})`;
+  const msg = cost > 0
+    ? `Сестра Джой вылечила всю команду! (−¥${cost.toLocaleString()})`
+    : 'Сестра Джой вылечила всю команду! (бесплатно — только статусы)';
   // Временно меняем текст описания локации (меняем на 2 секунды)
   const descEl = document.getElementById('loc-desc');
   const oldText = descEl.innerText;
@@ -325,7 +328,7 @@ export function healTeam() {
 
   autoSave();  // Сохраняем игру
 
-  // Обновляем UI: деньги (списали HEAL_PRICE), сетка команды и профиль
+  // Обновляем UI: деньги (списали цену), сетка команды и профиль
   updateMoneyDisplay();
   getProfileModule().then(pm => pm.renderTeamGrid());
   getProfileModule().then(pm => pm.refreshProfileUI());
@@ -566,11 +569,14 @@ export let renderLocation = function(locId: any) {
     };
     actionsContainer.appendChild(btnArena);
 
-    // Кнопка "Вылечить команду" (M-24: платно — цена в подписи)
+    // Кнопка "Вылечить команду" (M-24: платно — цена по ранам, 1 HP = 1 кр)
     const btnHeal = document.createElement('button');
     btnHeal.className = 'btn-use';
     btnHeal.style.backgroundColor = '#34c759';  // Зелёный
-    btnHeal.innerText = `🏥 Вылечить команду (¥${HEAL_PRICE.toLocaleString()})`;
+    const healCost = healCostForTeam(state.myTeam);
+    btnHeal.innerText = healCost > 0
+      ? `🏥 Вылечить команду (¥${healCost.toLocaleString()})`
+      : '🏥 Вылечить команду';
     btnHeal.onclick = () => healTeam();
     actionsContainer.appendChild(btnHeal);
 

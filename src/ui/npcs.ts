@@ -34,7 +34,7 @@ import { openPC } from './pc.js';                          // Открытие P
 import { openBreedBoxes } from './daycare.js';
 import { NPC_DATA } from '../data/npc.js';                  // Статические данные NPC
 // Платное лечение (M-24): та же цена, что кнопка центра
-import { HEAL_PRICE, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
+import { healCostForTeam, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
 
 // ── renderNPCQuests: отрисовка списка квестов NPC ───────
 // Принимает npc — объект NPC из NPC_DATA
@@ -211,7 +211,10 @@ export function openNPCDialog(npcId: string) {
     const btnHeal = document.createElement('button');
     btnHeal.className = 'tma-btn npc-action-extra';
     btnHeal.style.backgroundColor = '#34c759';  // Зелёная
-    btnHeal.innerText = `🏥 Вылечить команду (¥${HEAL_PRICE.toLocaleString()})`;
+    const joyCost = healCostForTeam(state.myTeam);
+    btnHeal.innerText = joyCost > 0
+      ? `🏥 Вылечить команду (¥${joyCost.toLocaleString()})`
+      : '🏥 Вылечить команду';
     btnHeal.onclick = () => {
       if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
       // Лечить нечего — бесплатно
@@ -220,13 +223,16 @@ export function openNPCDialog(npcId: string) {
         modal.style.display = 'none';
         return;
       }
+      const cost = healCostForTeam(state.myTeam);
       // Деньги вперёд: не хватает — не лечим
-      if (!tryChargeHeal()) {
-        showToast(`Лечение стоит ¥${HEAL_PRICE.toLocaleString()}! Не хватает кредитов.`, true);
+      if (!tryChargeHeal(cost)) {
+        showToast(`Лечение стоит ¥${cost.toLocaleString()}! Не хватает кредитов.`, true);
         return;
       }
       applyTeamHeal(state.myTeam);
-      showToast(`Ваша команда полностью вылечена! (−¥${HEAL_PRICE.toLocaleString()})`, false);
+      showToast(cost > 0
+        ? `Ваша команда полностью вылечена! (−¥${cost.toLocaleString()})`
+        : 'Ваша команда полностью вылечена! (бесплатно — только статусы)', false);
       modal.style.display = 'none';  // Закрываем модалку
       store.emit('save');
     };

@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 // heal.ts — ПЛАТНОЕ ЛЕЧЕНИЕ В ПОКЕ-ЦЕНТРЕ (блок M-24)
 // ─────────────────────────────────────────────────────────────
-// Лечение всей команды у сестры Джой стоит фикс HEAL_PRICE.
-// Без денег — отказ (тост), команда не лечится.
+// Цена лечения = недостающее HP команды × HEAL_PRICE_PER_HP (1 HP = 1 кр).
+// Статусы/PP чинятся бесплатно довеском. Без денег — отказ (тост).
 // Пути лечения:
 //   location.ts healTeam (кнопка центра) — платно,
 //   npcs.ts joy_pokecenter (медсестра Джой) — платно,
@@ -18,10 +18,10 @@ import { state } from '../game/state.js';
 import { store } from '../game/store.js';
 import { calculateStat } from '../battle/stats.js';
 
-// ── HEAL_PRICE: цена полного лечения команды ──
-// potion стоит 300; полное восстановление до 6 покемонов (HP + статусы + PP)
-// = potion × 5 = 1500. Дешевле шести fullRestore (18 000), но не халява.
-export const HEAL_PRICE = 1500;
+// ── HEAL_PRICE_PER_HP: 1 единица недостающего HP = 1 кредит ──
+// Решение хозяина: цена лечения зависит от урона. Лечить царапину дёшево,
+// поднимать команду с нуля — дорого (ф fainted стоит полный maxHp).
+export const HEAL_PRICE_PER_HP = 1;
 
 // Пересчёт maxHp по ЕДИНОЙ формуле из battle/stats.ts.
 // Раньше здесь стояла своя копия `0.01 * (2*baseHp + iv + ...)`, где база
@@ -67,20 +67,35 @@ export function applyTeamHeal(team: any[]): boolean {
   return healed;
 }
 
-/** Хватает ли кредитов на лечение. */
-export function canAffordHeal(): boolean {
-  return (state.inventory?.credit || 0) >= HEAL_PRICE;
+/**
+ * Цена лечения команды: суммарное недостающее HP × HEAL_PRICE_PER_HP.
+ * Без сознания (0 HP) стоит полный maxHp. Статусы/PP — бесплатно.
+ */
+export function healCostForTeam(team: any[]): number {
+  let cost = 0;
+  for (const mon of team || []) {
+    if (!mon || !mon.apiData) continue;
+    cost += Math.max(0, calcMaxHp(mon) - (mon.currentHp ?? 0)) * HEAL_PRICE_PER_HP;
+  }
+  return cost;
+}
+
+/** Хватает ли кредитов на лечение за данную цену. */
+export function canAffordHeal(cost: number): boolean {
+  return (state.inventory?.credit || 0) >= cost;
 }
 
 /**
- * Списать плату за лечение. true — списано, false — не хватает денег
- * (ничего не трогаем, лечить нельзя).
+ * Списать плату за лечение. true — списано (или цена 0), false —
+ * не хватает денег (ничего не трогаем, лечить нельзя).
  */
-export function tryChargeHeal(): boolean {
+export function tryChargeHeal(cost: number): boolean {
   const cur = state.inventory?.credit || 0;
-  if (cur < HEAL_PRICE) return false;
-  state.inventory.credit = cur - HEAL_PRICE;
-  store.emit('money:changed');
-  store.emit('inventory:changed', 'credit', -HEAL_PRICE);
+  if (cur < cost) return false;
+  if (cost > 0) {
+    state.inventory.credit = cur - cost;
+    store.emit('money:changed');
+    store.emit('inventory:changed', 'credit', -cost);
+  }
   return true;
 }

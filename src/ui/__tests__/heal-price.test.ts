@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  HEAL_PRICE,
+  HEAL_PRICE_PER_HP,
+  healCostForTeam,
   teamNeedsHeal,
   applyTeamHeal,
   canAffordHeal,
   tryChargeHeal,
 } from '../heal.js';
-import { ITEMS } from '../../data/items.js';
 import { state } from '../../game/state.js';
 import { calculateStat } from '../../battle/stats.js';
 
 /**
- * M-24: лечение в поке-центре платное.
+ * M-24: лечение в поке-центре платное, цена = недостающее HP × 1 кр.
  * - без денег — отказ, команда не лечится;
- * - с деньгами — списание HEAL_PRICE и полный хил;
- * - здоровая команда — лечить нечего (отдельная ветка, бесплатно).
+ * - с деньгами — списание цены и полный хил;
+ * - здоровая команда — лечить нечего (цена 0, бесплатно).
  */
 
 function makeMon(over: Record<string, any> = {}): any {
@@ -46,16 +46,28 @@ function makeMon(over: Record<string, any> = {}): any {
   return mon;
 }
 
-describe('M-24: платное лечение', () => {
+describe('M-24: лечение по HP (1 HP = 1 кр)', () => {
   beforeEach(() => {
     state.inventory = { credit: 0 };
   });
 
-  it('HEAL_PRICE = potion × 5 (решение зафиксировано константой)', () => {
-    const potion = ITEMS.find((i) => i.id === 'potion')!;
-    expect(potion.price).toBe(300);
-    expect(HEAL_PRICE).toBe(potion.price * 5);
-    expect(HEAL_PRICE).toBe(1500);
+  it('тариф зафиксирован: HEAL_PRICE_PER_HP = 1', () => {
+    expect(HEAL_PRICE_PER_HP).toBe(1);
+  });
+
+  it('healCostForTeam: здоровая — 0; раненая — недостача; без сознания — полный maxHp', () => {
+    expect(healCostForTeam([])).toBe(0);
+    const healthy = makeMon();
+    expect(healCostForTeam([healthy])).toBe(0);
+    const hurt = makeMon({ currentHp: 5 });
+    expect(healCostForTeam([hurt])).toBe(hurt.maxHp - 5);
+    const dead = makeMon({ currentHp: 0 });
+    expect(healCostForTeam([dead])).toBe(dead.maxHp);
+    // Статус/PP без ран — 0 (чинятся бесплатно довеском)
+    expect(healCostForTeam([makeMon({ status: 'psn' })])).toBe(0);
+    expect(healCostForTeam([makeMon({ movesPP: [{ current: 3, max: 30 }] })])).toBe(0);
+    // Сумма по команде
+    expect(healCostForTeam([hurt, dead])).toBe((hurt.maxHp - 5) + dead.maxHp);
   });
 
   it('teamNeedsHeal: здоровая — false; раненая/статус/PP — true', () => {
@@ -72,27 +84,42 @@ describe('M-24: платное лечение', () => {
 
   it('без денег — отказ, кредит не трогаем', () => {
     state.inventory = { credit: 0 };
-    expect(canAffordHeal()).toBe(false);
-    expect(tryChargeHeal()).toBe(false);
+    expect(canAffordHeal(10)).toBe(false);
+    expect(tryChargeHeal(10)).toBe(false);
     expect(state.inventory.credit).toBe(0);
   });
 
   it('денег меньше цены — отказ', () => {
-    state.inventory = { credit: HEAL_PRICE - 1 };
-    expect(tryChargeHeal()).toBe(false);
-    expect(state.inventory.credit).toBe(HEAL_PRICE - 1);
+    const team = [makeMon({ currentHp: 5 })];
+    const cost = healCostForTeam(team);
+    expect(cost).toBeGreaterThan(0);
+    state.inventory = { credit: cost - 1 };
+    expect(tryChargeHeal(cost)).toBe(false);
+    expect(state.inventory.credit).toBe(cost - 1);
   });
 
-  it('с деньгами — списание ровно HEAL_PRICE', () => {
+  it('с деньгами — списание ровно цены ран', () => {
+    const team = [makeMon({ currentHp: 5 })];
+    const cost = healCostForTeam(team);
     state.inventory = { credit: 5000 };
-    expect(canAffordHeal()).toBe(true);
-    expect(tryChargeHeal()).toBe(true);
-    expect(state.inventory.credit).toBe(5000 - HEAL_PRICE);
+    expect(canAffordHeal(cost)).toBe(true);
+    expect(tryChargeHeal(cost)).toBe(true);
+    expect(state.inventory.credit).toBe(5000 - cost);
   });
 
   it('ровно цена — списание в ноль', () => {
-    state.inventory = { credit: HEAL_PRICE };
-    expect(tryChargeHeal()).toBe(true);
+    const team = [makeMon({ currentHp: 0 })];
+    const cost = healCostForTeam(team);
+    state.inventory = { credit: cost };
+    expect(tryChargeHeal(cost)).toBe(true);
+    expect(state.inventory.credit).toBe(0);
+  });
+
+  it('цена 0 (только статус) — бесплатно, кредит не трогаем', () => {
+    const team = [makeMon({ status: 'psn' })];
+    expect(healCostForTeam(team)).toBe(0);
+    state.inventory = { credit: 0 };
+    expect(tryChargeHeal(0)).toBe(true);
     expect(state.inventory.credit).toBe(0);
   });
 
@@ -118,23 +145,28 @@ describe('M-24: платное лечение', () => {
   });
 
   it('полный цикл без денег: отказ, команда остаётся раненой', () => {
-    state.inventory = { credit: 100 };
     const team = [makeMon({ currentHp: 7, status: 'psn' })];
+    const cost = healCostForTeam(team);
+    state.inventory = { credit: Math.max(0, cost - 1) };
     expect(teamNeedsHeal(team)).toBe(true);
     // UI-путь: денег нет → applyTeamHeal не вызываем
-    expect(tryChargeHeal()).toBe(false);
-    expect(team[0].currentHp).toBe(7);
-    expect(team[0].status).toBe('psn');
+    expect(tryChargeHeal(cost)).toBe(cost === 0);
+    if (cost > 0) {
+      expect(team[0].currentHp).toBe(7);
+      expect(team[0].status).toBe('psn');
+    }
   });
 
   it('полный цикл с деньгами: списание + хил', () => {
     state.inventory = { credit: 10000 };
     const team = [makeMon({ currentHp: 7, status: 'psn' })];
+    const cost = healCostForTeam(team);
+    expect(cost).toBeGreaterThan(0);
     expect(teamNeedsHeal(team)).toBe(true);
-    expect(tryChargeHeal()).toBe(true);
+    expect(tryChargeHeal(cost)).toBe(true);
     expect(applyTeamHeal(team)).toBe(true);
     expect(team[0].currentHp).toBe(team[0].maxHp);
     expect(team[0].status).toBeNull();
-    expect(state.inventory.credit).toBe(10000 - HEAL_PRICE);
+    expect(state.inventory.credit).toBe(10000 - cost);
   });
 });

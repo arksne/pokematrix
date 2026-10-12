@@ -22,10 +22,16 @@
 export const ARENA_TOKEN_ID = 'arenaToken';
 
 /** Цена жетона в маркете (паритет с server/src/routes/economy.ts). */
-export const ARENA_TOKEN_PRICE = 5000;
+export const ARENA_TOKEN_PRICE = 100000;
 
 /** Цена продажи жетона (половина покупки, как везде). */
-export const ARENA_TOKEN_SELL = 2500;
+export const ARENA_TOKEN_SELL = 50000;
+
+/**
+ * Утешительный приз проигравшему бой на арене (10% цены жетона).
+ * Стрик при этом сбрасывается. Выдаёт сервер вместе с pvp_arena_update.
+ */
+export const ARENA_LOSS_CONSOLATION = 10000;
 
 export interface ArenaRewardItem {
   id: string;
@@ -40,30 +46,33 @@ export interface ArenaReward {
 /**
  * Приз за победу при текущем стрике (стрик уже увеличен за этот бой).
  *
- * Таблица (деньги + предметы, выдаёт сервер через pvp_reward):
- *   стрик 1:  500 + potion×1
- *   стрик 2:  800 + superPotion×1
- *   стрик 3: 1200 + greatBall×2
- *   стрик 4: 2000 + ultraBall×2
- *   стрик 5+: 3000 + rareCandy×1
+ * Экономика привязана к цене жетона (100 000): оба бойца сжигают по
+ * жетону (банк боя 200 000), победитель забирает приз, проигравший —
+ * утешительные 10 000. Максимальная выдача 175 000 + 10 000 = 185 000
+ * < 200 000: арена всегда в плюсе минимум на 15 000, деньги не печатаются.
  *
- * Стрик 1 деньгами равен обычному PvP (+500, см. E5b): бой с арены идёт
- * по тому же протоколу, базовый приз тот же, сверху — предмет и рост.
+ * Таблица (деньги + предметы, выдаёт сервер через pvp_reward):
+ *   стрик 1: 115 000 + superPotion×1
+ *   стрик 2: 130 000 + greatBall×2
+ *   стрик 3: 145 000 + ultraBall×2
+ *   стрик 4: 160 000 + rareCandy×1
+ *   стрик 5+: 175 000 + masterBall×1
  */
 export function arenaRewardForStreak(streak: unknown): ArenaReward {
   const s = Math.floor(Number(streak));
   const tier = !Number.isFinite(s) || s < 1 ? 1 : Math.min(5, s);
+  const money = ARENA_TOKEN_PRICE + 15000 * tier;
   switch (tier) {
     case 1:
-      return { money: 500, items: [{ id: 'potion', qty: 1 }] };
+      return { money, items: [{ id: 'superPotion', qty: 1 }] };
     case 2:
-      return { money: 800, items: [{ id: 'superPotion', qty: 1 }] };
+      return { money, items: [{ id: 'greatBall', qty: 2 }] };
     case 3:
-      return { money: 1200, items: [{ id: 'greatBall', qty: 2 }] };
+      return { money, items: [{ id: 'ultraBall', qty: 2 }] };
     case 4:
-      return { money: 2000, items: [{ id: 'ultraBall', qty: 2 }] };
+      return { money, items: [{ id: 'rareCandy', qty: 1 }] };
     default:
-      return { money: 3000, items: [{ id: 'rareCandy', qty: 1 }] };
+      return { money, items: [{ id: 'masterBall', qty: 1 }] };
   }
 }
 

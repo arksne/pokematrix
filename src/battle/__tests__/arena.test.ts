@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ARENA_TOKEN_ID,
   ARENA_TOKEN_PRICE,
+  ARENA_LOSS_CONSOLATION,
   arenaRewardForStreak,
   hasArenaToken,
   nextArenaStreak,
@@ -15,7 +16,8 @@ import {
 describe('арена: жетон', () => {
   it('ID и цена жетона зафиксированы', () => {
     expect(ARENA_TOKEN_ID).toBe('arenaToken');
-    expect(ARENA_TOKEN_PRICE).toBe(5000);
+    expect(ARENA_TOKEN_PRICE).toBe(100000);
+    expect(ARENA_LOSS_CONSOLATION).toBe(10000);
   });
 
   it('гейт пускает только с жетоном', () => {
@@ -30,16 +32,23 @@ describe('арена: жетон', () => {
 });
 
 describe('арена: призы за стрик', () => {
-  it('стрик 1 деньгами равен обычному PvP (+500)', () => {
-    expect(arenaRewardForStreak(1).money).toBe(500);
+  it('победа окупает жетон: приз > цены 100 000 уже на стрике 1', () => {
+    expect(arenaRewardForStreak(1).money).toBe(115000);
   });
 
-  it('таблица наград зафиксирована', () => {
-    expect(arenaRewardForStreak(1)).toEqual({ money: 500, items: [{ id: 'potion', qty: 1 }] });
-    expect(arenaRewardForStreak(2)).toEqual({ money: 800, items: [{ id: 'superPotion', qty: 1 }] });
-    expect(arenaRewardForStreak(3)).toEqual({ money: 1200, items: [{ id: 'greatBall', qty: 2 }] });
-    expect(arenaRewardForStreak(4)).toEqual({ money: 2000, items: [{ id: 'ultraBall', qty: 2 }] });
-    expect(arenaRewardForStreak(5)).toEqual({ money: 3000, items: [{ id: 'rareCandy', qty: 1 }] });
+  it('таблица наград зафиксирована (цена жетона + 15 000 × тир)', () => {
+    expect(arenaRewardForStreak(1)).toEqual({ money: 115000, items: [{ id: 'superPotion', qty: 1 }] });
+    expect(arenaRewardForStreak(2)).toEqual({ money: 130000, items: [{ id: 'greatBall', qty: 2 }] });
+    expect(arenaRewardForStreak(3)).toEqual({ money: 145000, items: [{ id: 'ultraBall', qty: 2 }] });
+    expect(arenaRewardForStreak(4)).toEqual({ money: 160000, items: [{ id: 'rareCandy', qty: 1 }] });
+    expect(arenaRewardForStreak(5)).toEqual({ money: 175000, items: [{ id: 'masterBall', qty: 1 }] });
+  });
+
+  it('арена не печатает деньги: победа + утешительные < двух жетонов', () => {
+    for (let s = 1; s <= 5; s++) {
+      expect(arenaRewardForStreak(s).money + ARENA_LOSS_CONSOLATION)
+        .toBeLessThan(2 * ARENA_TOKEN_PRICE);
+    }
   });
 
   it('деньги строго растут 1→5', () => {

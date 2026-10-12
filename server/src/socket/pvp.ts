@@ -49,16 +49,21 @@ const ARENA_TOKEN_ID = 'arenaToken';
 /**
  * Приз за победу при данном стрике.
  * ЗЕРКАЛО src/battle/arena.ts (arenaRewardForStreak): цифры менять в обоих
- * местах. Стрик 1 деньгами равен обычному PvP (+500) — E5b не ломается.
+ * местах. Привязка к цене жетона 100 000: победа = 100 000 + 15 000 × тир,
+ * поражение = утешительные ARENA_LOSS_CONSOLATION. Макс. выдача за бой
+ * 175 000 + 10 000 < 200 000 (два сожжённых жетона): деньги не печатаются.
  */
+const ARENA_TOKEN_PRICE = 100000;
+const ARENA_LOSS_CONSOLATION = 10000;
 function arenaRewardForStreak(streak: number): { money: number; items: Array<{ id: string; qty: number }> } {
   const tier = !Number.isFinite(streak) || streak < 1 ? 1 : Math.min(5, Math.floor(streak));
+  const money = ARENA_TOKEN_PRICE + 15000 * tier;
   switch (tier) {
-    case 1: return { money: 500, items: [{ id: 'potion', qty: 1 }] };
-    case 2: return { money: 800, items: [{ id: 'superPotion', qty: 1 }] };
-    case 3: return { money: 1200, items: [{ id: 'greatBall', qty: 2 }] };
-    case 4: return { money: 2000, items: [{ id: 'ultraBall', qty: 2 }] };
-    default: return { money: 3000, items: [{ id: 'rareCandy', qty: 1 }] };
+    case 1: return { money, items: [{ id: 'superPotion', qty: 1 }] };
+    case 2: return { money, items: [{ id: 'greatBall', qty: 2 }] };
+    case 3: return { money, items: [{ id: 'ultraBall', qty: 2 }] };
+    case 4: return { money, items: [{ id: 'rareCandy', qty: 1 }] };
+    default: return { money, items: [{ id: 'masterBall', qty: 1 }] };
   }
 }
 
@@ -470,12 +475,30 @@ export function initPvP(io: Server, socket: Socket) {
               .where(eq(users.id, wId));
           }
 
-          // Стрик проигравшего сбрасывается (поражение/сдача = 0).
+          // Стрик проигравшего сбрасывается (поражение/сдача = 0),
+          // утешительные ARENA_LOSS_CONSOLATION — в тот же сейв.
           const lSt: any = await readOrCreateArenaRow(tx, lId);
           if ((Number(lSt.streak) || 0) !== 0) {
             await tx.update(arenaStats).set({
               streak: 0, updated_at: new Date().toISOString(),
             }).where(eq(arenaStats.user_id, lId));
+          }
+          const lRow = (await tx.select({ id: users.id, save_data: users.save_data })
+            .from(users)
+            .where(eq(users.id, lId))
+            .for('update')
+            .limit(1))[0];
+          if (lRow) {
+            const lsd: any = parseSaveStrict(lRow.save_data, lId);
+            if (!lsd.inventory) lsd.inventory = {};
+            lsd.inventory.credit = (lsd.inventory.credit || 0) + ARENA_LOSS_CONSOLATION;
+            await tx.update(users)
+              .set({
+                save_data: JSON.stringify(stampSave(lsd)),
+                money: lsd.inventory.credit || 0,
+                save_version: sql`${users.save_version} + 1`,
+              })
+              .where(eq(users.id, lId));
           }
           return { reward, streak, best, wins };
         });
@@ -489,9 +512,10 @@ export function initPvP(io: Server, socket: Socket) {
           wins: settled.wins,
           arena: true,
         });
-        // Проигравший узнаёт о сбросе стрика (клиент обновит счётчик).
+        // Проигравший узнаёт о сбросе стрика и утешительных
+        // (клиент обновит счётчик и покажет тост).
         const loserSock = winnerIsSender ? opponentSocket : socket;
-        loserSock?.emit('pvp_arena_update', { streak: 0, arena: true });
+        loserSock?.emit('pvp_arena_update', { streak: 0, arena: true, consolation: ARENA_LOSS_CONSOLATION });
         broadcastArenaLobby(io);
         return;
       }

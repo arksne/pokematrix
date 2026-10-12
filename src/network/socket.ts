@@ -315,6 +315,9 @@ export function initTradeSocket() {
     if (data?.arena === true && typeof data.streak === 'number') {
       state.pvpStreak = data.streak;
       state.pvpLosses = (state.pvpLosses || 0) + 1;
+      if (typeof data.consolation === 'number' && data.consolation > 0) {
+        showToast(`Утешительный приз арены: +¥${data.consolation.toLocaleString()}`, false);
+      }
       import('../ui/pvp-arena.js').then((m) => m.renderArenaStatus()).catch(() => {});
       autoSave();
     }

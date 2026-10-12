@@ -50,6 +50,7 @@ const ITEMS: ItemDef[] = [
   { id: 'amuletCoin', price: 10000 },
   { id: 'antiSputin', price: 0 },
   { id: 'antidote', price: 200 },
+  { id: 'arenaToken', price: 100000 },
   { id: 'articunoCandy', price: 20 },
   { id: 'aspearBerry', price: 80 },
   { id: 'assaultVest', price: 1000 },
