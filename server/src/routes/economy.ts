@@ -37,8 +37,8 @@ interface ItemDef {
 }
 
 const ITEMS: ItemDef[] = [
-  { id: 'abilityCapsule', price: 10000 },
-  { id: 'abilityPatch', price: 20 },
+  { id: 'abilityCapsule', price: 500000 },
+  { id: 'abilityPatch', price: 1000000 },
   { id: 'abilityShield', price: 20000 },
   { id: 'abraCandy', price: 20 },
   { id: 'absorbBulb', price: 4000 },
