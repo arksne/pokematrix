@@ -34,6 +34,13 @@ describe('контратаки', () => {
     expect(counterDamage('counter', null, 'physical')).toBeNull();
     expect(counterDamage('tackle', 40, 'physical')).toBeNull();
   });
+
+  it('протухает через раунд', () => {
+    expect(counterDamage('counter', 40, 'physical', 5, 5)).toBe(80);
+    expect(counterDamage('counter', 40, 'physical', 5, 6)).toBe(80);
+    expect(counterDamage('counter', 40, 'physical', 5, 7)).toBeNull();
+    expect(counterDamage('counter', 40, 'physical')).toBe(80); // без раундов — как раньше
+  });
 });
 
 describe('урон от веса', () => {

@@ -65,7 +65,7 @@ const MECHANICS = [
   { name: 'growl-like', kind: 'stat' },
 
   // Явные обработчики по имени в коде.
-  { name: 'protect', kind: 'named', expect: /move\.name === 'protect'/ },
+  { name: 'protect', kind: 'named', expect: /\['protect', 'detect'/ }, // L5: общий список protect/detect/guards + флаги protectActive
   { name: 'substitute', kind: 'named', expect: /move\.name === 'substitute'/ },
   { name: 'reflect', kind: 'named', expect: /move\.name === 'reflect'/ },
   { name: 'light-screen', kind: 'named', expect: /move\.name === 'light-screen'/ },
@@ -150,8 +150,8 @@ suite.check(
 suite.check(
   'P-multihit',
   'число попаданий многократной атаки вычисляется',
-  /function getMultiHitCount/.test(core),
-  'getMultiHitCount',
+  /getMultiHitCount\(/.test(core), // L5: определение в special-moves.ts, вызовы в core.ts
+  'getMultiHitCount(...) вызывается в core.ts',
 );
 
 suite.finish();

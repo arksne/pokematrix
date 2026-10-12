@@ -663,6 +663,52 @@ async function feedCandy(mon, itemId, label, evGain = 4) {
   return true;
 }
 
+// ── Таблицы эффектов — в src/data/item-effects.ts (leaf-модуль) ──
+// Реэкспорт для совместимости (тесты и старый код тянут отсюда).
+export { HEAL_HP, CURE_ONE, CURE_ALL, EXP_CANDY_XP, WING_EV, BERRY_MANUAL, REVIVE_MODE } from '../data/item-effects.js';
+import { HEAL_HP, CURE_ONE, EXP_CANDY_XP, WING_EV } from '../data/item-effects.js';
+
+// ── feedExp: скормить EXP-конфету ──
+// Даёт опыт (не уровень напрямую): инициализация exp, добавление,
+// цикл level-up с пересчётом HP/EV/эволюцией/атаками — как в бою.
+async function feedExp(mon, itemId, label, amount) {
+  const curLvl = mon.baseLevel + (mon.candiesEaten || 0);
+  if (curLvl >= 100) {
+    showToast('Достигнут максимальный 100 уровень!', true);
+    return false;
+  }
+  if (typeof mon.exp !== 'number') {
+    mon.exp = Math.pow(mon.baseLevel, 3);
+    mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
+  }
+  removeItem(itemId);
+  mon.exp += amount;
+  let ups = 0;
+  while (mon.exp >= mon.expToNext && (mon.baseLevel + (mon.candiesEaten || 0)) < 100) {
+    mon.baseLevel++;
+    ups++;
+    mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
+    const baseHp = mon.apiData.stats[0].base_stat;
+    const lvl = mon.baseLevel + (mon.candiesEaten || 0);
+    const oldMax = mon.maxHp;
+    mon.maxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * lvl) + lvl + 10;
+    mon.currentHp += (mon.maxHp - oldMax);
+    const m = await import('../battle/core.js');
+    if (typeof m.grantLevelUpEVs === 'function') {
+      m.grantLevelUpEVs(mon);
+    }
+  }
+  const evoTarget = await _checkEvolution(mon);
+  if (evoTarget) {
+    await _triggerEvolution(mon, evoTarget.name);
+  }
+  await checkNewMovesOnLevelUp(mon, mon.baseLevel + (mon.candiesEaten || 0));
+  refreshProfileUI();
+  autoSave();
+  showToast(`${label}: +${amount.toLocaleString()} EXP${ups ? `, уровень повышен (${ups})` : ''}!`, false);
+  return true;
+}
+
 // ── useItem: основной обработчик использования предмета ──
 // Принимает itemId — ID предмета (строка)
 // Это огромный switch-case с логикой для каждого типа предмета
@@ -729,6 +775,19 @@ export async function useItem(itemId) {
       await _cureStatus(mon);         // Снимаем все статусные эффекты
       refreshProfileUI();
       showToast(`Полное Восстановление использовано! ${mon.nickname || mon.apiData.name} полностью здоров!`, false);
+      break;
+    }
+
+    // ── Лечилки HP по таблице (аудит итемов): hyperPotion 200, maxPotion фулл и т.д. ──
+    case 'hyperPotion': case 'maxPotion': case 'freshWater': case 'sodaPop':
+    case 'lemonade': case 'moomooMilk': case 'energyPowder': case 'energyRoot':
+    case 'berryJuice': case 'sweetHeart': {
+      if (mon.currentHp >= mon.maxHp) return showToast('Здоровье уже полное!', true);
+      const amount = HEAL_HP[itemId];
+      removeItem(itemId);
+      mon.currentHp = amount === 'full' ? mon.maxHp : Math.min(mon.maxHp, mon.currentHp + (amount as number));
+      refreshProfileUI();
+      showToast(`${item.nameRu} использована! HP: ${mon.currentHp}/${mon.maxHp}.`, false);
       break;
     }
 
@@ -848,17 +907,79 @@ export async function useItem(itemId) {
       break;
     }
 
-    // ── Ягоды (Berries) ──
-    case 'sitrusBerry':  { await _giveBerryToMon('sitrus'); break; }  // Ситрус (+25% HP)
-    case 'oranBerry':    { await _giveBerryToMon('oran'); break; }    // Оран (+10 HP)
-    case 'lumBerry':     { await _giveBerryToMon('lum'); break; }     // Лум (лечит любой статус)
-    case 'chestoBerry':  { await _giveBerryToMon('chesto'); break; }  // Често (лечит сон)
-    case 'rawstBerry':   { await _giveBerryToMon('rawst'); break; }   // Рауст (лечит ожог)
+    // ── Ягоды (Berries): ручная выдача с немедленным эффектом ──
+    // Раньше 5 кейсов звали _giveBerryToMon → заглушка в core (только тост),
+    // остальные 43 вообще падали в «скоро будет». Теперь: лечилки/хілки
+    // действуют сразу, остальные — честный тост «эффект только при держании».
+    case 'sitrusBerry': case 'oranBerry': case 'lumBerry': case 'chestoBerry':
+    case 'rawstBerry': case 'cheriBerry': case 'pechaBerry': case 'aspearBerry':
+    case 'leppaBerry': {
+      if (itemId === 'sitrusBerry' || itemId === 'oranBerry') {
+        if (mon.currentHp >= mon.maxHp) return showToast('Здоровье уже полное!', true);
+        const amt = itemId === 'sitrusBerry' ? Math.floor(mon.maxHp * 0.25) : 10;
+        removeItem(itemId);
+        mon.currentHp = Math.min(mon.maxHp, mon.currentHp + amt);
+        refreshProfileUI();
+        showToast(`Ягода съедена! HP +${amt}.`, false);
+        break;
+      }
+      if (itemId === 'leppaBerry') {
+        const idx = (mon.movesPP || []).findIndex((pp: any) => pp && pp.current < pp.max);
+        if (idx < 0) return showToast('Все PP уже полные!', true);
+        removeItem(itemId);
+        mon.movesPP[idx].current = Math.min(mon.movesPP[idx].max, mon.movesPP[idx].current + 10);
+        refreshProfileUI();
+        showToast('Ягода Леппа: +10 PP!', false);
+        break;
+      }
+      // Лечебные ягоды: люм — всё, остальные — свой статус
+      const need = itemId === 'lumBerry' ? mon.status : CURE_ONE[itemId];
+      if (!mon.status) return showToast('Статусов нет!', true);
+      if (itemId !== 'lumBerry' && mon.status !== need) {
+        return showToast('Эта ягода лечит другой статус!', true);
+      }
+      removeItem(itemId);
+      mon.status = null;
+      mon.sleepTurns = 0;
+      refreshProfileUI();
+      showToast('Ягода съедена, статус снят!', false);
+      break;
+    }
 
-    // ── Конкретные камни эволюции ──
+    // ── Остальные ягоды: эффект только при держании в бою ──
+    // Чтобы не падали в «скоро будет»: честно говорим, что съесть вручную
+    // можно только лечилки (выше), остальные работают как held-предмет.
+    case 'babiriBerry': case 'chartiBerry':
+    case 'chilanBerry': case 'chopleBerry': case 'cobaBerry': case 'colburBerry':
+    case 'custapBerry': case 'grepaBerry':
+    case 'habanBerry': case 'hondewBerry': case 'kasibBerry':
+    case 'kebiaBerry': case 'kelpsyBerry':
+    case 'occaBerry': case 'passhoBerry':
+    case 'payapaBerry': case 'persimBerry': case 'pomegBerry':
+    case 'qualotBerry': case 'rindoBerry': case 'roseliBerry':
+    case 'shucaBerry': case 'tamatoBerry': case 'tangaBerry':
+    case 'wacanBerry': case 'yacheBerry': {
+      // persimBerry лечит спутанность, но она не живёт вне боя — честно говорим
+      if (itemId === 'persimBerry') {
+        return showToast('Спутанность проходит сама после боя!', true);
+      }
+      return showToast('Эта ягода работает только как held-предмет в бою!', true);
+    }
+
+    // ── Камни эволюции: любой камень из категории (аудит итемов) ──
+    // Раньше только 10 штук; остальные 30 падали в «скоро будет».
+    // checkEvolution сам решает по данным (use-item + маппинг STONE_ITEM_MAP);
+    // неподходящий камень — честный отказ, а не молчание.
     case 'fireStone': case 'waterStone': case 'leafStone': case 'thunderStone':
     case 'moonStone': case 'sunStone': case 'shinyStone': case 'duskStone':
-    case 'iceStone': case 'dawnStone': {
+    case 'iceStone': case 'dawnStone': case 'berrySweet': case 'chippedPot':
+    case 'cloverSweet': case 'crackedPot': case 'dragonScale': case 'dubiousDisc':
+    case 'electirizer': case 'flowerSweet': case 'linkingCord': case 'loveSweet':
+    case 'magmarizer': case 'maliciousArmor': case 'masterpieceTeacup': case 'metalAlloy':
+    case 'ovalStone': case 'peatBlock': case 'prismScale': case 'protector':
+    case 'reaperCloth': case 'ribbonSweet': case 'sachet': case 'starSweet':
+    case 'strawberrySweet': case 'sweetApple': case 'syrupyApple': case 'tartApple':
+    case 'unremarkableTeacup': case 'upGrade': case 'whippedDream': {
       (async () => {
         // Проверяем, может ли покемон эволюционировать С ЭТИМ КАМНЕМ
         const evoTarget = await _checkEvolution(mon, true, itemId);
@@ -937,6 +1058,138 @@ export async function useItem(itemId) {
       removeItem(itemId);
       if (getTeamState().currentPokemonIndex !== null) refreshProfileUI();
       break;
+    }
+
+    // ── Лечилки всех статусов разом (аудит итемов) ──
+    case 'fullHeal': case 'healPowder': case 'lavaCookie': case 'bigMalasada':
+    case 'casteliacone': case 'lumioseGalette': case 'oldGateau':
+    case 'pewterCrunchies': case 'shalourSable': case 'iceHeal': {
+      if (!mon.status) return showToast('У покемона нет статуса!', true);
+      if (itemId === 'iceHeal' && mon.status !== 'frz') {
+        return showToast('Ледяное зелье лечит только заморозку!', true);
+      }
+      removeItem(itemId);
+      mon.status = null;
+      mon.sleepTurns = 0;
+      if (getTeamState().currentPokemonIndex !== null) refreshProfileUI();
+      showToast(`${mon.nickname || mon.apiData.name} полностью очищен!`, false);
+      break;
+    }
+
+    // ── Max Ether: полные PP всех атак (аудит итемов) ──
+    case 'maxEther': {
+      if (!mon.movesPP || mon.movesPP.every(pp => !pp || pp.current >= pp.max)) {
+        return showToast('Все PP уже максимальны!', true);
+      }
+      removeItem(itemId);
+      mon.movesPP.forEach(pp => { if (pp) pp.current = pp.max; });
+      if (getTeamState().currentPokemonIndex !== null) refreshProfileUI();
+      showToast('PP всех атак восстановлены полностью!', false);
+      break;
+    }
+
+    // ── Воскрешение (аудит итемов): выбор павшего из команды ──
+    case 'revive': case 'maxRevive': case 'sacredAsh': case 'revivalHerb': case 'maxHoney': {
+      const fainted = (getTeamState().myTeam || []).map((m, i) => ({ m, i }))
+        .filter(({ m }) => m && (m.currentHp ?? 1) <= 0);
+      if (fainted.length === 0) return showToast('Павших покемонов нет!', true);
+      const full = itemId === 'maxRevive' || itemId === 'sacredAsh' || itemId === 'maxHoney';
+      const targets = itemId === 'sacredAsh' ? fainted : null; // пепел — всех сразу
+      const reviveOne = (entry: { m: any }) => {
+        entry.m.currentHp = full ? entry.m.maxHp : Math.max(1, Math.floor(entry.m.maxHp / 2));
+      };
+      if (targets) {
+        removeItem(itemId);
+        targets.forEach(reviveOne);
+        refreshProfileUI();
+        autoSave();
+        showToast(`Священный пепел: вся команда поднята с полным HP!`, false);
+        break;
+      }
+      showSelectionModal('Кого воскресить?', fainted.map(({ m }) => ({
+        label: `Lv.${m.baseLevel + (m.candiesEaten || 0)} ${m.nickname || m.apiData?.name}`,
+        subtitle: `HP: 0/${m.maxHp}`,
+      })), (choiceIdx) => {
+        const picked = fainted[choiceIdx];
+        if (!picked) return;
+        removeItem(itemId);
+        reviveOne(picked);
+        refreshProfileUI();
+        autoSave();
+        showToast(`${picked.m.nickname || picked.m.apiData?.name} воскрешён!`, false);
+      }, true);
+      break;
+    }
+
+    // ── EXP-конфеты (аудит итемов): опыт + level-up цикл ──
+    case 'expCandyXs': case 'expCandyS': case 'expCandyM': case 'expCandyL': case 'expCandyXl': {
+      const amount = EXP_CANDY_XP[itemId] || 0;
+      if (!amount) return showToast('Странная конфета...', true);
+      await feedExp(mon, itemId, item.nameRu, amount);
+      break;
+    }
+
+    // ── Крылья: +1 EV в свой стат (аудит итемов, канон) ──
+    case 'healthWing': case 'muscleWing': case 'resistWing':
+    case 'geniusWing': case 'cleverWing': case 'swiftWing': {
+      const evKey = WING_EV[itemId];
+      const totalEV = Object.values(mon.evs as Record<string, number>).reduce((s, v) => s + v, 0);
+      if (mon.evs[evKey] >= 252) return showToast(`EV ${evKey.toUpperCase()} уже на максимуме (252)!`, true);
+      if (totalEV >= 510) return showToast('Суммарные EV уже на максимуме (510)!', true);
+      removeItem(itemId);
+      mon.evs[evKey] = Math.min(252, mon.evs[evKey] + 1);
+      if (getTeamState().currentPokemonIndex !== null) refreshProfileUI();
+      autoSave();
+      showToast(`Крыло скормлено! EV ${evKey.toUpperCase()} +1.`, false);
+      break;
+    }
+
+    // ── Ability Capsule / Patch (аудит итемов) ──
+    case 'abilityCapsule': case 'abilityPatch': {
+      const abs = (mon.apiData?.abilities || []).filter((a: any) => a?.ability?.name);
+      if (abs.length === 0) return showToast('У покемона нет способностей для смены!', true);
+      const cur = mon.abilityName || abs[0].ability.name;
+      if (itemId === 'abilityCapsule') {
+        const others = abs.filter((a: any) => !a.is_hidden && a.ability.name !== cur);
+        if (others.length === 0) return showToast('Другой обычной способности нет!', true);
+        removeItem(itemId);
+        mon.abilityName = others[0].ability.name;
+      } else {
+        const hidden = abs.find((a: any) => a.is_hidden);
+        if (!hidden) return showToast('Скрытой способности нет!', true);
+        if (cur === hidden.ability.name) return showToast('Уже скрытая способность!', true);
+        removeItem(itemId);
+        mon.abilityName = hidden.ability.name;
+      }
+      if (getTeamState().currentPokemonIndex !== null) refreshProfileUI();
+      autoSave();
+      showToast(`Способность сменена: ${mon.abilityName}!`, false);
+      break;
+    }
+
+    // ── PP Max: +60% к макс PP одной атаки (аудит итемов, канон) ──
+    case 'ppMax': {
+      if (!mon.movesPP || mon.movesPP.length === 0) return showToast('У покемона нет атак!', true);
+      const movesWithPP = mon.movesPP.map((pp, i) => {
+        const moveName = mon.apiData?.moves?.[i]?.move?.name || `Атака ${i + 1}`;
+        return { ...pp, moveName, index: i };
+      }).filter(m => m && m.max > 0);
+      if (movesWithPP.length === 0) return showToast('Нет атак для усиления!', true);
+      showSelectionModal('PP Max: выберите атаку', movesWithPP.map(m => ({
+        label: `${m.moveName}`,
+        subtitle: `PP: ${m.current}/${m.max}`
+      })), (choiceIdx) => {
+        const picked = movesWithPP[choiceIdx];
+        if (!picked) return;
+        const newMax = Math.floor(picked.max * 1.6);
+        if (newMax <= picked.max) { showToast('PP уже на максимуме!', true); return; }
+        removeItem('ppMax');
+        mon.movesPP[picked.index].max = newMax;
+        mon.movesPP[picked.index].current = Math.min(newMax, mon.movesPP[picked.index].current + (newMax - picked.max));
+        refreshProfileUI();
+        showToast(`PP атаки ${picked.moveName} увеличено до ${newMax}!`, false);
+      }, true);
+      return;
     }
 
     // ── Восстановление PP (Ether, Elixir, Max Elixir) ──
@@ -1106,9 +1359,12 @@ export async function useItem(itemId) {
 
     // ── DEFAULT: обработка боевых предметов и held items ──
     default: {
-      // Общая логика: если предмет боевой И есть в наличии — надеваем на покемона
+      // Общая логика: если предмет боевой/тренировочный И есть в наличии —
+      // надеваем на покемона. Эффект — только у реализованных (amuletCoin,
+      // everstone, luckIncense); остальные held без хука честно бесполезны,
+      // пока хозяин не решит их судьбу (см. items-coverage.test.ts).
       if (
-        (item.category === 'battle' || item.id === 'luckyEgg' || item.id === 'expShare') &&
+        (item.category === 'battle' || item.category === 'training' || item.id === 'luckyEgg' || item.id === 'expShare') &&
         getItemQty(item.id) > 0
       ) {
         if (!mon) { showToast('Сначала выберите покемона во вкладке Команда!', true); break; }

@@ -7,7 +7,7 @@ import {
   tormentBlocks, perishTick, yawnWakes, WEATHER_SET, TERRAIN_SET,
   FIELD_TURNS, TAILWIND_TURNS, TRICK_ROOM_TURNS, collisionCourseMult,
   saltCureChip, resistantType, metronomePick, METRONOME_POOL, meFirstCopy,
-  baseDefOf, effectivePowerMove, moveDealsDamage,
+  baseDefOf, effectivePowerMove, moveDealsDamage, getMultiHitCount,
 } from '../special-moves.js';
 
 /** Проход-741, пачка 2: переменная сила, волатильные, поле, подмены. */
@@ -277,3 +277,15 @@ describe('подмены', () => {
     expect(moveDealsDamage({ name: 'splash', power: null })).toBe(false);
   });
 });
+
+describe('loaded-dice: максимум ударов', () => {
+  const mv = { meta: { min_hits: 2, max_hits: 5 } };
+  it('без куба — обычное число', () => {
+    expect(getMultiHitCount({ meta: {} })).toBe(1);
+  });
+  it('с кубом — всегда максимум', () => {
+    expect(getMultiHitCount(mv, Math.random, 'loadedDice')).toBe(5);
+    expect(getMultiHitCount({ meta: { min_hits: 2, max_hits: 2 } }, Math.random, 'loadedDice')).toBe(2);
+  });
+});
+

@@ -153,6 +153,13 @@ playerReflectTurns: 0,
   playerActedRound: -1,
   wildTookHit: false,
   playerTookHit: false,
+  wildTookCat: null,
+  playerTookCat: null,
+  gravityTurns: 0,
+  magicRoomTurns: 0,
+  mistP: 0, mistW: 0,
+  safeguardP: 0, safeguardW: 0,
+  luckyP: 0, luckyW: 0,
   imprisonP: [],
   imprisonW: [],
   lastTakenByPlayer: null,
@@ -290,10 +297,17 @@ export interface BattleStateData {
   enemyChargedMove: any | null;    // Same for enemy
   // L2-остаток: входящий урон с прошлого хода — для Counter/Mirror Coat/
   // Metal Burst ({ dmg, cat } или null, если бить нечем).
-  lastTakenByPlayer?: { dmg: number; cat: string | null } | null;
-  lastTakenByWild?: { dmg: number; cat: string | null } | null;
+  lastTakenByPlayer?: { dmg: number; cat: string | null; round?: number } | null;
+  lastTakenByWild?: { dmg: number; cat: string | null; round?: number } | null;
   wildTookHit?: boolean;   // дикий получал прямой урон в этом ходу (для endure)
   playerTookHit?: boolean; // игрок получал прямой урон в этом ходу (для endure)
+  wildTookCat?: string | null;   // категория входящего дикому (для shell-trap)
+  playerTookCat?: string | null; // категория входящего игроку (для shell-trap)
+  gravityTurns?: number;   // гравитация (все наземные)
+  magicRoomTurns?: number; // волшебная комната (предметы молчат)
+  mistP?: number; mistW?: number;             // туман (статы не понизят)
+  safeguardP?: number; safeguardW?: number;   // защита (статусы не пройдут)
+  luckyP?: number; luckyW?: number;           // напев (без критов)
   // Проход-741: поле боя и последние ходы (для copycat/mirror-move/sketch).
   terrain?: { kind: string; turns: number } | null;
   tailwindP?: number;   // ходы попутного ветра игрока

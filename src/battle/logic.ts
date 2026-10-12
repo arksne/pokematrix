@@ -59,6 +59,49 @@ export const TYPE_CHART = {
 /** Список всех типов погоды (для цикла/проверок) */
 export const WEATHERS = ['clear', 'rain', 'sun', 'sandstorm', 'hail'];
 
+// ── Типовые бусты held-предметов (аудит итемов, проход-741) ──
+// Плиты ×1.2, остальные типовые ×1.1. Раньше из ~30 таких предметов не
+// работал НИ ОДИН (надевались, но урон не менялся).
+export const TYPE_BOOST: Record<string, { type: string; mult: number }> = {
+  dracoPlate: { type: 'dragon', mult: 1.2 }, dreadPlate: { type: 'dark', mult: 1.2 },
+  earthPlate: { type: 'ground', mult: 1.2 }, fistPlate: { type: 'fighting', mult: 1.2 },
+  flamePlate: { type: 'fire', mult: 1.2 }, iciclePlate: { type: 'ice', mult: 1.2 },
+  insectPlate: { type: 'bug', mult: 1.2 }, ironPlate: { type: 'steel', mult: 1.2 },
+  meadowPlate: { type: 'grass', mult: 1.2 }, mindPlate: { type: 'psychic', mult: 1.2 },
+  pixiePlate: { type: 'fairy', mult: 1.2 }, skyPlate: { type: 'flying', mult: 1.2 },
+  splashPlate: { type: 'water', mult: 1.2 }, spookyPlate: { type: 'ghost', mult: 1.2 },
+  stonePlate: { type: 'rock', mult: 1.2 }, toxicPlate: { type: 'poison', mult: 1.2 },
+  zapPlate: { type: 'electric', mult: 1.2 },
+  charcoal: { type: 'fire', mult: 1.1 }, miracleSeed: { type: 'grass', mult: 1.1 },
+  mysticWater: { type: 'water', mult: 1.1 }, sharpBeak: { type: 'flying', mult: 1.1 },
+  silkScarf: { type: 'normal', mult: 1.1 }, blackBelt: { type: 'fighting', mult: 1.1 },
+  blackGlasses: { type: 'dark', mult: 1.1 }, poisonBarb: { type: 'poison', mult: 1.1 },
+  twistedSpoon: { type: 'psychic', mult: 1.1 }, neverMeltIce: { type: 'ice', mult: 1.1 },
+  hardStone: { type: 'rock', mult: 1.1 }, softSand: { type: 'ground', mult: 1.1 },
+  spellTag: { type: 'ghost', mult: 1.1 }, silverPowder: { type: 'bug', mult: 1.1 },
+  magnet: { type: 'electric', mult: 1.1 }, dragonFang: { type: 'dragon', mult: 1.1 },
+  seaIncense: { type: 'water', mult: 1.1 }, waveIncense: { type: 'water', mult: 1.1 },
+  oddIncense: { type: 'psychic', mult: 1.1 }, rockIncense: { type: 'rock', mult: 1.1 },
+  roseIncense: { type: 'grass', mult: 1.1 },
+};
+
+// ── Самоцветы: тип → id (×1.3 разово, камень сгорает) ──
+export const GEM_TYPE: Record<string, string> = {
+  normalGem: 'normal', fireGem: 'fire', waterGem: 'water', electricGem: 'electric',
+  grassGem: 'grass', iceGem: 'ice', fightingGem: 'fighting', poisonGem: 'poison',
+  groundGem: 'ground', flyingGem: 'flying', psychicGem: 'psychic', bugGem: 'bug',
+  rockGem: 'rock', ghostGem: 'ghost', dragonGem: 'dragon', darkGem: 'dark',
+  steelGem: 'steel', fairyGem: 'fairy',
+};
+
+// ── Удары кулаком (Punching Glove ×1.1) ──
+export const PUNCH_MOVES: ReadonlySet<string> = new Set([
+  'bullet-punch', 'comet-punch', 'dizzy-punch', 'drain-punch', 'dynamic-punch',
+  'fire-punch', 'focus-punch', 'hammer-arm', 'ice-punch', 'mach-punch',
+  'mega-punch', 'meteor-mash', 'plasma-fists', 'power-up-punch', 'shadow-punch',
+  'sky-uppercut', 'thunder-punch', 'surging-strikes', 'wicked-blow', 'jet-punch',
+]);
+
 export function getTypeMultiplier(attackType, defenderTypes) {
   if (!TYPE_CHART[attackType]) return 1;
   let multiplier = 1;
@@ -73,7 +116,7 @@ export function getTypeMultiplier(attackType, defenderTypes) {
 
 import { getWeatherMultiplier } from '../data/weather.js';
 import { calculateStat as calculateStatShared } from './stats.js';
-import { isOhkoMove, getFixedDamage, hasFixedDamage } from './special-moves.js';
+import { isOhkoMove, getFixedDamage, hasFixedDamage, normMoveName } from './special-moves.js';
 export { getWeatherMultiplier };
 
 /**
@@ -322,11 +365,16 @@ alwaysCrit = false,
     // Контратаки (L2-остаток): урон, полученный атакующим с прошлого хода.
     lastTakenDmg = undefined,
     lastTakenCat = undefined,
+    lastTakenRound = undefined,
+    nowRound = undefined,
     // Проход-741: заряды stockpile атакующего (spit-up).
     stock = undefined,
     // Проход-741: смена типа (transform/conversion/soak/...).
     attackerTypesOverride = undefined,
     defenderTypesOverride = undefined,
+    // Аудит итемов/атак: lucky-chant давит криты, foresight бьёт по призраку.
+    suppressCrit = false,
+    ignoreGhost = false,
   }) {
   const parts = [];
   const power = move.power;
@@ -351,6 +399,8 @@ alwaysCrit = false,
       stock,
       lastTakenDmg,
       lastTakenCat,
+      lastTakenRound,
+      nowRound,
     });
   }
   if (fixed !== undefined && fixed !== null && !power) {
@@ -438,7 +488,16 @@ alwaysCrit = false,
     stab = 2.0;
   }
 
-  const typeMult = getTypeMultiplier(move.type?.name, defenderTypesOverride || defender.apiData?.types || defender.types || []);
+  let effDefTypes = defenderTypesOverride || defender.apiData?.types || defender.types || [];
+  // Проход-741: foresight — нормальные/боевые бьют по призраку
+  if (ignoreGhost && (move.type?.name === 'normal' || move.type?.name === 'fighting')) {
+    const arr = effDefTypes.map((t: any) => t?.type?.name || t);
+    if (arr.includes('ghost')) {
+      effDefTypes = arr.filter((t: string) => t !== 'ghost');
+      if (effDefTypes.length === 0) effDefTypes = ['normal'];
+    }
+  }
+  const typeMult = getTypeMultiplier(move.type?.name, effDefTypes);
   const weatherMult = getWeatherMultiplier(move.type?.name, weather);
   const randMod = 0.85 + Math.random() * 0.15;  // Всегда случайно, даже при гарантированном крите
 
@@ -453,7 +512,7 @@ alwaysCrit = false,
   let effectiveCritStage = critRateStage;
   if (normAtkAbil === 'superluck') effectiveCritStage += 1;
   const critBlocked = normDefAbil === 'battlearmor' || normDefAbil === 'shellarmor';
-  const critRate = critBlocked ? 0
+  const critRate = (critBlocked || suppressCrit) ? 0
     : (alwaysCrit ? 1.0 : CRIT_RATES[Math.min(effectiveCritStage, CRIT_RATES.length - 1)]);
   const isCrit = Math.random() < critRate;
   const critMult = isCrit ? 1.5 : 1.0;
@@ -585,6 +644,22 @@ alwaysCrit = false,
   let heldMult = 1.0;
   if (attackerHeldItem === 'expertBelt' && effectiveTypeMult > 1) heldMult = 1.2;
   if (attackerHeldItem === 'lifeOrb') heldMult = 1.3;
+  // Аудит итемов: типовые бусты, самоцветы, перчатка, видовые ×2
+  {
+    const tb = attackerHeldItem ? TYPE_BOOST[attackerHeldItem] : undefined;
+    if (tb && move.type?.name === tb.type) heldMult *= tb.mult;
+    if (attackerHeldItem && GEM_TYPE[attackerHeldItem] === move.type?.name) heldMult *= 1.3;
+    if (attackerHeldItem === 'punchingGlove' && PUNCH_MOVES.has(normMoveName(move.name))) heldMult *= 1.1;
+    if (attackerHeldItem === 'muscleBand' && move.damage_class?.name === 'physical') heldMult *= 1.1;
+    if (attackerHeldItem === 'wiseGlasses' && move.damage_class?.name === 'special') heldMult *= 1.1;
+    const species = attacker.apiData?.species?.name || attacker.species?.name || '';
+    if (attackerHeldItem === 'lightBall' && species === 'pikachu') heldMult *= 2;
+    // thickClub — в stats.ts (×2 к стате атаки), здесь не дублируем
+    if (attackerHeldItem === 'soulDew' && (species === 'latios' || species === 'latias')) heldMult *= 1.2;
+    if (attackerHeldItem === 'adamantOrb' && species === 'dialga') heldMult *= 1.2;
+    if (attackerHeldItem === 'lustrousOrb' && species === 'palkia') heldMult *= 1.2;
+    if (attackerHeldItem === 'griseousOrb' && species === 'giratina') heldMult *= 1.2;
+  }
 
   let dmg = Math.floor(baseDmg * stab * effectiveTypeMult * weatherMult * randMod * sniperCritMult * heldMult * abilityMult);
 

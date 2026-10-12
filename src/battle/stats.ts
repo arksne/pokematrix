@@ -141,6 +141,14 @@ export function calculateStat(pokemon: any, statName: string, opts: StatOptions 
       const species = pokemon.apiData?.species?.name || pokemon.apiData?.name || '';
       if (species === 'cubone' || species === 'marowak') result = Math.floor(result * 2);
     }
+    // Аудит итемов: видовые защиты/скорость (раньше не работали вообще)
+    if ((item === 'metalPowder' || item === 'quickPowder' || item === 'deepSeaScale' || item === 'deepSeaTooth')) {
+      const species = pokemon.apiData?.species?.name || pokemon.apiData?.name || '';
+      if (item === 'metalPowder' && species === 'ditto' && statName === 'defense') result = Math.floor(result * 2);
+      if (item === 'quickPowder' && species === 'ditto' && statName === 'speed') result = Math.floor(result * 2);
+      if (item === 'deepSeaScale' && species === 'clamperl' && statName === 'special-defense') result = Math.floor(result * 1.5);
+      if (item === 'deepSeaTooth' && species === 'clamperl' && statName === 'special-attack') result = Math.floor(result * 2);
+    }
     if (item === 'eviolite' && (statName === 'defense' || statName === 'special-defense')) {
       if (pokemon.apiData?.species?.url) result = Math.floor(result * 1.5);
     }

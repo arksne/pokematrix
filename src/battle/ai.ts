@@ -43,6 +43,7 @@ export function selectEnemyMove({
   defender,
   isTrainer,
   getTypeMultiplier,
+  banned,
 }: {
   moves: any[];
   movesPP: any[];
@@ -50,8 +51,18 @@ export function selectEnemyMove({
   defender: any;
   isTrainer: boolean;
   getTypeMultiplier: (type: string, defenderTypes: any[]) => number;
+  /** Запрещённые слаги (imprison): ИИ их не выбирает, берёт другое. */
+  banned?: string[];
 }) {
   if (!moves || moves.length === 0) return null; // Нет атак — возвращаем null
+  // Imprison: выкидываем запрещённые из пула (с сохранением индексов)
+  let pool = moves.map((m, i) => ({ m, i }));
+  if (Array.isArray(banned) && banned.length > 0) {
+    const norm = (s: unknown) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const rest = pool.filter(({ m }) => !banned.includes(norm(m?.name)));
+    if (rest.length > 0) pool = rest;
+    // Все запрещены — бьём чем есть (не стоим столбом)
+  }
 
   let chosenMove = null;
   let chosenIdx = -1;
@@ -64,8 +75,7 @@ export function selectEnemyMove({
     // STAB (Same-Type Attack Bonus): ×1.5 если тип атаки совпадает с типом покемона
     // typeEffectiveness: ×0, ×0.5, ×1, ×2, ×4 (из TYPE_CHART)
     let bestScore = -1;
-    for (let i = 0; i < moves.length; i++) {
-      const m = moves[i];
+    for (const { m, i } of pool) {
       if (!m) continue;
       const hasPP = movesPP && movesPP[i] && movesPP[i].current > 0;
       if (!hasPP) continue; // Пропускаем атаки без PP
@@ -83,10 +93,12 @@ export function selectEnemyMove({
     // Просто выбирает случайную атаку с PP > 0
     // Делает до 20 попыток чтобы не зациклиться
     for (let attempt = 0; attempt < 20; attempt++) {
-      const idx = Math.floor(Math.random() * moves.length);
-      if (moves[idx]) {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      if (!pick) continue;
+      const { m, i: idx } = pick;
+      if (m) {
         if (movesPP && movesPP[idx] && movesPP[idx].current <= 0) continue; // Нет PP — пропускаем
-        chosenMove = moves[idx];
+        chosenMove = m;
         chosenIdx = idx;
         break;
       }

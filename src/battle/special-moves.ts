@@ -96,6 +96,9 @@ export interface FixedDamageCtx {
   lastTakenDmg?: number;
   /** Категория входящего урона: 'physical' | 'special'. */
   lastTakenCat?: string;
+  /** Раунд входящего урона и текущий раунд (протухание). */
+  lastTakenRound?: number;
+  nowRound?: number;
 }
 
 /** Есть ли у атаки фиксированный урон (поле meta.damage или имя в таблице). */
@@ -123,7 +126,7 @@ export function getFixedDamage(move: any, ctx: FixedDamageCtx = {}): number | nu
     return lvl > 0 ? lvl : null;
   }
   if (kind === 'counter') {
-    return counterDamage(move.name, ctx.lastTakenDmg, ctx.lastTakenCat);
+    return counterDamage(move.name, ctx.lastTakenDmg, ctx.lastTakenCat, ctx.lastTakenRound, ctx.nowRound);
   }
   if (kind === 'hp120') {
     const cur = Math.floor(Number(ctx.defenderCurrentHp) || 0);
@@ -165,10 +168,12 @@ export function moveDealsDamage(move: any): boolean {
 // ── Мультихиты ───────────────────────────────────────────────
 // Распределение канона: 2 и 3 удара — по 3/8, 4 и 5 — по 1/8.
 // rand инжектится для детерминированных тестов.
-export function getMultiHitCount(move: any, rand: () => number = Math.random): number {
+export function getMultiHitCount(move: any, rand: () => number = Math.random, holderItem?: unknown): number {
   const minH = move?.meta?.min_hits;
   const maxH = move?.meta?.max_hits;
   if (!minH || !maxH || minH < 2 || maxH < minH) return 1;
+  // Аудит итемов: Loaded Dice — всегда максимум ударов
+  if (holderItem === 'loadedDice') return maxH;
   if (minH === maxH) return minH;
   const r = rand();
   if (r < 3 / 8) return 2;
@@ -223,14 +228,23 @@ export const COUNTER_MULT: Record<string, { mult: number; cat: 'physical' | 'spe
   'comeuppance': { mult: 1.5, cat: 'any' },
 };
 
-/** Урон контратаки или null (нечем ответить). */
+/** Урон контратаки или null (нечем ответить).
+ * round/nowRound — протухание: отвечает только урон прошлого/текущего раунда,
+ * иначе counter бил бы спустя 5 ходов (баг из отчёта). */
 export function counterDamage(
   moveName: unknown,
   lastTakenDmg: unknown,
   lastTakenCat: unknown,
+  lastTakenRound?: unknown,
+  nowRound?: unknown,
 ): number | null {
   const spec = COUNTER_MULT[normMoveName(moveName)];
   if (!spec) return null;
+  if (lastTakenRound !== undefined && nowRound !== undefined) {
+    const lr = Math.floor(Number(lastTakenRound));
+    const nr = Math.floor(Number(nowRound));
+    if (!Number.isFinite(lr) || !Number.isFinite(nr) || nr - lr > 1) return null;
+  }
   const dmg = Math.floor(Number(lastTakenDmg) || 0);
   if (dmg <= 0) return null;
   const cat = String(lastTakenCat || '');
@@ -605,6 +619,53 @@ export const TERRAIN_SET: Record<string, string> = {
 export const FIELD_TURNS = 5;
 export const TAILWIND_TURNS = 4;
 export const TRICK_ROOM_TURNS = 5;
+
+// ── Типовые бусты held-предметов (аудит итемов) ──
+// Плиты ×1.2, остальные типовые ×1.1. Раньше не работал НИ ОДИН.
+export const TYPE_BOOST: Record<string, { type: string; mult: number }> = {
+  'dracoPlate': { type: 'dragon', mult: 1.2 }, 'dreadPlate': { type: 'dark', mult: 1.2 },
+  'earthPlate': { type: 'ground', mult: 1.2 }, 'fistPlate': { type: 'fighting', mult: 1.2 },
+  'flamePlate': { type: 'fire', mult: 1.2 }, 'iciclePlate': { type: 'ice', mult: 1.2 },
+  'insectPlate': { type: 'bug', mult: 1.2 }, 'ironPlate': { type: 'steel', mult: 1.2 },
+  'meadowPlate': { type: 'grass', mult: 1.2 }, 'mindPlate': { type: 'psychic', mult: 1.2 },
+  'pixiePlate': { type: 'fairy', mult: 1.2 }, 'skyPlate': { type: 'flying', mult: 1.2 },
+  'splashPlate': { type: 'water', mult: 1.2 }, 'spookyPlate': { type: 'ghost', mult: 1.2 },
+  'stonePlate': { type: 'rock', mult: 1.2 }, 'toxicPlate': { type: 'poison', mult: 1.2 },
+  'zapPlate': { type: 'electric', mult: 1.2 },
+  'charcoal': { type: 'fire', mult: 1.1 }, 'miracleSeed': { type: 'grass', mult: 1.1 },
+  'mysticWater': { type: 'water', mult: 1.1 }, 'sharpBeak': { type: 'flying', mult: 1.1 },
+  'silkScarf': { type: 'normal', mult: 1.1 }, 'blackBelt': { type: 'fighting', mult: 1.1 },
+  'blackGlasses': { type: 'dark', mult: 1.1 }, 'poisonBarb': { type: 'poison', mult: 1.1 },
+  'twistedSpoon': { type: 'psychic', mult: 1.1 }, 'neverMeltIce': { type: 'ice', mult: 1.1 },
+  'hardStone': { type: 'rock', mult: 1.1 }, 'softSand': { type: 'ground', mult: 1.1 },
+  'spellTag': { type: 'ghost', mult: 1.1 }, 'silverPowder': { type: 'bug', mult: 1.1 },
+  'magnet': { type: 'electric', mult: 1.1 }, 'dragonFang': { type: 'dragon', mult: 1.1 },
+  'seaIncense': { type: 'water', mult: 1.1 }, 'waveIncense': { type: 'water', mult: 1.1 },
+  'oddIncense': { type: 'psychic', mult: 1.1 }, 'rockIncense': { type: 'rock', mult: 1.1 },
+  'roseIncense': { type: 'grass', mult: 1.1 },
+};
+
+// ── Самоцветы: тип → id (×1.3 разово, камень сгорает) ──
+export const GEM_TYPE: Record<string, string> = {
+  'normalGem': 'normal', 'fireGem': 'fire', 'waterGem': 'water', 'electricGem': 'electric',
+  'grassGem': 'grass', 'iceGem': 'ice', 'fightingGem': 'fighting', 'poisonGem': 'poison',
+  'groundGem': 'ground', 'flyingGem': 'flying', 'psychicGem': 'psychic', 'bugGem': 'bug',
+  'rockGem': 'rock', 'ghostGem': 'ghost', 'dragonGem': 'dragon', 'darkGem': 'dark',
+  'steelGem': 'steel', 'fairyGem': 'fairy',
+};
+
+// ── Удары кулаком (Punching Glove ×1.1) ──
+export const PUNCH_MOVES: ReadonlySet<string> = new Set([
+  'bullet-punch', 'comet-punch', 'dizzy-punch', 'drain-punch', 'dynamic-punch',
+  'fire-punch', 'focus-punch', 'hammer-arm', 'ice-punch', 'mach-punch',
+  'mega-punch', 'meteor-mash', 'plasma-fists', 'power-up-punch', 'shadow-punch',
+  'sky-uppercut', 'thunder-punch', 'surging-strikes', 'wicked-blow', 'jet-punch',
+]);
+
+// ── Всегда критуют (аудит итемов): storm-throw и семья ──
+export const ALWAYS_CRIT: ReadonlySet<string> = new Set([
+  'storm-throw', 'frost-breath', 'surging-strikes', 'wicked-blow', 'flower-trick',
+]);
 
 // ── Collision Course / Electro Drift (проход-741) ─────────────
 // ×4/3, если удар суперэффективен.

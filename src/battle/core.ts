@@ -49,9 +49,10 @@ import { ITEMS } from '../data/items.js';                                // Ма
 import { getAbilityNameRu } from '../data/abilities.js';                 // Русские названия способностей для UI
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
-import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy, TYPE_CHART } from './logic.js';
-import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, baseDefOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, falseSwipeClamp, crushGripPower, flailPower, finalGambitDmg, flingPower, naturalGift, presentRoll, spitUpPower, swallowPct, lastRespectsPower, rageFistPower, populationBombHits, confuseChance, confusionTurns, confusionSelfHit, confusionDamage, attractBlocks, tauntBlocks, encoreForces, disableBlocks, tormentBlocks, perishTick, yawnWakes, WEATHER_SET, TERRAIN_SET, FIELD_TURNS, TAILWIND_TURNS, TRICK_ROOM_TURNS, collisionCourseMult, saltCureChip, resistantType, METRONOME_POOL, metronomePick, meFirstCopy, normMoveName } from './special-moves.js';
+import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy, TYPE_CHART, SOUND_MOVES, GEM_TYPE } from './logic.js';
+import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, baseDefOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, falseSwipeClamp, crushGripPower, flailPower, finalGambitDmg, flingPower, naturalGift, presentRoll, spitUpPower, swallowPct, lastRespectsPower, rageFistPower, populationBombHits, confuseChance, confusionTurns, confusionSelfHit, confusionDamage, attractBlocks, tauntBlocks, encoreForces, disableBlocks, tormentBlocks, perishTick, yawnWakes, WEATHER_SET, TERRAIN_SET, FIELD_TURNS, TAILWIND_TURNS, TRICK_ROOM_TURNS, collisionCourseMult, saltCureChip, resistantType, METRONOME_POOL, metronomePick, meFirstCopy, ALWAYS_CRIT, normMoveName } from './special-moves.js';
 import { calculateStat as calculateStatShared } from './stats.js';
+import { HEAL_HP, CURE_ONE, CURE_ALL } from '../data/item-effects.js';  // аудит итемов: общие таблицы с рюкзаком
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
 import { store } from '../game/store.js';
 import { checkAchievement } from '../ui/achievements.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
@@ -201,6 +202,58 @@ function saveBattleState() {
       (quota ? ' — localStorage переполнен. Бой пропадёт при перезагрузке.' : ''),
     );
   }
+}
+
+/**
+ * resetBattleField — чистый лист на старт боя (фикс утечек состояния).
+ * Поле (террейн/комнаты/ветер/туман), последние ходы, заточения и ВСЁ
+ * волатильное команды не должны жить между боями: иначе Trick Room
+ * прошлого боя ломает следующий, а trapped/perish висят на покемонах.
+ * Статусы/сон/стадии не трогаем (существующее поведение).
+ */
+function resetBattleField() {
+  S.terrain = null;
+  S.tailwindP = 0; S.tailwindW = 0;
+  S.trickRoomTurns = 0;
+  S.weatherTurns = 0;
+  S.gravityTurns = 0;
+  S.magicRoomTurns = 0;
+  S.mistP = 0; S.mistW = 0;
+  S.safeguardP = 0; S.safeguardW = 0;
+  S.luckyP = 0; S.luckyW = 0;
+  S.imprisonP = []; S.imprisonW = [];
+  S.lastTakenByPlayer = null; S.lastTakenByWild = null;
+  S.wildTookHit = false; S.playerTookHit = false;
+  S.wildTookCat = null; S.playerTookCat = null;
+  S.lastMoveUsed = null; S.lastMoveUsedDetail = null;
+  S.lastPlayerMove = null; S.lastPlayerMoveDetail = null;
+  S.lastWildMove = null; S.lastWildMoveDetail = null;
+  S.pendingHeal = null;
+  S.playerActedRound = -1;
+  for (const m of (GS.myTeam || [])) {
+    if (!m) continue;
+    m.vol = {};
+    m.typeOverride = null;
+    m.lockedOn = false;
+    m.recharging = false;
+    m.hiddenIn = null;
+    m.bide = null;
+    m.stock = 0;
+    m.rageHits = 0;
+    m.turnsOut = 0;
+    m.consumeHeldAfterHit = null;
+    m.payDayHits = 0;
+    m.shieldPunish = null;
+    m.laserFocus = false;
+    m.focusEnergy = false;
+    m.trapped = false;
+    m.flinch = false;
+    m.truantSkip = false;
+    m.slowStartTurns = 0;
+    m.choiceLockedMove = undefined;
+  }
+  S.playerChargedMove = null;
+  S.enemyChargedMove = null;
 }
 
 /**
@@ -557,6 +610,15 @@ function getEffectiveSpeed(pokemon, isWild): number {
 function getEffectivePriority(move, mon, isWild) {
   let prio = move?.priority ?? 0;
   if (!move || !mon) return prio;
+  // Аудит итемов: Quick Claw 20% +1, Custap Berry +1 при HP<25%
+  if (mon.heldItem === 'quickClaw' && Math.random() < 0.2) prio += 1;
+  {
+    // Custap не сгорает (упрощение: приоритет считается до хода дважды,
+    // сгорание там дало бы двойной расход) — работает пока HP<25%.
+    const cur = isWild ? S.wildCurHP : mon.currentHp;
+    const max = isWild ? S.wildMaxHP : mon.maxHp;
+    if (mon.heldItem === 'custapBerry' && max > 0 && cur > 0 && cur < max * 0.25) prio += 1;
+  }
   const name = String(getAbilityName(mon, isWild) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   if (name === 'prankster' && !move.power) prio += 1;
   if (name === 'gale-wings' && move.type?.name === 'flying') {
@@ -865,7 +927,7 @@ function handlePlayerStatusEffects(move) {
   // Без этого все они падали в «Но ничего не произошло...».
   {
     const ail = move.meta?.ailment?.name;
-    if (ail && ['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable'].includes(ail)) {
+    if (ail && ['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable', 'trap', 'ingrain'].includes(ail)) {
       let ok = true;
       if (ail === 'confusion') {
         ok = Math.random() * 100 < confuseChance(move.name);
@@ -1073,7 +1135,7 @@ function handleEnemyStatusEffects(move) {
   // 0a. Проход-741: волатильные ailments (зеркало игрока).
   {
     const ail = move.meta?.ailment?.name;
-    if (ail && ['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable'].includes(ail)) {
+    if (ail && ['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable', 'trap', 'ingrain'].includes(ail)) {
       let ok = true;
       if (ail === 'confusion') {
         // Serene Grace врага здесь недоступна (считается в конвейере) —
@@ -1280,6 +1342,14 @@ const STAT_GUARD_ABILITIES: Record<string, string[] | '*'> = {
 };
 
 function statStageModify(pokemon, stat, delta, fromOpponent = false) {
+  // Проход-741: туман стороны не даёт понижать статы
+  if (fromOpponent && delta < 0 && pokemon) {
+    const isWild = pokemon !== S.activePlayerMon;
+    if ((isWild ? (S.mistW || 0) : (S.mistP || 0)) > 0) {
+      appendToLog(`Туман прячет статы ${monLogName(pokemon, isWild)}!`, false, 'system');
+      return;
+    }
+  }
   // Защита от понижения: способность блокирует ТОЛЬКО то, что навязал
   // противник. Свои атаки (Overheat снижает свою сп. атаку) проходят.
   if (fromOpponent && delta < 0 && pokemon) {
@@ -1289,6 +1359,17 @@ function statStageModify(pokemon, stat, delta, fromOpponent = false) {
       appendToLog(`${getAbilityNameRu(abil)} не даёт понизить ${STAT_LABELS[stat] || stat} ${pokemon.apiData?.name || ''}!`, false, 'system');
       return;
     }
+  }
+  // Аудит итемов: White Herb возвращает пониженные статы (съедается)
+  if (pokemon && pokemon.heldItem === 'whiteHerb' && fromOpponent && delta < 0) {
+    pokemon.heldItem = null;
+    if (!pokemon.statStages) pokemon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+    for (const k of ['atk', 'def', 'spa', 'spd', 'spe']) {
+      if ((pokemon.statStages[k] || 0) < 0) pokemon.statStages[k] = 0;
+    }
+    updateStatBadges();
+    appendToLog(`${pokemon.nickname || pokemon.apiData?.name || pokemon.name} съедает Белую траву — статы восстановлены!`, false, 'system');
+    return;
   }
   // Если стат-стадии ещё нет — инициализируем нулями
   if (!pokemon.statStages) pokemon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
@@ -1662,6 +1743,14 @@ function getStatusIcon(status) {
  */
 function applyStatusEffect(target, statusType) {
   if (target.status) return false; // Уже есть статус — не накладываем повторно
+  // Проход-741: Safeguard стороны не даёт статусы
+  {
+    const isWild = target !== S.activePlayerMon;
+    if ((isWild ? (S.safeguardW || 0) : (S.safeguardP || 0)) > 0) {
+      appendToLog(`Защита ${monLogName(target, isWild)} отражает статус!`, false, 'system');
+      return false;
+    }
+  }
   // Проход-741: туманный террейн не даёт статусы наземным, электрический —
   // не даёт сон наземным. Молча не глотаем: пишем причину в лог.
   {
@@ -1711,6 +1800,8 @@ function monLogName(mon: any, isWild: boolean): string {
 
 /** Наземный ли (для террейнов): не летающий и не левитирующий. */
 function isGrounded(mon: any, isWild: boolean): boolean {
+  // Проход-741: гравитация прижимает всех
+  if ((S.gravityTurns || 0) > 0) return true;
   const types = (mon?.apiData?.types || []).map((t: any) => t?.type?.name || t);
   if (types.includes('flying')) return false;
   const ab = String(abilityOf(mon, isWild) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1732,6 +1823,8 @@ function effTypes(mon: any): string[] {
  * или null (играть дальше). Логи пишет сам.
  */
 function volatileStart(mon: any, isWild: boolean, hp: { get: () => number; set: (v: number) => void; max: () => number; ui: () => void }): 'fainted' | 'done' | null {
+  // Счётчик ходов на поле (для fake-out/first-impression: только первый ход)
+  mon.turnsOut = (mon.turnsOut || 0) + 1;
   const vol = monVol(mon);
   const nm = monLogName(mon, isWild);
   // Perish Song: обратный отсчёт
@@ -1842,6 +1935,13 @@ function volatileAction(mon: any, foe: any, isWild: boolean, move: any, moveInde
  * (вызывающий пропускает обычный applyStatusEffect).
  */
 function applyVolatileAilment(target: any, isWildTarget: boolean, ailment: string, sourceName: string, foeLastMove?: string | null): boolean {
+  // Аудит итемов: Mental Herb съедается вместо волатильного состояния
+  if (target.heldItem === 'mentalHerb' && ['infatuation', 'taunt'].includes(ailment)) {
+    target.heldItem = null;
+    const nm = monLogName(target, isWildTarget);
+    appendToLog(`${nm} съедает Мятную траву и остаётся в себе!`, false, 'system');
+    return true;
+  }
   const vol = monVol(target);
   const tnm = monLogName(target, isWildTarget);
   switch (ailment) {
@@ -1881,6 +1981,20 @@ function applyVolatileAilment(target: any, isWildTarget: boolean, ailment: strin
       }
       return true;
     }
+    case 'trap': {
+      // Проход-741: fire-spin и семья — держат и щиплют 1/8
+      vol.trapped = true;
+      vol.bindChip = true;
+      appendToLog(`${tnm} попал в хватку!`, false, 'system');
+      return true;
+    }
+    case 'ingrain': {
+      // Проход-741: корни — 1/16 себе, сам не уйдёт (trapped у себя)
+      vol.ingrain = true;
+      vol.trapped = true;
+      appendToLog(`${tnm} пускает корни!`, false, 'system');
+      return true;
+    }
     default:
       return false;
   }
@@ -1916,6 +2030,87 @@ function tickFieldEndOfRound() {
   if ((S.trickRoomTurns || 0) > 0) {
     S.trickRoomTurns -= 1;
     if (S.trickRoomTurns <= 0) appendToLog('Trick Room рассеивается!', false, 'system');
+  }
+  // (фикс ниже: проверки обморока после тиков — у вызывающих)
+
+  // Гравитация, волшебная комната, туман, защита, напев — часы
+  if ((S.gravityTurns || 0) > 0) {
+    S.gravityTurns -= 1;
+    if (S.gravityTurns <= 0) appendToLog('Гравитация ослабевает!', false, 'system');
+  }
+  if ((S.magicRoomTurns || 0) > 0) {
+    S.magicRoomTurns -= 1;
+    if (S.magicRoomTurns <= 0) appendToLog('Волшебная комната исчезает!', false, 'system');
+  }
+  if ((S.mistP || 0) > 0) S.mistP -= 1;
+  if ((S.mistW || 0) > 0) S.mistW -= 1;
+  if ((S.safeguardP || 0) > 0) S.safeguardP -= 1;
+  if ((S.safeguardW || 0) > 0) S.safeguardW -= 1;
+  if ((S.luckyP || 0) > 0) S.luckyP -= 1;
+  if ((S.luckyW || 0) > 0) S.luckyW -= 1;
+  // Проклятие: 1/4 макс HP в конце хода
+  if (S.activePlayerMon.vol?.cursed && S.activePlayerMon.currentHp > 0) {
+    const chip = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 4));
+    S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - chip);
+    updatePlayerHpUI();
+    appendToLog(`Проклятие гложет ${S.activePlayerMon.apiData.name}! (−${chip} HP)`, false, 'dmg');
+  }
+  if (S.activeWild.vol?.cursed && S.wildCurHP > 0) {
+    const chip = Math.max(1, Math.floor(S.wildMaxHP / 4));
+    S.wildCurHP = Math.max(0, S.wildCurHP - chip);
+    updateWildHpUI();
+    appendToLog(`Проклятие гложет дикого ${S.activeWild.name}! (−${chip} HP)`, false, 'dmg');
+  }
+  // Водяное кольцо и корни: 1/16 себе в конце хода
+  if (S.activePlayerMon.vol?.aquaRing && S.activePlayerMon.currentHp > 0 && S.activePlayerMon.currentHp < S.activePlayerMon.maxHp) {
+    const h = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 16));
+    S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + h);
+    updatePlayerHpUI();
+    appendToLog(`Кольцо лечит ${S.activePlayerMon.apiData.name}! (+${h} HP)`, false, 'heal');
+  }
+  if (S.activeWild.vol?.aquaRing && S.wildCurHP > 0 && S.wildCurHP < S.wildMaxHP) {
+    const h = Math.max(1, Math.floor(S.wildMaxHP / 16));
+    S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + h);
+    updateWildHpUI();
+    appendToLog(`Кольцо лечит дикого ${S.activeWild.name}! (+${h} HP)`, false, 'heal');
+  }
+  if (S.activePlayerMon.vol?.ingrain && S.activePlayerMon.currentHp > 0 && S.activePlayerMon.currentHp < S.activePlayerMon.maxHp) {
+    const h = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 16));
+    S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + h);
+    updatePlayerHpUI();
+    appendToLog(`Корни питают ${S.activePlayerMon.apiData.name}! (+${h} HP)`, false, 'heal');
+  }
+  if (S.activeWild.vol?.ingrain && S.wildCurHP > 0 && S.wildCurHP < S.wildMaxHP) {
+    const h = Math.max(1, Math.floor(S.wildMaxHP / 16));
+    S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + h);
+    updateWildHpUI();
+    appendToLog(`Корни питают дикого ${S.activeWild.name}! (+${h} HP)`, false, 'heal');
+  }
+  // Привязка (fire-spin и семья): 1/8 макс HP
+  if (S.activePlayerMon.vol?.bindChip && S.activePlayerMon.currentHp > 0) {
+    const chip = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 8));
+    S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - chip);
+    updatePlayerHpUI();
+    appendToLog(`${S.activePlayerMon.apiData.name} страдает в хватке! (−${chip} HP)`, false, 'dmg');
+  }
+  if (S.activeWild.vol?.bindChip && S.wildCurHP > 0) {
+    const chip = Math.max(1, Math.floor(S.wildMaxHP / 8));
+    S.wildCurHP = Math.max(0, S.wildCurHP - chip);
+    updateWildHpUI();
+    appendToLog(`Дикий ${S.activeWild.name} страдает в хватке! (−${chip} HP)`, false, 'dmg');
+  }
+  // Кошмар: спит — теряет 1/4
+  if (S.activePlayerMon.vol?.nightmare && S.activePlayerMon.status === 'slp' && S.activePlayerMon.currentHp > 0) {
+    const chip = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 4));
+    S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - chip);
+    updatePlayerHpUI();
+    appendToLog(`${S.activePlayerMon.apiData.name} мучается кошмаром! (−${chip} HP)`, false, 'dmg');
+  }
+  if (S.activeWild.vol?.nightmare && S.activeWild.status === 'slp' && S.wildCurHP > 0) {
+    const chip = Math.max(1, Math.floor(S.wildMaxHP / 4));
+    S.wildCurHP = Math.max(0, S.wildCurHP - chip);
+    updateWildHpUI();
+    appendToLog(`Дикий ${S.activeWild.name} мучается кошмаром! (−${chip} HP)`, false, 'dmg');
   }
   // Трава лечит наземных 1/16
   if (S.terrain?.kind === 'grassy') {
@@ -2167,6 +2362,27 @@ function handleFieldAndTrickMoves(move: any, isPlayer: boolean): boolean {
       updateAbilityDisplay();
       return done(`${fname} теперь Простой!`);
     }
+    // ── Ловушки: mean-look / spider-web / octolock / jaw-lock ──
+    // Противник не может сбежать/смениться (проверки в побеге, смене, телепорте).
+    case 'mean-look': case 'spider-web': {
+      foe.trapped = true;
+      return done(`${fname} не может уйти!`);
+    }
+    case 'octolock': {
+      foe.trapped = true;
+      statStageModify(foe, 'def', -1, foeIsWild);
+      statStageModify(foe, 'spd', -1, foeIsWild);
+      return done(`${fname} в оковах! Защита падает, уйти нельзя!`);
+    }
+    // ── Фокус и прицел (аудит итемов/атак) ──
+    case 'focus-energy': {
+      user.focusEnergy = true;
+      return done(`${uname} сосредоточился! (крит +2 ступени)`);
+    }
+    case 'laser-focus': {
+      user.laserFocus = true;
+      return done(`${uname} прицелился! Следующая атака — точно крит!`);
+    }
     // ── Желания/судьба/стойкость ──
     case 'wish': {
       monVol(user).wish = true;
@@ -2193,6 +2409,175 @@ function handleFieldAndTrickMoves(move: any, isPlayer: boolean): boolean {
       const amt = Math.max(1, baseAttackOf(foe, foeIsWild));
       setHp(Math.min(maxHp(), getHp() + amt));
       return done(`${uname} высасывает силу! Атака падает, +${amt} HP`, 'heal');
+    }
+    // ── Отдых / кольца / проклятия ──
+    case 'rest': {
+      cureStatus(user);
+      if (isPlayer) {
+        user.currentHp = user.maxHp;
+        updatePlayerHpUI();
+      } else {
+        S.wildCurHP = S.wildMaxHP;
+        updateWildHpUI();
+      }
+      applyStatusEffect(user, 'slp');
+      user.sleepTurns = 2;
+      if (isPlayer) {
+        document.getElementById('player-status-icon').innerText = getStatusIcon('slp');
+      } else {
+        S.wildStatus = 'slp';
+        document.getElementById('wild-status-icon').innerText = getStatusIcon('slp');
+      }
+      return done(`${uname} отдыхает: полное HP и сон на 2 хода!`, 'heal');
+    }
+    case 'aqua-ring': {
+      monVol(user).aquaRing = true;
+      return done(`${uname} окружает себя водяным кольцом!`);
+    }
+    case 'snatch': {
+      // Упрощение: крадёт текущие усиления (как spectral-thief без урона)
+      const fs = foe.statStages || {};
+      const stolen = ['atk', 'def', 'spa', 'spd', 'spe'].some((k) => (fs[k] || 0) > 0);
+      if (!stolen) return done('Красть нечего — усилений нет!');
+      const us = user.statStages || { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+      for (const k of ['atk', 'def', 'spa', 'spd', 'spe']) {
+        us[k] = Math.max(-6, Math.min(6, (us[k] || 0) + Math.max(0, fs[k] || 0)));
+        fs[k] = 0;
+      }
+      user.statStages = us;
+      foe.statStages = fs;
+      updateStatBadges();
+      return done(`${uname} выхватывает усиления!`);
+    }
+    case 'grudge': {
+      monVol(user).grudge = true;
+      return done(`${uname} затаил злобу! (добьёт — у врага кончится PP)`);
+    }
+    case 'instruct': {
+      // Упрощение: как encore на 1 ход — противник повторяет последнюю атаку
+      const last = foeIsWild ? S.lastWildMove : S.lastPlayerMove;
+      if (!last) return done('Приказывать нечего!');
+      monVol(foe).encore = { move: last, turns: 1 };
+      return done(`${uname} приказывает: ${fname} повторяет ${last}!`);
+    }
+    case 'court-change': {
+      const t = S.playerReflectTurns; S.playerReflectTurns = S.enemyReflectTurns; S.enemyReflectTurns = t;
+      const t2 = S.playerLightScreenTurns; S.playerLightScreenTurns = S.enemyLightScreenTurns; S.enemyLightScreenTurns = t2;
+      const t3 = S.tailwindP || 0; S.tailwindP = S.tailwindW || 0; S.tailwindW = t3;
+      return done(`${uname} меняет стороны поля! (экраны и ветер)`);
+    }
+    case 'magic-coat': {
+      monVol(user).magicCoat = true;
+      return done(`${uname} готов отразить статус!`);
+    }
+    case 'quash': {
+      // В синглах нашего движка враг и так ходит после игрока —
+      // если он уже сходил, поздно; иначе фиксируем факт.
+      return done(`${uname} откладывает ход противника! (он и так ходит вторым)`);
+    }
+    case 'after-you': {
+      return done(`${uname} пропускает противника вперёд! (он и так ходит вторым)`);
+    }
+    case 'helping-hand': case 'rage-powder': case 'follow-me': case 'ally-switch':
+    case 'aromatic-mist': case 'coaching': case 'gear-up': case 'magnetic-flux':
+    case 'spotlight': {
+      return done(`${uname} зовёт напарника — но бьётся один! Без эффекта.`);
+    }
+    case 'mimic': {
+      // Как sketch, но только до конца боя (упрощение: так же постоянно —
+      // слот всё равно вернётся при смене набора; отдельно не отслеживаем).
+      const last = foeIsWild ? S.lastWildMove : S.lastPlayerMove;
+      if (!last) return done('Копировать нечего!');
+      return done(`${uname} запоминает ${last}! (как sketch — смените атаку вручную)`);
+    }
+    case 'refresh': {
+      if (!user.status) return done('Статусов нет — нечего освежать!');
+      cureStatus(user);
+      if (isPlayer) document.getElementById('player-status-icon').innerText = getStatusIcon(user.status);
+      else { S.wildStatus = user.status; document.getElementById('wild-status-icon').innerText = getStatusIcon(user.status); }
+      return done(`${uname} освежается!`);
+    }
+    case 'acupressure': {
+      const keys = ['atk', 'def', 'spa', 'spd', 'spe', 'eva'];
+      const k = keys[Math.floor(Math.random() * 5)]; // без уклонения в движке — 5 статов
+      statStageModify(user, k as any, 2, !isPlayer);
+      return done(`${uname}: точка нажата — ${k} +2!`);
+    }
+    case 'psycho-shift': {
+      if (!user.status) return done('Передавать нечего — чист!');
+      if (foe.status) return done('Противник уже со статусом!');
+      foe.status = user.status;
+      foe.sleepTurns = user.sleepTurns || 0;
+      cureStatus(user);
+      if (foeIsWild) { S.wildStatus = foe.status; document.getElementById('wild-status-icon').innerText = getStatusIcon(foe.status); }
+      else document.getElementById('player-status-icon').innerText = getStatusIcon(foe.status);
+      if (isPlayer) document.getElementById('player-status-icon').innerText = getStatusIcon(user.status);
+      else { S.wildStatus = user.status; document.getElementById('wild-status-icon').innerText = getStatusIcon(user.status); }
+      return done(`${uname} перекладывает статус на противника!`);
+    }
+    case 'curse': {
+      const utypes = effTypes(user);
+      if (utypes.includes('ghost')) {
+        setHp(Math.max(1, Math.floor(maxHp() / 2)));
+        monVol(foe).cursed = true;
+        return done(`${uname} проклинает ${fname} ценой половины HP!`);
+      }
+      statStageModify(user, 'atk', 1, !isPlayer);
+      statStageModify(user, 'def', 1, !isPlayer);
+      statStageModify(user, 'spe', -1, !isPlayer);
+      return done(`${uname}: атака/защита +1, скорость −1!`);
+    }
+    case 'foresight': case 'odor-sleuth': {
+      monVol(foe).foresight = true;
+      return done(`${fname} распознан: нормальные/боевые бьют по призраку!`);
+    }
+    case 'lock-on': case 'mind-reader': {
+      user.lockedOn = true;
+      return done(`${uname} берёт цель на мушку!`);
+    }
+    case 'gravity': {
+      S.gravityTurns = 5;
+      return done(`${uname} усиливает гравитацию! Летающие — на земле!`);
+    }
+    case 'wonder-room': {
+      const a = user.statStages || {};
+      const b = foe.statStages || {};
+      for (const k of ['def', 'spd']) {
+        const t = a[k] || 0;
+        a[k] = b[k] || 0;
+        b[k] = t;
+      }
+      user.statStages = a;
+      foe.statStages = b;
+      return done('Чудо-комната меняет защиту и сп. защиту местами!');
+    }
+    case 'magic-room': {
+      S.magicRoomTurns = 5;
+      return done('Волшебная комната: предметы молчат!');
+    }
+    case 'mist': {
+      if (isPlayer) S.mistP = 5; else S.mistW = 5;
+      return done(`${uname} прячется в тумане! (статы не понизят)`);
+    }
+    case 'safeguard': {
+      if (isPlayer) S.safeguardP = 5; else S.safeguardW = 5;
+      return done(`${uname} под защитой! (статусы не пройдут)`);
+    }
+    case 'lucky-chant': {
+      if (isPlayer) S.luckyP = 5; else S.luckyW = 5;
+      return done(`${uname} под счастливым напевом! (без критов)`);
+    }
+    case 'aurora-veil': {
+      if (S.currentWeather !== 'hail') return done('Без града вуаль не встаёт!');
+      if (isPlayer) { S.playerReflectTurns = 5; S.playerLightScreenTurns = 5; }
+      else { S.enemyReflectTurns = 5; S.enemyLightScreenTurns = 5; }
+      return done(`${uname} ставит полярное сияние!`);
+    }
+    case 'pay-day': {
+      // Урон — обычным ходом (power 40 в данных); здесь только метка монет.
+      // Деньги начисляются в награде за победу (см. handleWildFaintRewards).
+      monVol(user).payDay = (monVol(user).payDay || 0) + 1;
+      return done(`${uname} разбрасывает монеты!`);
     }
     // ── NO-META новинки (в данных meta пустое — по имени) ──
     case 'tidy-up': {
@@ -2304,6 +2689,22 @@ function applyShieldPunish(defender: any, attacker: any, attackerIsWild: boolean
  */
 function guardFaintWild(): boolean {
   if (S.wildCurHP > 0) return false;
+  // Фикс: Focus Band — 10% пережить добивающий удар с 1 HP
+  if (S.activeWild.heldItem === 'focusBand' && Math.random() < 0.1) {
+    S.wildCurHP = 1;
+    updateWildHpUI();
+    appendToLog(`Дикий ${S.activeWild.name} держится благодаря Focus Band! (1 HP)`, false, 'system');
+    return true;
+  }
+  // Проход-741: Grudge — добивший ход врага теряет все PP
+  if (S.activeWild.vol?.grudge && S.lastPlayerMove) {
+    const idx = (S.playerMovesDetailed || []).findIndex((m: any) => m && normMoveName(m.name) === S.lastPlayerMove);
+    if (idx >= 0 && S.activePlayerMon.movesPP?.[idx]) {
+      S.activePlayerMon.movesPP[idx].current = 0;
+      appendToLog(`Злоба дикого ${S.activeWild.name}: у ${S.lastPlayerMove} кончились PP!`, false, 'system');
+    }
+    S.activeWild.vol.grudge = false;
+  }
   if (S.activeWild.vol?.endure && S.wildTookHit) {
     S.activeWild.vol.endure = false;
     S.wildCurHP = 1;
@@ -2322,6 +2723,22 @@ function guardFaintWild(): boolean {
 
 function guardFaintPlayer(): boolean {
   if (S.activePlayerMon.currentHp > 0) return false;
+  // Фикс: Focus Band — 10% пережить добивающий удар с 1 HP
+  if (S.activePlayerMon.heldItem === 'focusBand' && Math.random() < 0.1) {
+    S.activePlayerMon.currentHp = 1;
+    updatePlayerHpUI();
+    appendToLog(`${S.activePlayerMon.apiData.name} держится благодаря Focus Band! (1 HP)`, false, 'system');
+    return true;
+  }
+  // Проход-741: Grudge — добивший ход дикого теряет все PP
+  if (monVol(S.activePlayerMon).grudge && S.lastWildMove) {
+    const idx = (S.wildMovesDetailed || []).findIndex((m: any) => m && normMoveName(m.name) === S.lastWildMove);
+    if (idx >= 0 && S.wildMovesPP?.[idx]) {
+      S.wildMovesPP[idx].current = 0;
+      appendToLog(`Злоба ${S.activePlayerMon.apiData.name}: у ${S.lastWildMove} кончились PP!`, false, 'system');
+    }
+    monVol(S.activePlayerMon).grudge = false;
+  }
   if (monVol(S.activePlayerMon).endure && S.playerTookHit) {
     monVol(S.activePlayerMon).endure = false;
     S.activePlayerMon.currentHp = 1;
@@ -2507,6 +2924,11 @@ function fleeWildBattle(msg: string) {
 }
 
 function switchPokemon() {
+  // Проход-741: ловушка не даёт смениться
+  if (S.activePlayerMon.trapped) {
+    showToast('Ловушка держит покемона — смена невозможна!', true);
+    return;
+  }
   // Ищем живых покемонов, исключая текущего активного
   const aliveMons = GS.myTeam.filter((mon, i) => mon.currentHp > 0 && mon !== S.activePlayerMon);
   if (aliveMons.length === 0) { showToast('Нет других покемонов для смены!', true); return; }
@@ -3000,6 +3422,7 @@ async function startHunt(encountersArray) {
     S.activePlayerMon = GS.myTeam[activeMonIndex];
   S.activePlayerMon.choiceLockedMove = undefined;
   S.currentWeather = getDailyWeather(GS.currentLocationId);
+  resetBattleField(); // фикс: поле/vol не текут между боями
 
   const modal = document.getElementById('encounter-modal');
   const battleLog = document.getElementById('battle-log');
@@ -3553,7 +3976,14 @@ async function handleWildFaintRewards(isWild: boolean) {
     const rItems = getWildDropItems();
     // Журнал дропа: строка лога исчезает вместе с боем, а выпавшее нужно помнить.
     recordDrop(S.activeWild.name, S.wildLvl, rItems);
-    store.giveReward(S.wildLvl * 20 + 50, rItems);          // Деньги + предметы
+    let wildMoney = S.wildLvl * 20 + 50;
+    // Аудит итемов: Amulet Coin / Luck Incense удваивают деньги за дикий бой
+    const moneyMult = (S.activePlayerMon.heldItem === 'amuletCoin' || S.activePlayerMon.heldItem === 'luckIncense') ? 2 : 1;
+    if (moneyMult > 1) appendToLog(`${S.activePlayerMon.apiData.name} удваивает приз монетой!`, false, 'system');
+    // Проход-741: Pay Day разбрасывает монеты (по 5 за удар, пачка за бой)
+    const payDay = (S.activePlayerMon.payDayHits || 0) * 5;
+    if (payDay > 0) appendToLog(`Подобрано монет Pay Day: +${payDay}!`, false, 'system');
+    store.giveReward(wildMoney * moneyMult + payDay, rItems);          // Деньги + предметы
     checkQuestProgress('earn_money', S.wildLvl * 20 + 50);  // Квест "заработать деньги"
     // Туториал: выбить предмет (если хоть что-то выпало)
     if (rItems.length > 0) store.checkTutorialProgress('collect_drop', 1, rItems[0].id);
@@ -3628,10 +4058,15 @@ async function handleWildFaintRewards(isWild: boolean) {
     }
 
     // ═══ Эволюция ═══
-    const evoTarget = await checkEvolution(S.activePlayerMon);
-    if (evoTarget) {
-      await triggerEvolution(S.activePlayerMon, evoTarget.name);
-      updatePlayerHpUI();
+    // Аудит итемов: Everstone блокирует эволюцию по уровню
+    if (S.activePlayerMon.heldItem === 'everstone') {
+      appendToLog(`${S.activePlayerMon.apiData.name} не эволюционирует (Вечный камень)!`, false, 'system');
+    } else {
+      const evoTarget = await checkEvolution(S.activePlayerMon);
+      if (evoTarget) {
+        await triggerEvolution(S.activePlayerMon, evoTarget.name);
+        updatePlayerHpUI();
+      }
     }
   }
 
@@ -3895,7 +4330,7 @@ async function useMove(moveIndex) {
     S.wildCurHP = Math.max(0, S.wildCurHP - rel);
     updateWildHpUI();
     appendToLog(`${S.activePlayerMon.apiData.name} выпускает накопленное: −${rel} HP!`, false, 'dmg');
-    S.lastTakenByWild = { dmg: rel, cat: 'physical' };
+    S.lastTakenByWild = { dmg: rel, cat: 'physical', round: S.battleRound };
     document.getElementById('battle-main-menu').style.display = 'none';
     if (S.wildCurHP === 0) {
       await handleWildFaintRewards(S.battleType === 'wild');
@@ -3904,6 +4339,15 @@ async function useMove(moveIndex) {
     saveBattleState();
     setTimeout(() => { enemyTurn(); }, 1000);
     return;
+  }
+
+  // ── Фикс: самоцвет сгорает при ударе своим типом (иначе ×1.3 навсегда) ──
+  // Общий AFTER ALL HITS уже списывает consumeHeldAfterHit — здесь ставим метку.
+  {
+    const held = S.activePlayerMon.heldItem;
+    if (held && GEM_TYPE[held] === move.type?.name) {
+      S.activePlayerMon.consumeHeldAfterHit = held;
+    }
   }
 
   // ── ПРОХОД-741: подмены и особые действия ──
@@ -4033,6 +4477,8 @@ async function useMove(moveIndex) {
       return;
     } else if (gslug === 'roar' || gslug === 'whirlwind' || gslug === 'teleport') {
       if (S.battleType !== 'wild') { failGimmick('Лидер не даёт уйти из боя!'); return; }
+      // Проход-741: ловушка не даёт телепортироваться (рык выгоняет дикого — работает)
+      if (gslug === 'teleport' && S.activePlayerMon.trapped) { failGimmick('Ловушка держит — телепорт не работает!'); return; }
       appendToLog(gslug === 'teleport' ? `${pname} телепортируется из боя!` : `Дикий ${S.activeWild.name} в ужасе убегает!`, false, 'system');
       fleeWildBattle(gslug === 'teleport' ? 'Вам удалось сбежать!' : 'Противник сбежал!');
       return;
@@ -4071,6 +4517,24 @@ async function useMove(moveIndex) {
     } else if (gslug === 'rage-fist') {
       move = { ...move, power: rageFistPower(S.activePlayerMon.rageHits) };
       power = move.power;
+    } else if (gslug === 'acrobatics') {
+      // Без предмета — 110 вместо 55
+      if (!S.activePlayerMon.heldItem) {
+        move = { ...move, power: 110 };
+        power = 110;
+        appendToLog(`${pname} лёгкий как пёрышко!`, false, 'system');
+      }
+    } else if (gslug === 'stored-power' || gslug === 'power-trip') {
+      // 20 + 20 за каждую положительную ступень
+      const st = S.activePlayerMon.statStages || {};
+      const boosts = ['atk', 'def', 'spa', 'spd', 'spe'].reduce((n, k) => n + Math.max(0, st[k] || 0), 0);
+      move = { ...move, power: 20 + 20 * boosts };
+      power = move.power;
+    } else if (gslug === 'eruption' || gslug === 'water-spout' || gslug === 'dragon-energy') {
+      // 150 × доля HP
+      const frac = S.activePlayerMon.maxHp > 0 ? S.activePlayerMon.currentHp / S.activePlayerMon.maxHp : 0;
+      move = { ...move, power: Math.max(1, Math.floor(150 * frac)) };
+      power = move.power;
     }
   }
 
@@ -4090,6 +4554,8 @@ async function useMove(moveIndex) {
   // Проход-741: флаги прямого урона свежие каждый ход (для endure)
   S.wildTookHit = false;
   S.playerTookHit = false;
+  S.wildTookCat = null;
+  S.playerTookCat = null;
 
   // ── 4b. ПРОХОД-741: начало хода игрока (perish/yawn/wish) ──
   {
@@ -4141,6 +4607,34 @@ async function useMove(moveIndex) {
     saveBattleState();
     setTimeout(() => { enemyTurn(); }, 1000);
     return;
+  }
+
+  // ── 5b3. ПРОХОД-741: условия первого хода и ответа на урон ──
+  // Focus Punch падает, если били; Shell Trap — только по физике;
+  // Fake Out / First Impression — только первый ход на поле.
+  {
+    const fslug = normMoveName(move.name);
+    if (fslug === 'focus-punch' && S.playerTookHit) {
+      appendToLog(`${S.activePlayerMon.apiData.name} потерял концентрацию!`, false, 'system');
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
+    if (fslug === 'shell-trap' && S.playerTookCat !== 'physical') {
+      appendToLog(`Ловушка не сработала — физического удара не было!`, false, 'system');
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
+    if ((fslug === 'fake-out' || fslug === 'first-impression') && (S.activePlayerMon.turnsOut || 1) > 1) {
+      appendToLog(`${move.name} срабатывает только на первом ходу!`, false, 'system');
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+      setTimeout(() => { enemyTurn(); }, 1000);
+      return;
+    }
   }
 
   // ── 5b2. ПРОХОД-741: волатильные проверки выбранной атаки ──
@@ -4210,6 +4704,29 @@ async function useMove(moveIndex) {
         // не вызовется), поэтому часы поля тикают тут, иначе быстрые враги
         // останавливали бы погоду/террейн/tailwind/trick-room.
         tickFieldEndOfRound();
+        // Фикс: тики могли добить — те же проверки, что в finishEnemyTurn
+        if (S.wildCurHP <= 0) {
+          if (guardFaintWild()) { /* выдержал */ }
+          else {
+            await handleWildFaintRewards(S.battleType === 'wild');
+            return;
+          }
+        }
+        if (S.activePlayerMon.currentHp <= 0) {
+          if (!guardFaintPlayer()) {
+            appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
+            handlePlayerFaint();
+            // Фикс: destiny могла обнулить дикого — обрабатываем и его
+            if (S.wildCurHP <= 0) {
+              if (guardFaintWild()) { /* выдержал */ }
+              else {
+                await handleWildFaintRewards(S.battleType === 'wild');
+                return;
+              }
+            }
+            return;
+          }
+        }
         showPlayerMenuAfterDelay();
         return;
       }
@@ -4279,6 +4796,7 @@ async function useMove(moveIndex) {
           defender: S.activePlayerMon,
           isTrainer: S.battleType !== 'wild',
           getTypeMultiplier,
+          banned: S.imprisonP, // imprison: запрещённые не предлагать
         });
         enemyMoveForOrder = aiPreview?.move || null;
       }
@@ -4359,6 +4877,12 @@ async function useMove(moveIndex) {
     abilityOf(S.activeWild, true),
     S.currentWeather,
   );
+  // ПРОХОД-741: наведение (lock-on/mind-reader) бьёт без промаха, разовое
+  if (!accResult.hit && S.activePlayerMon.lockedOn) {
+    S.activePlayerMon.lockedOn = false;
+    accResult = { hit: true, message: '' };
+    appendToLog(`Наведение сработало — мимо не пройти!`, false, 'system');
+  }
   // Hustle: 20% additional miss chance for physical moves
   const playerAbilityName = abilityOf(S.activePlayerMon, false);
   // Serene Grace удваивает шанс побочных эффектов своих атак (статус, статы,
@@ -4371,6 +4895,12 @@ async function useMove(moveIndex) {
   }
   if (!accResult.hit) {
     appendToLog(accResult.message); // "Атака промахнулась!"
+    // Аудит итемов: Blunder Policy — скорость +2 при промахе (съедается)
+    if (S.activePlayerMon.heldItem === 'blunderPolicy') {
+      S.activePlayerMon.heldItem = null;
+      statStageModify(S.activePlayerMon, 'spe', 2, false);
+      appendToLog(`${S.activePlayerMon.apiData.name} съедает Blunder Policy: скорость +2!`, false, 'system');
+    }
     document.getElementById('battle-main-menu').style.display = 'none';
     saveBattleState();
      endTurn();
@@ -4403,14 +4933,21 @@ async function useMove(moveIndex) {
       appendToLog(`${S.activePlayerMon.apiData.name} теряет заряд ${S.playerChargedMove.name}!`);
       S.playerChargedMove = null;
     }
-  } else if (isCharge) {
-    // ═══ ЗАРЯД ═══ Первый ход — заряжаем атаку
-    S.playerChargedMove = move;
-    appendToLog(`${S.activePlayerMon.apiData.name} заряжает ${move.name}!`);
-    document.getElementById('battle-main-menu').style.display = 'none';
-    saveBattleState();
-     endTurn();
-    return;
+  } else if (isCharge || normMoveName(move.name) === 'geomancy') {
+    // Проход-741: geomancy тоже двухходовая (заряд → баффы обычным ходом)
+    // Аудит итемов: Power Herb пропускает заряд (съедается)
+    if (S.activePlayerMon.heldItem === 'powerHerb') {
+      S.activePlayerMon.heldItem = null;
+      appendToLog(`${S.activePlayerMon.apiData.name} съедает Power Herb — сразу бьёт!`, false, 'system');
+    } else {
+      // ═══ ЗАРЯД ═══ Первый ход — заряжаем атаку
+      S.playerChargedMove = move;
+      appendToLog(`${S.activePlayerMon.apiData.name} заряжает ${move.name}!`);
+      document.getElementById('battle-main-menu').style.display = 'none';
+      saveBattleState();
+       endTurn();
+      return;
+    }
   }
 
   // ── 9c. L2-остаток: полунеуязвимость (fly/dig/dive/...) ──
@@ -4460,6 +4997,8 @@ async function useMove(moveIndex) {
     // L2-остаток: контратаки бьют от входящего с прошлого хода
     lastTakenDmg: S.lastTakenByPlayer?.dmg,
     lastTakenCat: S.lastTakenByPlayer?.cat,
+    lastTakenRound: S.lastTakenByPlayer?.round,
+    nowRound: S.battleRound,
   }) : null;
   if (!power && playerFixedDmg == null && !isOhkoMove(move)) {
     // 10a-i: Наложение статуса (Toxic, Thunder Wave, Will-O-Wisp, Spore...)
@@ -4549,6 +5088,10 @@ async function useMove(moveIndex) {
     const curLvl = S.activePlayerMon.baseLevel + S.activePlayerMon.candiesEaten;
     // Crit rate stage: base from move (0=normal, 1=high-crit) + items/abilities
     let critRateStage = move.meta?.crit_rate || 0;
+    // Аудит итемов: Scope Lens / Razor Claw +1 ступень крита
+    if (S.activePlayerMon.heldItem === 'scopeLens' || S.activePlayerMon.heldItem === 'razorClaw') critRateStage += 1;
+    // Фокус: +2 ступени
+    if (S.activePlayerMon.focusEnergy) critRateStage += 2;
     // Stick (Farfetch'd/Sirfetch'd): +2 crit stages (25%)
     if (S.activePlayerMon.heldItem === 'stick' && ['farfetchd', 'sirfetchd'].includes(S.activePlayerMon.apiData?.species?.name || '')) {
       critRateStage += 2;
@@ -4562,7 +5105,7 @@ async function useMove(moveIndex) {
       ? Math.max(1, beatParty!.length)
       : beatSlug === 'population-bomb'
         ? populationBombHits()
-        : getMultiHitCount(move);
+        : getMultiHitCount(move, Math.random, S.activePlayerMon.heldItem);
 
     // Sheer Force: убирает вторичные эффекты атак, даёт 1.3x урон (в calculateDamage)
     const playerSheerForce = playerAbilityName === 'sheer-force' &&
@@ -4620,10 +5163,17 @@ async function useMove(moveIndex) {
           // L2-остаток: контратаки бьют от входящего с прошлого хода
           lastTakenDmg: S.lastTakenByPlayer?.dmg,
           lastTakenCat: S.lastTakenByPlayer?.cat,
+          lastTakenRound: S.lastTakenByPlayer?.round,
+          nowRound: S.battleRound,
           // Проход-741: заряды stockpile и смена типа
           stock: S.activePlayerMon.stock || 0,
           attackerTypesOverride: effTypes(S.activePlayerMon).length ? effTypes(S.activePlayerMon) : undefined,
           defenderTypesOverride: effTypes(S.activeWild).length ? effTypes(S.activeWild) : undefined,
+          // Аудит итемов/атак: лазерный прицел и гарантированные криты
+          alwaysCrit: !!S.activePlayerMon.laserFocus || ALWAYS_CRIT.has(normMoveName(move.name)),
+          // Проход-741: напев давит криты, foresight бьёт по призраку
+          suppressCrit: (S.luckyW || 0) > 0,
+          ignoreGhost: !!S.activeWild.vol?.foresight,
       });
       let hitDmg = dmgResult.damage;
       const bMod = applyBarrierMod(1, move, false, dmgResult.isCrit);
@@ -4698,7 +5248,7 @@ async function useMove(moveIndex) {
       if (S.wildCurHP > 0 && !playerSheerForce && move.meta?.ailment && move.meta.ailment.name !== 'none' && move.meta.ailment.name !== 'unknown') {
         // ПРОХОД-741: волатильные (confusion/...) — не в .status, а в mon.vol
         const vAil = move.meta.ailment.name;
-        if (['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable'].includes(vAil)) {
+        if (['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable', 'trap', 'ingrain'].includes(vAil)) {
           const ok = vAil === 'confusion'
             ? Math.random() * 100 < confuseChance(move.name) * playerSereneGrace
             : true;
@@ -4871,9 +5421,10 @@ async function useMove(moveIndex) {
 
     // L2-остаток: запоминаем входящий дикому — для Counter/Mirror Coat/
     // Metal Burst и накопления Bide следующим ходом.
-    S.lastTakenByWild = { dmg: totalDmg, cat: move.damage_class?.name || null };
+    S.lastTakenByWild = { dmg: totalDmg, cat: move.damage_class?.name || null, round: S.battleRound };
     // Проход-741: флаг прямого урона (для endure)
     S.wildTookHit = totalDmg > 0;
+    S.wildTookCat = totalDmg > 0 ? (move.damage_class?.name || null) : S.wildTookCat;
     if (S.activeWild.bide && S.activeWild.bide.turns > 0) {
       S.activeWild.bide.dmg += totalDmg;
     }
@@ -4881,15 +5432,101 @@ async function useMove(moveIndex) {
     if (hitsLanded > 0 && needsRecharge(move)) {
       S.activePlayerMon.recharging = true;
     }
+    // Лазерный прицел — разовый, сгорает после атаки
+    if (S.activePlayerMon.laserFocus) S.activePlayerMon.laserFocus = false;
     // Проход-741: счётчик Rage Fist у получившего
     if (hitsLanded > 0) {
       S.activeWild.rageHits = (S.activeWild.rageHits || 0) + 1;
+    }
+    // Проход-741: Pay Day копит монеты за удары
+    if (hitsLanded > 0 && normMoveName(move.name) === 'pay-day') {
+      S.activePlayerMon.payDayHits = (S.activePlayerMon.payDayHits || 0) + hitsLanded;
+    }
+    // Аудит итемов: реакции держащего на входящий удар
+    if (hitsLanded > 0 && S.activeWild.heldItem) {
+      const held = S.activeWild.heldItem;
+      const wnm = `Дикий ${S.activeWild.name}`;
+      if (held === 'weaknessPolicy' && getTypeMultiplier(move.type?.name, effTypes(S.activeWild)) > 1) {
+        S.activeWild.heldItem = null;
+        statStageModify(S.activeWild, 'atk', 2, false);
+        statStageModify(S.activeWild, 'spa', 2, false);
+        appendToLog(`${wnm} съедает Weakness Policy: атака +2!`, false, 'system');
+      } else if (held === 'cellBattery' && move.type?.name === 'electric') {
+        S.activeWild.heldItem = null;
+        statStageModify(S.activeWild, 'spa', 1, false);
+        appendToLog(`${wnm} заряжается Cell Battery: сп. атака +1!`, false, 'system');
+      } else if (held === 'luminousMoss' && move.type?.name === 'water') {
+        S.activeWild.heldItem = null;
+        statStageModify(S.activeWild, 'spd', 1, false);
+        appendToLog(`${wnm} впитывает Luminous Moss: сп. защита +1!`, false, 'system');
+      } else if (held === 'snowball' && move.type?.name === 'ice') {
+        S.activeWild.heldItem = null;
+        statStageModify(S.activeWild, 'atk', 1, false);
+        appendToLog(`${wnm} лепит Snowball: атака +1!`, false, 'system');
+      } else if (held === 'throatSpray' && SOUND_MOVES.has(normMoveName(move.name))) {
+        S.activeWild.heldItem = null;
+        statStageModify(S.activeWild, 'spa', 1, false);
+        appendToLog(`${wnm} пьёт Throat Spray: сп. атака +1!`, false, 'system');
+      } else if (held === 'destinyKnot') {
+        monVol(S.activePlayerMon).attract = true;
+        appendToLog(`${S.activePlayerMon.apiData.name} влюбляется в ${S.activeWild.name}!`, false, 'system');
+      }
+    }
+    // Аудит итемов/атак: Fake Out / First Impression дрогают цель
+    if (hitsLanded > 0 && (normMoveName(move.name) === 'fake-out' || normMoveName(move.name) === 'first-impression') && S.wildCurHP > 0) {
+      S.activeWild.flinch = true;
+      appendToLog(`Дикий ${S.activeWild.name} дрогнул!`, false, 'system');
+    }
+    // Проход-741: jaw-lock / anchor-shot / thunder-cage держат цель
+    if (hitsLanded > 0 && ['jaw-lock', 'anchor-shot', 'thunder-cage'].includes(normMoveName(move.name)) && S.wildCurHP > 0) {
+      S.activeWild.trapped = true;
+      if (normMoveName(move.name) === 'jaw-lock') S.activePlayerMon.trapped = true;
+      appendToLog(`Дикий ${S.activeWild.name} не может уйти!`, false, 'system');
     }
     // Проход-741: Clear Smog сносит все усиления цели
     if (hitsLanded > 0 && normMoveName(move.name) === 'clear-smog' && S.wildCurHP > 0) {
       S.activeWild.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
       updateStatBadges();
       appendToLog(`Чистый дым сносит усиления дикого ${S.activeWild.name}!`, false, 'system');
+    }
+    // Аудит итемов: King's Rock / Razor Fang — 10% флинч при уроне
+    if (hitsLanded > 0 && (S.activePlayerMon.heldItem === 'kingsRock' || S.activePlayerMon.heldItem === 'razorFang')
+      && S.wildCurHP > 0 && Math.random() < 0.1) {
+      S.activeWild.flinch = true;
+      appendToLog(`Дикий ${S.activeWild.name} дрогнул!`, false, 'system');
+    }
+    // Аудит итемов: Shell Bell — 1/8 нанесённого себе
+    if (hitsLanded > 0 && S.activePlayerMon.heldItem === 'shellBell' && totalDmg > 0
+      && S.activePlayerMon.currentHp > 0 && S.activePlayerMon.currentHp < S.activePlayerMon.maxHp) {
+      const heal = Math.max(1, Math.floor(totalDmg / 8));
+      S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
+      updatePlayerHpUI();
+      appendToLog(`Колокольчик лечит ${S.activePlayerMon.apiData.name}! (+${heal} HP)`, false, 'heal');
+    }
+    // Аудит итемов: ворующие/ломающие атаки после попадания
+    if (hitsLanded > 0) {
+      const stealSlug = normMoveName(move.name);
+      // Thief/Covet: забрать предмет, если у самого пусто
+      if ((stealSlug === 'thief' || stealSlug === 'covet') && S.activeWild.heldItem && !S.activePlayerMon.heldItem) {
+        S.activePlayerMon.heldItem = S.activeWild.heldItem;
+        S.activeWild.heldItem = null;
+        updateAbilityDisplay();
+        appendToLog(`${S.activePlayerMon.apiData.name} крадёт ${S.activePlayerMon.heldItem}!`, false, 'system');
+      }
+      // Pluck/Bug Bite: склевать ягоду + 25% себе. Incinerate: сжечь ягоду.
+      if ((stealSlug === 'pluck' || stealSlug === 'bug-bite' || stealSlug === 'incinerate')
+        && S.activeWild.heldItem && itemCategory(S.activeWild.heldItem) === 'berries') {
+        const berry = S.activeWild.heldItem;
+        S.activeWild.heldItem = null;
+        if (stealSlug === 'incinerate') {
+          appendToLog(`Ягода ${berry} сгорела!`, false, 'system');
+        } else {
+          const heal = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 4));
+          S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
+          updatePlayerHpUI();
+          appendToLog(`${S.activePlayerMon.apiData.name} склевал ${berry}! (+${heal} HP)`, false, 'heal');
+        }
+      }
     }
     // Проход-741: расходники удара (fling/natural-gift) сгорают при попадании
     if (hitsLanded > 0 && S.activePlayerMon.consumeHeldAfterHit) {
@@ -4931,6 +5568,14 @@ async function useMove(moveIndex) {
     if (!guardFaintPlayer()) {
       appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
       handlePlayerFaint();
+      // Фикс: destiny могла обнулить дикого — обрабатываем и его
+      if (S.wildCurHP <= 0) {
+        if (guardFaintWild()) { /* выдержал */ }
+        else {
+          await handleWildFaintRewards(S.battleType === 'wild');
+          return;
+        }
+      }
       return;
     }
   }
@@ -5309,8 +5954,10 @@ async function finishEnemyTurn() {
 
   S.battleRound++;
 
-  // Проход-741: часы поля тикают раз в раунд (погода/террейн/tailwind/
-  // trick-room истекают, трава лечит, соль щиплет).
+// Проход-741: часы поля тикают раз в раунд (погода/террейн/tailwind/
+// trick-room истекают, трава лечит, соль щиплет).
+  // Фикс: тики могли добить — обмороки проверяем ПОСЛЕ ВСЕХ тиков
+  // (включая Black Sludge ниже), иначе труп с 0 HP стоит с открытым меню.
   tickFieldEndOfRound();
 
   // Объедки — пассивное восстановление 1/16 максимального HP
@@ -5326,6 +5973,87 @@ async function finishEnemyTurn() {
     updateWildHpUI();
     appendToLog(`${S.activeWild.name} восстанавливает HP от Объедков! (+${heal})`);
   }
+  // Аудит итемов: Black Sludge — яд лечит 1/16, остальных бьёт 1/8
+  {
+    const pTypes = (S.activePlayerMon.apiData?.types || []).map((t: any) => t?.type?.name || t);
+    if (S.activePlayerMon.heldItem === 'blackSludge' && S.activePlayerMon.currentHp > 0) {
+      if (pTypes.includes('poison')) {
+        const heal = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 16));
+        S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
+        updatePlayerHpUI();
+        appendToLog(`Чёрный ил лечит ${S.activePlayerMon.apiData.name}! (+${heal} HP)`, false, 'heal');
+      } else {
+        const chip = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 8));
+        S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - chip);
+        updatePlayerHpUI();
+        appendToLog(`Чёрный ил разъедает ${S.activePlayerMon.apiData.name}! (−${chip} HP)`, false, 'dmg');
+      }
+    }
+    const wTypes = (S.activeWild.apiData?.types || S.activeWild.types || []).map((t: any) => t?.type?.name || t);
+    if (S.activeWild.heldItem === 'blackSludge' && S.wildCurHP > 0) {
+      if (wTypes.includes('poison')) {
+        const heal = Math.max(1, Math.floor(S.wildMaxHP / 16));
+        S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
+        updateWildHpUI();
+        appendToLog(`Чёрный ил лечит дикого ${S.activeWild.name}! (+${heal} HP)`, false, 'heal');
+      } else {
+        const chip = Math.max(1, Math.floor(S.wildMaxHP / 8));
+        S.wildCurHP = Math.max(0, S.wildCurHP - chip);
+        updateWildHpUI();
+        appendToLog(`Чёрный ил разъедает дикого ${S.activeWild.name}! (−${chip} HP)`, false, 'dmg');
+      }
+    }
+  }
+  // Аудит итемов: Flame/Toxic Orb поджигают/травят держателя в конце хода
+  if (S.activePlayerMon.heldItem === 'flameOrb' && !S.activePlayerMon.status) {
+    S.activePlayerMon.status = 'brn';
+    document.getElementById('player-status-icon').innerText = getStatusIcon('brn');
+    appendToLog(`${S.activePlayerMon.apiData.name} обжигается сферой!`, false, 'system');
+  }
+  if (S.activePlayerMon.heldItem === 'toxicOrb' && !S.activePlayerMon.status) {
+    S.activePlayerMon.status = 'tox';
+    document.getElementById('player-status-icon').innerText = getStatusIcon('tox');
+    appendToLog(`${S.activePlayerMon.apiData.name} сильно травится сферой!`, false, 'system');
+  }
+  if (S.activeWild.heldItem === 'flameOrb' && !S.activeWild.status) {
+    S.activeWild.status = 'brn';
+    S.wildStatus = 'brn';
+    document.getElementById('wild-status-icon').innerText = getStatusIcon('brn');
+    appendToLog(`Дикий ${S.activeWild.name} обжигается сферой!`, false, 'system');
+  }
+  if (S.activeWild.heldItem === 'toxicOrb' && !S.activeWild.status) {
+    S.activeWild.status = 'tox';
+    S.wildStatus = 'tox';
+    document.getElementById('wild-status-icon').innerText = getStatusIcon('tox');
+    appendToLog(`Дикий ${S.activeWild.name} сильно травится сферой!`, false, 'system');
+  }
+
+  // Фикс: тики конца раунда (проклятие/хватка/соль/ил) могли добить —
+  // проверяем обмороки здесь, иначе труп с 0 HP стоит с открытым меню.
+  // Порядок как везде: сначала дикий, потом игрок.
+  if (S.wildCurHP <= 0) {
+    if (guardFaintWild()) {
+      // Выдержал (endure) — бой продолжается
+    } else {
+      await handleWildFaintRewards(S.battleType === 'wild');
+      return;
+    }
+  }
+  if (S.activePlayerMon.currentHp <= 0) {
+    if (!guardFaintPlayer()) {
+      appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
+      handlePlayerFaint();
+      // Фикс: destiny могла обнулить дикого — обрабатываем и его
+      if (S.wildCurHP <= 0) {
+        if (guardFaintWild()) { /* выдержал */ }
+        else {
+          await handleWildFaintRewards(S.battleType === 'wild');
+          return;
+        }
+      }
+      return;
+    }
+  }
 
   saveBattleState();
   showPlayerMenuAfterDelay();
@@ -5336,6 +6064,8 @@ async function runEnemyTurnBody() {
   // Проход-741: флаги прямого урона свежие каждый ход (для endure)
   S.wildTookHit = false;
   S.playerTookHit = false;
+  S.wildTookCat = null;
+  S.playerTookCat = null;
 
   // Урон от статуса и погодный чип врага переехали в finishEnemyTurn():
   // по спецификации они срабатывают ПОСЛЕ его действия, а не в начале хода.
@@ -5414,6 +6144,7 @@ async function runEnemyTurnBody() {
       defender: S.activePlayerMon,
       isTrainer: S.battleType !== 'wild',
       getTypeMultiplier,
+      banned: S.imprisonP, // imprison: запрещённые не предлагать
     });
     chosenMove = aiResult?.move || { power: 30, damage_class: { name: 'physical' }, type: { name: 'normal' }, name: 'Атака' };
     chosenIdx = aiResult?.index ?? -1;
@@ -5459,14 +6190,40 @@ async function runEnemyTurnBody() {
     }
   }
 
+  // ── ПРОХОД-741: условия первого хода и ответа (зеркало) ──
+  {
+    const fslug = normMoveName(chosenMove.name);
+    if (fslug === 'focus-punch' && S.wildTookHit) {
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} потерял концентрацию!`, false, 'system');
+      await finishEnemyTurn();
+      return;
+    }
+    if (fslug === 'shell-trap' && S.wildTookCat !== 'physical') {
+      appendToLog(`Ловушка не сработала — физического удара не было!`, false, 'system');
+      await finishEnemyTurn();
+      return;
+    }
+    if ((fslug === 'fake-out' || fslug === 'first-impression') && (S.activeWild.turnsOut || 1) > 1) {
+      appendToLog(`${chosenMove.name} срабатывает только на первом ходу!`, false, 'system');
+      await finishEnemyTurn();
+      return;
+    }
+  }
+
   // ═══ 3b. TWO-TURN MOVE CHARGE ═══
   // Если атака требует зарядки — заряжаем и завершаем ход врага.
   // isChargeMove — та же проверка, что у игрока (симметрия).
-  if (!isChargeRelease && isChargeMove(chosenMove)) {
-    S.enemyChargedMove = chosenMove;
-    appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} заряжает ${enemyMoveName}!`);
-    await finishEnemyTurn();
-    return;
+  if (!isChargeRelease && (isChargeMove(chosenMove) || normMoveName(chosenMove.name) === 'geomancy')) {
+    // Аудит итемов: Power Herb пропускает заряд
+    if (S.activeWild.heldItem === 'powerHerb') {
+      S.activeWild.heldItem = null;
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} съедает Power Herb — сразу бьёт!`, false, 'system');
+    } else {
+      S.enemyChargedMove = chosenMove;
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} заряжает ${enemyMoveName}!`);
+      await finishEnemyTurn();
+      return;
+    }
   }
 
   // ── L2-остаток: Bide врага ──
@@ -5496,7 +6253,7 @@ async function runEnemyTurnBody() {
     S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - rel);
     updatePlayerHpUI();
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} выпускает накопленное: −${rel} HP!`, false, 'dmg');
-    S.lastTakenByPlayer = { dmg: rel, cat: 'physical' };
+    S.lastTakenByPlayer = { dmg: rel, cat: 'physical', round: S.battleRound };
     if (S.activePlayerMon.currentHp <= 0) {
       appendToLog(`${S.activePlayerMon.apiData.name} потерял сознание!`, false, 'faint');
       handlePlayerFaint();
@@ -5658,12 +6415,31 @@ async function runEnemyTurnBody() {
       chosenMove = { ...chosenMove, power: lastRespectsPower(0) };
     } else if (gslug === 'rage-fist') {
       chosenMove = { ...chosenMove, power: rageFistPower(S.activeWild.rageHits) };
+    } else if (gslug === 'acrobatics') {
+      if (!S.activeWild.heldItem) {
+        chosenMove = { ...chosenMove, power: 110 };
+        appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} лёгкий как пёрышко!`, false, 'system');
+      }
+    } else if (gslug === 'stored-power' || gslug === 'power-trip') {
+      const st = S.activeWild.statStages || {};
+      const boosts = ['atk', 'def', 'spa', 'spd', 'spe'].reduce((n, k) => n + Math.max(0, st[k] || 0), 0);
+      chosenMove = { ...chosenMove, power: 20 + 20 * boosts };
+    } else if (gslug === 'eruption' || gslug === 'water-spout' || gslug === 'dragon-energy') {
+      const frac = S.wildMaxHP > 0 ? S.wildCurHP / S.wildMaxHP : 0;
+      chosenMove = { ...chosenMove, power: Math.max(1, Math.floor(150 * frac)) };
     }
     if (sub) {
       // power пересчитается ниже штатной строкой (knock-off ×1.5 + сила):
       // блок гиммиков стоит раньше её объявления.
       chosenMove = sub;
       enemyMoveName = sub.name || enemyMoveName;
+    }
+    // Фикс: самоцвет врага сгорает при ударе своим типом
+    {
+      const held = S.activeWild.heldItem;
+      if (held && GEM_TYPE[held] === chosenMove.type?.name) {
+        S.activeWild.consumeHeldAfterHit = held;
+      }
     }
   }
 
@@ -5691,8 +6467,20 @@ async function runEnemyTurnBody() {
       enemyAcc = { hit: false, message: 'Атака промахнулась из-за Hustle!' };
     }
   }
+  // ПРОХОД-741: наведение врага (после расчёта точности, иначе TDZ)
+  if (!enemyAcc.hit && S.activeWild.lockedOn) {
+    S.activeWild.lockedOn = false;
+    enemyAcc = { hit: true, message: '' };
+    appendToLog(`Наведение сработало — мимо не пройти!`, false, 'system');
+  }
   if (!enemyAcc.hit) {
     appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}, но ${enemyAcc.message?.toLowerCase() || 'промахнулся'}!`);
+    // Аудит итемов: Blunder Policy врага
+    if (S.activeWild.heldItem === 'blunderPolicy') {
+      S.activeWild.heldItem = null;
+      statStageModify(S.activeWild, 'spe', 2, true);
+      appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} съедает Blunder Policy: скорость +2!`, false, 'system');
+    }
     await finishEnemyTurn();
     return;
   }
@@ -5713,6 +6501,8 @@ async function runEnemyTurnBody() {
     // L2-остаток: контратаки бьют от входящего с прошлого хода
     lastTakenDmg: S.lastTakenByWild?.dmg,
     lastTakenCat: S.lastTakenByWild?.cat,
+    lastTakenRound: S.lastTakenByWild?.round,
+    nowRound: S.battleRound,
   }) : null;
   if (!power && enemyFixedDmg == null && !isOhkoMove(chosenMove)) {
 appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} использует ${enemyMoveName}!`);
@@ -5749,7 +6539,7 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
     : 0;
   const numHits = eBeatSlug === 'beat-up' ? eBeatHits
     : eBeatSlug === 'population-bomb' ? populationBombHits()
-    : getMultiHitCount(chosenMove);
+    : getMultiHitCount(chosenMove, Math.random, S.activeWild.heldItem);
 
   // Sheer Force: убирает вторичные эффекты атак, даёт 1.3x урон (в calculateDamage)
   const enemySheerForce = wildAbilityName === 'sheer-force' &&
@@ -5799,7 +6589,9 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
       attackerHeldItem: S.activeWild.heldItem,
       defenderHeldItem: S.activePlayerMon.heldItem,
       naturesList: natures,
-      critRateStage: chosenMove.meta?.crit_rate || 0,
+      critRateStage: (chosenMove.meta?.crit_rate || 0)
+      + ((S.activeWild.heldItem === 'scopeLens' || S.activeWild.heldItem === 'razorClaw') ? 1 : 0)
+      + (S.activeWild.focusEnergy ? 2 : 0),
       defenderAbilityName: abilityOf(S.activePlayerMon, false),
       attackerAbilityName: abilityOf(S.activeWild, true),
         defenderCurrentHp: S.activePlayerMon.currentHp,
@@ -5812,10 +6604,17 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
         // L2-остаток: контратаки бьют от входящего с прошлого хода
         lastTakenDmg: S.lastTakenByWild?.dmg,
         lastTakenCat: S.lastTakenByWild?.cat,
+        lastTakenRound: S.lastTakenByWild?.round,
+        nowRound: S.battleRound,
         // Проход-741: заряды stockpile и смена типа
         stock: S.activeWild.stock || 0,
         attackerTypesOverride: effTypes(S.activeWild).length ? effTypes(S.activeWild) : undefined,
         defenderTypesOverride: effTypes(S.activePlayerMon).length ? effTypes(S.activePlayerMon) : undefined,
+        // Аудит итемов/атак: лазерный прицел и гарантированные криты
+        alwaysCrit: !!S.activeWild.laserFocus || ALWAYS_CRIT.has(normMoveName(chosenMove.name)),
+        // Проход-741: напев давит криты, foresight бьёт по призраку
+        suppressCrit: (S.luckyP || 0) > 0,
+        ignoreGhost: !!S.activePlayerMon.vol?.foresight,
     });
     let hitDmg = dmgResult.damage;
     const bMod = applyBarrierMod(1, chosenMove, true, dmgResult.isCrit); // Барьеры игрока
@@ -5934,7 +6733,7 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
     if (S.activePlayerMon.currentHp > 0 && !enemySheerForce && chosenMove.meta && chosenMove.meta.ailment && chosenMove.meta.ailment.name !== 'none' && chosenMove.meta.ailment.name !== 'unknown') {
       // ПРОХОД-741: волатильные — не в .status, а в mon.vol
       const vAil = chosenMove.meta.ailment.name;
-      if (['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable'].includes(vAil)) {
+      if (['confusion', 'infatuation', 'yawn', 'perish-song', 'torment', 'disable', 'trap', 'ingrain'].includes(vAil)) {
         const ok = vAil === 'confusion'
           ? Math.random() * 100 < effectiveSecondaryChance(confuseChance(chosenMove.name), wildSereneGrace)
           : true;
@@ -6019,9 +6818,10 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
 
   // L2-остаток: запоминаем входящий игроку — для Counter/Mirror Coat/
   // Metal Burst и накопления Bide следующим ходом.
-  S.lastTakenByPlayer = { dmg: totalDmg, cat: chosenMove.damage_class?.name || null };
+  S.lastTakenByPlayer = { dmg: totalDmg, cat: chosenMove.damage_class?.name || null, round: S.battleRound };
   // Проход-741: флаг прямого урона (для endure)
   S.playerTookHit = totalDmg > 0;
+  S.playerTookCat = totalDmg > 0 ? (chosenMove.damage_class?.name || null) : S.playerTookCat;
   if (S.activePlayerMon.bide && S.activePlayerMon.bide.turns > 0) {
     S.activePlayerMon.bide.dmg += totalDmg;
   }
@@ -6029,15 +6829,98 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
   if (hitsLanded > 0 && needsRecharge(chosenMove)) {
     S.activeWild.recharging = true;
   }
+  // Лазерный прицел — разовый, сгорает после атаки
+  if (S.activeWild.laserFocus) S.activeWild.laserFocus = false;
   // Проход-741: счётчик Rage Fist у получившего
   if (hitsLanded > 0) {
     S.activePlayerMon.rageHits = (S.activePlayerMon.rageHits || 0) + 1;
+  }
+  // Проход-741: Pay Day копит монеты за удары
+  if (hitsLanded > 0 && normMoveName(chosenMove.name) === 'pay-day') {
+    S.activeWild.payDayHits = (S.activeWild.payDayHits || 0) + hitsLanded;
+  }
+  // Аудит итемов: реакции держащего на входящий удар (зеркало)
+  if (hitsLanded > 0 && S.activePlayerMon.heldItem) {
+    const held = S.activePlayerMon.heldItem;
+    const pnm = S.activePlayerMon.apiData.name;
+    if (held === 'weaknessPolicy' && getTypeMultiplier(chosenMove.type?.name, effTypes(S.activePlayerMon)) > 1) {
+      S.activePlayerMon.heldItem = null;
+      statStageModify(S.activePlayerMon, 'atk', 2, false);
+      statStageModify(S.activePlayerMon, 'spa', 2, false);
+      appendToLog(`${pnm} съедает Weakness Policy: атака +2!`, false, 'system');
+    } else if (held === 'cellBattery' && chosenMove.type?.name === 'electric') {
+      S.activePlayerMon.heldItem = null;
+      statStageModify(S.activePlayerMon, 'spa', 1, false);
+      appendToLog(`${pnm} заряжается Cell Battery: сп. атака +1!`, false, 'system');
+    } else if (held === 'luminousMoss' && chosenMove.type?.name === 'water') {
+      S.activePlayerMon.heldItem = null;
+      statStageModify(S.activePlayerMon, 'spd', 1, false);
+      appendToLog(`${pnm} впитывает Luminous Moss: сп. защита +1!`, false, 'system');
+    } else if (held === 'snowball' && chosenMove.type?.name === 'ice') {
+      S.activePlayerMon.heldItem = null;
+      statStageModify(S.activePlayerMon, 'atk', 1, false);
+      appendToLog(`${pnm} лепит Snowball: атака +1!`, false, 'system');
+    } else if (held === 'throatSpray' && SOUND_MOVES.has(normMoveName(chosenMove.name))) {
+      S.activePlayerMon.heldItem = null;
+      statStageModify(S.activePlayerMon, 'spa', 1, false);
+      appendToLog(`${pnm} пьёт Throat Spray: сп. атака +1!`, false, 'system');
+    } else if (held === 'destinyKnot') {
+      monVol(S.activeWild).attract = true;
+      appendToLog(`Дикий ${S.activeWild.name} влюбляется в ${pnm}!`, false, 'system');
+    }
+  }
+  // Аудит итемов/атак: Fake Out дрогает цель
+  if (hitsLanded > 0 && normMoveName(chosenMove.name) === 'fake-out' && S.activePlayerMon.currentHp > 0) {
+    S.activePlayerMon.flinch = true;
+    appendToLog(`${S.activePlayerMon.apiData.name} дрогнул!`, false, 'system');
+  }
+  // Проход-741: jaw-lock / anchor-shot / thunder-cage держат цель
+  if (hitsLanded > 0 && ['jaw-lock', 'anchor-shot', 'thunder-cage'].includes(normMoveName(chosenMove.name)) && S.activePlayerMon.currentHp > 0) {
+    S.activePlayerMon.trapped = true;
+    if (normMoveName(chosenMove.name) === 'jaw-lock') S.activeWild.trapped = true;
+    appendToLog(`${S.activePlayerMon.apiData.name} не может уйти!`, false, 'system');
   }
   // Проход-741: Clear Smog сносит все усиления цели
   if (hitsLanded > 0 && normMoveName(chosenMove.name) === 'clear-smog' && S.activePlayerMon.currentHp > 0) {
     S.activePlayerMon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     updateStatBadges();
     appendToLog(`Чистый дым сносит усиления ${S.activePlayerMon.apiData.name}!`, false, 'system');
+  }
+  // Аудит итемов: King's Rock / Razor Fang — 10% флинч
+  if (hitsLanded > 0 && (S.activeWild.heldItem === 'kingsRock' || S.activeWild.heldItem === 'razorFang')
+    && S.activePlayerMon.currentHp > 0 && Math.random() < 0.1) {
+    S.activePlayerMon.flinch = true;
+    appendToLog(`${S.activePlayerMon.apiData.name} дрогнул!`, false, 'system');
+  }
+  // Аудит итемов: Shell Bell — 1/8 нанесённого себе
+  if (hitsLanded > 0 && S.activeWild.heldItem === 'shellBell' && totalDmg > 0 && S.wildCurHP > 0) {
+    const heal = Math.max(1, Math.floor(totalDmg / 8));
+    S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
+    updateWildHpUI();
+    appendToLog(`Колокольчик лечит дикого ${S.activeWild.name}! (+${heal} HP)`, false, 'heal');
+  }
+  // Аудит итемов: воровство и склёв ягод
+  if (hitsLanded > 0) {
+    const stealSlug = normMoveName(chosenMove.name);
+    if ((stealSlug === 'thief' || stealSlug === 'covet') && S.activePlayerMon.heldItem && !S.activeWild.heldItem) {
+      S.activeWild.heldItem = S.activePlayerMon.heldItem;
+      S.activePlayerMon.heldItem = null;
+      updateAbilityDisplay();
+      appendToLog(`Дикий ${S.activeWild.name} крадёт ${S.activeWild.heldItem}!`, false, 'system');
+    }
+    if ((stealSlug === 'pluck' || stealSlug === 'bug-bite' || stealSlug === 'incinerate')
+      && S.activePlayerMon.heldItem && itemCategory(S.activePlayerMon.heldItem) === 'berries') {
+      const berry = S.activePlayerMon.heldItem;
+      S.activePlayerMon.heldItem = null;
+      if (stealSlug === 'incinerate') {
+        appendToLog(`Ягода ${berry} сгорела!`, false, 'system');
+      } else {
+        const heal = Math.max(1, Math.floor(S.wildMaxHP / 4));
+        S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
+        updateWildHpUI();
+        appendToLog(`Дикий ${S.activeWild.name} склевал ${berry}! (+${heal} HP)`, false, 'heal');
+      }
+    }
   }
   // Проход-741: расходники удара сгорают при попадании
   if (hitsLanded > 0 && S.activeWild.consumeHeldAfterHit) {
@@ -6130,6 +7013,11 @@ function initEncounterEvents() {
   on('btn-run', () => {
     if (S.battleType !== 'wild') {
       appendToLog('Нельзя сбежать от лидера!');
+      return;
+    }
+    // Проход-741: ловушка (mean-look/octolock/...) не даёт сбежать
+    if (S.activePlayerMon.trapped) {
+      appendToLog(`${S.activePlayerMon.apiData.name} не может сбежать — держит ловушка!`, false, 'system');
       return;
     }
     // Действовать можно только в свой ход — иначе побег во время хода врага
@@ -6441,14 +7329,105 @@ function initEncounterEvents() {
     } else if (item === 'tm') {
       if (store.getItemQty('tm') <= 0) return showToast('Нет TM-совместимости!', true);
       showToast('Используйте TM из профиля покемона.', true);
-    } else if (itemCategory(item) === 'statusCure') {
-      const statusCureMap = {
-        'antidote': 'psn', 'paralyzeHeal': 'par', 'awakening': 'slp',
-        'burnHeal': 'brn', 'antiSputin': null,
+    } else if (HEAL_HP[item] !== undefined && !['potion', 'superPotion', 'fullRestore'].includes(item)) {
+      // Аудит итемов: остальные лечилки (hyperPotion, maxPotion, воды, корни...)
+      if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
+      if (S.activePlayerMon.currentHp >= S.activePlayerMon.maxHp) return showToast('Здоровье уже полное!', true);
+      store.removeItem(item);
+      GS.itemsUsedInBattle++;
+      checkQuestProgress('use_item');
+      store.updateInventoryDisplay();
+      const amt = HEAL_HP[item];
+      S.activePlayerMon.currentHp = amt === 'full'
+        ? S.activePlayerMon.maxHp
+        : Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + (amt as number));
+      updatePlayerHpUI();
+      document.getElementById('battle-main-menu').style.display = 'none';
+      appendToLog(`Вы использовали ${itemDef(item).nameRu}! HP: ${S.activePlayerMon.currentHp}/${S.activePlayerMon.maxHp}.`);
+      setTimeout(() => {
+        enemyTurn();
+      }, 1500);
+    } else if (['revive', 'maxRevive', 'sacredAsh', 'revivalHerb', 'maxHoney'].includes(item)) {
+      // Аудит итемов: воскрешение в бою (выбор павшего из команды)
+      const fainted = (GS.myTeam || []).map((m, i) => ({ m, i }))
+        .filter(({ m }) => m && (m.currentHp ?? 1) <= 0);
+      if (fainted.length === 0) return showToast('Павших покемонов нет!', true);
+      if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
+      const full = item !== 'revive' && item !== 'revivalHerb';
+      const doRevive = (entry: { m: any }) => {
+        entry.m.currentHp = full ? entry.m.maxHp : Math.max(1, Math.floor(entry.m.maxHp / 2));
+        store.removeItem(item);
+        GS.itemsUsedInBattle++;
+        checkQuestProgress('use_item');
+        store.updateInventoryDisplay();
+        document.getElementById('battle-main-menu').style.display = 'none';
+        appendToLog(`Вы использовали ${itemDef(item).nameRu}! ${entry.m.nickname || entry.m.apiData?.name} воскрешён!`);
+        setTimeout(() => {
+          enemyTurn();
+        }, 1500);
       };
-      const targetStatus = statusCureMap[item];
+      if (item === 'sacredAsh') {
+        fainted.forEach(({ m }) => { m.currentHp = m.maxHp; });
+        store.removeItem(item);
+        GS.itemsUsedInBattle++;
+        checkQuestProgress('use_item');
+        store.updateInventoryDisplay();
+        document.getElementById('battle-main-menu').style.display = 'none';
+        appendToLog(`Священный пепел поднял всю команду!`);
+        setTimeout(() => {
+          enemyTurn();
+        }, 1500);
+      } else {
+        showSelectionModal('Кого воскресить?', fainted.map(({ m }) => ({
+          label: `Lv.${m.baseLevel + (m.candiesEaten || 0)} ${m.nickname || m.apiData?.name}`,
+          subtitle: `HP: 0/${m.maxHp}`,
+        })), (choiceIdx) => {
+          const picked = fainted[choiceIdx];
+          if (picked) doRevive(picked);
+        }, true);
+      }
+    } else if (['sitrusBerry', 'oranBerry', 'lumBerry', 'chestoBerry', 'rawstBerry', 'cheriBerry', 'pechaBerry', 'aspearBerry', 'leppaBerry'].includes(item)) {
+      // Аудит итемов: ягоды с немедленным эффектом — и в бою
+      if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
+      if (item === 'sitrusBerry' || item === 'oranBerry') {
+        if (S.activePlayerMon.currentHp >= S.activePlayerMon.maxHp) return showToast('Здоровье уже полное!', true);
+        const amt = item === 'sitrusBerry' ? Math.floor(S.activePlayerMon.maxHp * 0.25) : 10;
+        store.removeItem(item);
+        S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + amt);
+        updatePlayerHpUI();
+      } else if (item === 'leppaBerry') {
+        const idx = (S.activePlayerMon.movesPP || []).findIndex((pp: any) => pp && pp.current < pp.max);
+        if (idx < 0) return showToast('Все PP уже полные!', true);
+        store.removeItem(item);
+        S.activePlayerMon.movesPP[idx].current = Math.min(S.activePlayerMon.movesPP[idx].max, S.activePlayerMon.movesPP[idx].current + 10);
+        updateMoveButtonUIs();
+      } else {
+        const need = item === 'lumBerry' ? S.activePlayerMon.status : CURE_ONE[item];
+        if (!S.activePlayerMon.status) return showToast('Статусов нет!', true);
+        if (item !== 'lumBerry' && S.activePlayerMon.status !== need) return showToast('Эта ягода лечит другой статус!', true);
+        store.removeItem(item);
+        cureStatus(S.activePlayerMon);
+        document.getElementById('player-status-icon').innerText = '';
+      }
+      GS.itemsUsedInBattle++;
+      checkQuestProgress('use_item');
+      store.updateInventoryDisplay();
+      document.getElementById('battle-main-menu').style.display = 'none';
+      appendToLog(`Вы использовали ${itemDef(item).nameRu}!`);
+      setTimeout(() => {
+        enemyTurn();
+      }, 1500);
+    } else if (itemCategory(item) === 'statusCure') {
+      // Аудит итемов: общая таблица с рюкзаком (одиночные + все разом)
+      const targetStatus = CURE_ONE[item] || null;
+      const curesAll = CURE_ALL.includes(item);
       if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
       if (item === 'healingHerb') {
+        if (!S.activePlayerMon.status) return showToast('У покемона нет статуса!', true);
+        store.removeItem(item);
+        cureStatus(S.activePlayerMon);
+        document.getElementById('player-status-icon').innerText = '';
+      } else if (curesAll) {
         if (!S.activePlayerMon.status) return showToast('У покемона нет статуса!', true);
         store.removeItem(item);
         cureStatus(S.activePlayerMon);
@@ -6469,9 +7448,10 @@ function initEncounterEvents() {
       setTimeout(() => {
         enemyTurn();
       }, 1500);
-    } else if (['ether', 'elixir', 'maxElixir'].includes(item)) {
-      const elixirMap = { 'ether': 10, 'elixir': 20, 'maxElixir': 40 };
-      const ppRestore = elixirMap[item];
+    } else if (['ether', 'elixir', 'maxElixir', 'maxEther', 'leppaBerry'].includes(item)) {
+      const elixirMap = { 'ether': 10, 'elixir': 20, 'maxElixir': 40, 'leppaBerry': 10 };
+      // maxEther — полные PP всем атакам
+      const ppRestore = item === 'maxEther' ? Infinity : elixirMap[item];
       if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
       if (!S.activePlayerMon.movesPP || S.activePlayerMon.movesPP.every(pp => pp && pp.current >= pp.max)) {
         return showToast('PP уже полностью!', true);
@@ -6835,6 +7815,7 @@ async function startGymNextPokemon() {
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.currentWeather = getDailyWeather(GS.currentLocationId);
+    resetBattleField(); // фикс: поле/vol не текут между боями
     S.enemyChargedMove = null; // Сброс заряда при смене покемона гима
 
     // Perfect IVs for gym leader pokemon
@@ -7097,6 +8078,7 @@ async function startEliteNextPokemon() {
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.currentWeather = getDailyWeather(GS.currentLocationId);
+    resetBattleField(); // фикс: поле/vol не текут между боями
     S.enemyChargedMove = null; // Сброс заряда при смене покемона элиты
 
     // Perfect IVs для Elite Four (как у gym лидеров)
@@ -7209,6 +8191,7 @@ async function startChampionNextPokemon() {
     S.wildStatus = null;
     S.wildSleepTurns = 0;
     S.currentWeather = getDailyWeather(GS.currentLocationId);
+    resetBattleField(); // фикс: поле/vol не текут между боями
     S.enemyChargedMove = null; // Сброс заряда при смене покемона чемпиона
 
     // Perfect IVs для Чемпиона (как у gym лидеров)
