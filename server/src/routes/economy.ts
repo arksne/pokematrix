@@ -692,7 +692,7 @@ const ITEMS: ItemDef[] = [
   { id: 'repeatBall', price: 100 },
   { id: 'repel', price: 400 },
   { id: 'resistWing', price: 300 },
-  { id: 'revivalHerb', price: 2800 },
+  { id: 'revivalHerb', price: 2000 },
   { id: 'revive', price: 2000 },
   { id: 'rhyhornCandy', price: 20 },
   { id: 'ribbonSweet', price: 500 },
