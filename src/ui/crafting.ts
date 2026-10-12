@@ -71,9 +71,6 @@ const CRAFTING_RECIPES = [
     ingredients: { 'healingHerbs': 2, 'honeycomb': 1, 'ore': 1 }, result: 'protein', qty: 1 },
   { id: 'craftIron', name: 'Железо', category: 'Витамины',
     ingredients: { 'ore': 2, 'metalIngot': 1 }, result: 'iron', qty: 1 },
-  // ── Ягоды ──
-  { id: 'craftOran', name: 'Оран Ягода (x3)', category: 'Ягоды',
-    ingredients: { 'cotton': 1, 'honeycomb': 1 }, result: 'oranBerry', qty: 3 },
   // ── Эликсиры (восстановление PP) ──
   { id: 'craftWeakElixir', name: 'Слабый эликсир', category: 'Эликсиры',
     ingredients: { 'healingHerbs': 2, 'wonderFlower': 1 }, result: 'ether', qty: 1 },
