@@ -34,11 +34,9 @@ async function seed() {
   if (existingDrop.length === 0) {
     await db.insert(dropConfig).values({
       monster_drops: JSON.stringify({}),
-      universal_drops: JSON.stringify([
-        { item: 'prettyWing', chance: 0.04, qty: 1 },
-        { item: 'nugget', chance: 0.02, qty: 1 },
-        { item: 'starPiece', chance: 0.01, qty: 1 },
-      ]),
+      // Valuable-категория удалена: универсальный пул пуст (миграция 0006
+      // чистит старые строки).
+      universal_drops: JSON.stringify([]),
     });
     console.log('[seed] Default drop config inserted');
   }

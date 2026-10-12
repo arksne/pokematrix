@@ -860,10 +860,9 @@ export function getLocationDropString(uniqueMons: string[]) {
 }
 
 // ── UNIVERSAL_DROPS: базовые универсальные дропы ────────
-// D4: оставлен ТОЛЬКО самородок (2%). Крыло и кусок звезды убраны.
-const UNIVERSAL_DROPS = [
-  { item: 'nugget', chance: 0.02, qty: 1 },         // 2% — Самородок
-];
+// Valuable-категория удалена из игры: универсальный пул пуст.
+// Легенды держат свой дроп (rareCandy 8% + masterBall 3%, см. drops.js).
+const UNIVERSAL_DROPS: Array<{ item: string; chance: number; qty: number }> = [];
 
 // ── fetchDropConfig: загрузка конфигурации дропов с сервера ──
 // Вызывается при старте игры
