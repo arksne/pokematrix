@@ -1,25 +1,28 @@
 // ─────────────────────────────────────────────────────────────
 // gym-reward.ts — НАГРАДА ЗА ПОБЕДУ НАД ЛИДЕРОМ СТАДИОНА
 // ─────────────────────────────────────────────────────────────
-// Отвечает за выдачу награды игроку после победы над лидером гима:
-// создаёт шини-версию покемона лидера (Lv.1, идеальные IV, лучшая природа)
-// и добавляет предметы (rewardItem лидера + 10 Супердаркболов).
+// Решение хозяина: приз — ОДИН из двух, рандом 50/50:
+//   1) супердаркболы ×1–10;
+//   2) случайный покемон из команды лидера (шини Lv.1, повышенные IV).
+// Выбора нет — что выпало, то выпало. Значок/деньги/предмет лидера выдаёт
+// сервер через POST /economy/badge-reward (единый источник, без дублей).
 //
 // ЗАВИСИМОСТИ:
 //   gyms     — gymLeaders (данные лидеров)
-//   state    — state, getTrainerId, itemDef
-//   dom      — showSelectionModal, showToast
+//   state    — state, getTrainerId
+//   dom      — showToast
 //   actions  — addItem
 //   save     — autoSave
 //   profile  — renderTeamGrid
 //
 // ИСПОЛЬЗУЕТСЯ В:
 //   init.ts    — showGymRewardSelection
-//   core.ts    — вызов после победы над лидером
+//   core.ts    — вызов после победы над лидером (только первая победа)
 //
 // ЭКСПОРТЫ:
 //   createAndGivePokemon(name, level, opts) — создание покемона через PokeAPI
-//   showGymRewardSelection(locId)           — модалка выбора награды
+//   rollGymPrize(team, rand) — чистый розыгрыш приза (тесты)
+//   showGymRewardSelection(locId) — розыгрыш и выдача приза
 // ─────────────────────────────────────────────────────────────
 
 // ── ИМПОРТЫ ───────────────────────────────────────────────
@@ -27,9 +30,8 @@
 import { gymLeaders } from '../data/gyms.js';      // Данные лидеров залов
 import { natures } from '../data/natures.js';          // Характеры (для случайного)
 import { state, getTrainerId } from '../game/state.js';  // Глобальное состояние
-import { showSelectionModal, showToast } from '../utils/dom.js';  // UI модалки/тосты
+import { showToast } from '../utils/dom.js';  // UI тосты
 import { addItem } from '../game/actions.js';          // Добавление предметов
-import { itemDef } from '../game/state.js';            // Название предмета по ID
 import { autoSave } from '../game/save.js';              // Автосохранение
 import { renderTeamGrid } from './profile.js';          // Обновление сетки команды
 
@@ -112,41 +114,52 @@ export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {
   }
 }
 
-// ── showGymRewardSelection: модалка выбора награды ──────
-// После победы над лидером показывает список его покемонов
-// Игрок выбирает одного — получает шини-версию Lv.1
-// + награду лидера + 10 Супердаркболов
-export function showGymRewardSelection(locId) {
+export type GymPrize =
+  | { type: 'balls'; qty: number }
+  | { type: 'mon'; name: string };
+
+/**
+ * rollGymPrize — чистый розыгрыш приза гима (тестируемо, без DOM).
+ * 50/50: супердаркболы ×1–10 или случайный покемон из команды лидера.
+ * Пустая команда — null (приза нет, только значок с сервера).
+ */
+export function rollGymPrize(
+  team: Array<{ name: string }>,
+  rand: () => number = Math.random,
+): GymPrize | null {
+  if (!team || team.length === 0) return null;
+  if (rand() < 0.5) {
+    return { type: 'balls', qty: 1 + Math.floor(rand() * 10) };
+  }
+  return { type: 'mon', name: team[Math.floor(rand() * team.length)].name };
+}
+
+// ── showGymRewardSelection: розыгрыш и выдача приза ──────
+// Выбора больше нет: что выпало в rollGymPrize, то и выдаём.
+// Предмет лидера НЕ выдаём здесь — его уже выдал сервер через
+// POST /economy/badge-reward (иначе задвоение).
+export function showGymRewardSelection(locId: string, rand?: () => number) {
   const leader = gymLeaders[locId];
   if (!leader || !leader.team) return;
 
-  // Формируем список выбора: все покемоны лидера
-  const choices = leader.team.map(m => ({
-    label: `🔑 Lv.1 ${m.name}`,
-    subtitle: `Тот же покемон, что был в бою — Lv.1, шини, повышенные гены`,
-    value: m.name
-  }));
+  const prize = rollGymPrize(leader.team, rand);
+  if (!prize) return;
 
-  showSelectionModal('🎉 Выберите покемона лидера в награду!', choices, async (idx) => {
-    const chosenName = choices[idx]?.value;
-    if (!chosenName) return;
+  if (prize.type === 'balls') {
+    const got = addItem('superDarkBall', prize.qty);
+    showToast(
+      got ? `🎰 Приз гима: Супердаркбол×${prize.qty}!` : 'Рюкзак полон! Награда потеряна.',
+      !got,
+    );
+    autoSave();
+    return;
+  }
 
-    // Создаём шини-покемона Lv.1
-    const mon = await createAndGivePokemon(chosenName, 1, { isShiny: true });
+  createAndGivePokemon(prize.name, 1, { isShiny: true }).then((mon) => {
     if (mon) {
-      // Добавляем награду лидера (предмет + 10 супердаркболов)
-      const gotReward = addItem(leader.rewardItem, leader.rewardQty || 1);
-      const gotBalls = addItem('superDarkBall', 10);
-      if (!gotReward && !gotBalls) {
-        showToast('Рюкзак полон! Награда потеряна.', true);
-      } else {
-        showToast(
-          `Получен Lv.1 ${chosenName} (шини!)${gotReward ? ' + ' + itemDef(leader.rewardItem).nameRu : ''}${gotBalls ? ' + Супердаркбол×10' : ''}!`,
-          !gotReward || !gotBalls
-        );
-      }
+      showToast(`🎰 Приз гима: Lv.1 ${prize.name} (шини, случайно из команды лидера)!`, false);
     }
     autoSave();
     if (typeof renderTeamGrid === 'function') renderTeamGrid();
-  }, true);
+  });
 }

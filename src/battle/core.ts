@@ -7750,7 +7750,7 @@ async function startGymBattle(locId) {
  *   - Выдаёт бейдж (GS.gymBadges.push)
  *   - Выдаёт денежную награду
  *   - Показывает экран победы
- *   - Вызывает store.showGymRewardSelection (выбор предмета-награды)
+ *   - Вызывает store.showGymRewardSelection (рандом-приз: мячи или мон)
  *   - Показывает battle-end-menu
  *
  * ЕСЛИ ЕСТЬ СЛЕДУЮЩИЙ ПОКЕМОН:
