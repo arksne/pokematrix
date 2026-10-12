@@ -654,7 +654,7 @@ export const NPC_DATA = {
       quest_incomplete: 'Рейс не окончен. Штормит у дальних рифов...',
     },
     quests: [
-      { id: 'i1_sea_1', type: 'explore', targetItem: null, targetQty: 5, desc: 'Посетите 5 островов Южного Архипелага', rewardMoney: 3000, rewardItem: 'diveBall', rewardQty: 4, prereqQuest: null },
+      { id: 'i1_sea_1', type: 'explore', targetItem: null, targetQty: 5, desc: 'Посетите 5 островов Южного Архипелага', rewardMoney: 3000, rewardItem: 'duskBall', rewardQty: 4, prereqQuest: null },
       { id: 'i1_sea_2', type: 'catch_x', targetItem: null, targetQty: 12, desc: 'Поймайте 12 водных покемонов в лагунах', rewardMoney: 6500, rewardItem: 'netBall', rewardQty: 5, prereqQuest: 'i1_sea_1' },
       { id: 'i1_sea_3', type: 'defeat_x', targetItem: null, targetQty: 18, desc: 'Одержите 18 побед над пиратами и дикими стаями', rewardMoney: 10000, rewardItem: 'maxEther', rewardQty: 2, prereqQuest: 'i1_sea_2' },
       { id: 'i1_sea_4', type: 'earn_money', targetItem: null, targetQty: 40000, desc: 'Заработайте ¥40 000 на морских контрактах и доставке', rewardMoney: 15000, rewardItem: 'sunStone', rewardQty: 1, prereqQuest: 'i1_sea_3' },

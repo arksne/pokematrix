@@ -127,7 +127,10 @@ describe('M-23: ассортимент маркетов', () => {
     const price = (id: string) => ITEMS.find((i) => i.id === id)!.price;
     expect(price('potion')).toBe(300);
     expect(price('superPotion')).toBe(700);
-    expect(price('ultraBall')).toBe(1200);
+    // Интервью по мячам: покебол = 100, ультра = 600 (x2 к покеболу)
+    expect(price('pokeBall')).toBe(100);
+    expect(price('greatBall')).toBe(300);
+    expect(price('ultraBall')).toBe(600);
     expect(price('rareCandy')).toBe(800000);
     expect(price('tm')).toBe(500);
     expect(price('tmWeak')).toBe(200000);
