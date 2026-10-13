@@ -128,8 +128,10 @@ export async function openTrainerProfile(userId) {
   if (avatarEl) avatarEl.innerHTML = '<span style="font-size:1.5rem;">👤</span>';
 
   try {
+      // Таймаут 10с: без него висящий сервер = вечная «Загрузка...» в модалке.
+      const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000));
       // apiFetch добавляет Bearer и обновляет токен при 401.
-      const res = await apiFetch(`/profile/${userId}`);
+      const res = await Promise.race([apiFetch(`/profile/${userId}`), timeout]);
       if (!res.ok) {
         document.getElementById('modal-trainer-name').innerText = 'Не удалось загрузить профиль';
         return;
@@ -241,34 +243,20 @@ export async function openTrainerProfile(userId) {
       actionsDiv.style.display = 'none';
     }
 
+    // Команда чужого — ТОЛЬКО иконки покеболов по числу (решение хозяина:
+    // данные чужих покемонов не светим — ни спрайтов, ни имён, ни уровней).
     const teamEl = document.getElementById('modal-trainer-team');
     teamEl.innerHTML = '';
-    if (!p.team || p.team.length === 0) {
+    const teamCount = Array.isArray(p.team) ? p.team.length : (Number(p.teamSize) || 0);
+    if (teamCount <= 0) {
       teamEl.innerHTML = '<div class="trainer-team-empty">Нет покемонов</div>';
       return;
     }
-      p.team.forEach(mon => {
-        const div = document.createElement('div');
-        div.className = 'trainer-team-mon';
-        // sprite приходит из save_data, то есть в него может положить что
-        // угодно сам игрок: сертер сохраняет тело запроса как есть
-        // (save.ts: JSON.stringify(body.saveData)), а teamMonSchema не
-        // перечисляет это поле. Раньше значение подставлялось в атрибут src
-        // без проверки, поэтому строка вида x" onerror="… сохранялась в чужом
-        // сейве и выполнялась у всех, кто открывал профиль. Здесь та же защита,
-        // что в ui/trainers.ts для аватара: принимаем только URL картинки.
-        const rawSprite = typeof mon.sprite === 'string' ? mon.sprite : '';
-        const safeSprite = /^https?:\/\/[^\s"'<>]+$/.test(rawSprite) ? escHtml(rawSprite) : '';
-        div.innerHTML = `
-          <div class="trainer-team-mon-img-box">
-            <img class="trainer-team-mon-img" src="${safeSprite}" alt="">
-          </div>
-          <div class="trainer-team-mon-info">
-            <div class="trainer-team-mon-name">${escHtml(mon.nickname || mon.name)}</div>
-            <div class="trainer-team-mon-lvl">Lv${mon.level}</div>
-          </div>`;
-        teamEl.appendChild(div);
-      });
+    const balls: string[] = [];
+    for (let i = 0; i < Math.min(6, teamCount); i++) {
+      balls.push('<span class="trainer-team-ball" title="Покемон"></span>');
+    }
+    teamEl.innerHTML = `<div class="trainer-team-balls">${balls.join('')}</div>`;
   } catch (e) {
     console.error('Trainer profile error:', e);
     document.getElementById('modal-trainer-name').innerText = 'Ошибка загрузки';

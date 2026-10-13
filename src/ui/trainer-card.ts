@@ -30,7 +30,7 @@
 import { state, lsKey } from '../game/state.js';              // Глобальное состояние
 // showTextInputModal — показывает модалку с полем ввода текста
 // Отличается от showSelectionModal — пользователь вводит текст, а не выбирает
-import { showTextInputModal, showSelectionModal } from '../utils/dom.js';
+import { showTextInputModal, showSelectionModal, showToast } from '../utils/dom.js';
 import { TITLES, getTitleById, isTitleId } from '../data/titles.js';
 import { autoSave } from '../game/save.js';              // Автосохранение
 // pokedexTotal — общее количество видов покемонов в покедексе
@@ -179,9 +179,23 @@ export function getTrainerAvatarId(): string {
   return DEFAULT_AVATAR_ID;
 }
 
-/** Выбрать аватарку из пака. false — неизвестный id (ничего не меняет). */
+/**
+ * Выбрать аватарку из пака — ОДИН РАЗ на игру (решение хозяина).
+ * Повторная смена на другой id отклоняется (false); тот же id — ок.
+ * Проверка: state → localStorage (оба считаются выбором).
+ */
 export function setTrainerAvatarId(id: string): boolean {
   if (!isAvatarId(id)) return false;
+  try {
+    const cur = (state as any).trainerAvatar;
+    if (isAvatarId(cur)) return cur === id; // уже выбрана: только та же
+  } catch { /* ignore */ }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(lsKey('avatar'));
+      if (isAvatarId(saved)) return saved === id;
+    }
+  } catch { /* ignore */ }
   try { (state as any).trainerAvatar = id; } catch { /* ignore */ }
   try {
     if (typeof localStorage !== 'undefined') localStorage.setItem(lsKey('avatar'), id);
@@ -243,7 +257,10 @@ export function renderAvatarPicker(containerId = 'trainer-avatar-grid'): void {
         btn.innerHTML = `${av.svg}<span style="font-size:0.62rem;line-height:1.1;text-align:center;">${esc(av.name)}</span>`;
         const pickId = av.id;
         btn.onclick = () => {
-          setTrainerAvatarId(pickId);
+          if (!setTrainerAvatarId(pickId)) {
+            showToast('Аватар выбирается один раз на игру!', true);
+            return;
+          }
           try { autoSave(); } catch { /* ignore */ }
           renderAvatarPicker(containerId);
           renderTrainerCard();

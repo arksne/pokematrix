@@ -32,7 +32,7 @@ import { openTrainerProfile } from '../social/trainer-profile.js';
 import { lsKey } from '../game/state.js';
 // renderTrainerCard — отрисовывает карточку текущего тренера (в чате)
 //   Показывает никнейм, аватар, онлайн-статус
-import { renderTrainerCard } from './trainer-card.js';
+import { renderTrainerCard, setTrainerAvatarId } from './trainer-card.js';
 // autoSave — сохраняет игру в localStorage и на сервер
 import { autoSave } from '../game/save.js';
 // showToast — всплывающее уведомление (true=красное/ошибка, false=зелёное/успех)
@@ -212,10 +212,13 @@ export function initTrainersTab() {
       const nickname = (document.getElementById('account-nickname') as HTMLInputElement).value.trim();
       setTrainerNickname(nickname);  // Сохраняем в глобальное состояние (через store)
 
-      // Читаем выбранный аватар из выпадающего списка
+      // Читаем выбранный аватар из выпадающего списка.
+      // Аватар — один раз на игру: повторная смена отклоняется.
       const avatar = (document.getElementById('account-avatar-select') as HTMLSelectElement).value;
-      // Сохраняем в localStorage (чтобы не сбрасывалось при перезагрузке)
-      localStorage.setItem(lsKey('avatar'), avatar);
+      if (!setTrainerAvatarId(avatar)) {
+        showToast('Аватар выбирается один раз на игру!', true);
+        return;
+      }
       localStorage.setItem(lsKey('nickname_'), getSocialState().trainerNickname);
 
       // Обновляем UI

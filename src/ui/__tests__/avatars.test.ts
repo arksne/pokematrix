@@ -224,6 +224,16 @@ describe('G2: тренеркарта — только поверхностно',
     expect(m.trainerAvatarSvg('nope', 48)).toContain('<svg');
   });
 
+  it('аватар: выбор один раз на игру (повтор на другой — отказ)', async () => {
+    const m = await import('../trainer-card.js');
+    const a = AVATARS[3].id, b = AVATARS[7].id;
+    expect(m.setTrainerAvatarId(a)).toBe(true);
+    expect(m.getTrainerAvatarId()).toBe(a);
+    expect(m.setTrainerAvatarId(b)).toBe(false); // другой — нельзя
+    expect(m.getTrainerAvatarId()).toBe(a);
+    expect(m.setTrainerAvatarId(a)).toBe(true); // тот же — ок
+  });
+
   it('прогресс рендерится числами, без <li>/<ul>/историй', async () => {
     const els = stubDom();
     els['trainer-name'] = makeEl('trainer-name');
