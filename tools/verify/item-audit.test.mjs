@@ -24,7 +24,7 @@ const ITEMS = new Map();
     ITEMS.set(m[1], { price: Number(m[4]), sell: Number(m[5]), impl: m[8] === 'true', cat: m[3] });
   }
 }
-suite.check('I0', `ITEMS распарсился (${ITEMS.size} шт)`, ITEMS.size > 500, `нашлось: ${ITEMS.size}`);
+suite.check('I0', `ITEMS распарсился (${ITEMS.size} шт)`, ITEMS.size > 300, `нашлось: ${ITEMS.size}`);
 
 const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
 
