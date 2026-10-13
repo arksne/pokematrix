@@ -29,6 +29,7 @@ import { API_BASE, SOCKET_COOLDOWN } from '../game/config.js';
 import { getCloudAuthHeaders } from '../game/save.js';
 import { escHtml, showToast } from '../utils/dom.js';
 import { initTradeSocket } from '../network/socket.js';
+import { getTitleById } from '../data/titles.js';
 
 // --- Online players display ---
 
@@ -148,6 +149,35 @@ export async function openTrainerProfile(userId) {
     const statusText = isOnline ? ' (В сети)' : ' (Не в сети)';
     document.getElementById('modal-trainer-name').innerHTML = onlineDot + escHtml(p.first_name || p.username || `Trainer#${p.id}`) + `<span style="font-size:0.7rem;color:${isOnline ? '#34c759' : '#888'};">${statusText}</span>`;
     document.getElementById('modal-trainer-badges').innerText = p.badges;
+    // Титул + полная витрина (титулы, PvP, декс — отдаёт GET /profile/:userId)
+    try {
+      const titleEl = document.getElementById('modal-trainer-title');
+      if (titleEl) {
+        const titles = Array.isArray(p.titles) ? p.titles : [];
+        const active = typeof p.activeTitle === 'string' && titles.includes(p.activeTitle) ? p.activeTitle : null;
+        if (active) {
+          const def = getTitleById(active);
+          titleEl.style.display = 'block';
+          titleEl.innerHTML = def ? `${escHtml(def.icon)} ${escHtml(def.name)}` : `🏷️ ${escHtml(active)}`;
+          titleEl.title = def ? `${def.desc} (титулов: ${titles.length})` : `Титулов: ${titles.length}`;
+        } else {
+          titleEl.style.display = 'none';
+        }
+      }
+      const statsEl = document.getElementById('modal-trainer-stats');
+      if (statsEl) {
+        const w = Number(p.pvpWins) || 0, l = Number(p.pvpLosses) || 0;
+        const st = Number(p.pvpStreak) || 0, best = Number(p.pvpBestStreak) || 0;
+        const dex = Number(p.dexCaught) || 0, team = Number(p.teamSize) || 0;
+        const titles = Array.isArray(p.titles) ? p.titles.length : 0;
+        statsEl.innerHTML =
+          `<div class="trainer-stat"><span class="trainer-stat-label">PvP</span><span class="trainer-stat-value">${w}В/${l}П</span></div>`
+          + `<div class="trainer-stat"><span class="trainer-stat-label">Стрик</span><span class="trainer-stat-value">🔥${st} (макс ${best})</span></div>`
+          + `<div class="trainer-stat"><span class="trainer-stat-label">Декс</span><span class="trainer-stat-value">🐾${dex}</span></div>`
+          + `<div class="trainer-stat"><span class="trainer-stat-label">Команда</span><span class="trainer-stat-value">👥${team}</span></div>`
+          + `<div class="trainer-stat"><span class="trainer-stat-label">Титулы</span><span class="trainer-stat-value">🎖️${titles}</span></div>`;
+      }
+    } catch { /* витрина не роняет профиль */ }
 
     // Аватар тренера. Раньше #modal-trainer-avatar не заполнялся вообще — ни
     // здесь, ни в разметке, — поэтому в модалке профиля всегда висел статичный

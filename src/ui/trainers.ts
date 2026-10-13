@@ -191,12 +191,15 @@ export function initTrainersTab() {
 
       // Получаем ID панели из data-атрибута
       const panel = tab.getAttribute('data-tab');
-      // Показываем соответствующую панель, скрываем другую
+      // Показываем соответствующую панель, скрываем остальные
       document.getElementById('trainers-all-panel').style.display = panel === 'all' ? 'block' : 'none';
+      const cardPanel = document.getElementById('trainers-card-panel');
+      if (cardPanel) cardPanel.style.display = panel === 'card' ? 'block' : 'none';
       document.getElementById('trainers-account-panel').style.display = panel === 'account' ? 'block' : 'none';
 
       // При переключении — подгружаем данные
       if (panel === 'all') loadAllTrainers();       // Список всех тренеров
+      if (panel === 'card') renderTrainerCard();    // Своя карта
       if (panel === 'account') showAccountPanel();  // Настройки аккаунта
     });
   });

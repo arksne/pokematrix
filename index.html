@@ -410,11 +410,8 @@
         <!-- ======================= -->
         <div id="view-chat" class="app-view">
           <div class="chat-layout">
-            <div class="chat-top-bar" id="chat-top-bar">
-              <span class="chat-my-name" id="trainer-name">---</span>
-              <span class="chat-my-stat">🏅<span id="trainer-badges">0</span></span>
-              <span class="chat-my-stat">🐾<span id="trainer-caught">0</span></span>
-            </div>
+            <!-- Чат: только онлайн по игре + кто на локации + сообщения.
+                 Своя карта переехала во вкладку «Тренеры → Моя карта». -->
             <div class="chat-trainers-bar">
               <span class="chat-trainers-label">📍</span><span id="trainer-location-list" class="chat-trainers-list">---</span>
               <span class="chat-trainers-sep">|</span>
@@ -436,10 +433,20 @@
         <div id="view-trainers" class="app-view">
           <div class="trainers-tabs-bar">
             <button class="trainers-tab active" data-tab="all">👥 Все</button>
+            <button class="trainers-tab" data-tab="card">🎴 Моя карта</button>
             <button class="trainers-tab" data-tab="account">👤 Аккаунт</button>
           </div>
           <div id="trainers-all-panel" class="trainers-panel">
             <div id="trainers-all-list" class="trainers-all-list">Загрузка...</div>
+          </div>
+          <div id="trainers-card-panel" class="trainers-panel" style="display:none;">
+            <div class="trainer-card-mine-head">
+              <span class="chat-my-name" id="trainer-name">---</span>
+              <span class="chat-my-stat">🏅<span id="trainer-badges">0</span></span>
+              <span class="chat-my-stat">🐾<span id="trainer-caught">0</span></span>
+            </div>
+            <div id="trainer-card-mount"></div>
+            <div id="trainer-avatar-grid" class="trainer-avatar-grid"></div>
           </div>
           <div id="trainers-account-panel" class="trainers-panel" style="display:none;">
             <div class="account-card">
@@ -779,7 +786,8 @@
           <div class="trainer-avatar" id="modal-trainer-avatar">👤</div>
           <div class="trainer-profile-name" id="modal-trainer-name">Загрузка...</div>
         </div>
-        <div class="trainer-profile-stats">
+        <div class="trainer-profile-title" id="modal-trainer-title" style="display:none;"></div>
+        <div class="trainer-profile-stats" id="modal-trainer-stats">
           <div class="trainer-stat">
             <span class="trainer-stat-label">Значки</span>
             <span class="trainer-stat-value" id="modal-trainer-badges">0</span>

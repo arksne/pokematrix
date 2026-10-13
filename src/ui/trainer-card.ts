@@ -276,8 +276,9 @@ export function ensureTrainerCardActions(): any {
     } catch { /* ignore */ }
     // Пусто намеренно: кнопку добавит агент арены. Только комментарий-маркер.
     try { box.innerHTML = '<!-- arena-agent mounts PvP action here -->'; } catch { /* ignore */ }
-    // Куда положить: рядом с карточкой, иначе — в чат-вью, иначе — в body.
-    const parents = ['chat-top-bar', 'view-chat'];
+    // Куда положить: панель своей карты, иначе — вью тренеров, иначе — в body.
+    // (Раньше якорились к чату; карта переехала в «Тренеры → Моя карта».)
+    const parents = ['trainers-card-panel', 'view-trainers'];
     for (const pid of parents) {
       try {
         const p = doc.getElementById(pid);
@@ -310,8 +311,8 @@ function renderTrainerProgress(): void {
         if (!box) return;
         box.id = 'trainer-card-progress';
         box.className = 'trainer-card-progress';
-        // Положим рядом с топ-баром чата, чтобы было видно в карточке.
-        const anchor = doc.getElementById('chat-top-bar');
+        // Положим в панель своей карты, чтобы было видно в карточке.
+        const anchor = doc.getElementById('trainers-card-panel');
         if (anchor && anchor.parentNode && typeof anchor.parentNode.insertBefore === 'function') {
           anchor.parentNode.insertBefore(box, (anchor as any).nextSibling || null);
         } else if (doc.body && typeof doc.body.appendChild === 'function') {
@@ -346,55 +347,31 @@ function renderTrainerProgress(): void {
 }
 
 /**
- * Витрина титулов: активный под именем (клик — выбор из заработанных).
- * Пусто (нет титулов) — строка не рисуется.
+ * Открыть выбор титула из заработанных (модалка).
  */
-function renderTrainerTitle(): void {
+export function openTitlePicker(): void {
   try {
-    if (typeof document === 'undefined') return;
-    const doc = document as any;
-    let row = doc.getElementById('trainer-card-title');
     const earned: string[] = ((state as any).titles || []).filter((t: unknown) => isTitleId(t));
-    if (earned.length === 0) { if (row) row.style.display = 'none'; return; }
-    if (!row) {
-      row = doc.createElement('div');
-      if (!row) return;
-      row.id = 'trainer-card-title';
-      row.className = 'trainer-card-title';
-      const anchor = doc.getElementById('trainer-name');
-      if (anchor && anchor.parentNode && typeof anchor.parentNode.insertBefore === 'function') {
-        anchor.parentNode.insertBefore(row, (anchor as any).nextSibling || null);
-      } else if (doc.body && typeof doc.body.appendChild === 'function') {
-        doc.body.appendChild(row);
-      } else return;
-    }
-    const active = getActiveTitle();
-    row.style.display = 'block';
-    row.style.cursor = 'pointer';
-    row.style.fontSize = '0.85rem';
-    row.style.opacity = '0.95';
-    row.title = 'Нажмите чтобы сменить титул';
-    row.textContent = active ? `${active.icon} ${active.name}` : '— без титула —';
-    row.onclick = () => {
-      const choices = [{ label: '— без титула —', value: '' }]
-        .concat(earned.map((id) => {
-          const t = getTitleById(id)!;
-          return { label: `${t.icon} ${t.name}`, value: id };
-        }));
-      showSelectionModal('Титул тренера', choices, (idx: number) => {
-        const v = choices[idx]?.value;
-        setActiveTitle(v || null);
-        try { autoSave(); } catch { /* ignore */ }
-        renderTrainerCard();
-      });
-    };
+    if (earned.length === 0) return;
+    const choices = [{ label: '— без титула —', value: '' }]
+      .concat(earned.map((id) => {
+        const t = getTitleById(id)!;
+        return { label: `${t.icon} ${t.name}`, value: id };
+      }));
+    showSelectionModal('Титул тренера', choices, (idx: number) => {
+      const v = choices[idx]?.value;
+      setActiveTitle(v || null);
+      try { autoSave(); } catch { /* ignore */ }
+      renderTrainerCard();
+    });
   } catch { /* ignore */ }
 }
 
 /**
- * Богатая карточка: шапка (аватар + имя + титул + локация), сетка статов,
- * значки. Строится в #trainer-card-box (создаётся у chat-top-bar).
- * Старые id (trainer-name/badges/caught) заполняются как раньше.
+ * Богатая карточка: шапка (аватар + имя + титул + локация), сетка статов.
+ * Живёт в панели «Тренеры → Моя карта» (#trainer-card-mount).
+ * Титул кликабелен (выбор из заработанных). Старые id
+ * (trainer-name/badges/caught) заполняются как раньше.
  */
 export function renderTrainerCardBox(): void {
   try {
@@ -406,9 +383,10 @@ export function renderTrainerCardBox(): void {
       if (!box) return;
       box.id = 'trainer-card-box';
       box.className = 'trainer-card-box';
-      const anchor = doc.getElementById('chat-top-bar');
-      if (anchor && anchor.parentNode && typeof anchor.parentNode.insertBefore === 'function') {
-        anchor.parentNode.insertBefore(box, (anchor as any).nextSibling || null);
+      const mount = doc.getElementById('trainer-card-mount')
+        || doc.getElementById('trainers-card-panel');
+      if (mount && typeof mount.appendChild === 'function') {
+        mount.appendChild(box);
       } else if (doc.body && typeof doc.body.appendChild === 'function') {
         doc.body.appendChild(box);
       } else return;
@@ -416,6 +394,7 @@ export function renderTrainerCardBox(): void {
     const s = getTrainerSummary();
     const avId = getTrainerAvatarId();
     const active = getActiveTitle();
+    const earned: string[] = ((state as any).titles || []).filter((t: unknown) => isTitleId(t));
     const name = esc((state as any).trainerNickname
       || (state as any).tgUser?.first_name
       || (state as any).tgUser?.username
@@ -425,7 +404,7 @@ export function renderTrainerCardBox(): void {
       `<div class="tcb-head" style="display:flex;gap:10px;align-items:center;">`
       + `<div class="tcb-avatar">${trainerAvatarSvg(avId, 64)}</div>`
       + `<div class="tcb-id"><div class="tcb-name" style="font-weight:700;font-size:1.05rem;">${name}</div>`
-      + `<div class="tcb-title" style="font-size:0.85rem;opacity:0.95;">${active ? `${active.icon} ${esc(active.name)}` : '— без титула —'}</div>`
+      + `<div class="tcb-title" id="tcb-title" style="font-size:0.85rem;opacity:0.95;${earned.length ? 'cursor:pointer;' : ''}" title="${earned.length ? 'Нажмите чтобы сменить титул' : ''}">${active ? `${active.icon} ${esc(active.name)}` : '— без титула —'}</div>`
       + (loc ? `<div class="tcb-loc" style="font-size:0.75rem;opacity:0.7;">📍 ${loc}</div>` : '')
       + `</div></div>`
       + `<div class="tcb-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;font-size:0.8rem;">`
@@ -436,6 +415,12 @@ export function renderTrainerCardBox(): void {
       + `<div class="tcb-cell">🔥<br><b>${s.pvpStreak}</b><br><span>стрик (макс ${s.pvpBestStreak})</span></div>`
       + `<div class="tcb-cell">🎖️<br><b>${s.titles}</b><br><span>титулы</span></div>`
       + `</div>`;
+    if (earned.length > 0) {
+      try {
+        const titleEl = box.querySelector ? box.querySelector('#tcb-title') : doc.getElementById('tcb-title');
+        if (titleEl) titleEl.onclick = () => openTitlePicker();
+      } catch { /* ignore */ }
+    }
   } catch { /* ignore */ }
 }
 
@@ -466,7 +451,6 @@ export function renderTrainerCard() {
   // но базовые поля пропускаем (страница не загружена или другая вкладка)
   if (!nameEl || !badgesEl || !caughtEl) {
     try { renderTrainerProgress(); } catch { /* ignore */ }
-    try { renderTrainerTitle(); } catch { /* ignore */ }
     try { renderTrainerCardBox(); } catch { /* ignore */ }
     try { renderAvatarPicker(); } catch { /* ignore */ }
     try { ensureTrainerCardActions(); } catch { /* ignore */ }
@@ -509,7 +493,6 @@ export function renderTrainerCard() {
 
   // ── Блок G: поверхностный прогресс + аватар + сетка + место под арену ──
   try { renderTrainerAvatar(); } catch { /* ignore */ }
-  try { renderTrainerTitle(); } catch { /* ignore */ }
   try { renderTrainerCardBox(); } catch { /* ignore */ }
   try { renderTrainerProgress(); } catch { /* ignore */ }
   try { renderAvatarPicker(); } catch { /* ignore */ }

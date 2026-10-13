@@ -140,6 +140,10 @@ router.get('/:userId', authMiddleware, async (req: Request, res: Response) => {
         }))
       : [];
 
+    const titles = Array.isArray((saveData as any).titles)
+      ? (saveData as any).titles.filter((t: unknown) => typeof t === 'string')
+      : [];
+    const caught = (saveData as any).pokedexCaught;
     res.json({
       profile: {
         id: user.tg_id,
@@ -153,6 +157,15 @@ router.get('/:userId', authMiddleware, async (req: Request, res: Response) => {
         badges: user.badges_count,
         money: user.money,
         team,
+        // Полная витрина чужой карты: титулы, PvP, декс.
+        titles,
+        activeTitle: typeof (saveData as any).activeTitle === 'string' ? (saveData as any).activeTitle : null,
+        pvpWins: (saveData as any).pvpWins || 0,
+        pvpLosses: (saveData as any).pvpLosses || 0,
+        pvpStreak: (saveData as any).pvpStreak || 0,
+        pvpBestStreak: (saveData as any).pvpBestStreak || 0,
+        dexCaught: Array.isArray(caught) ? caught.length : 0,
+        teamSize: Array.isArray(saveData.myTeam) ? saveData.myTeam.length : 0,
       },
     });
   } catch (err: any) {
