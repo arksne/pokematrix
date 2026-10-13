@@ -72,6 +72,7 @@ const ITEMS: ItemDef[] = [
   { id: 'cleverWing', price: 300 },
   { id: 'cloverSweet', price: 500 },
   { id: 'commonCandy', price: 35000 },
+  { id: 'courierParcel', price: 100 },
   { id: 'typeCandyBox', price: 300000 },
   { id: 'crackedPot', price: 1600 },
   { id: 'craftersKit', price: 3000 },

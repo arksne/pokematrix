@@ -30,6 +30,7 @@ import { getCloudAuthHeaders } from '../game/save.js';
 import { escHtml, showToast } from '../utils/dom.js';
 import { initTradeSocket } from '../network/socket.js';
 import { getTitleById } from '../data/titles.js';
+import { rankLabel } from '../data/ranks.js';
 
 // --- Online players display ---
 
@@ -153,12 +154,21 @@ export async function openTrainerProfile(userId) {
     }
 
     const p = data.profile;
-    const isOnline = state.onlinePlayersList.some(op => op.userId === userId);
+    // Сравнение по строкам: userId из сокета и id из БД могут разъехаться
+    // по типу (число vs строка) — строгое === вечно показывало «не в сети».
+    const isOnline = state.onlinePlayersList.some((op: any) => String(op?.userId) === String(userId));
     const onlineDot = isOnline
       ? '<span class="online-dot yes"></span>'
       : '<span class="online-dot no"></span>';
     const statusText = isOnline ? ' (В сети)' : ' (Не в сети)';
-    document.getElementById('modal-trainer-name').innerHTML = onlineDot + escHtml(p.first_name || p.username || `Trainer#${p.id}`) + `<span style="font-size:0.7rem;color:${isOnline ? '#34c759' : '#888'};">${statusText}</span>`;
+    const nameEl = document.getElementById('modal-trainer-name');
+    try {
+      // Длинные ники вылезали за поля модалки — режем на уровне элемента.
+      (nameEl as any).style.overflowWrap = 'anywhere';
+      (nameEl as any).style.wordBreak = 'break-word';
+      (nameEl as any).style.minWidth = '0';
+    } catch { /* ignore */ }
+    nameEl.innerHTML = onlineDot + escHtml(p.first_name || p.username || `Trainer#${p.id}`) + `<span style="font-size:0.7rem;color:${isOnline ? '#34c759' : '#888'};">${statusText}</span>`;
     document.getElementById('modal-trainer-badges').innerText = p.badges;
     // Титул + полная витрина (титулы, PvP, декс — отдаёт GET /profile/:userId)
     try {
@@ -181,8 +191,10 @@ export async function openTrainerProfile(userId) {
         const st = Number(p.pvpStreak) || 0, best = Number(p.pvpBestStreak) || 0;
         const dex = Number(p.dexCaught) || 0, team = Number(p.teamSize) || 0;
         const titles = Array.isArray(p.titles) ? p.titles.length : 0;
+        const rank = rankLabel(Number(p.badges) || 0);
         statsEl.innerHTML =
-          `<div class="trainer-stat"><span class="trainer-stat-label">PvP</span><span class="trainer-stat-value">${w}В/${l}П</span></div>`
+          `<div class="trainer-stat"><span class="trainer-stat-label">Ранг</span><span class="trainer-stat-value">${escHtml(rank)}</span></div>`
+          + `<div class="trainer-stat"><span class="trainer-stat-label">PvP</span><span class="trainer-stat-value">${w}В/${l}П</span></div>`
           + `<div class="trainer-stat"><span class="trainer-stat-label">Стрик</span><span class="trainer-stat-value">🔥${st} (макс ${best})</span></div>`
           + `<div class="trainer-stat"><span class="trainer-stat-label">Декс</span><span class="trainer-stat-value">🐾${dex}</span></div>`
           + `<div class="trainer-stat"><span class="trainer-stat-label">Команда</span><span class="trainer-stat-value">👥${team}</span></div>`
@@ -218,7 +230,7 @@ export async function openTrainerProfile(userId) {
     // вызова в двух местах — значит со временем они разъедутся.
 
     const actionsDiv = document.getElementById('modal-trainer-actions');
-    const onlinePlayer = state.onlinePlayersList.find(op => op.userId === userId);
+    const onlinePlayer = state.onlinePlayersList.find((op: any) => String(op?.userId) === String(userId));
     if (actionsDiv && onlinePlayer && onlinePlayer.id !== state.socket?.id) {
       actionsDiv.style.display = 'flex';
       const tradeBtn = document.getElementById('btn-trainer-trade');

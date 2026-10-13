@@ -703,7 +703,7 @@ export let renderLocation = function(locId: any) {
       if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
       if (!state.visitedLocations.has(linkId)) {
         state.visitedLocations.add(linkId);
-        getBattleCore().then(bc => bc.checkQuestProgress('explore'));
+        getBattleCore().then(bc => bc.checkQuestProgress('explore', 1, undefined, { locId: linkId }));
         if (state.visitedLocations.size >= 20) checkAchievement('explorer');
       }
       renderLocation(linkId);  // Переходим в новую локацию
@@ -732,7 +732,7 @@ export let renderLocation = function(locId: any) {
         if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
         if (!state.visitedLocations.has(linkId)) {
           state.visitedLocations.add(linkId);
-          getBattleCore().then(bc => bc.checkQuestProgress('explore'));
+          getBattleCore().then(bc => bc.checkQuestProgress('explore', 1, undefined, { locId: linkId }));
           if (state.visitedLocations.size >= 20) checkAchievement('explorer');
         }
         renderLocation(linkId);

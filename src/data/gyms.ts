@@ -1,5 +1,24 @@
 export const gymLeaders = {
 
+  // ── Ученик Бруно — мини-босс у стадиона Пьютера (fighting) ──
+  // friendly: без значка/наград гима, реванши бесконечные. Бой запускается
+  // кнопкой NPC (startMiniBossBattle), нужен квесту «Кулачный боец».
+  pewterBully: {
+    name: 'Ученик Бруно',
+    title: 'Гроза новичков',
+    type: 'fighting',
+    badgeName: '',
+    badgeIcon: '🥊',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'machop', level: 28 },
+      { name: 'machoke', level: 28 },
+      { name: 'primeape', level: 28 },
+    ],
+  },
+
   // ── Брок — Лидер Зала Пьютера (rock) ──
   pewterStadium: {
     name: 'Брок',

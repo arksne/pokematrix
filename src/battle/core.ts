@@ -55,6 +55,7 @@ import { calculateStat as calculateStatShared } from './stats.js';
 import { HEAL_HP, CURE_ONE, CURE_ALL } from '../data/item-effects.js';  // аудит итемов: общие таблицы с рюкзаком
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
 import { store } from '../game/store.js';
+import { trackNPCQuests } from '../game/quest-track.js';     // Гринд-квесты NPC: тот же движок событий
 import { checkAchievement } from '../ui/achievements.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
 import { state } from '../game/state.js';                                 // state — глобальное состояние игры (инвентарь, команда, локация)
 import { generateUID, getTrainerId, LEGENDARY_SET } from '../utils/state.js';           // generateUID — уникальный ID для пойманного покемона; getTrainerId — ID тренера
@@ -1608,7 +1609,7 @@ function generateDailyQuests() {
  *   handleWildFaintRewards — "earn_money", "defeat_x"
  *   initEncounterEvents — "use_item" (использование предмета)
  */
-function checkQuestProgress(type, amount?, itemId?) {
+function checkQuestProgress(type, amount?, itemId?, info?: any) {
   if (amount === undefined) amount = 1;
   GS.quests.forEach(q => {
     if (q.completed || q.claimed) return;                    // Уже выполнено или награда получена
@@ -1622,6 +1623,13 @@ function checkQuestProgress(type, amount?, itemId?) {
       }
     }
   });
+  // Гринд-пачка NPC-квестов: тот же движок событий двигает и их
+  // (defeat/catch/earn/explore/use — с фильтрами из quest-track.ts).
+  try {
+    if (['defeat_x', 'catch_x', 'earn_money', 'explore', 'use_item'].includes(type)) {
+      trackNPCQuests(type, { amount, itemId, ...(info || {}) });
+    }
+  } catch (e) { console.error('[quest-track] fan-out failed:', e); }
   // Also track tutorial GS.quests
   store.checkTutorialProgress(type, amount, itemId); // Проверяем туториал-прогресс
 }
@@ -4028,7 +4036,13 @@ async function handleWildFaintRewards(isWild: boolean) {
     // Счётчик побед для ачивки trainer_100
     GS.battleWins = (GS.battleWins || 0) + 1;
     if (GS.battleWins >= 100) checkAchievement('trainer_100');
-    checkQuestProgress('defeat_x');                          // Квест "победить N покемонов"
+    checkQuestProgress('defeat_x', 1, undefined, {           // Квест "победить N покемонов"
+      species: S.activeWild.name,
+      types: (S.activeWild.apiData?.types || S.activeWild.types || []).map((t: any) => t?.type?.name),
+    });
+    // Стрик диких побед для streak-квестов
+    state.questStreak = (state.questStreak || 0) + 1;
+    trackNPCQuests('streak_x', { streak: state.questStreak });
     const rItems = getWildDropItems();
     // Журнал дропа: строка лога исчезает вместе с боем, а выпавшее нужно помнить.
     recordDrop(S.activeWild.name, S.wildLvl, rItems);
@@ -5740,6 +5754,11 @@ function handlePlayerFaint() {
     store.autoSave();
   } else {
     // ── ВСЯ КОМАНДА В НОКАУТЕ — ПОРАЖЕНИЕ ──
+    // Стрик диких побед сгорает (для streak-квестов)
+    if (S.battleType === 'wild' && (state.questStreak || 0) > 0) {
+      state.questStreak = 0;
+      trackNPCQuests('streak_x', { streak: 0 });
+    }
     appendToLog(isGym ? 'Вся команда потеряла сознание... Вы проиграли лидеру.' : 'Вся команда потеряла сознание... Вы проиграли.');
     if (isGym) {
       // Сбрасываем прогресс гима
@@ -7119,6 +7138,11 @@ function initEncounterEvents() {
     appendToLog('Вам удалось сбежать!');
     appendToLog(`${mon.apiData.name} выложился до конца и потерял сознание.`, false, 'faint');
     mon.currentHp = 0;
+    // Побег обнуляет стрик диких побед (streak-квесты: «подряд» — честно)
+    if ((state.questStreak || 0) > 0) {
+      state.questStreak = 0;
+      trackNPCQuests('streak_x', { streak: 0 });
+    }
     updatePlayerHpUI();
 
     battle.transition(BattlePhase.IDLE);
@@ -7333,7 +7357,7 @@ function initEncounterEvents() {
           if (dexN >= 100) checkAchievement('dex_100');
           if (POKEDEX_ALL.length > 0 && dexN >= POKEDEX_ALL.length) checkAchievement('dex_all');
 
-          checkQuestProgress('catch_x');
+          checkQuestProgress('catch_x', 1, undefined, { species: S.activeWild.name });
 
           document.getElementById('battle-main-menu').style.display = 'none';
           document.getElementById('battle-end-menu').style.display = 'flex';
@@ -7862,6 +7886,16 @@ async function startGymNextPokemon() {
   if (S.gymTeamIndex >= S.gymTeamData.length) {
     // ── ПОБЕДА НАД ВСЕЙ КОМАНДОЙ ЛИДЕРА — server-authoritative ──
     const leader = GS.gymLeaders[S.gymLeaderKey];
+    // Мини-босс (friendly): без значка/денег/призов гима. Только лог,
+    // счётчик побед и трек для квеста. Реванши бесконечные.
+    if (leader.friendly) {
+      appendToLog(`Победа над ${leader.name}!`);
+      GS.battleWins = (GS.battleWins || 0) + 1;
+      trackNPCQuests('boss_win', { bossId: S.gymLeaderKey });
+      document.getElementById('battle-main-menu').style.display = 'none';
+      document.getElementById('battle-end-menu').style.display = 'flex';
+      return;
+    }
     // N4: награда (значок + шини + предметы) — только за первую победу.
     // Реванш: сервер ответит 409, выбор награды не показываем.
     const firstWin = Array.isArray(state.badges) && !state.badges.includes(leader.badgeName);
@@ -8382,6 +8416,18 @@ function setBattleVars(updates: Record<string, any>) {
   }
 }
 
+// ── getBattleDexSpecies: виды активных покемонов для кнопок 📖 в бою ──
+// Возвращает {player, wild} — имена видов (species), null если боя нет.
+// Используется в init.ts: кнопки в шапке боя открывают покедекс по виду,
+// чтобы в бою посмотреть тип и данные покемона (как 📖 в команде).
+function getBattleDexSpecies() {
+  const p = S.activePlayerMon;
+  const player = p ? (p.apiData?.species?.name || p.apiData?.name || null) : null;
+  const w = S.activeWild;
+  const wild = w ? (w.name || null) : null;
+  return { player, wild };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ЭКСПОРТ
 // ═══════════════════════════════════════════════════════════════
@@ -8392,8 +8438,23 @@ function setBattleVars(updates: Record<string, any>) {
 //   startHunt / startAutoHunt — начало боя
 //   saveBattleState / restoreBattleState — персистентность
 //   openGymModal / startGymBattle — gym бой
+//   startMiniBossBattle(leaderKey) — дружеский бой с мини-боссом (без значка)
 //   openEliteModal / startEliteBattle — элита
 //   championBattle / startChampionNextPokemon — чемпион
 //   Множество утилит: calculateStat, getStatusIcon, switchPokemon и т.д.
 // ─────────────────────────────────────────────────────────────
-export { saveBattleState, clearBattleState, restoreBattleState, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars };
+export { saveBattleState, clearBattleState, restoreBattleState, renderBattleUI, getTypeMultiplier, calculateStat, appendToLog, getAbilityName, statStageModify, updateStatBadges, clearUsedItem, checkBerryAutoUse, giveBerryToMon, generateDailyQuests, checkQuestProgress, claimQuestReward, openQuests, renderQuests, loadPokedexData, getStatusIcon, applyStatusEffect, cureStatus, checkStatusTurn, applyStatusEndOfTurn, switchPokemon, pickWeightedEncounter, getWildLevel, getLocationEncounters, startAutoHunt, stopAutoHunt, getBestRod, startHunt, loadMoveButtons, updateMoveButtonUI, updateMoveButtonUIs, updateWildHpUI, updatePlayerHpUI, useMove, handlePlayerFaint, enemyTurn, initEncounterEvents, openGymModal, initGymEvents, startGymBattle, startGymNextPokemon, useMoveGym, enemyTurnGym, handleGymPlayerFaint, openEliteModal, startEliteBattle, startEliteNextMember, startEliteNextPokemon, championBattle, startChampionNextPokemon, getBattleVars, setBattleVars, getBattleDexSpecies };
+
+/**
+ * startMiniBossBattle — бой с именным противником (квест «Кулачный боец»).
+ * Тот же gym-движок, но лидер friendly: без значка, денег и призов гима.
+ * Реванши бесконечные. Нужен хоть один живой покемон.
+ */
+export async function startMiniBossBattle(leaderKey: string): Promise<void> {
+  const leader = GS.gymLeaders[leaderKey];
+  if (!leader || !leader.friendly) {
+    showToast('Этот боец сейчас недоступен!', true);
+    return;
+  }
+  await startGymBattle(leaderKey);
+}

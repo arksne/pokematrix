@@ -46,6 +46,7 @@ import { LEGENDARY_SET } from '../utils/state.js';
 import { GEN_STARTERS } from '../data/starters.js';
 import { baseStatTotal } from '../battle/stats.js';  // UI компоненты
 import { appendToLog, calculateStat } from '../battle/core.js';  // Лог + расчёт HP
+import { trackNPCQuests } from '../game/quest-track.js';  // Гринд-квесты: вылупление
 import { natures } from '../data/natures.js';          // Массив характеров
 import { fetchSiteLearnset, siteStarterMoves, rollEggMove } from '../data/learnset.js';
 
@@ -661,6 +662,7 @@ export async function hatchEgg(egg: any) {
     store.emit('team:render');
     store.emit('save');
     checkAchievement('breeder');
+    trackNPCQuests('hatch_x', {});
   } catch(e) {
     console.error('Hatch failed:', e);
     state.eggs = state.eggs.filter((e: any) => e.uid !== eggData.uid);

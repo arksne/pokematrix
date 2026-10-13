@@ -169,7 +169,7 @@ export function getFullSaveData() {
     currentPokemonIndex: state.currentPokemonIndex,
     pokedexSeen: Array.from(state.pokedexSeen),
     pokedexCaught: Array.from(state.pokedexCaught),
-    quests: state.quests, questProgress: state.questProgress, completedQuests: state.completedQuests, npcQuestProgress: state.npcQuestProgress, completedNPCQuests: state.completedNPCQuests, tutorialStep: state.tutorialStep,
+    quests: state.quests, questProgress: state.questProgress, completedQuests: state.completedQuests, npcQuestProgress: state.npcQuestProgress, completedNPCQuests: state.completedNPCQuests, tutorialStep: state.tutorialStep, questStreak: state.questStreak || 0,
     achievements: state.achievements || [], battleWins: state.battleWins || 0,
     // Блок G: поверхностные метрики тренеркарты + выбранная аватарка.
     titles: Array.isArray(state.titles) ? state.titles.filter((t: unknown) => typeof t === 'string') : [],
@@ -233,6 +233,7 @@ export function validateGameState() {
   if (!Array.isArray(state.titles)) state.titles = [];
   if (typeof state.activeTitle !== 'string') state.activeTitle = null;
   if (!['v6', 'v7', 'v3'].includes(state.cardTheme)) state.cardTheme = 'v6';
+  if (typeof state.questStreak !== 'number') state.questStreak = 0;
   // Validate team pokemon have required fields
   for (let i = state.myTeam.length - 1; i >= 0; i--) {
     const m = state.myTeam[i];
@@ -344,6 +345,7 @@ export async function loadGame() {
     state.questProgress = data.questProgress || {};
     state.completedQuests = data.completedQuests || [];
     state.npcQuestProgress = data.npcQuestProgress || {};
+    state.questStreak = data.questStreak || 0;
     state.completedNPCQuests = data.completedNPCQuests || [];
     state.achievements = data.achievements || [];
     state.battleWins = data.battleWins || 0;
@@ -856,6 +858,7 @@ export async function applyCloudSave(data) {
   state.questProgress = data.questProgress || state.questProgress;
   state.completedQuests = data.completedQuests || state.completedQuests;
   state.npcQuestProgress = data.npcQuestProgress || state.npcQuestProgress;
+  if (typeof data.questStreak === 'number') state.questStreak = data.questStreak;
   state.completedNPCQuests = data.completedNPCQuests || state.completedNPCQuests;
   state.achievements = data.achievements || state.achievements;
   state.battleWins = data.battleWins || state.battleWins;

@@ -7,7 +7,7 @@
  */
 import { parseSaveStrict } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -98,7 +98,7 @@ router.get('/trainers/all', authMiddleware, async (req: Request, res: Response) 
       region: users.region,
       lastSeen: users.last_seen,
       registered: users.registered,
-    }).from(users).orderBy(users.last_seen).limit(100);
+    }).from(users).orderBy(desc(users.last_seen)).limit(100);
 
     res.json({ users: allUsers });
   } catch (err: any) {

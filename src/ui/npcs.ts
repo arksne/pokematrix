@@ -29,7 +29,7 @@ import { itemDef } from '../game/state.js';            // Название пр�
 import { addItem, removeItem } from '../game/actions.js';  // Манипуляции с инвентарём
 import { showToast } from '../utils/dom.js';              // Всплывающие уведомления
 import { addNotification } from './notifications.js';      // Системные уведомления (колокольчик)
-import { appendToLog } from '../battle/core.js';           // Запись в боевой лог
+import { appendToLog, startMiniBossBattle } from '../battle/core.js';           // Запись в боевой лог + дружеские бои
 import { openPC } from './pc.js';                          // Открытие PC
 import { openBreedBoxes } from './daycare.js';
 import { NPC_DATA } from '../data/npc.js';                  // Статические данные NPC
@@ -46,6 +46,37 @@ import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange, rollRand
 //   "Сдать" — сдать выполненный квест (прогресс >= targetQty)
 //   "..." (disabled) — квест взят, но ещё не выполнен
 // Завершённые квесты отображаются с ✅
+/**
+ * completeNPCQuest — сдача обычного квеста: списать цели, выдать деньги +
+ * предмет + титул (rewardTitle → grantTitle). Общий UI (диалог, деньги,
+ * перерисовка, сейв) — здесь же, чтобы verify-ветка не дублировала.
+ */
+export function completeNPCQuest(npc: any, q: any): void {
+  // Убираем target-предметы из инвентаря (по одному)
+  if (q.targetItem) {
+    for (let i = 0; i < q.targetQty; i++) removeItem(q.targetItem, 1);
+  }
+  state.completedNPCQuests.push(q.id);   // Отмечаем выполненным
+  delete state.npcQuestProgress[q.id];   // Очищаем прогресс
+  // Награда: деньги + предмет
+  state.inventory['credit'] = (state.inventory['credit'] || 0) + q.rewardMoney;
+  const rewardAdded = addItem(q.rewardItem, q.rewardQty);
+  if (!rewardAdded) showToast('Рюкзак полон! Часть награды потеряна.', true);
+  // Награда-титул (гринд-пачка): витрина тренеркарты
+  if (q.rewardTitle) {
+    import('./trainer-card.js').then((m) => {
+      if (m.grantTitle(q.rewardTitle)) {
+        showToast(`🏷️ Новый титул: ${q.rewardTitle}!`, false);
+      }
+    }).catch(() => {});
+  }
+  appendToLog(`Квест "${q.desc}" выполнен!`, false, 'quest');
+  // Общий UI
+  document.getElementById('npc-dialog')!.innerText = npc.dialog.quest_complete;
+  store.emit('money:changed');
+  renderNPCQuests(npc);
+  store.emit('save');
+}
 function renderNPCQuests(npc: any) {
   const container = document.getElementById('npc-quests')!;
   container.innerHTML = '';  // Очищаем контейнер
@@ -92,6 +123,19 @@ function renderNPCQuests(npc: any) {
       btn.innerText = 'Взять';
       btn.onclick = () => {
         state.npcQuestProgress[q.id] = 0;  // Инициализируем прогресс
+        // Выдача на взятии (курьерская посылка и т.п.)
+        if (q.giveItem) {
+          addItem(q.giveItem, q.giveQty || 1);
+          showToast(`Получено: ${itemDef(q.giveItem).nameRu} ×${q.giveQty || 1} (для квеста)`, false);
+        }
+        // Составной квест могут уже выполнить заранее — сразу готов
+        if (q.verify) {
+          import('../game/quest-track.js').then((m) => {
+            if (m.verifyQuest(q).ok) state.npcQuestProgress[q.id] = q.targetQty;
+            renderNPCQuests(npc);
+            store.emit('save');
+          });
+        }
         document.getElementById('npc-dialog')!.innerText = npc.dialog.quest_incomplete;
         renderNPCQuests(npc);  // Перерисовываем
         store.emit('save');
@@ -121,15 +165,19 @@ function renderNPCQuests(npc: any) {
           }
         } else {
           // ── Обычный квест ──
-          // Убираем target-предметы из инвентаря (по одному)
-          for (let i = 0; i < q.targetQty; i++) removeItem(q.targetItem, 1);
-          state.completedNPCQuests.push(q.id);   // Отмечаем выполненным
-          delete state.npcQuestProgress[q.id];   // Очищаем прогресс
-          // Награда: деньги + предмет
-          state.inventory['credit'] = (state.inventory['credit'] || 0) + q.rewardMoney;
-          const rewardAdded2 = addItem(q.rewardItem, q.rewardQty);
-          if (!rewardAdded2) showToast('Рюкзак полон! Часть награды потеряна.', true);
-          appendToLog(`Квест "${q.desc}" выполнен!`, false, 'quest');
+          // Составные условия (уровень, коллекция, локации, EV) — гейт сдачи
+          if (q.verify) {
+            import('../game/quest-track.js').then((m) => {
+              const v = m.verifyQuest(q);
+              if (!v.ok) {
+                showToast(`Ещё рано: ${v.missing}!`, true);
+                return;
+              }
+              completeNPCQuest(npc, q);
+            });
+            return;
+          }
+          completeNPCQuest(npc, q);
         }
         // Общий UI для обоих типов
         document.getElementById('npc-dialog')!.innerText = npc.dialog.quest_complete;
@@ -272,6 +320,43 @@ export function openNPCDialog(npcId: string) {
       });
     };
     actionsContainer.insertBefore(btnStyle, document.getElementById('btn-close-npc'));
+  }
+
+  // ── NPC: Отправитель (выдача посылки для квеста курьера) ──
+  // Квест живёт у курьера в Пьютере (там сдача), а посылка выдаётся здесь.
+  if (npcId === 'viridian_sender') {
+    const btnParcel = document.createElement('button');
+    btnParcel.className = 'tma-btn npc-action-extra';
+    btnParcel.style.backgroundColor = '#8e8e93';
+    btnParcel.innerText = '📦 Взять посылку для Пьютера';
+    btnParcel.onclick = () => {
+      if (state.completedNPCQuests.includes('pw_courier')) {
+        showToast('Ты уже доставил посылку!', false);
+        return;
+      }
+      if (!('pw_courier' in state.npcQuestProgress)) state.npcQuestProgress['pw_courier'] = 0;
+      addItem('courierParcel', 1);
+      showToast('Получено: Посылка курьера ×1 (вези в Пьютер, не вскрывать!)', false);
+      modal.style.display = 'none';
+      store.emit('save');
+    };
+    actionsContainer.insertBefore(btnParcel, document.getElementById('btn-close-npc'));
+  }
+
+  // ── NPC: Задира (мини-босс, бой без значка) ──
+  // Квест «Кулачный боец»: победа трекается как boss_win.
+  if (npcId === 'pewter_bully') {
+    const btnFight = document.createElement('button');
+    btnFight.className = 'tma-btn npc-action-extra';
+    btnFight.style.backgroundColor = '#ff3b30';
+    btnFight.innerText = '🥊 Сразиться (команда 3×Lv28)';
+    btnFight.onclick = () => {
+      if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
+      if (!state.myTeam.some((m: any) => (m.currentHp || 0) > 0)) { showToast('Нужен живой покемон!', true); return; }
+      modal.style.display = 'none';
+      startMiniBossBattle('pewterBully');
+    };
+    actionsContainer.insertBefore(btnFight, document.getElementById('btn-close-npc'));
   }
 
   // ── NPC: Питомник (PC + боксы разведения) ──

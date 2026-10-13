@@ -30,7 +30,7 @@
 import { state, lsKey, generateUID } from './state.js';
 import { store } from './store.js';
 import { REGIONS } from '../data/regions.js';
-import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress } from '../battle/core.js';
+import { battle, loadPokedexData, generateDailyQuests, startAutoHunt, stopAutoHunt, restoreBattleState, initEncounterEvents, initGymEvents, openQuests, checkQuestProgress, getBattleDexSpecies } from '../battle/core.js';
 import { loadGame, saveGame, cloudLoad, cloudSave, applyCloudSave, validateGameState, getFullSaveData, getLeaderboardData, getCloudAuthHeaders, autoSave, initCloudEvents, totalPokemonCountOf, totalPokemonCount, cloudUnreachable, clearLocalGameKeys, startSaveHeartbeat } from './save.js';
 import { authTelegram } from './auth.js';
 import { initAppNav } from '../ui/nav.js';
@@ -42,7 +42,7 @@ import { initShopEvents, initSellTab } from '../ui/shop.js';
 import { initTrainersTab } from '../ui/trainers.js';
 import { initDropTab } from '../ui/drop-log.js';
 import { sendChatMessage } from '../ui/chat.js';
-import { openPokedex } from '../ui/pokedex.js';
+import { openPokedex, showPokedexInfo } from '../ui/pokedex.js';
 import { editNickname } from '../ui/nickname.js';
 import { openNotifications, updateNotifBadge, addNotification } from '../ui/notifications.js';
 import { giveStarter } from '../ui/starter.js';
@@ -410,6 +410,23 @@ initGymEvents();
     if (btnClosePokedex) btnClosePokedex.addEventListener('click', () => {
       document.getElementById('pokedex-modal').style.display = 'none';
     });
+
+    // ── Кнопки 📖 в шапке боя: покедекс своего и дикого покемона ──
+    // Вид берём из активного боя (getBattleDexSpecies), а не из DOM-имени:
+    // у своего покемона может быть nickname, а нужен именно вид.
+    const wireBattleDex = (btnId: string, kind: 'player' | 'wild') => {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        const sp = getBattleDexSpecies();
+        const species = kind === 'player' ? sp.player : sp.wild;
+        if (!species) return;
+        openPokedex();
+        showPokedexInfo(species).catch(() => {});
+      });
+    };
+    wireBattleDex('player-dex-btn', 'player');
+    wireBattleDex('wild-dex-btn', 'wild');
 
     const btnCloseTM = document.getElementById('btn-close-tm');
     if (btnCloseTM) btnCloseTM.addEventListener('click', () => {

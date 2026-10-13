@@ -117,6 +117,16 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
   suite.check('I-source', 'бесплатное добывается (дроп/квест/крафт)', sourceless.length === 0, sourceless.length ? `взять негде: ${sourceless.slice(0, 15).join(', ')}${sourceless.length > 15 ? ` +${sourceless.length - 15}` : ''}` : 'ок');
 }
 
+// ── 8b. Титулы наград — из data/titles.ts ──
+{
+  const tt = R('src/data/titles.ts');
+  const titleIds = new Set([...tt.matchAll(/id: '([A-Za-z0-9_-]+)'/g)].map((m) => m[1]));
+  const npc = R('src/data/npc.ts');
+  const used = [...new Set([...npc.matchAll(/rewardTitle: '([^']+)'/g)].map((m) => m[1]))];
+  const dead = used.filter((id) => !titleIds.has(id));
+  suite.check('I-title', `титулы наград существуют (${used.length})`, dead.length === 0, dead.length ? `мёртвые: ${dead.join(', ')}` : `всего: ${used.length}`);
+}
+
 // ── 9. Тень: убранное не просачивается обратно ──
 {
   const sh = R('src/data/shadow-items.ts');

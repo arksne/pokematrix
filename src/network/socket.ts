@@ -122,6 +122,10 @@ export function initTradeSocket() {
     state.onlinePlayersList = players.filter(p => p.id !== state.socket.id);
     renderTradePlayerList();
     renderOnlinePlayers();
+    // Точки онлайна во вкладке «Тренеры → Все» без refetch (иначе врут до перезахода)
+    import('../ui/trainers.js').then((m) => {
+      try { m.refreshTrainersOnline(); } catch { /* ignore */ }
+    }).catch(() => {});
   });
 
   state.socket.on('save_updated', async () => {

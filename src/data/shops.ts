@@ -91,6 +91,8 @@ const SHOP_STOCK_RAW = {
   'viridianCity_pokemart': [
     // Ворота Виридианского леса: нест-боллы для жуков (отличие от Паллета)
     'nestBall',
+    // Почта: посылки курьера (квест «Гонец»)
+    'courierParcel',
     'antidote', 'arenaToken', 'assaultVest',
     'awakening', 'berryJuice', 'blackBelt', 'blackGlasses', 'burnHeal', 'charcoal', 'dracoPlate', 'dragonFang',
     'dreadPlate', 'earthPlate',

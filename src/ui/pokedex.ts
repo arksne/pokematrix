@@ -9,11 +9,15 @@
 //   getters.ts    — getPokedexState (POKEDEX_ALL, pokedexSeen, pokedexData)
 //   sprite.ts     — getTypeColor, getTypeGradient (цвета типов)
 //   evolution.ts  — getEvolutions (цепочки эволюции)
+//   learnset.ts   — fetchSiteLearnset (атакдекс: levelup/egg/tm/tutor с сайта лиги)
+//   game/state.ts — state.myTeam/pcBoxes (подсчёт "сколько таких у тебя")
+//   regions.ts    — REGIONS (локации, где ловится вид)
 //   core.ts       — evolvesFromMap (карта эволюций)
 //   gyms.ts       — gymLeaders (для отображения типов лидеров)
 //   api.ts        — fetchPokeAPI (загрузка данных покемона)
 //
-// ИСПОЛЬЗУЕТСЯ В: init.ts (кнопка "Покедекс")
+// ИСПОЛЬЗУЕТСЯ В: init.ts (кнопка "Покедекс" + кнопки 📖 в бою),
+//   profile.ts (кнопка 📖 в команде)
 // ─────────────────────────────────────────────────────────────
 
 // ── Импорты ───────────────────────────────────────────────
@@ -43,6 +47,14 @@ import { gymLeaders } from '../data/gyms.js';
 // fetchPokeAPI — HTTP-клиент для PokeAPI с кэшированием
 //   Делает запрос через прокси /api/pokeapi/ чтобы обойти CORS
 import { fetchPokeAPI } from '../utils/api.js';
+// fetchSiteLearnset — мувсет вида с сайта лиги (порядок изучения, яйца, ТМ)
+//   GET /api/learnset/:name → { levelup: [[lvl, name]], egg: [], tm: [[no, name]], tutor: [] }
+import { fetchSiteLearnset } from '../data/learnset.js';
+import type { SiteLearnset } from '../data/learnset.js';
+// state — глобальное состояние (myTeam, pcBoxes) для подсчёта "сколько таких у тебя"
+import { state } from '../game/state.js';
+// REGIONS — все локации с encounters, чтобы показать "где ловить" по виду
+import { REGIONS } from '../data/regions.js';
 
 // ── getPokedexId: получить номер покемона в покедексе ────
 // Принимает speciesName — имя вида (например, 'pikachu')
@@ -232,6 +244,67 @@ export function openPokedex() {
   if (statusFilter) statusFilter.onchange = renderGrid;
 }
 
+// ── encounterMatchesSpecies: подходит ли энкаунтер локации под вид ──
+// Принимает encounterName — запись из encounters локации (например, 'pikachu', 'sandshrew-alola')
+// Возвращает true если это тот же вид: точное совпадение ИЛИ форма вида ('sandshrew' ← 'sandshrew-alola')
+// Чистая функция — покрыта тестами (pokedex-extra.test.ts)
+export function encounterMatchesSpecies(encounterName: any, speciesName: any) {
+  const enc = (encounterName || '').toLowerCase();
+  const sp = (speciesName || '').toLowerCase();
+  if (!enc || !sp) return false;
+  return enc === sp || enc.startsWith(sp + '-');
+}
+
+// ── countOwnedSpecies: сколько покемонов этого вида у игрока ──
+// Принимает speciesName — имя вида, myTeam — команда (массив), pcBoxes — боксы (массив массивов)
+// Возвращает {team, pc, total}. Вид берём из apiData.species.name (fallback: apiData.name).
+// Чистая функция — покрыта тестами (pokedex-extra.test.ts)
+export function countOwnedSpecies(speciesName: any, myTeam: any, pcBoxes: any) {
+  const key = (speciesName || '').toLowerCase();
+  const isOurs = (m) => ((m?.apiData?.species?.name || m?.apiData?.name || '').toLowerCase() === key);
+  const team = (myTeam || []).filter(isOurs).length;
+  const pc = (pcBoxes || []).reduce((n, box) => n + (box || []).filter(isOurs).length, 0);
+  return { team, pc, total: team + pc };
+}
+
+// ── findCatchLocations: локации, где ловится вид ──
+// Сканирует REGIONS (encounters + day/night) и возвращает до `limit` записей
+// [{region, locId, locName}]. Чистая функция — покрыта тестами (pokedex-extra.test.ts)
+export function findCatchLocations(speciesName: any, regions: any = REGIONS, limit = 8) {
+  const out = [];
+  for (const [regionId, region] of Object.entries(regions || {}) as Array<[string, any]>) {
+    const locs = region?.locations || {};
+    for (const [locId, loc] of Object.entries(locs) as Array<[string, any]>) {
+      const enc = [
+        ...(loc?.encounters || []),
+        ...(loc?.dayEncounters || []),
+        ...(loc?.nightEncounters || []),
+      ];
+      if (enc.some((e: any) => encounterMatchesSpecies(typeof e === 'string' ? e : e?.name, speciesName))) {
+        out.push({ region: region?.name || regionId, locId, locName: loc?.name || locId });
+        if (out.length >= limit) return out;
+      }
+    }
+  }
+  return out;
+}
+
+// ── formatHeightWeight: рост/вес из PokeAPI в человеческий вид ──
+// PokeAPI отдаёт height в дециметрах, weight в гектограммах.
+// '7, 69' → '0.7 м / 6.9 кг'. Чистая функция — покрыта тестами.
+export function formatHeightWeight(heightDm: any, weightHg: any) {
+  const h = typeof heightDm === 'number' ? `${(heightDm / 10).toFixed(1)} м` : '—';
+  const w = typeof weightHg === 'number' ? `${(weightHg / 10).toFixed(1)} кг` : '—';
+  return `${h} / ${w}`;
+}
+
+// ── formatLearnsetRows: строки атак по уровню для атакдекса ──
+// Принимает SiteLearnset.levelup ([[lvl, name], ...]), возвращает HTML-строки
+// 'Ур.1 — Growl'. Чистая функция — покрыта тестами.
+export function formatLearnsetRows(levelup: any) {
+  return (levelup || []).map(([lvl, name]) => `<div class="method-row">Ур.${lvl} — ${name}</div>`).join('');
+}
+
 // ── FORM_TO_POKEMON_MAP: маппинг форм для PokeAPI ────────
 // Некоторые покемоны имеют несколько форм (Deoxys, Giratina, etc.)
 // PokeAPI использует разные endpoint'ы для разных форм.
@@ -390,6 +463,19 @@ export async function showPokedexInfo(speciesName) {
       }
     }
 
+    // ── Сколько таких у игрока, где ловить, атакдекс с сайта лиги ──
+    // owned — счётчик вида в команде + PC (для строки "У тебя: N шт")
+    const owned = countOwnedSpecies(speciesName, state.myTeam, state.pcBoxes);
+    // catchLocs — локации с дикими этого вида (по REGIONS.encounters)
+    const catchLocs = findCatchLocations(speciesName);
+    // siteLearn — мувсет с сайта лиги: levelup/egg/tm/tutor (null если нет на сервере)
+    const siteLearn: SiteLearnset | null = await fetchSiteLearnset(speciesName).catch(() => null);
+
+    // ── Физические данные из PokeAPI ──
+    const abilities = (data.abilities || [])
+      .map(a => `${a.ability.name}${a.is_hidden ? ' (скрытая)' : ''}`).join(', ') || '—';
+    const hw = formatHeightWeight(data.height, data.weight);
+
     // ── Информация об эволюциях ──
     // Асинхронно получаем цепочку эволюций через getEvolutions()
     // getEvolutions возвращает массив: [{name, minLevel, trigger, item}, ...]
@@ -473,12 +559,22 @@ export async function showPokedexInfo(speciesName) {
         <span>${getRarityStars({apiData:data})}✦ редкость</span>
       </div>
 
-      <!-- Серверные данные: способ и место (если есть) -->
-      ${pokedexData[speciesName] ? `
+      <!-- Сколько таких у игрока + рост/вес/способности -->
       <div class="pokedex-detail-method">
+        <div class="method-row"><b>🎒 У тебя:</b> ${owned.total} шт (команда: ${owned.team}, PC: ${owned.pc})</div>
+        <div class="method-row"><b>📏 Рост / вес:</b> ${hw}</div>
+        <div class="method-row"><b>✨ Способности:</b> ${abilities}</div>
+      </div>
+
+      <!-- Серверные данные: способ и место (если есть) + локации с дикими -->
+      <div class="pokedex-detail-method">
+        ${pokedexData[speciesName] ? `
         <div class="method-row"><b>Способ:</b> ${pokedexData[speciesName].method}</div>
-        <div class="method-row"><b>Где:</b> ${pokedexData[speciesName].location}</div>
-      </div>` : ''}
+        <div class="method-row"><b>Где:</b> ${pokedexData[speciesName].location}</div>` : ''}
+        ${catchLocs.length > 0
+          ? `<div class="method-row"><b>🗺️ Ловится:</b> ${catchLocs.map(l => `${l.locName} (${l.region})`).join(', ')}</div>`
+          : `<div class="method-row"><b>🗺️ Ловится:</b> в дикой природе не встречается (эволюция / ивент)</div>`}
+      </div>
 
       <!-- Лидеры залов, использующие этого покемона -->
       ${gymUsers.length > 0 ? `
@@ -491,6 +587,27 @@ export async function showPokedexInfo(speciesName) {
 
       <!-- Эволюции (в кого может превратиться) -->
       ${evoHtml}
+
+      <!-- Атакдекс: изучение по уровню (порядок сайта лиги) -->
+      ${siteLearn?.levelup?.length ? `
+      <div class="pokedex-detail-method" style="background:rgba(255,149,0,0.08);border-color:#ff9500;">
+        <div class="method-row"><b>📚 Атаки по уровню (${siteLearn.levelup.length}):</b></div>
+        ${formatLearnsetRows(siteLearn.levelup)}
+      </div>` : ''}
+
+      <!-- Яйцевые и тьюторские атаки -->
+      ${((siteLearn?.egg?.length || 0) > 0 || (siteLearn?.tutor?.length || 0) > 0) ? `
+      <div class="pokedex-detail-method">
+        ${(siteLearn?.egg?.length || 0) > 0 ? `<div class="method-row"><b>🥚 Яйцевые:</b> ${siteLearn.egg.join(', ')}</div>` : ''}
+        ${(siteLearn?.tutor?.length || 0) > 0 ? `<div class="method-row"><b>🎓 Тьютор:</b> ${siteLearn.tutor.join(', ')}</div>` : ''}
+      </div>` : ''}
+
+      <!-- ТМ-совместимость: какие диски принимает -->
+      ${siteLearn?.tm?.length ? `
+      <div class="pokedex-detail-method" style="background:rgba(0,122,255,0.08);border-color:#007aff;">
+        <div class="method-row"><b>💿 ТМ принимает (${siteLearn.tm.length}):</b></div>
+        ${siteLearn.tm.map(([no, name]) => `<div class="method-row">TM${String(no).padStart(2, '0')} — ${name}</div>`).join('')}
+      </div>` : ''}
 
       <!-- Базовые статы (шкалы) -->
       <div class="pokedex-detail-stats">
@@ -533,10 +650,12 @@ export async function showPokedexInfo(speciesName) {
 }
 
 // ── Глобальная регистрация для onclick-вызовов ────────────
-// Регистрируем showPokedexInfo глобально (на window)
-// Это нужно чтобы из HTML onclick="showPokedexInfo('pikachu')" работал
-// Особенно для кликабельных эволюций и пре-эволюций.
+// Регистрируем showPokedexInfo и openPokedex глобально (на window)
+// showPokedexInfo нужен для кликабельных эволюций, openPokedex —
+// для кнопок 📖 в бою (init.ts вызывает напрямую, но window-копия
+// страхует от случаев когда модуль боя открыт без init).
 // Гард: модуль импортируется и в node-окружении (тесты) — там window нет.
 if (typeof window !== 'undefined') {
   (window as any).showPokedexInfo = showPokedexInfo;
+  (window as any).openPokedex = openPokedex;
 }

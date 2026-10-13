@@ -20,7 +20,7 @@
 // Используется: quests.ts (UI), core.ts (проверка), init.ts
 // ─────────────────────────────────────────────────────────────
 
-export const QUEST_TYPES = ['catch_x', 'defeat_x', 'earn_money', 'explore', 'use_item', 'collect_items'];
+export const QUEST_TYPES = ['catch_x', 'defeat_x', 'earn_money', 'explore', 'use_item', 'collect_items', 'hatch_x', 'boss_win', 'streak_x', 'special'];
 
 export const QUEST_CONFIGS = [
   // Original 8

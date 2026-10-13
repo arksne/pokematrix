@@ -100,6 +100,7 @@ export const state: Record<string, any> = {
   questProgress: {} as Record<string, any>, // Прогресс по квестам
   completedQuests: [] as Array<string>, // Выполненные квесты
   npcQuestProgress: {} as Record<string, number>, // Прогресс NPC-квестов
+  questStreak: 0, // Стрик побед в диких боях (для streak-квестов; сброс при поражении/побеге)
   completedNPCQuests: [] as Array<string>, // Выполненные NPC-квесты
   tutorialStep: 0,                 // Шаг туториала (0 = не начат)
 

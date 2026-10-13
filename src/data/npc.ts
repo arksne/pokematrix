@@ -505,16 +505,9 @@ export const NPC_DATA = {
   'estaire_officer_jes_quest': { id: 'estaire_officer_jes_quest', name: 'Офицер Джес (расследование)', sprite: '👮‍♀️', location: 'estaire_city', dialog: { greet: 'Офицер Джес. Команда R похитила Батискафиш! Нужно расследование. У вас ранг выше 650?', default: 'Расследование продолжается. Команда R где-то рядом.', quest_offer: 'Для расследования нужен {target} {item}.', quest_complete: 'Дело раскрыто! Батискафиш в безопасности.', quest_incomplete: 'Расследование не закончено...' }, quests: [] },
 
   // ─────────────────────────────────────────────────────────────
-  // I1. 36 больших квестов: битвы с NPC, сбор, прокачка, яйца,
-  // ловля видов, зал, торговля, тренировки (9 NPC x 4, цепочки).
-  // Типы — только из QUEST_TYPES (catch_x/defeat_x/earn_money/
-  // explore/use_item/collect_items): движок засчитывает
-  // collect_items через checkNPCQuestProgress (инвентарь), остальные
-  // типы — как принято в файле, с нарративом под механику
-  // (спарринги/зал → defeat_x, рынки → explore/earn_money,
-  // выгул яйца → explore, уход за малышами → use_item).
-  // Награды — только существующие предметы + умеренные деньги
-  // (макс 15000 за квест; без masterBall/rareCandy/evBrace).
+  // Пачка Пьютера: 10 гринд-квестов под Брока (гимы открыты всегда).
+  // Типы — из QUEST_TYPES; трекинг — game/quest-track.ts, составные
+  // условия — verify при сдаче. Награды: живые предметы + титулы.
   // ─────────────────────────────────────────────────────────────
   'i1_warhall_sensei': {
     id: 'i1_warhall_sensei', name: 'Мастер Дайго', sprite: '⚔️', location: 'warhall_samurai_gym',
@@ -602,7 +595,114 @@ export const NPC_DATA = {
       quest_complete: 'Мышцы и команда крепнут на глазах! Держи пайку.',
       quest_incomplete: 'Программа не выполнена. Круг ещё не закрыт...',
     },
+    quests: [
+      { id: 'pw_tempered', type: 'special', targetItem: null, targetQty: 1, desc: 'Набери 100 EV в пул команды', rewardMoney: 10000, rewardItem: 'protein', rewardQty: 1, rewardTitle: 'tempered', prereqQuest: null, verify: { evPool: 100 } },
+      { id: 'pw_undefeated', type: 'streak_x', targetItem: null, targetQty: 10, desc: '10 побед подряд в диких боях (без поражений и побегов)', rewardMoney: 30000, rewardItem: 'leftovers', rewardQty: 1, rewardTitle: 'undefeated', prereqQuest: 'pw_tempered' },
+    ],
+  },
+  // ── Пачка Пьютера: гринд-квесты под Брока (гимы открыты всегда) ──
+  'pewter_researcher': {
+    id: 'pewter_researcher', name: 'Исследователь музея', sprite: '🔬', location: 'pewterCity',
+    dialog: {
+      greet: 'Музей Пьютера изучает каменных покемонов. Поможешь с полевыми данными?',
+      default: 'Камень помнит всё. Продолжай наблюдения.',
+      quest_offer: 'Нужно: {target} {item}. Камень никуда не спешит.',
+      quest_complete: 'Отличные данные! Держи награду из фондов музея.',
+      quest_incomplete: 'Сбор данных не окончен. Скалы ждут...',
+    },
+    quests: [
+      { id: 'pw_trail', type: 'defeat_x', targetItem: null, targetQty: 25, desc: 'Победи 25 диких каменных/земляных + исходи 5 локаций (средний уровень 15)', rewardMoney: 5000, rewardItem: 'tm28', rewardQty: 1, rewardTitle: 'pathfinder', prereqQuest: null, filter: { types: ['rock', 'ground'] }, verify: { avgLevel: 15, locs: ['pewterCity', 'viridianForest', 'route3', 'mtMoon', 'rockTunnel'] } },
+      { id: 'pw_rockbane', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 25 и поймай 8 видов каменных', rewardMoney: 20000, rewardItem: 'superPotion', rewardQty: 3, rewardTitle: 'rockBane', prereqQuest: 'pw_trail', verify: { maxLevel: 25, rockSpecies: ['geodude', 'onix', 'rhyhorn', 'omanyte', 'kabuto', 'aerodactyl', 'nosepass', 'larvitar', 'cranidos', 'shieldon', 'roggenrola', 'boldore'], rockCount: 8 } },
+    ],
+  },
+  'pewter_bully': {
+    id: 'pewter_bully', name: 'Ученик Бруно', sprite: '🥋', location: 'pewterStadium',
+    dialog: {
+      greet: 'Ты слабак! Мои кулаки говорят за меня. Осмелишься выйти?',
+      default: 'Возвращайся, когда отрастишь хребет.',
+      quest_offer: 'Побей меня, если сможешь. Один бой — одна судьба.',
+      quest_complete: 'Невероятно... Ты силён. Забирай приз.',
+      quest_incomplete: 'Сначала победи меня в честном бою!',
+    },
+    quests: [
+      { id: 'pw_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Бруно (команда 3×Lv28)', rewardMoney: 15000, rewardItem: 'tm64', rewardQty: 1, rewardTitle: 'fistFighter', prereqQuest: null, filter: { bossId: 'pewterBully' } },
+    ],
+  },
+  'pewter_hunter': {
+    id: 'pewter_hunter', name: 'Охотник Скай', sprite: '🧭', location: 'pewterCity',
+    dialog: {
+      greet: 'Над скалами Пьютера кружит тень... Аэродактиль! Поймай его, и я озолочу.',
+      default: 'Небо не терпит суеты. Выслеживай.',
+      quest_offer: 'Нужен живой Аэродактиль. Один. Целый.',
+      quest_complete: 'Вот это добыча! Небо теперь твоё.',
+      quest_incomplete: 'Аэродактиль всё ещё кружит над скалами...',
+    },
+    quests: [
+      { id: 'pw_sky', type: 'catch_x', targetItem: null, targetQty: 1, desc: 'Поймай Aerodactyl', rewardMoney: 25000, rewardItem: 'tm27', rewardQty: 1, rewardTitle: 'skyHunter', prereqQuest: null, filter: { species: 'aerodactyl' } },
+    ],
+  },
+  'pewter_trader': {
+    id: 'pewter_trader', name: 'Торговец Кэш', sprite: '💰', location: 'pewterCity_pokemart',
+    dialog: {
+      greet: 'Деньги любят движение. Покажи оборот — получишь инструмент богачей.',
+      default: 'Торгуй, сражайся, богатей.',
+      quest_offer: 'Оборот 100 000. Легальный. Почти.',
+      quest_complete: 'Солидный оборот! Амулет твой.',
+      quest_incomplete: 'Касса пока пуста...',
+    },
+    quests: [
+      { id: 'pw_money', type: 'earn_money', targetItem: null, targetQty: 100000, desc: 'Заработай 100 000 боями и торговлей', rewardMoney: 5000, rewardItem: 'amuletCoin', rewardQty: 1, rewardTitle: 'moneyMagnate', prereqQuest: null },
+    ],
+  },
+  'pewter_breeder': {
+    id: 'pewter_breeder', name: 'Заводчица Нест', sprite: '🥚', location: 'pewterCity_pokecenter',
+    dialog: {
+      greet: 'Яйца — это будущее. Выведи и вылупи хоть одно — поверю в тебя.',
+      default: 'Тепло, забота и немного удачи.',
+      quest_offer: 'Одно вылупленное яйцо. Живое. Пищащее.',
+      quest_complete: 'Какая прелесть! Держи узел судьбы.',
+      quest_incomplete: 'Яйцо ещё не вылупилось...',
+    },
+    quests: [
+      { id: 'pw_breed', type: 'hatch_x', targetItem: null, targetQty: 1, desc: 'Выведи и вылупи яйцо', rewardMoney: 8000, rewardItem: 'destinyKnot', rewardQty: 1, rewardTitle: 'breeder', prereqQuest: null },
+    ],
+  },
+  'pewter_scout': {
+    id: 'pewter_scout', name: 'Следопыт Рут', sprite: '🎒', location: 'pewterCity',
+    dialog: {
+      greet: 'Карта Канто велика. Исходи её ногами — расскажешь, что видел.',
+      default: 'Дороги зовут. Не сиди в городе.',
+      quest_offer: '12 визитов по локациям Канто. Считаю.',
+      quest_complete: 'Настоящий странник! Дорожный набор твой.',
+      quest_incomplete: 'Карта ещё полна белых пятен...',
+    },
+    quests: [
+      { id: 'pw_wanderer', type: 'explore', targetItem: null, targetQty: 12, desc: 'Побывай в локациях Канто 12 раз', rewardMoney: 5000, rewardItem: 'escapeRope', rewardQty: 3, rewardTitle: 'wanderer', prereqQuest: null, filter: { region: 'kanto' } },
+    ],
+  },
+  'viridian_sender': {
+    id: 'viridian_sender', name: 'Отправитель Вера', sprite: '📦', location: 'viridianCity',
+    dialog: {
+      greet: 'Посылку в Пьютер надо доставить. Возьмёшься? Не вскрывать!',
+      default: 'Посылка ждёт курьера.',
+      quest_offer: 'Довези запечатанную посылку курьеру в Пьютер.',
+      quest_complete: 'Посылка уже не у меня — неси её!',
+      quest_incomplete: 'Посылка ещё у тебя? Неси в Пьютер!',
+    },
     quests: [],
+  },
+  'pewter_courier': {
+    id: 'pewter_courier', name: 'Курьер Пьютера', sprite: '🛵', location: 'pewterCity',
+    dialog: {
+      greet: 'Посылка из Виридиана? Давай сюда!',
+      default: 'Жду посылки с юга.',
+      quest_offer: 'Принеси посылку от Веры.',
+      quest_complete: 'Цела! Держи конфеты за скорость.',
+      quest_incomplete: 'Без посылки не сдам... то есть не приму!',
+    },
+    quests: [
+      { id: 'pw_courier', type: 'collect_items', targetItem: 'courierParcel', targetQty: 1, desc: 'Довези посылку из Виридиана в Пьютер', rewardMoney: 4500, rewardItem: 'expCandyM', rewardQty: 2, rewardTitle: 'courier', prereqQuest: null },
+    ],
   },
   'i1_archipelago_captain': {
     id: 'i1_archipelago_captain', name: 'Капитан Бриз', sprite: '⚓', location: 'il_de_far',

@@ -2403,6 +2403,8 @@ input[type="number"] {
   width: 90%;
   max-height: 80vh;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 .trainer-profile-header {
   display: flex;
@@ -2411,16 +2413,45 @@ input[type="number"] {
   margin-bottom: 15px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--tma-border);
+  min-width: 0;
 }
 .trainer-profile-name {
   font-size: 1rem;
   font-weight: 600;
   color: var(--tma-primary);
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .trainer-profile-stats {
   display: flex;
   gap: 10px;
   margin-bottom: 15px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.trainer-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 30%;
+  overflow: hidden;
+}
+.trainer-stat-label {
+  font-size: 0.68rem;
+  color: var(--tma-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trainer-stat-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .trainer-team-label {
   font-size: 0.75rem;
@@ -3018,6 +3049,7 @@ input[type="number"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 .trainer-list-card {
   display: flex;
@@ -3029,6 +3061,10 @@ input[type="number"] {
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.15s;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .trainer-list-card:hover { background: rgba(91,160,232,0.1); }
 .trainer-list-avatar {
@@ -3042,9 +3078,9 @@ input[type="number"] {
   font-size: 1.5rem;
   flex-shrink: 0;
 }
-.trainer-list-info { flex: 1; }
-.trainer-list-name { font-weight: 600; font-size: 0.9rem; }
-.trainer-list-id { font-size: 0.7rem; color: var(--tma-text-muted); }
+.trainer-list-info { flex: 1; min-width: 0; overflow: hidden; }
+.trainer-list-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.trainer-list-id { font-size: 0.7rem; color: var(--tma-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* Account card */
 .account-card {
@@ -3726,3 +3762,17 @@ input[type="number"] {
 }
 .team-slot { position: relative; }
 .team-held-badge img { display: block; }
+
+/* === BATTLE: кнопки покедекса в шапке боя === */
+.battle-dex-btn {
+  padding: 0 5px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  border-radius: 6px;
+  border: 1px solid var(--tma-border);
+  background: var(--tma-bg);
+  color: var(--tma-text);
+  cursor: pointer;
+  margin-left: 4px;
+}
+.battle-dex-btn:active { transform: scale(0.92); }

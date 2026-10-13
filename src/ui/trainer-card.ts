@@ -41,6 +41,7 @@ import { pokedexTotal } from '../battle/core.js';
 import { loadLocationTrainers, renderOnlinePlayers } from '../social/trainer-profile.js';
 // G1: SVG-пак аватарок (без файлов, кодогенерация)
 import { AVATARS, DEFAULT_AVATAR_ID, getAvatarById, isAvatarId } from '../data/avatars.js';
+import { rankLabel } from '../data/ranks.js';
 
 // ── Локальный esc (чтобы не тянуть DOM-утилиты в node-тестах) ──
 function esc(s: unknown): string {
@@ -405,6 +406,7 @@ interface CardData {
   activeIcon: string; activeName: string; hasTitles: boolean;
   badges: number; dex: string; team: number;
   pvp: string; streak: string; titles: number;
+  rank: string;
 }
 
 function collectCardData(): CardData {
@@ -423,18 +425,19 @@ function collectCardData(): CardData {
     hasTitles: earned.length > 0,
     badges: s.badges, dex: `${s.dexCaught}/${s.dexTotal}`, team: s.teamSize,
     pvp: `${s.pvpWins}В/${s.pvpLosses}П`, streak: `${s.pvpStreak} (макс ${s.pvpBestStreak})`,
-    titles: s.titles,
+    titles: s.titles, rank: rankLabel(s.badges),
   };
 }
 
 /** v6 Material: пилюли-чипсы, скругления. */
 function cardHtmlV6(d: CardData): string {
-  return `<div class="tcb6" style="background:#fffbfe;border-radius:28px;padding:18px 16px;color:#1d1b20;">`
-    + `<div style="display:flex;gap:12px;align-items:center;background:#e8def8;border-radius:24px;padding:12px;">`
+  return `<div class="tcb6" style="background:#fffbfe;border-radius:28px;padding:18px 16px;color:#1d1b20;max-width:100%;overflow:hidden;box-sizing:border-box;">`
+    + `<div style="display:flex;gap:12px;align-items:center;background:#e8def8;border-radius:24px;padding:12px;min-width:0;">`
     + `<div style="width:64px;height:64px;flex:0 0 64px;border-radius:50%;overflow:hidden;">${d.avSvg}</div>`
-    + `<div><div style="font-size:1.05rem;font-weight:700;">${d.name}</div>`
-    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;margin-top:4px;background:#fff;padding:4px 10px;border-radius:999px;font-size:0.8rem;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
-    + (d.loc ? `<div style="font-size:0.75rem;opacity:0.7;margin-top:4px;">📍 ${d.loc}</div>` : '')
+    + `<div style="min-width:0;flex:1;"><div style="font-size:1.05rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.name}</div>`
+    + `<div style="display:inline-block;margin-top:4px;background:#1d1b20;color:#fff;padding:4px 10px;border-radius:999px;font-size:0.8rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.rank)}</div><br>`
+    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;margin-top:4px;background:#fff;padding:4px 10px;border-radius:999px;font-size:0.8rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
+    + (d.loc ? `<div style="font-size:0.75rem;opacity:0.7;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📍 ${d.loc}</div>` : '')
     + `</div></div>`
     + `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;font-size:0.8rem;">`
     + `<span style="background:#e8def8;border-radius:999px;padding:6px 10px;">🏅 ${d.badges}</span>`
@@ -448,11 +451,12 @@ function cardHtmlV6(d: CardData): string {
 
 /** v7 Wanted: плакат розыска. */
 function cardHtmlV7(d: CardData): string {
-  return `<div class="tcb7" style="background:#f5e6c3;border:4px double #3d2b1f;padding:14px;text-align:center;color:#2b1d12;">`
+  return `<div class="tcb7" style="background:#f5e6c3;border:4px double #3d2b1f;padding:14px;text-align:center;color:#2b1d12;max-width:100%;overflow:hidden;box-sizing:border-box;">`
     + `<div style="font-family:Impact,sans-serif;font-size:2rem;letter-spacing:4px;">WANTED</div>`
     + `<div style="width:110px;height:110px;margin:8px auto;border-radius:50%;background:#f9f1d6;border:4px solid #2b1d12;overflow:hidden;">${d.avSvg}</div>`
-    + `<div style="font-family:Impact,sans-serif;font-size:1.8rem;">${d.name}</div>`
-    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;background:#8b1a1a;color:#ffe9b0;padding:4px 10px;margin:4px 0;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
+    + `<div style="font-family:Impact,sans-serif;font-size:1.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.name}</div>`
+    + `<div style="display:inline-block;background:#2b1d12;color:#ffe9b0;padding:4px 10px;margin:4px 0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.rank)}</div><br>`
+    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;background:#8b1a1a;color:#ffe9b0;padding:4px 10px;margin:4px 0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
     + (d.loc ? `<div style="font-size:0.8rem;font-weight:bold;">📍 ${d.loc}</div>` : '')
     + `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border:2px solid #2b1d12;background:#fdf6df;margin-top:10px;font-size:0.8rem;">`
     + `<div>🏅<br><b>${d.badges}</b></div><div>🐾<br><b>${d.dex}</b></div><div>👥<br><b>${d.team}</b></div>`
@@ -462,11 +466,12 @@ function cardHtmlV7(d: CardData): string {
 
 /** v3 Pixel: геймбой. */
 function cardHtmlV3(d: CardData): string {
-  return `<div class="tcb3" style="background:#9bbc0f;border:4px solid #0f380f;color:#0f380f;padding:12px;font-family:monospace;">`
-    + `<div style="display:flex;gap:10px;align-items:center;border:4px solid #0f380f;background:#8bac0f;padding:10px;">`
+  return `<div class="tcb3" style="background:#9bbc0f;border:4px solid #0f380f;color:#0f380f;padding:12px;font-family:monospace;max-width:100%;overflow:hidden;box-sizing:border-box;">`
+    + `<div style="display:flex;gap:10px;align-items:center;border:4px solid #0f380f;background:#8bac0f;padding:10px;min-width:0;">`
     + `<div style="width:72px;height:72px;flex:0 0 72px;border-radius:50%;background:#9bbc0f;border:4px solid #0f380f;overflow:hidden;">${d.avSvg}</div>`
-    + `<div><div style="font-size:1.2rem;font-weight:900;">${d.name}</div>`
-    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;border:3px solid #0f380f;padding:2px 6px;font-weight:bold;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
+    + `<div style="min-width:0;flex:1;"><div style="font-size:1.2rem;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.name}</div>`
+    + `<div style="display:inline-block;border:3px solid #0f380f;padding:2px 6px;font-weight:bold;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.rank)}</div><br>`
+    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;border:3px solid #0f380f;padding:2px 6px;font-weight:bold;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
     + (d.loc ? `<div style="font-size:0.75rem;font-weight:bold;">📍 ${d.loc}</div>` : '')
     + `</div></div>`
     + `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px;font-size:0.75rem;text-align:center;font-weight:bold;">`
