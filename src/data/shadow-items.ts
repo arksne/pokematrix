@@ -42,6 +42,8 @@ export const SHADOW_ITEMS: Array<{
   removedFrom: string[];
   commit: string;
 }> = [
+
   // пример:
   // { id: 'pinkNectar', def: `{ id: 'pinkNectar', ... }`, removedFrom: ['items', 'shops', 'economy'], commit: '16c97f5' },
 ];
+
