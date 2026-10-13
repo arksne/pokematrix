@@ -2468,6 +2468,11 @@ input[type="number"] {
 .trainer-team-mon-info { font-size: 0.7rem; }
 .trainer-team-mon-name { color: var(--tma-text); font-weight: 600; }
 .trainer-team-mon-lvl { color: var(--tma-text-muted); }
+/* Темы чужой тренеркарты (как свои v6/v7/v3) */
+.trainer-profile-modal-content.tc-theme-v6 { background: #fffbfe; color: #1d1b20; border-radius: 28px; }
+.trainer-profile-modal-content.tc-theme-v7 { background: #f5e6c3; color: #2b1d12; border: 4px double #3d2b1f; }
+.trainer-profile-modal-content.tc-theme-v7 .trainer-profile-name { font-family: Impact, sans-serif; letter-spacing: 1px; }
+.trainer-profile-modal-content.tc-theme-v3 { background: #9bbc0f; color: #0f380f; border: 4px solid #0f380f; font-family: monospace; }
 /* Чужая команда — только иконки покеболов (данные не светим) */
 .trainer-team-balls { display: flex; gap: 8px; justify-content: center; padding: 6px 0; }
 .trainer-team-ball {

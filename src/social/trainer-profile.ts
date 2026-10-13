@@ -118,6 +118,15 @@ export async function openTrainerProfile(userId) {
   const modal = document.getElementById('trainer-profile-modal');
   if (!modal) return;
   modal.style.display = 'flex';
+  // Тема чужой карты — как своя (v6/v7/v3 из стейта)
+  try {
+    const content = modal.querySelector('.trainer-profile-modal-content');
+    if (content) {
+      content.classList.remove('tc-theme-v6', 'tc-theme-v7', 'tc-theme-v3');
+      const t = (state as any).cardTheme;
+      content.classList.add('tc-theme-' + (['v6', 'v7', 'v3'].includes(t) ? t : 'v6'));
+    }
+  } catch { /* ignore */ }
 
   document.getElementById('modal-trainer-name').innerText = 'Загрузка...';
   document.getElementById('modal-trainer-badges').innerText = '0';

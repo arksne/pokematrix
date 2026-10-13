@@ -384,11 +384,104 @@ export function openTitlePicker(): void {
   } catch { /* ignore */ }
 }
 
+/** Тема карточки: v6 (материал) / v7 (розыск) / v3 (пиксель). */
+export const CARD_THEMES = ['v6', 'v7', 'v3'] as const;
+export function getCardTheme(): string {
+  try {
+    const t = (state as any).cardTheme;
+    if (CARD_THEMES.includes(t)) return t;
+  } catch { /* ignore */ }
+  return 'v6';
+}
+/** Сменить тему (false — неизвестная). Сохранение — на вызывающем. */
+export function setCardTheme(t: string): boolean {
+  if (!CARD_THEMES.includes(t as any)) return false;
+  try { (state as any).cardTheme = t; } catch { return false; }
+  return true;
+}
+
+interface CardData {
+  name: string; loc: string; avSvg: string;
+  activeIcon: string; activeName: string; hasTitles: boolean;
+  badges: number; dex: string; team: number;
+  pvp: string; streak: string; titles: number;
+}
+
+function collectCardData(): CardData {
+  const s = getTrainerSummary();
+  const active = getActiveTitle();
+  const earned: string[] = ((state as any).titles || []).filter((t: unknown) => isTitleId(t));
+  return {
+    name: esc((state as any).trainerNickname
+      || (state as any).tgUser?.first_name
+      || (state as any).tgUser?.username
+      || '---'),
+    loc: esc((state as any).currentLocationName || (state as any).currentLocationId || ''),
+    avSvg: trainerAvatarSvg(getTrainerAvatarId(), 64),
+    activeIcon: active ? active.icon : '',
+    activeName: active ? esc(active.name) : '— без титула —',
+    hasTitles: earned.length > 0,
+    badges: s.badges, dex: `${s.dexCaught}/${s.dexTotal}`, team: s.teamSize,
+    pvp: `${s.pvpWins}В/${s.pvpLosses}П`, streak: `${s.pvpStreak} (макс ${s.pvpBestStreak})`,
+    titles: s.titles,
+  };
+}
+
+/** v6 Material: пилюли-чипсы, скругления. */
+function cardHtmlV6(d: CardData): string {
+  return `<div class="tcb6" style="background:#fffbfe;border-radius:28px;padding:18px 16px;color:#1d1b20;">`
+    + `<div style="display:flex;gap:12px;align-items:center;background:#e8def8;border-radius:24px;padding:12px;">`
+    + `<div style="width:64px;height:64px;flex:0 0 64px;border-radius:50%;overflow:hidden;">${d.avSvg}</div>`
+    + `<div><div style="font-size:1.05rem;font-weight:700;">${d.name}</div>`
+    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;margin-top:4px;background:#fff;padding:4px 10px;border-radius:999px;font-size:0.8rem;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
+    + (d.loc ? `<div style="font-size:0.75rem;opacity:0.7;margin-top:4px;">📍 ${d.loc}</div>` : '')
+    + `</div></div>`
+    + `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;font-size:0.8rem;">`
+    + `<span style="background:#e8def8;border-radius:999px;padding:6px 10px;">🏅 ${d.badges}</span>`
+    + `<span style="background:#ccf0e9;border-radius:999px;padding:6px 10px;">🐾 ${d.dex}</span>`
+    + `<span style="background:#f5e0e6;border-radius:999px;padding:6px 10px;">👥 ${d.team}</span>`
+    + `<span style="background:#e6e0f0;border-radius:999px;padding:6px 10px;">⚔️ ${d.pvp}</span>`
+    + `<span style="background:#fff0d8;border-radius:999px;padding:6px 10px;">🔥 ${d.streak}</span>`
+    + `<span style="background:#dbe7ff;border-radius:999px;padding:6px 10px;">🎖️ ${d.titles}</span>`
+    + `</div></div>`;
+}
+
+/** v7 Wanted: плакат розыска. */
+function cardHtmlV7(d: CardData): string {
+  return `<div class="tcb7" style="background:#f5e6c3;border:4px double #3d2b1f;padding:14px;text-align:center;color:#2b1d12;">`
+    + `<div style="font-family:Impact,sans-serif;font-size:2rem;letter-spacing:4px;">WANTED</div>`
+    + `<div style="width:110px;height:110px;margin:8px auto;border-radius:50%;background:#f9f1d6;border:4px solid #2b1d12;overflow:hidden;">${d.avSvg}</div>`
+    + `<div style="font-family:Impact,sans-serif;font-size:1.8rem;">${d.name}</div>`
+    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;background:#8b1a1a;color:#ffe9b0;padding:4px 10px;margin:4px 0;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
+    + (d.loc ? `<div style="font-size:0.8rem;font-weight:bold;">📍 ${d.loc}</div>` : '')
+    + `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border:2px solid #2b1d12;background:#fdf6df;margin-top:10px;font-size:0.8rem;">`
+    + `<div>🏅<br><b>${d.badges}</b></div><div>🐾<br><b>${d.dex}</b></div><div>👥<br><b>${d.team}</b></div>`
+    + `<div>⚔️<br><b>${d.pvp}</b></div><div>🔥<br><b>${d.streak}</b></div><div>🎖️<br><b>${d.titles}</b></div>`
+    + `</div></div>`;
+}
+
+/** v3 Pixel: геймбой. */
+function cardHtmlV3(d: CardData): string {
+  return `<div class="tcb3" style="background:#9bbc0f;border:4px solid #0f380f;color:#0f380f;padding:12px;font-family:monospace;">`
+    + `<div style="display:flex;gap:10px;align-items:center;border:4px solid #0f380f;background:#8bac0f;padding:10px;">`
+    + `<div style="width:72px;height:72px;flex:0 0 72px;border-radius:50%;background:#9bbc0f;border:4px solid #0f380f;overflow:hidden;">${d.avSvg}</div>`
+    + `<div><div style="font-size:1.2rem;font-weight:900;">${d.name}</div>`
+    + `<div class="tcb-title" id="tcb-title" style="display:inline-block;border:3px solid #0f380f;padding:2px 6px;font-weight:bold;${d.hasTitles ? 'cursor:pointer;' : ''}">${d.activeIcon} ${d.activeName}</div>`
+    + (d.loc ? `<div style="font-size:0.75rem;font-weight:bold;">📍 ${d.loc}</div>` : '')
+    + `</div></div>`
+    + `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px;font-size:0.75rem;text-align:center;font-weight:bold;">`
+    + `<div style="border:3px solid #0f380f;padding:4px;">🏅 ${d.badges}</div>`
+    + `<div style="border:3px solid #0f380f;padding:4px;">🐾 ${d.dex}</div>`
+    + `<div style="border:3px solid #0f380f;padding:4px;">👥 ${d.team}</div>`
+    + `<div style="border:3px solid #0f380f;padding:4px;">⚔️ ${d.pvp}</div>`
+    + `<div style="border:3px solid #0f380f;padding:4px;">🔥 ${d.streak}</div>`
+    + `<div style="border:3px solid #0f380f;padding:4px;">🎖️ ${d.titles}</div>`
+    + `</div></div>`;
+}
+
 /**
- * Богатая карточка: шапка (аватар + имя + титул + локация), сетка статов.
- * Живёт в панели «Тренеры → Моя карта» (#trainer-card-mount).
- * Титул кликабелен (выбор из заработанных). Старые id
- * (trainer-name/badges/caught) заполняются как раньше.
+ * Богатая карточка в теме (v6/v7/v3). Живёт в «Тренеры → Моя карта».
+ * Титул кликабелен (выбор из заработанных).
  */
 export function renderTrainerCardBox(): void {
   try {
@@ -408,36 +501,53 @@ export function renderTrainerCardBox(): void {
         doc.body.appendChild(box);
       } else return;
     }
-    const s = getTrainerSummary();
-    const avId = getTrainerAvatarId();
-    const active = getActiveTitle();
-    const earned: string[] = ((state as any).titles || []).filter((t: unknown) => isTitleId(t));
-    const name = esc((state as any).trainerNickname
-      || (state as any).tgUser?.first_name
-      || (state as any).tgUser?.username
-      || '---');
-    const loc = esc((state as any).currentLocationName || (state as any).currentLocationId || '');
-    box.innerHTML =
-      `<div class="tcb-head" style="display:flex;gap:10px;align-items:center;">`
-      + `<div class="tcb-avatar">${trainerAvatarSvg(avId, 64)}</div>`
-      + `<div class="tcb-id"><div class="tcb-name" style="font-weight:700;font-size:1.05rem;">${name}</div>`
-      + `<div class="tcb-title" id="tcb-title" style="font-size:0.85rem;opacity:0.95;${earned.length ? 'cursor:pointer;' : ''}" title="${earned.length ? 'Нажмите чтобы сменить титул' : ''}">${active ? `${active.icon} ${esc(active.name)}` : '— без титула —'}</div>`
-      + (loc ? `<div class="tcb-loc" style="font-size:0.75rem;opacity:0.7;">📍 ${loc}</div>` : '')
-      + `</div></div>`
-      + `<div class="tcb-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;font-size:0.8rem;">`
-      + `<div class="tcb-cell">🏅<br><b>${s.badges}</b><br><span>значки</span></div>`
-      + `<div class="tcb-cell">🐾<br><b>${s.dexCaught}/${s.dexTotal}</b><br><span>декс</span></div>`
-      + `<div class="tcb-cell">👥<br><b>${s.teamSize}</b><br><span>команда</span></div>`
-      + `<div class="tcb-cell">⚔️<br><b>${s.pvpWins}В/${s.pvpLosses}П</b><br><span>pvp</span></div>`
-      + `<div class="tcb-cell">🔥<br><b>${s.pvpStreak}</b><br><span>стрик (макс ${s.pvpBestStreak})</span></div>`
-      + `<div class="tcb-cell">🎖️<br><b>${s.titles}</b><br><span>титулы</span></div>`
-      + `</div>`;
-    if (earned.length > 0) {
+    const d = collectCardData();
+    const theme = getCardTheme();
+    box.innerHTML = theme === 'v7' ? cardHtmlV7(d) : theme === 'v3' ? cardHtmlV3(d) : cardHtmlV6(d);
+    if (d.hasTitles) {
       try {
         const titleEl = box.querySelector ? box.querySelector('#tcb-title') : doc.getElementById('tcb-title');
         if (titleEl) titleEl.onclick = () => openTitlePicker();
       } catch { /* ignore */ }
     }
+    renderThemePicker();
+  } catch { /* ignore */ }
+}
+
+/** Переключатель темы под карточкой (Материал / Розыск / Пиксель). */
+export function renderThemePicker(): void {
+  try {
+    if (typeof document === 'undefined') return;
+    const doc = document as any;
+    const cur = getCardTheme();
+    let row = doc.getElementById('trainer-card-themes');
+    if (!row) {
+      row = doc.createElement('div');
+      if (!row) return;
+      row.id = 'trainer-card-themes';
+      const mount = doc.getElementById('trainer-card-mount')
+        || doc.getElementById('trainers-card-panel')
+        || (doc.body || null);
+      if (!mount || typeof mount.appendChild !== 'function') return;
+      mount.appendChild(row);
+    }
+    const labels: Record<string, string> = { v6: '🟣 Материал', v7: '📜 Розыск', v3: '👾 Пиксель' };
+    row.innerHTML = '<div style="font-size:0.75rem;opacity:0.7;margin:8px 0 4px;">Тема карты:</div>'
+      + CARD_THEMES.map((t) =>
+        `<button data-theme="${t}" style="margin-right:6px;padding:6px 10px;border-radius:99px;border:${t === cur ? '2px solid #34c759' : '1px solid #888'};background:transparent;color:inherit;cursor:pointer;">${labels[t]}</button>`,
+      ).join('');
+    try {
+      const btns = row.querySelectorAll ? row.querySelectorAll('button[data-theme]') : [];
+      for (const b of btns) {
+        b.onclick = () => {
+          const t = b.getAttribute ? b.getAttribute('data-theme') : (b as any)['data-theme'];
+          if (setCardTheme(t)) {
+            try { autoSave(); } catch { /* ignore */ }
+            renderTrainerCard();
+          }
+        };
+      }
+    } catch { /* ignore */ }
   } catch { /* ignore */ }
 }
 

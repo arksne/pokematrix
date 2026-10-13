@@ -76,6 +76,62 @@ describe('grantTitle/setActiveTitle', () => {
   });
 });
 
+describe('темы карты', () => {
+  function stubDoc() {
+    const made: any[] = [];
+    (globalThis as any).document = {
+      getElementById: () => null,
+      createElement: () => {
+        const el: any = { style: {}, innerHTML: '', id: '', onclick: null, querySelector: () => null };
+        made.push(el);
+        return el;
+      },
+      body: { appendChild: () => {} },
+    };
+    return made;
+  }
+
+  it('get/set темы, мусор отклоняется', async () => {
+    const m = await card();
+    expect(m.getCardTheme()).toBe('v6');
+    expect(m.setCardTheme('v7')).toBe(true);
+    expect(m.getCardTheme()).toBe('v7');
+    expect(m.setCardTheme('nope')).toBe(false);
+    expect(m.getCardTheme()).toBe('v7');
+  });
+
+  it('три темы рендерятся по-разному', async () => {
+    const m = await card();
+    const made: any[] = [];
+    (globalThis as any).document = {
+      getElementById: () => null,
+      createElement: () => {
+        const el: any = { style: {}, innerHTML: '', id: '', onclick: null, querySelector: () => null };
+        made.push(el);
+        return el;
+      },
+      body: { appendChild: () => {} },
+    };
+    const html: Record<string, string> = {};
+    for (const t of ['v6', 'v7', 'v3']) {
+      m.setCardTheme(t);
+      made.length = 0;
+      m.renderTrainerCardBox();
+      const box = made.find((el) => el.id === 'trainer-card-box');
+      expect(box, `бокс темы ${t}`).toBeTruthy();
+      html[t] = String(box.innerHTML);
+      expect(html[t].length).toBeGreaterThan(100);
+    }
+    expect(html.v6).not.toBe(html.v7);
+    expect(html.v7).not.toBe(html.v3);
+    expect(html.v6).not.toBe(html.v3);
+    // Все три несут те же данные
+    for (const t of ['v6', 'v7', 'v3']) {
+      expect(html[t]).toContain('tcb-title');
+    }
+  });
+});
+
 describe('аватары квестовые', () => {
   it('пак вырос до 32, новые id на месте', () => {
     expect(AVATARS.length).toBe(32);

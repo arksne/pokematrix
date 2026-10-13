@@ -174,6 +174,7 @@ export function getFullSaveData() {
     // Блок G: поверхностные метрики тренеркарты + выбранная аватарка.
     titles: Array.isArray(state.titles) ? state.titles.filter((t: unknown) => typeof t === 'string') : [],
     activeTitle: typeof state.activeTitle === 'string' ? state.activeTitle : null,
+    cardTheme: ['v6', 'v7', 'v3'].includes(state.cardTheme) ? state.cardTheme : 'v6',
     trainerAvatar: state.trainerAvatar || '',
     pvpWins: state.pvpWins || 0, pvpLosses: state.pvpLosses || 0,
     pvpStreak: state.pvpStreak || 0, pvpBestStreak: state.pvpBestStreak || 0,
@@ -231,6 +232,7 @@ export function validateGameState() {
   if (typeof state.pvpBestStreak !== 'number') state.pvpBestStreak = 0;
   if (!Array.isArray(state.titles)) state.titles = [];
   if (typeof state.activeTitle !== 'string') state.activeTitle = null;
+  if (!['v6', 'v7', 'v3'].includes(state.cardTheme)) state.cardTheme = 'v6';
   // Validate team pokemon have required fields
   for (let i = state.myTeam.length - 1; i >= 0; i--) {
     const m = state.myTeam[i];
@@ -353,6 +355,7 @@ export async function loadGame() {
     if (typeof data.pvpBestStreak === 'number') state.pvpBestStreak = data.pvpBestStreak;
     if (Array.isArray(data.titles)) state.titles = data.titles.filter((t: unknown) => typeof t === 'string');
     if (typeof data.activeTitle === 'string') state.activeTitle = data.activeTitle;
+    if (['v6', 'v7', 'v3'].includes(data.cardTheme)) state.cardTheme = data.cardTheme;
     state.tutorialStep = data.tutorialStep || 0;
     state.visitedLocations = new Set(data.visitedLocations || []);
     state.itemsUsedInBattle = data.itemsUsedInBattle || 0;
@@ -864,6 +867,7 @@ export async function applyCloudSave(data) {
   if (typeof data.pvpBestStreak === 'number') state.pvpBestStreak = data.pvpBestStreak;
   if (Array.isArray(data.titles)) state.titles = data.titles.filter((t: unknown) => typeof t === 'string');
   if (typeof data.activeTitle === 'string') state.activeTitle = data.activeTitle;
+  if (['v6', 'v7', 'v3'].includes(data.cardTheme)) state.cardTheme = data.cardTheme;
   state.tutorialStep = data.tutorialStep || state.tutorialStep;
   state.visitedLocations = new Set(data.visitedLocations || []);
   state.itemsUsedInBattle = data.itemsUsedInBattle || state.itemsUsedInBattle;
