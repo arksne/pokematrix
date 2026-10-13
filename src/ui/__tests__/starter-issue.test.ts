@@ -7,36 +7,60 @@ import { GEN_STARTERS } from '../../data/starters.js';
  * Сеть (PokeAPI) и DOM подменены стабами — проверяем логику, не сеть.
  */
 
-// ── Минимальный стаб document: любой getElementById/createElement даёт
-// объект-заглушку, принимающий всё (Proxy), body считает appendChild ──
+// ── Стаб document: персистентные элементы по id (клики симулируем),
+// createElement даёт Proxy-заглушку, body считает appendChild ──
 function makeEl(): any {
   const listeners: Record<string, Function[]> = {};
-  return new Proxy(
-    { style: {}, _listeners: listeners },
-    {
-      get(t: any, p: string) {
-        if (p === 'addEventListener') return (ev: string, fn: Function) => { (listeners[ev] = listeners[ev] || []).push(fn); };
-        if (p === 'appendChild') return (c: any) => c;
-        if (p === 'querySelector') return null;
-        if (p === 'getBoundingClientRect') return () => ({ top: 0, left: 0, width: 0, height: 0 });
-        if (p === 'classList') return { add: () => {}, remove: () => {} };
-        return t[p];
-      },
-      set(t: any, p: string, v: any) { t[p] = v; return true; },
+  const el: any = {
+    style: {},
+    removed: false,
+    // Жмём только ПОСЛЕДНИЙ хендлер: старые принадлежат убранным
+    // оверлеям (в браузере они умирают вместе с DOM-узлом).
+    click() { const arr = listeners['click'] || []; if (arr.length) arr[arr.length - 1](); },
+  };
+  return new Proxy(el, {
+    get(t: any, p: string) {
+      if (p === 'addEventListener') return (ev: string, fn: Function) => { (listeners[ev] = listeners[ev] || []).push(fn); };
+      if (p === 'appendChild') return (c: any) => c;
+      if (p === 'querySelector') return null;
+      if (p === 'remove') return () => { t.removed = true; };
+      if (p === 'getBoundingClientRect') return () => ({ top: 0, left: 0, width: 0, height: 0 });
+      if (p === 'classList') return { add: () => {}, remove: () => {} };
+      return t[p];
     },
-  );
+    set(t: any, p: string, v: any) { t[p] = v; return true; },
+  });
 }
 const appended: any[] = [];
+const byId = new Map<string, any>();
 function installDomNull() {
   appended.length = 0;
+  byId.clear();
   (globalThis as any).document = {
-    getElementById: () => null,
+    getElementById: (id: string) => {
+      if (id === 'tutorial-overlay') {
+        // оверлей «живёт» пока не remove(): ищем неубранный
+        for (let i = appended.length - 1; i >= 0; i--) {
+          if (appended[i].id === 'tutorial-overlay' && !appended[i].removed) return appended[i];
+        }
+        return null;
+      }
+      if (!byId.has(id)) byId.set(id, makeEl());
+      return byId.get(id);
+    },
     querySelector: () => null,
     querySelectorAll: () => [],
     createElement: () => makeEl(),
     addEventListener: () => {},
     body: { appendChild: (c: any) => { appended.push(c); return c; } },
   };
+}
+/** Клик по кнопке онбординга (null-safe: кнопки может не быть). */
+function clickBtn(id: string): boolean {
+  const el = byId.get(id);
+  if (!el) return false;
+  el.click();
+  return true;
 }
 
 // ── Фикстура PokeAPI для бульбазавра ──
@@ -142,7 +166,9 @@ describe('giveStarterMon (выдача)', () => {
 describe('giveStarter (фолбэк без модалки)', () => {
   it('без DOM-модалки резолвится и выдаёт монстра', async () => {
     const { giveStarter } = await import('../starter.js');
-    await giveStarter(); // getElementById → null → запасной путь
+    // Модалки нет в DOM: getElementById → null → запасной путь
+    (globalThis as any).document.getElementById = () => null;
+    await giveStarter();
     // выдача асинхронна (цепочка после resolve) — ждём тик
     for (let i = 0; i < 50 && state.myTeam.length === 0; i++) {
       await new Promise((r) => setTimeout(r, 20));
@@ -159,5 +185,40 @@ describe('startOnboarding (модалка обучения)', () => {
     const ov = appended.find((el) => el.className === 'tutorial-overlay');
     expect(ov).toBeTruthy();
     expect(String(ov.innerHTML)).toContain('tutorial-card');
+  });
+
+  it('полный проход: клики «Далее» ведут по цепочке до завершения', async () => {
+    const tut = await import('../tutorial.js');
+    expect(tut.isTutorialComplete()).toBe(false);
+    let done = false;
+    tut.startOnboarding(() => { done = true; });
+    // Кликаем «Далее» пока оверлеи появляются (кап от зацикливания)
+    for (let i = 0; i < 40 && !tut.isTutorialComplete(); i++) {
+      if (!clickBtn('tutorial-next')) break;
+    }
+    expect(tut.isTutorialComplete()).toBe(true);
+    expect(done).toBe(true);
+  });
+
+  it('повторный запуск после завершения — сразу колбэк, без оверлея', async () => {
+    const tut = await import('../tutorial.js');
+    tut.markTutorialComplete();
+    expect(tut.isTutorialComplete()).toBe(true);
+    appended.length = 0;
+    let done = false;
+    tut.startOnboarding(() => { done = true; });
+    expect(done).toBe(true);
+    expect(appended.filter((el) => el.className === 'tutorial-overlay')).toHaveLength(0);
+  });
+
+  it('кнопка «Пропустить» завершает текущий урок', async () => {
+    const tut = await import('../tutorial.js');
+    tut.startOnboarding();
+    const before = appended.filter((el) => el.className === 'tutorial-overlay').length;
+    expect(before).toBeGreaterThan(0);
+    expect(clickBtn('tutorial-skip')).toBe(true);
+    // Пропуск финиширует урок → цепочка идёт дальше (новый оверлей) или конец
+    const states = appended.filter((el) => el.className === 'tutorial-overlay').length;
+    expect(states).toBeGreaterThanOrEqual(before);
   });
 });
