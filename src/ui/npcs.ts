@@ -40,6 +40,21 @@ import { showSelectionModal } from '../utils/dom.js';
 import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange, rollRandomNature } from './nature-change.js';
 
 // ── renderNPCQuests: отрисовка списка квестов NPC ───────
+/**
+ * questRewards — полный список предметных наград квеста.
+ * Живёт в game/quest-track.ts (листовой, тестируется); здесь импорт + реэкспорт.
+ */
+import { questRewards } from '../game/quest-track.js';
+export { questRewards };
+
+/** Строка наград для карточки ("2x Предмет, 1x Второй"). */
+export function questRewardText(q: any): string {
+  const parts = questRewards(q).map((r) => {
+    try { return `${r.qty}x ${itemDef(r.id).nameRu}`; } catch { return `${r.qty}x ${r.id}`; }
+  });
+  return parts.length ? parts.join(', ') : '—';
+}
+
 // Принимает npc — объект NPC из NPC_DATA
 // Показывает все доступные квесты с кнопками:
 //   "Взять" — начать квест (ещё не активен)
@@ -58,9 +73,12 @@ export function completeNPCQuest(npc: any, q: any): void {
   }
   state.completedNPCQuests.push(q.id);   // Отмечаем выполненным
   delete state.npcQuestProgress[q.id];   // Очищаем прогресс
-  // Награда: деньги + предмет
+  // Награда: деньги + ВСЕ предметы (основной + дополнительные)
   state.inventory['credit'] = (state.inventory['credit'] || 0) + q.rewardMoney;
-  const rewardAdded = addItem(q.rewardItem, q.rewardQty);
+  let rewardAdded = true;
+  for (const r of questRewards(q)) {
+    if (!addItem(r.id, r.qty)) rewardAdded = false;
+  }
   if (!rewardAdded) showToast('Рюкзак полон! Часть награды потеряна.', true);
   // Награда-титул (гринд-пачка): витрина тренеркарты
   if (q.rewardTitle) {
@@ -108,7 +126,7 @@ function renderNPCQuests(npc: any) {
     el.innerHTML = `
       <div class="npc-quest-info">
         <div class="npc-quest-name">${q.desc}</div>                    <!-- Описание квеста -->
-        <div class="npc-quest-reward">Награда: ${q.rewardMoney}💰 + ${q.rewardQty}x ${itemDef(q.rewardItem).nameRu}</div>
+        <div class="npc-quest-reward">Награда: ${q.rewardMoney}💰 + ${questRewardText(q)}</div>
         ${isActive ? `<div class="npc-quest-progress">${progress}/${q.targetQty}</div><div class="npc-quest-bar"><div class="npc-quest-bar-fill" style="width:${pct}%"></div></div>` : ''}
       </div>`;
 

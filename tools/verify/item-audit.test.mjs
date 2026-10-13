@@ -52,7 +52,8 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
   const npc = R('src/data/npc.ts');
   const rw = [...npc.matchAll(/rewardItem: '([^']+)'/g)].map((m) => m[1]);
   const tg = [...npc.matchAll(/targetItem: '([^']+)'/g)].map((m) => m[1]);
-  const all = [...new Set([...rw, ...tg])];
+  const multi = [...npc.matchAll(/\{ id: '([^']+)', qty: \d+ \}/g)].map((m) => m[1]);
+  const all = [...new Set([...rw, ...tg, ...multi])];
   const dead = all.filter((id) => !live(id));
   suite.check('I-quest', `награды/цели квестов — живые предметы (${all.length})`, dead.length === 0, dead.length ? `мёртвые: ${dead.join(', ')}` : `всего: ${all.length}`);
 }

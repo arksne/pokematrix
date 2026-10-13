@@ -91,6 +91,20 @@ export function trackNPCQuests(type: string, info: TrackInfo = {}): void {
   }
 }
 
+/**
+ * questRewards — полный список предметных наград квеста:
+ * основная (rewardItem × rewardQty) + дополнительные (rewardItems[]).
+ * Пустые/нулевые записи отбрасываются.
+ */
+export function questRewards(q: any): Array<{ id: string; qty: number }> {
+  const out: Array<{ id: string; qty: number }> = [];
+  if (q && q.rewardItem && (q.rewardQty || 0) > 0) out.push({ id: q.rewardItem, qty: q.rewardQty });
+  for (const r of q?.rewardItems || []) {
+    if (r && r.id && (r.qty || 0) > 0) out.push({ id: r.id, qty: r.qty });
+  }
+  return out;
+}
+
 export interface VerifyResult { ok: boolean; missing: string }
 
 /**

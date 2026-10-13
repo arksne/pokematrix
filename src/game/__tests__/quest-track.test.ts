@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { state } from '../../game/state.js';
-import { trackNPCQuests, verifyQuest } from '../quest-track.js';
+import { trackNPCQuests, verifyQuest, questRewards } from '../quest-track.js';
 
 /**
  * Трекер гринд-квестов: фильтры и verify без DOM.
@@ -88,6 +88,18 @@ describe('trackNPCQuests: фильтры', () => {
     trackNPCQuests('catch_x', { species: 'aerodactyl' });
     trackNPCQuests('catch_x', { species: 'aerodactyl' });
     expect(state.npcQuestProgress['pw_sky']).toBe(1);
+  });
+});
+
+describe('questRewards', () => {
+  it('основная + дополнительные, мусор отбрасывается', () => {
+    expect(questRewards({ rewardItem: 'tm28', rewardQty: 1 })).toEqual([{ id: 'tm28', qty: 1 }]);
+    expect(questRewards({
+      rewardItem: 'tm28', rewardQty: 1,
+      rewardItems: [{ id: 'superPotion', qty: 3 }, { id: 'x', qty: 0 }, null],
+    })).toEqual([{ id: 'tm28', qty: 1 }, { id: 'superPotion', qty: 3 }]);
+    expect(questRewards({})).toEqual([]);
+    expect(questRewards(null)).toEqual([]);
   });
 });
 

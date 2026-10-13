@@ -26,9 +26,11 @@ type NpcQuest = {
   rewardMoney: number;
   rewardItem: string;
   rewardQty: number;
+  rewardItems?: Array<{ id: string; qty: number }>;
   rewardTitle?: string;
   prereqQuest: string | null;
   giveItem?: string;
+  filter?: any;
   verify?: any;
 };
 
@@ -72,10 +74,23 @@ describe('quests-content (пачка Пьютера)', () => {
   it('награды и цели — живые предметы и титулы', () => {
     for (const q of allQuests) {
       expect(itemIds.has(q.rewardItem), `${q.id}: rewardItem ${q.rewardItem}`).toBe(true);
+      for (const r of q.rewardItems || []) {
+        expect(itemIds.has(r.id), `${q.id}: rewardItems ${r.id}`).toBe(true);
+        expect(Number.isInteger(r.qty) && r.qty > 0, `${q.id}: rewardItems qty`).toBe(true);
+      }
       if (q.targetItem) expect(itemIds.has(q.targetItem), `${q.id}: targetItem ${q.targetItem}`).toBe(true);
       if (q.giveItem) expect(itemIds.has(q.giveItem), `${q.id}: giveItem ${q.giveItem}`).toBe(true);
       if (q.rewardTitle) expect(titleIds.has(q.rewardTitle), `${q.id}: rewardTitle ${q.rewardTitle}`).toBe(true);
     }
+  });
+
+  it('мульти-награды пачки: следопыт/кулак/странник', () => {
+    const byId = new Map(allQuests.map((q) => [q.id, q]));
+    const has = (qid: string, id: string) =>
+      (byId.get(qid)?.rewardItems || []).some((r: any) => r.id === id);
+    expect(has('pw_trail', 'superPotion')).toBe(true);
+    expect(has('pw_fist', 'rareCandy')).toBe(true);
+    expect(has('pw_wanderer', 'maxRepel')).toBe(true);
   });
 
   it('NPC и verify-локации существуют', () => {
