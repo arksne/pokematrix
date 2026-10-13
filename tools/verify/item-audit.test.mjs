@@ -116,7 +116,7 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
   const sh = R('src/data/shadow-items.ts');
   const m = sh.match(/SHADOW_IDS: string\[\] = \[([\s\S]*?)\];/);
   const shadow = m ? [...m[1].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((x) => x[1]) : [];
-  const leaks: string[] = [];
+  const leaks = [];
   const shops = R('src/data/shops.ts');
   const drops = R('src/data/drops.js');
   const eco = R('server/src/routes/economy.ts');
