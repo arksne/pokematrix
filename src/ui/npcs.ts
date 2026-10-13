@@ -44,7 +44,7 @@ import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange, rollRand
  * questRewards — полный список предметных наград квеста.
  * Живёт в game/quest-track.ts (листовой, тестируется); здесь импорт + реэкспорт.
  */
-import { questRewards } from '../game/quest-track.js';
+import { questRewards, questHowTo } from '../game/quest-track.js';
 export { questRewards };
 
 /** Строка наград для карточки ("2x Предмет, 1x Второй"). */
@@ -123,9 +123,17 @@ function renderNPCQuests(npc: any) {
     // ── HTML карточки квеста ──
     const el = document.createElement('div');
     el.className = 'npc-quest-item';
+    // Подсказка «как выполнять» — собирается из типа/фильтров/verify (questHowTo).
+    // Игрок видит не только «что», но и «как и где» — без лазанья по вики.
+    let howHtml = '';
+    try {
+      const how = questHowTo(q);
+      if (how) howHtml = `<div class="npc-quest-how">ℹ️ ${how}</div>`;
+    } catch { /* подсказка не роняет карточку */ }
     el.innerHTML = `
       <div class="npc-quest-info">
         <div class="npc-quest-name">${q.desc}</div>                    <!-- Описание квеста -->
+        ${howHtml}
         <div class="npc-quest-reward">Награда: ${q.rewardMoney}💰 + ${questRewardText(q)}</div>
         ${isActive ? `<div class="npc-quest-progress">${progress}/${q.targetQty}</div><div class="npc-quest-bar"><div class="npc-quest-bar-fill" style="width:${pct}%"></div></div>` : ''}
       </div>`;
@@ -263,6 +271,56 @@ export function miniBossButton(npc: any, modal: HTMLElement, actionsContainer: H
   actionsContainer.insertBefore(btnFight, document.getElementById('btn-close-npc'));
 }
 
+// ── exchangeButton: декларативная кнопка обмена грузов ───────
+// NPC-запись может иметь поле `exchange`: один конфиг
+// `{ questId, takeItem, giveItem, label }` ИЛИ массив таких
+// (blackthorn_relay несёт два обмена: mahLeg2→mahLeg3 и blaLeg1→blaLeg2).
+// Поведение: квест сдан → тост; нет takeItem в инвентаре → тост-подсказка;
+// иначе removeItem(take)+addItem(give)+тост+сейв. Модалку не закрываем,
+// чтобы второй обмен того же NPC остался доступен без переоткрытия.
+export function exchangeButton(npc: any, modal: HTMLElement, actionsContainer: HTMLElement, inline?: { questId: string; takeItem: string; giveItem: string; label: string } | Array<{ questId: string; takeItem: string; giveItem: string; label: string }>): void {
+  // Декларативное поле в приоритете, инлайн — для старых id (пока нет таких)
+  const raw = (npc as any).exchange ?? inline;
+  if (!raw) return; // У NPC нет обмена — кнопок нет
+  const cfgs = Array.isArray(raw) ? raw : [raw];
+  for (const cfg of cfgs) {
+    if (!cfg || !cfg.questId || !cfg.takeItem || !cfg.giveItem) continue; // битый конфиг — пропускаем
+    const btnExchange = document.createElement('button');
+    btnExchange.className = 'tma-btn npc-action-extra';
+    btnExchange.style.backgroundColor = '#ff9500';
+    btnExchange.innerText = cfg.label || '🔄 Обменять';
+    btnExchange.onclick = () => {
+      if (state.completedNPCQuests.includes(cfg.questId)) {
+        showToast('Уже обменено!', false);
+        return;
+      }
+      if ((state.inventory[cfg.takeItem] || 0) < 1) {
+        let need = cfg.takeItem;
+        try { need = itemDef(cfg.takeItem).nameRu; } catch { /* оставляем id */ }
+        showToast(`Нужен предмет: ${need}!`, true);
+        return;
+      }
+      if (!removeItem(cfg.takeItem, 1)) {
+        showToast('Не удалось отдать предмет!', true);
+        return;
+      }
+      if (!addItem(cfg.giveItem, 1)) {
+        // Рюкзак полон — возвращаем отданное, чтобы не сжечь груз
+        addItem(cfg.takeItem, 1);
+        showToast('Рюкзак полон! Освободите место.', true);
+        return;
+      }
+      let takeName = cfg.takeItem;
+      let giveName = cfg.giveItem;
+      try { takeName = itemDef(cfg.takeItem).nameRu; } catch { /* оставляем id */ }
+      try { giveName = itemDef(cfg.giveItem).nameRu; } catch { /* оставляем id */ }
+      showToast(`Обмен: ${takeName} → ${giveName}!`, false);
+      store.emit('save');
+    };
+    actionsContainer.insertBefore(btnExchange, document.getElementById('btn-close-npc'));
+  }
+}
+
 // ── openNPCDialog: открыть модалку диалога с NPC ────────
 // Принимает npcId — ID NPC из NPC_DATA
 // Показывает: спрайт NPC, имя, текст диалога, список квестов,
@@ -398,6 +456,10 @@ export function openNPCDialog(npcId: string) {
   // ── Декларативный мини-босс (pewter_bully — инлайн, новые NPC — через npc.miniBoss) ──
   // Квест «Кулачный боец»: победа трекается как boss_win.
   miniBossButton(npc, modal, actionsContainer, npcId === 'pewter_bully' ? { leaderKey: 'pewterBully', label: '🥊 Сразиться (команда 3×Lv28)' } : undefined);
+
+  // ── Декларативный обмен грузов (промежутки доставок — через npc.exchange) ──
+  // Один конфиг или массив (blackthorn_relay несёт два обмена). Кнопок нет — вызов пустой.
+  exchangeButton(npc, modal, actionsContainer);
 
   // ── NPC: Питомник (PC + боксы разведения) ──
   // C3: кнопки смотрителя-депозита больше нет (openDaycareDeposit удалён из

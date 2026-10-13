@@ -14,6 +14,9 @@ import { createSuite } from './support.mjs';
 
 const suite = createSuite('Предметы');
 const R = (p) => readFileSync(path.join(REPO, p), 'utf8');
+// Пачки лесенки живут в отдельных файлах (см. шапку npc.ts) — аудит смотрит
+// их тоже. Несуществующих файлов не боится (пак ещё не написан).
+const npcSrc = () => ['src/data/npc.ts', 'src/data/npc-packs/kanto-1.ts', 'src/data/npc-packs/kanto-2.ts', 'src/data/npc-packs/johto-1.ts', 'src/data/npc-packs/johto-2.ts'].map((p) => { try { return R(p); } catch { return ''; } }).join('\n');
 
 const itemsSrc = R('src/data/items.ts');
 const ITEMS = new Map();
@@ -49,7 +52,7 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
 
 // ── 3. Квесты ──
 {
-  const npc = R('src/data/npc.ts');
+  const npc = npcSrc();
   const rw = [...npc.matchAll(/rewardItem: '([^']+)'/g)].map((m) => m[1]);
   const tg = [...npc.matchAll(/targetItem: '([^']+)'/g)].map((m) => m[1]);
   const multi = [...npc.matchAll(/\{ id: '([^']+)', qty: \d+ \}/g)].map((m) => m[1]);
@@ -102,8 +105,11 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
 {
   const drops = R('src/data/drops.js');
   const dropIds = new Set([...drops.matchAll(/\{ item: '([^']+)'/g)].map((m) => m[1]));
-  const npc = R('src/data/npc.ts');
-  const questIds = new Set([...npc.matchAll(/rewardItem: '([^']+)'/g)].map((m) => m[1]));
+  const npc = npcSrc();
+  // Источник — не только награда: квестовые грузы (targetItem доставок,
+  // giveItem на взятии, takeItem обменов) выдаются кнопками NPC, в дропе/крафте их нет.
+  // Считать источником любой предмет, упомянутый квестом как цель, выдача или обмен.
+  const questIds = new Set([...npc.matchAll(/(?:rewardItem|targetItem|giveItem|takeItem): '([^']+)'/g)].map((m) => m[1]));
   const cr = R('src/ui/crafting.ts');
   const craftIds = new Set([...cr.matchAll(/result: '([^']+)'/g)].map((m) => m[1]));
   // Коробка типовых конфет: содержимое падает из typeCandyBox (только так,
@@ -122,7 +128,7 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
 {
   const tt = R('src/data/titles.ts');
   const titleIds = new Set([...tt.matchAll(/id: '([A-Za-z0-9_-]+)'/g)].map((m) => m[1]));
-  const npc = R('src/data/npc.ts');
+  const npc = npcSrc();
   const used = [...new Set([...npc.matchAll(/rewardTitle: '([^']+)'/g)].map((m) => m[1]))];
   const dead = used.filter((id) => !titleIds.has(id));
   suite.check('I-title', `титулы наград существуют (${used.length})`, dead.length === 0, dead.length ? `мёртвые: ${dead.join(', ')}` : `всего: ${used.length}`);

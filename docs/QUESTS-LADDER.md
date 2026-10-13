@@ -23,11 +23,16 @@
    Id сверить с `moves_db.json` / `items.ts` при внедрении.
 7. **Сначала движок**: verify, титулы, боссы, посылки (см. «Что допилить»).
 
-## Что допилить в движке
+## Что допилить в движке (статусы на 2026-10-14)
 
-- `verify.typeSpecies/typeCount`, `verify.regionLocs + region`.
-- 15 мини-боссов (`friendly: true`) + кнопка боя. 30 титулов. Посылки на 2–3 плеча.
-- TODO-механики (помечены ⚠️): фильтр времени суток, трекинг обменов, verify по дексу.
+- `verify.typeSpecies/typeCount`, `verify.regionLocs + region` ✅ ГОТОВО.
+- 15 мини-боссов ✅ ГОТОВО (gyms.ts). 30 титулов ✅ ГОТОВО (titles.ts).
+- 24 груза доставок ✅ ГОТОВО (items.ts, price 0). I-source считает
+  targetItem/giveItem источником ✅ ГОТОВО.
+- `filter.speciesList` (любой-из) + `verify.dexCount` + `trade_x` + кнопка
+  `npc.exchange` (объект или массив) — ДЕЛАЕТ 5-й агент параллельно.
+- `filter.time` (ночь) — ДЕЛАЕТСЯ если в state есть время суток, иначе
+  `vio_night`/`ecr_night` откатываются на обычный улов (решит приемка).
 - Исключения лесенки помечены «(искл.)» — там flavor важнее цифр
   (26 букв анноуна, 5 сестёр кимоно, Leaf Stone ×3 — камни дорогие).
 
@@ -370,7 +375,7 @@ NPC: Гляциолог 🧊 (`mahoganyTown`), Морозко ⛄ (`mahoganyStad
 | `mah_counter` | Оттепель | контрудар | победить 435 огненных/бойцов/каменных/стальных | 75k + Yache Berry×8 |
 | `mah_money` | Пушной аукцион | заработок | 65M | 75k + bigNugget×10 |
 | `mah_breed` | Тёплая кладка | выводок | вылупить 9 | 120k + goldBottleCap |
-| `mah_dex` | Перепись севера | экзотика | 40% декса (⚠️ TODO verify) | 450k + ppMax×2 |
+| `mah_dex` | Перепись севера | экзотика | 40% декса (`verify.dexCount: 400` — абсолютное число видов; считать проценты нельзя — battle/core закольцует импорт) | 450k + ppMax×2 |
 | `mah_fist` | Холодный приём | босс | Морозко 6×88 | 225k + TM Ice Beam + rareCandy×3 + «Сердце зимы» |
 | `mah_caravan` | Караван на север | доставка | Оливин→Махогани→Блэкторн, 3 плеча | 68k + rareCandy×12 |
 | `mah_streak` | Горячее сердце | стрик | 38 побед | 450k + choiceScarf + «Тёплое сердце» |
@@ -426,3 +431,124 @@ NPC: Драконовед 🐲 (`blackthornCity`), Наследница 👑 (`b
 Массовый улов: 8/10/12/15/18/22/26/30/35/40/45/50/55/60/70.
 Расход: 6/8/10/12/15/18/22/26/30/35/40/45/50/60/70 (искл.: Leaf Stone ×3).
 Доставка: 1 плечо (n1–5) → 2 плеча (n6–13) → 3 плеча (n14–15).
+
+---
+
+## Приложение A. Реализация контента (обязательно исполнителю!)
+
+> Таблицы городов выше фиксируют МЕХАНИКИ и ЧИСЛА. Награды — по §A2
+> (этот раздел новее таблиц). Доставки — по §A3. Ключи боссов — §A4.
+
+### A1. ТМ-награды троп и кулаков — НАСТОЯЩИЕ номерные ТМ (v4, разнообразие!)
+
+Именные ТМ нашлись в items.ts (`tmNN` с мувами в desc). Кулаку (престиж выше) —
+настоящий ТМ его STAB/мува, тропе при дубле — тировый. Итог в коде:
+- Настоящие: ver_trail tm78, gol_trail tm31, mah_trail tm52, bla_trail tm14,
+  ver_fist tm24, saf_fist tm29, fuc_fist tm36, cin_fist tm35, vir_fist tm26,
+  vio_fist tm40, aza_fist tm81, gol_fist tm42, ecr_fist tm30, oli_fist tm91,
+  mah_fist tm13, bla_fist tm02 (16 уникальных).
+- Тировые (дубли мувов): тропы cer/cel/saf/fuc → tmWeak; cin/vir/vio/aza → tmMid;
+  oli/ecr/cia → tmTop; кулаки cer/cel → tmWeak; cia → tmTop.
+- Нет в items (Surf, Giga Drain, Dark Pulse, Close Combat, Solar Beam) —
+  там тировые (см. выше).
+
+### A2. Замены наград (слева было в таблицах → справа в код)
+
+- `luxuryBall` → по городам: lapras netBall×2, electabuzz quickBall×3,
+  tangela nestBall×4, grimer ultraBall×3, growlithe repeatBall×8,
+  shuckle friendBall×5, dratini loveBall×6 (abra premierBall×5, magnemite
+  premierBall×30 — дубль через 9 городов, допустимо; ночные duskBall×10/12 — пара).
+- Курьеры (редкие конфеты только финалам!): cin expCandyM×10, vio expCandyL×15,
+  aza protein×2, gol calcium×2, ecr zinc×2, cia carbos×2; oli/mah/bla — rareCandy.
+- Маршруты: pillar maxRepel×5, hq fullHeal×3 (было абсурдные maxRepel×26 —
+  пофикшено приемкой), journals revive×2, anne без изменений.
+- `bla_temper`: muscleBand → weaknessPolicy. `aza_contest`: → timerBall×4.
+- `expCandyXL` в лесенке нет в items — курьеры везут витаминные наборы:
+  cin expCandyM×10, vio expCandyL×15, aza protein×2, gol calcium×2, ecr zinc×2,
+  cia carbos×2 (ранние — expCandyM×3–20, финалы — rareCandy).
+- Стрики: `vir` → `brightPowder`; `aza` → `scopeLens`; `vio` → `expertBelt`;
+  `ecr` → `leftovers`.
+- Закалка: n10 `goldBottleCap` → `protein`; n15 `boosterEnergy` → `muscleBand`.
+  (Итог закалок: iron, calcium, zinc, carbos, hpUp, ppUp, ppMax, rareCandy,
+  abilityCapsule, protein, lifeOrb, choiceSpecs, focusSash, weaknessPolicy, muscleBand.)
+- Гнезда: `cel` lax→`oddIncense`, `saf` odd→`rockIncense`, `fuc` rock→`waveIncense`,
+  `cin` wave→`roseIncense`, `vir` rose→`luckIncense`, `vio` full→`ovalStone`,
+  `aza` luck→`moonStone`, `gol` pure→`sunStone`, `ecr` ovalCharm→`shinyStone`,
+  `cia` shinyCharm→`dawnStone`, `oli` abilityCapsule→`duskStone`,
+  `mah` goldBottleCap→`luckyEgg`. (`cer` everstone, `ver` seaIncense,
+  `bla` abilityPatch — без изменений.)
+- Кошелёк (все 14): сокровищ нет в items — награда `maxHoney`,
+  qty: 2/3/4/5/6/8/10/12/15/18/22/26/30/40 по n1–14.
+- `cer_fossil`: Helix×2 → `moonStone`×2 (desc: камни с горы Мун).
+  `cin_amber`: Old Amber → `fireStone`×1.
+- `cel_eevee`: `sootheBell` → `rewardItems: [thunderStone, waterStone, fireStone] ×1`.
+- `ecr_kimono`: → `premierBall`×6. `aza_slowpoke`: `smokeBall` → `pokeDoll`×5.
+  `vio_unown`: → `fullHeal`×5. `aza_contest`: `starPiece` → `rareCandy`×2.
+- Контрудары-ягоды (ягод нет в items): `cer` Cheri→`cellBattery`×2;
+  `fuc` Pecha→`blackSludge`×1; `cin` Rawst→`absorbBulb`×1;
+  `vir` Aspear→`iceHeal`×5; `cia` Coba→`skyPlate`×1; `oli` Occa→`hardStone`×1;
+  `mah` Yache→`iceStone`×1; `gol` Chople→`focusBand`×1.
+  (Остальные контрудары уже на живых id — не трогать.)
+
+### A3. Доставки: грузы, цепочки, NPC (12+1 квестов)
+
+Правило грузов: у КАЖДОЙ доставки СВОЙ предмет (общий комплитил бы все
+активные разом — `checkNPCQuestProgress` бьёт по targetItem). Все грузы —
+`price: 0` в items.ts (уже заведены, покупать/продавать нельзя).
+Отправитель выдаёт груз кнопкой `npc.parcel = { questId, itemId, label }`
+(`parcelButton` в npcs.ts). Промежуток меняет груз кнопкой
+`npc.exchange = { questId, takeItem, giveItem, label }` (реализует движок,
+см. «Что допилить»). Финал — квест `collect_items` с `targetItem` = последний груз.
+
+| Квест | Отправитель (даёт) | Промежуток (обмен) | Финал (потребляет) | Деньги+конфеты |
+|---|---|---|---|---|
+| `cer_courier` | Бриз, vermilionCity: parcelCer | — | NEW `cerulean_courier`, ceruleanCity | 9k + expCandyM×3 |
+| `ver_courier` | Провод, saffronCity: parcelVer | — | NEW `vermilion_courier`, vermilionCity | 14k + expCandyM×5 |
+| `cel_courier` | Спица, lavenderTown: parcelCel | — | NEW `celadon_courier`, celadonCity | 18k + expCandyM×6 |
+| `saf_courier` | Курьер, fuchsiaCity: parcelSaf | — | NEW `saffron_courier`, saffronCity | 23k + expCandyM×10 |
+| `fuc_courier` | Тропа, cinnabarIsland: parcelFuc | — | NEW `fuchsia_courier`, fuchsiaCity | 27k + expCandyM×16 |
+| `vir_courier` | Перевал, pewterCity: parcelVir | — | NEW `viridian_courier`, viridianCity | 36k + expCandyM×20 |
+| `vio_courier` | Перелёт, viridianCity: parcelVio | — | NEW `violet_courier`, violetCity | 41k + rareCandy×3 |
+| `cin_courier` | Паром, viridianCity: cinLeg1 | NEW `pallet_relay`, palletTown: cinLeg1→cinLeg2 | NEW `cinnabar_courier`, cinnabarIsland | 32k + rareCandy×1 |
+| `aza_courier` | Лес, violetCity: azaLeg1 | NEW `azalea_relay`, azaleaTown: azaLeg1→azaLeg2 | NEW `goldenrod_courier`, goldenrodCity | 45k + rareCandy×4 |
+| `gol_courier` | Экспресс, azaleaTown: golLeg1 | NEW `goldenrod_relay`, goldenrodCity: golLeg1→golLeg2 | NEW `ecruteak_courier`, ecruteakCity | 50k + rareCandy×5 |
+| `ecr_courier` | Тьма, goldenrodCity: ecrLeg1 | NEW `ecruteak_relay`, ecruteakCity: ecrLeg1→ecrLeg2 | NEW `olivine_courier`, olivineCity | 54k + rareCandy×6 |
+| `cia_courier` | Волна, ecruteakCity: ciaLeg1 | NEW `olivine_relay`, olivineCity: ciaLeg1→ciaLeg2 | NEW `cianwood_courier`, cianwoodCity | 59k + rareCandy×8 |
+| `mah_caravan` | Подъёмник, olivineCity: mahLeg1 | NEW `mahogany_relay`, mahoganyTown: mahLeg1→mahLeg2; NEW `blackthorn_relay`, blackthornCity: mahLeg2→mahLeg3 | NEW `blackthorn_courier`, blackthornCity (потребляет mahLeg3) | 68k + rareCandy×12 |
+| `bla_caravan` | Перевал, mahoganyTown: blaLeg1 | `blackthorn_relay` второй кнопкой: blaLeg1→blaLeg2; NEW `indigo_relay`, indigoPlateau: blaLeg2→blaLeg3 | NEW `indigo_courier`, indigoPlateau (потребляет blaLeg3) | 72k + rareCandy×12 |
+| `oli_potion` | Рейс, cianwoodCity: secretPotion | — | NEW `olivine_healer`, olivineCity (медпункт; Маячник из npc.ts НЕ трогать) | 63k + rareCandy×10 |
+
+### A4. Ключи мини-боссов (filter.bossId — байт-в-байт)
+
+`ceruleanFinn`, `vermilionVolt`, `celadonFlora`, `saffronEsper`, `fuchsiaApprentice`,
+`cinnabarBlaze`, `viridianAgent`, `violetSky`, `azaleaSwarm`, `goldenrodNorm`,
+`ecruteakShade`, `cianwoodPupil`, `olivineSteel`, `mahoganyFrost`, `blackthornHeir`.
+NPC босса держит квест кулака И кнопку `npc.miniBoss = { leaderKey, label }`.
+
+### A5. Раскладка NPC и форма записей
+
+- Холдеры по умолчанию: тропа+кладовая → исследователь; редкость/улов →
+  охотник; контрудар+стрик → наставник; кошелёк → торговец; гнездо → заводчик;
+  расход → тематический; визиты/маршрут → старожил; доставка → курьер;
+  кулак → босс; строй → старожил; экзотика → тематический.
+- NPC клади в файл города его `location`. `location` ОБЯЗАН существовать в
+  REGIONS (проверяй! тест упадёт). `trainingGrounds` НЕ существуют —
+  наставников сажай в Stadium/город с комментарием `// TODO: trainingGrounds`.
+- Форма NPC — как `pewter_researcher` (id/name/sprite/location/dialog/quests),
+  плюс опционально `parcel` / `miniBoss` / `exchange` (см. комментарии в npcs.ts).
+- Форма квеста — как `pw_*`: все поля явно (`targetItem: null` где не надо),
+  `prereqQuest: null` (свобода!), титулы ТОЛЬКО из списков §«30 титулов».
+- Диалоги пиши живые, по-русски, с характером города (greet/default/quest_offer/
+  quest_complete/quest_incomplete).
+
+### A6. Валидация перед сдачей (самопроверка скриптом!)
+
+- Все `rewardItem/rewardItems/targetItem/giveItem` ∈ ITEMS (ничего не выдумывать —
+  список живых id смотри скриптом по `src/data/items.ts`).
+- Все `location` и `verify.locs` ∈ REGIONS. `filter.region` ∈ {kanto, johto}.
+- `filter.bossId` — только §A4. `type` ∈ QUEST_TYPES. `rewardTitle` — только §«30 титулов».
+- Пулы `typeSpecies` — только реальные виды этого типа (иконки знаешь — сомневаешься,
+  бери меньше, но точно).
+- Мульти-видовые охоты/уловы (кимоно, крысы, пауки, ярость, красные, кроты,
+  вольторбы) — через `filter.speciesList` (любой-из; реализует движок
+  параллельно, см. «Что допилить»). Использовать смело — приемка проверит связку.

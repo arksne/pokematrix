@@ -16,7 +16,19 @@
 //   respawnTime?: number — через сколько мс NPC возрождается
 //
 // Используется: npcs.ts (UI), core.ts (сражения), init.ts
+//
+// Пачки лесенки квестов (docs/QUESTS-LADDER.md) живут в ОТДЕЛЬНЫХ файлах
+// (по одному на агента контента) и подмешиваются сюда спредом — чтобы
+// параллельные агенты не писали в один файл:
+//   src/data/npc-packs/kanto-1.ts (Церулин, Вермилион, Селадон, Шаффран)
+//   src/data/npc-packs/kanto-2.ts (Фуксия, Киноварь, Виридиан)
+//   src/data/npc-packs/johto-1.ts (Вайолет, Азалия, Голденрод, Эйкрутик)
+//   src/data/npc-packs/johto-2.ts (Сианвуд, Оливин, Махогани, Блэкторн)
 // ─────────────────────────────────────────────────────────────
+import { KANTO1_NPCS } from './npc-packs/kanto-1.js';
+import { KANTO2_NPCS } from './npc-packs/kanto-2.js';
+import { JOHTO1_NPCS } from './npc-packs/johto-1.js';
+import { JOHTO2_NPCS } from './npc-packs/johto-2.js';
 export const NPC_DATA = {
   'professor_tutorial': {
     id: 'professor_tutorial', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'pewterCity',
@@ -715,5 +727,11 @@ export const NPC_DATA = {
     },
     quests: [],
   },
+
+  // ── Пачки лесенки (внешние файлы, см. шапку) ──
+  ...KANTO1_NPCS,
+  ...KANTO2_NPCS,
+  ...JOHTO1_NPCS,
+  ...JOHTO2_NPCS,
 
 };

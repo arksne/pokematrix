@@ -52,6 +52,7 @@ import { MONSTER_DROP_TABLE } from '../data/drops.js';
 import { ITEMS } from '../data/items.js';
 // TRANSPORT_HUBS — хабы транспорта: { locId: [{targetRegion, targetLoc, label, ticket}, ...] }
 import { TRANSPORT_TICKETS, routesFrom, routeFrom } from '../data/transport.js';
+import { noteLocationVisit } from '../game/quest-track.js';
 // Погода: getDailyWeather(локация) → 'sunny'/'rain'/'fog'/etc.
 //         WEATHER_ICONS — иконки погоды
 //         WEATHER_NAMES — названия погоды
@@ -400,6 +401,25 @@ export let renderLocation = function(locId: any) {
   // ── Пре-рендер хук (если зарегистрирован) ──
   if (_beforeRenderLocation) _beforeRenderLocation(locId);
 
+  // ── Учёт исследования (квесты explore): КАЖДЫЙ реальный заход ──
+  // Раньше трекинг жил в кнопках переходов и срабатывал только на ПЕРВЫЙ
+  // визит — повторная ходьба («побывай 12 раз») не считалась, а карта,
+  // транспорт и кнопка «Назад» вообще ничего не двигали (симптом: «хожу
+  // по Канто, а следопыт стоит»). Центр здесь: noteLocationVisit решает,
+  // реальный ли это переход (локация сменилась), и пополняет visited.
+  // Перерисовка той же локи и рестор при загрузке не считаются.
+  try {
+    if (noteLocationVisit(locId)) {
+      getBattleCore()
+        .then((bc) => bc.checkQuestProgress('explore', 1, undefined, { locId }))
+        .catch(() => {});
+      const visitedSize = state.visitedLocations instanceof Set
+        ? state.visitedLocations.size
+        : (state.visitedLocations || []).length;
+      if (visitedSize >= 20) checkAchievement('explorer');
+    }
+  } catch { /* исследование не роняет рендер */ }
+
   // ── Сохраняем предыдущую локацию для навигации "Назад" ──
   if (state.currentLocationId && state.currentLocationId !== locId) {
     state.lastLocation = state.currentLocationId;
@@ -699,13 +719,9 @@ export let renderLocation = function(locId: any) {
     btn.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px';
     btn.innerHTML = `<span>➔ ${linkLoc.name}</span>`;
     btn.onclick = () => {
-      // Отслеживание исследования: если локация новая — проверяем квест
+      // Отслеживание исследования — централизованно в renderLocation
+      // (каждый реальный заход, не только первый визит).
       if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
-      if (!state.visitedLocations.has(linkId)) {
-        state.visitedLocations.add(linkId);
-        getBattleCore().then(bc => bc.checkQuestProgress('explore', 1, undefined, { locId: linkId }));
-        if (state.visitedLocations.size >= 20) checkAchievement('explorer');
-      }
       renderLocation(linkId);  // Переходим в новую локацию
     };
     navContainer.appendChild(btn);
@@ -730,11 +746,6 @@ export let renderLocation = function(locId: any) {
       btn.innerHTML = `<span>${icon} ${label}</span>`;
       btn.onclick = () => {
         if (!isTutorialGateOpen() && !STARTER_AREA.has(linkId)) return tutorialGateToast();
-        if (!state.visitedLocations.has(linkId)) {
-          state.visitedLocations.add(linkId);
-          getBattleCore().then(bc => bc.checkQuestProgress('explore', 1, undefined, { locId: linkId }));
-          if (state.visitedLocations.size >= 20) checkAchievement('explorer');
-        }
         renderLocation(linkId);
       };
       navContainer.appendChild(btn);

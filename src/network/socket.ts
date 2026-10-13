@@ -52,6 +52,7 @@ import { renderTeamGrid, refreshProfileUI } from '../ui/profile.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { updateInventoryDisplay } from '../ui/inventory.js';
 import { autoSave } from '../game/save.js';
+import { trackNPCQuests } from '../game/quest-track.js';
 
 export function initTradeSocket() {
   if (state.socket) return;
@@ -245,6 +246,8 @@ export function initTradeSocket() {
     }
 
     showToast('Обмен успешно завершён!', false);
+    // Трекинг обменов для NPC-квестов trade_x (рядом с addItem/toast, логику не меняем)
+    try { trackNPCQuests('trade_x', { amount: 1 }); } catch {}
     closeTradeWindow();
     updateMoneyDisplay();
     autoSave();

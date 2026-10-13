@@ -56,6 +56,7 @@ import { HEAL_HP, CURE_ONE, CURE_ALL } from '../data/item-effects.js';  // ау�
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
 import { store } from '../game/store.js';
 import { trackNPCQuests } from '../game/quest-track.js';     // Гринд-квесты NPC: тот же движок событий
+import { allNPCQuests, findQuestHolder, locName, questHowTo, questRewards, verifyQuest } from '../game/quest-track.js'; // Вкладка активных NPC-квестов в модалке
 import { checkAchievement } from '../ui/achievements.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
 import { state } from '../game/state.js';                                 // state — глобальное состояние игры (инвентарь, команда, локация)
 import { generateUID, getTrainerId, LEGENDARY_SET } from '../utils/state.js';           // generateUID — уникальный ID для пойманного покемона; getTrainerId — ID тренера
@@ -1682,7 +1683,11 @@ function renderQuests() {
   list.innerHTML = '';
   if (GS.quests.length === 0) {
     list.innerHTML = '<div class="quest-empty">Нет активных заданий</div>';
-    return;
+  } else {
+    const head = document.createElement('div');
+    head.className = 'quest-section-title';
+    head.textContent = `☀️ Ежедневные — активных: ${GS.quests.length}`;
+    list.appendChild(head);
   }
   GS.quests.forEach(q => {
     const div = document.createElement('div');
@@ -1703,6 +1708,74 @@ function renderQuests() {
   list.querySelectorAll('.quest-claim-btn').forEach(btn => {
     btn.addEventListener('click', () => claimQuestReward(btn.getAttribute('data-quest')));
   });
+
+  // ── Секция NPC-квестов: активные (взятые, не сданные) ──
+  // Раньше их было видно только в диалоге NPC-владельца: игрок ходил по Канто,
+  // а «Следопыт» молчал. Теперь все активные — здесь, со степенью прохождения,
+  // объяснением и местом сдачи. Сдача — по-прежнему у NPC в диалоге
+  // (награду выдаёт completeNPCQuest).
+  try {
+    renderActiveNPCQuests(list);
+  } catch (e) { console.warn('[quests] NPC-секция не отрисовалась:', e); }
+}
+
+/**
+ * renderActiveNPCQuests — активные NPC-квесты в модалку заданий.
+ * Готовые к сдаче — первыми. У каждого: прогресс-бар, «как выполнять»
+ * (questHowTo), награда и держатель (имя NPC + локация).
+ */
+function renderActiveNPCQuests(list: HTMLElement) {
+  const taken: string[] = Object.keys((GS as any).npcQuestProgress || {})
+    .filter((id) => !((GS as any).completedNPCQuests || []).includes(id));
+  const byId = new Map(allNPCQuests().map((q: any) => [q?.id, q]));
+  const rows: Array<{ q: any; progress: number; ready: boolean; pct: number; holder: string }> = [];
+  for (const id of taken) {
+    const q = byId.get(id);
+    if (!q) continue;
+    const progress = Math.min(q.targetQty || 1, (GS as any).npcQuestProgress[id] || 0);
+    let ready = progress >= (q.targetQty || 1);
+    if (!ready && q.verify) {
+      try { ready = verifyQuest(q).ok; } catch { /* ignore */ }
+    }
+    const pct = q.targetQty > 0 ? Math.round((progress / q.targetQty) * 100) : 0;
+    const h = findQuestHolder(id);
+    rows.push({
+      q, progress, ready, pct,
+      holder: h ? `${h.name} (${locName(h.location)})` : 'NPC',
+    });
+  }
+  const head = document.createElement('div');
+  head.className = 'quest-section-title';
+  head.textContent = `📋 Задания тренеров — активных: ${rows.length}`;
+  list.appendChild(head);
+  if (rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'quest-empty';
+    empty.textContent = 'Нет взятых заданий — заглядывай к NPC с «!» над головой.';
+    list.appendChild(empty);
+    return;
+  }
+  rows.sort((a, b) => Number(b.ready) - Number(a.ready) || b.pct - a.pct);
+  for (const r of rows) {
+    const div = document.createElement('div');
+    div.className = 'quest-card' + (r.ready ? ' quest-ready' : '');
+    let how = '';
+    try {
+      const t = questHowTo(r.q);
+      if (t) how = `<div class="npc-quest-how">ℹ️ ${t}</div>`;
+    } catch { /* ignore */ }
+    const rewards = questRewards(r.q)
+      .map((x: any) => `${x.qty}x ${(itemDef(x.id)?.nameRu || x.id)}`)
+      .join(', ');
+    div.innerHTML = `
+      <div class="quest-desc">${r.q.desc} (${r.progress}/${r.q.targetQty})</div>
+      <div class="quest-bar-bg"><div class="quest-bar-fill" style="width:${r.pct}%"></div></div>
+      ${how}
+      <div class="quest-reward">Награда: ¥${r.q.rewardMoney}${rewards ? ` + ${rewards}` : ''}</div>
+      <div class="quest-holder">Сдача: ${r.holder}${r.ready ? ' — <b>можно сдавать!</b>' : ''}</div>
+    `;
+    list.appendChild(div);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -7381,7 +7454,7 @@ function initEncounterEvents() {
       if (S.activePlayerMon.currentHp >= S.activePlayerMon.maxHp) return showToast('Здоровье уже полное!', true);
 
       GS.itemsUsedInBattle++;
-      checkQuestProgress('use_item');
+      checkQuestProgress('use_item', 1, item);
       store.removeItem('potion');
       store.updateInventoryDisplay();
 
@@ -7399,7 +7472,7 @@ function initEncounterEvents() {
       if (store.getItemQty('superPotion') <= 0) return showToast('Нет Супер Аптечек!', true);
       if (S.activePlayerMon.currentHp >= S.activePlayerMon.maxHp) return showToast('Здоровье уже полное!', true);
       GS.itemsUsedInBattle++;
-      checkQuestProgress('use_item');
+      checkQuestProgress('use_item', 1, item);
       store.removeItem('superPotion');
       store.updateInventoryDisplay();
       S.activePlayerMon.currentHp += 50;
@@ -7414,7 +7487,7 @@ function initEncounterEvents() {
       if (store.getItemQty('fullRestore') <= 0) return showToast('Нет Полного Восстановления!', true);
       if (S.activePlayerMon.currentHp >= S.activePlayerMon.maxHp && !S.activePlayerMon.status) return showToast('Здоровье уже полное!', true);
       GS.itemsUsedInBattle++;
-      checkQuestProgress('use_item');
+      checkQuestProgress('use_item', 1, item);
       store.removeItem('fullRestore');
       store.updateInventoryDisplay();
       S.activePlayerMon.currentHp = S.activePlayerMon.maxHp;
@@ -7432,7 +7505,7 @@ function initEncounterEvents() {
         const evoTarget = await checkEvolution(S.activePlayerMon, true);
         if (!evoTarget) return showToast('Этот покемон не может эволюционировать!', true);
         GS.itemsUsedInBattle++;
-        checkQuestProgress('use_item');
+        checkQuestProgress('use_item', 1, item);
         store.removeItem('evolutionStone');
         store.updateInventoryDisplay();
         await triggerEvolution(S.activePlayerMon, evoTarget.name);
@@ -7452,7 +7525,7 @@ function initEncounterEvents() {
       if (S.activePlayerMon.currentHp >= S.activePlayerMon.maxHp) return showToast('Здоровье уже полное!', true);
       store.removeItem(item);
       GS.itemsUsedInBattle++;
-      checkQuestProgress('use_item');
+      checkQuestProgress('use_item', 1, item);
       store.updateInventoryDisplay();
       const amt = HEAL_HP[item];
       S.activePlayerMon.currentHp = amt === 'full'
@@ -7475,7 +7548,7 @@ function initEncounterEvents() {
         entry.m.currentHp = full ? entry.m.maxHp : Math.max(1, Math.floor(entry.m.maxHp / 2));
         store.removeItem(item);
         GS.itemsUsedInBattle++;
-        checkQuestProgress('use_item');
+        checkQuestProgress('use_item', 1, item);
         store.updateInventoryDisplay();
         document.getElementById('battle-main-menu').style.display = 'none';
         appendToLog(`Вы использовали ${itemDef(item).nameRu}! ${entry.m.nickname || entry.m.apiData?.name} воскрешён!`);
@@ -7487,7 +7560,7 @@ function initEncounterEvents() {
         fainted.forEach(({ m }) => { m.currentHp = m.maxHp; });
         store.removeItem(item);
         GS.itemsUsedInBattle++;
-        checkQuestProgress('use_item');
+        checkQuestProgress('use_item', 1, item);
         store.updateInventoryDisplay();
         document.getElementById('battle-main-menu').style.display = 'none';
         appendToLog(`Священный пепел поднял всю команду!`);
@@ -7527,7 +7600,7 @@ function initEncounterEvents() {
         document.getElementById('player-status-icon').innerText = '';
       }
       GS.itemsUsedInBattle++;
-      checkQuestProgress('use_item');
+      checkQuestProgress('use_item', 1, item);
       store.updateInventoryDisplay();
       document.getElementById('battle-main-menu').style.display = 'none';
       appendToLog(`Вы использовали ${itemDef(item).nameRu}!`);
@@ -7558,7 +7631,7 @@ function initEncounterEvents() {
         return showToast('Этот предмет пока не работает в бою.', true);
       }
       GS.itemsUsedInBattle++;
-      checkQuestProgress('use_item');
+      checkQuestProgress('use_item', 1, item);
       store.updateInventoryDisplay();
       document.getElementById('battle-main-menu').style.display = 'none';
       appendToLog(`Вы использовали ${itemDef(item).nameRu}! Статус ${S.activePlayerMon.apiData.name} исцелён.`);
@@ -7575,7 +7648,7 @@ function initEncounterEvents() {
       }
       store.removeItem(item);
       GS.itemsUsedInBattle++;
-      checkQuestProgress('use_item');
+      checkQuestProgress('use_item', 1, item);
       store.updateInventoryDisplay();
       if (item === 'ether') {
         // Ether: восстанавливаем PP атаки с самым низким текущим PP
@@ -7619,7 +7692,7 @@ function initEncounterEvents() {
         if (S.activePlayerMon.statStages[stat] >= 6) return showToast('Стат уже максимально повышен!', true);
         store.removeItem(item);
         GS.itemsUsedInBattle++;
-        checkQuestProgress('use_item');
+        checkQuestProgress('use_item', 1, item);
         store.updateInventoryDisplay();
         statStageModify(S.activePlayerMon, stat, 1);
         document.getElementById('battle-main-menu').style.display = 'none';
@@ -7645,7 +7718,7 @@ function initEncounterEvents() {
         const evoTarget = await checkEvolution(S.activePlayerMon, true, item);
         if (!evoTarget) return showToast('Этот покемон не может эволюционировать с этим камнем!', true);
         GS.itemsUsedInBattle++;
-        checkQuestProgress('use_item');
+        checkQuestProgress('use_item', 1, item);
         store.removeItem(item);
         store.updateInventoryDisplay();
         await triggerEvolution(S.activePlayerMon, evoTarget.name);

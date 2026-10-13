@@ -16,6 +16,7 @@ import { TITLES } from '../titles.js';
 //   6. Локации NPC и verify.locs существуют в REGIONS.
 // ─────────────────────────────────────────────────────────────
 import { REGIONS } from '../regions.js';
+import { gymLeaders } from '../gyms.js';
 
 type NpcQuest = {
   id: string;
@@ -49,7 +50,28 @@ describe('quests-content (пачка Пьютера)', () => {
   it('ровно 10 квестов pw_*', () => {
     const pw = allQuests.filter((q) => q.id.startsWith('pw_'));
     expect(pw.length).toBe(10);
-    expect(allQuests.length).toBe(10);
+  });
+
+  it('лесенка: 15 городов × 10 = 150 (+10 Пьютера = 160)', () => {
+    expect(allQuests.length).toBe(160);
+    for (const p of ['cer_', 'ver_', 'cel_', 'saf_', 'fuc_', 'cin_', 'vir_',
+      'vio_', 'aza_', 'gol_', 'ecr_', 'cia_', 'oli_', 'mah_', 'bla_']) {
+      expect(allQuests.filter((q) => q.id.startsWith(p)).length, `пачка ${p}`).toBe(10);
+    }
+  });
+
+  it('лесенка: свобода порядка — prereq только на существующие, без циклов', () => {
+    for (const q of allQuests) {
+      if (q.prereqQuest) expect(byId.has(q.prereqQuest), `${q.id} → ${q.prereqQuest}`).toBe(true);
+    }
+  });
+
+  it('лесенка: bossId — ключи мини-боссов из gyms.ts', () => {
+    const leaders = new Set(Object.keys(gymLeaders as any));
+    for (const q of allQuests) {
+      const bossId = (q.filter as any)?.bossId;
+      if (bossId) expect(leaders.has(bossId), `${q.id}: bossId ${bossId}`).toBe(true);
+    }
   });
 
   it('id уникальны, prereq существуют', () => {

@@ -738,6 +738,19 @@ async function feedCandy(mon, itemId, label, evGain = 4) {
 // Реэкспорт для совместимости (тесты и старый код тянут отсюда).
 export { HEAL_HP, CURE_ONE, CURE_ALL, EXP_CANDY_XP, WING_EV, BERRY_MANUAL, REVIVE_MODE } from '../data/item-effects.js';
 import { HEAL_HP, CURE_ONE, EXP_CANDY_XP, WING_EV } from '../data/item-effects.js';
+import { trackNPCQuests } from '../game/quest-track.js';
+
+/**
+ * trackUse — засчитать использование предмета в квесты use_item.
+ * Вызывать ТОЛЬКО после успешного применения (не при отказах!).
+ * Трекер сам отфильтрует по filter.itemId; try/catch — использование
+ * предмета никогда не должно ронять UI из-за квестов.
+ */
+function trackUse(itemId: string): void {
+  try {
+    trackNPCQuests('use_item', { amount: 1, itemId });
+  } catch { /* ignore */ }
+}
 
 // ── feedExp: скормить EXP-конфету ──
 // Даёт опыт (не уровень напрямую): инициализация exp, добавление,
@@ -876,6 +889,7 @@ export async function useItem(itemId) {
     case 'repel': case 'superRepel': case 'maxRepel': {
       const charges = { repel: 100, superRepel: 200, maxRepel: 250 }[itemId] || 100;
       removeItem(itemId);
+      trackUse(itemId);
       state.repelHunts = (state.repelHunts || 0) + charges;
       state.lureHunts = 0; state.lureMult = 1; // репеллент перебивает приманку
       store.emit('save');
@@ -905,6 +919,7 @@ export async function useItem(itemId) {
     // ── Верёвка: возврат в хаб региона ──
     case 'escapeRope': {
       removeItem(itemId);
+      trackUse(itemId);
       const region = state.currentRegion;
       const hub = region === 'kanto' ? 'saffronCity' : 'goldenrodCity';
       const hubRegion = region === 'kanto' ? 'kanto' : 'johto';
@@ -1020,6 +1035,7 @@ export async function useItem(itemId) {
         const evoTarget = await _checkEvolution(mon, true);  // force=true — игнорируем уровень
         if (!evoTarget) return showToast('Этот покемон не может эволюционировать!', true);
         removeItem('evolutionStone');
+        trackUse('evolutionStone');
         await _triggerEvolution(mon, evoTarget.name);
         refreshProfileUI();
         showToast(`${mon.nickname || mon.apiData.name} эволюционировал в ${evoTarget.name}!`, false);
@@ -1125,6 +1141,7 @@ export async function useItem(itemId) {
         const evoTarget = await _checkEvolution(mon, true, itemId);
         if (!evoTarget) return showToast('Этот покемон не может эволюционировать с этим камнем!', true);
         removeItem(itemId);  // Убираем камень из инвентаря
+        trackUse(itemId);
         await _triggerEvolution(mon, evoTarget.name);
         refreshProfileUI();
         showToast(`${mon.nickname || mon.apiData.name} эволюционировал в ${evoTarget.name}!`, false);
@@ -1150,6 +1167,7 @@ export async function useItem(itemId) {
       if (mon.status !== 'par') return showToast('Средство от паралича лечит только паралич!', true);
       mon.status = null;
       removeItem(itemId);
+      trackUse(itemId);
       if (getTeamState().currentPokemonIndex !== null) refreshProfileUI();
       showToast(`${mon.nickname || mon.apiData.name} вылечен от паралича!`, false);
       break;
@@ -1240,6 +1258,7 @@ export async function useItem(itemId) {
       };
       if (targets) {
         removeItem(itemId);
+        trackUse(itemId);
         targets.forEach(reviveOne);
         refreshProfileUI();
         autoSave();
@@ -1253,6 +1272,7 @@ export async function useItem(itemId) {
         const picked = fainted[choiceIdx];
         if (!picked) return;
         removeItem(itemId);
+        trackUse(itemId);
         reviveOne(picked);
         refreshProfileUI();
         autoSave();

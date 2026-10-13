@@ -2165,6 +2165,21 @@ input[type="number"] {
   padding: 30px;
   color: var(--tma-text-muted);
 }
+.quest-section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--tma-primary);
+  margin: 4px 2px 0;
+}
+.quest-card.quest-ready {
+  border-color: #34c759;
+  box-shadow: 0 0 0 1px #34c759 inset;
+}
+.quest-holder {
+  font-size: 0.75rem;
+  color: var(--tma-text-muted);
+  overflow-wrap: anywhere;
+}
 
 /* --- DARK THEME QUESTS --- */
 [data-theme="dark"] .quest-container {
@@ -2214,8 +2229,15 @@ input[type="number"] {
   margin-bottom: 8px;
   gap: 8px;
 }
-.npc-quest-info { flex: 1; min-width: 0; }
-.npc-quest-name { font-weight: bold; font-size: 0.9rem; }
+.npc-quest-info { flex: 1; min-width: 0; overflow: hidden; }
+.npc-quest-name { font-weight: bold; font-size: 0.9rem; overflow-wrap: anywhere; }
+.npc-quest-how {
+  font-size: 0.75rem;
+  color: var(--tma-text-muted);
+  line-height: 1.35;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
 .npc-quest-reward { font-size: 0.8rem; color: var(--tma-accent); }
 .npc-quest-progress { font-size: 0.75rem; color: var(--tma-text-muted); }
 .npc-quest-bar {
