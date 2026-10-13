@@ -246,6 +246,13 @@ const CFGS: AvatarCfg[] = [
   { id: 'duo-pika', bg: ['#7ec3f5', '#2b6cb0'], skin: '#ffd9b3', hair: '#4a3222', hairStyle: 'cap', jacket: '#2f6fb5', jacketDark: '#1c4470', shirt: '#ffd93b', acc: 'none', accColor: '#2f6fb5', companion: 'pika', battle: false, pose: 'front', emblem: '#2f9df0', mouth: 'smile' },
   { id: 'duo-ghost', bg: ['#4a3d6e', '#0e0a1c'], skin: '#ffe3d0', hair: '#6a5a9e', hairStyle: 'long', jacket: '#3a3050', jacketDark: '#211b30', shirt: '#241f38', acc: 'earring', accColor: '#9b7ede', companion: 'ghost', battle: false, pose: 'side', emblem: '#6a5a9e', mouth: 'smile' },
   { id: 'arena-hero', bg: ['#ff9a3d', '#7a1e3d'], skin: '#e0ac69', hair: '#2b2b2b', hairStyle: 'short', jacket: '#c0392b', jacketDark: '#7a1e14', shirt: '#ffd75e', acc: 'headband', accColor: '#ffd75e', companion: 'pika', battle: true, pose: 'action', emblem: '#ffd75e', mouth: 'grin' },
+  // ── Квестовые (пачка Пьютера): следопыт, гонец, непобедимый, магнат, заводчик, гроза скал ──
+  { id: 'trail-scout', bg: ['#9adc6a', '#2b4a1c'], skin: '#e0ac69', hair: '#4a3222', hairStyle: 'cap', jacket: '#5a7a3a', jacketDark: '#3a5226', shirt: '#e8f0d0', acc: 'none', accColor: '#5a7a3a', companion: 'bird', battle: false, pose: 'side', emblem: '#6a9a3a', mouth: 'smile' },
+  { id: 'swift-courier', bg: ['#ffd75e', '#7a4a00'], skin: '#ffd9b3', hair: '#2b2b2b', hairStyle: 'ponytail', jacket: '#e6a817', jacketDark: '#9a6f0e', shirt: '#ffffff', acc: 'scarf', accColor: '#e6a817', companion: 'none', battle: true, pose: 'action', emblem: '#e6a817', mouth: 'grin' },
+  { id: 'crowned-champ', bg: ['#4a3d6e', '#0e0a1c'], skin: '#f1c27d', hair: '#d8d8d8', hairStyle: 'short', jacket: '#3a3050', jacketDark: '#211b30', shirt: '#ffd75e', acc: 'earring', accColor: '#ffd75e', companion: 'none', battle: true, pose: 'front', emblem: '#ffd75e', mouth: 'grin' },
+  { id: 'coin-magnate', bg: ['#d4af37', '#4a3a00'], skin: '#e0ac69', hair: '#1c1c22', hairStyle: 'short', jacket: '#2b2b30', jacketDark: '#17171a', shirt: '#d4af37', acc: 'glasses', accColor: '#d4af37', companion: 'none', battle: false, pose: 'front', emblem: '#d4af37', mouth: 'smile' },
+  { id: 'egg-keeper', bg: ['#ffb5c8', '#6e2f4a'], skin: '#ffd9b3', hair: '#8a4a2b', hairStyle: 'curly', jacket: '#ff8ab5', jacketDark: '#c75a86', shirt: '#fff0f4', acc: 'none', accColor: '#ff8ab5', companion: 'egg', battle: false, pose: 'front', emblem: '#ff8ab5', mouth: 'smile' },
+  { id: 'stone-crusher', bg: ['#8d8d99', '#23232e'], skin: '#c68642', hair: '#3a3a3a', hairStyle: 'buzz', jacket: '#5a5a66', jacketDark: '#34343c', shirt: '#d8d8d8', acc: 'headband', accColor: '#8d8d99', companion: 'none', battle: true, pose: 'action', emblem: '#8d8d99', mouth: 'grin' },
 ];
 
 const NAMES: Record<string, string> = {
@@ -275,6 +282,12 @@ const NAMES: Record<string, string> = {
   'duo-pika': 'Дуэт с Пикачу',
   'duo-ghost': 'Дуэт с призраком',
   'arena-hero': 'Герой арены',
+  'trail-scout': 'Следопыт',
+  'swift-courier': 'Гонец-вихрь',
+  'crowned-champ': 'Венценосец',
+  'coin-magnate': 'Магнат',
+  'egg-keeper': 'Хранитель яиц',
+  'stone-crusher': 'Сокрушитель скал',
 };
 
 /** Полный пак: id + имя + inline-SVG. SVG строятся кодом выше. */

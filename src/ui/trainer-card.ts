@@ -30,7 +30,8 @@
 import { state, lsKey } from '../game/state.js';              // Глобальное состояние
 // showTextInputModal — показывает модалку с полем ввода текста
 // Отличается от showSelectionModal — пользователь вводит текст, а не выбирает
-import { showTextInputModal } from '../utils/dom.js';
+import { showTextInputModal, showSelectionModal } from '../utils/dom.js';
+import { TITLES, getTitleById, isTitleId } from '../data/titles.js';
 import { autoSave } from '../game/save.js';              // Автосохранение
 // pokedexTotal — общее количество видов покемонов в покедексе
 // Экспортируется из battle/core, вычисляется как длина POKEDEX_ALL
@@ -67,6 +68,8 @@ export interface TrainerSummary {
   pvpStreak: number;
   /** Лучший победный стрик. */
   pvpBestStreak: number;
+  /** Заработано титулов. */
+  titles: number;
 }
 
 function num(v: unknown): number {
@@ -97,7 +100,46 @@ export function getTrainerSummary(): TrainerSummary {
     pvpLosses: num((state as any).pvpLosses),
     pvpStreak: num((state as any).pvpStreak),
     pvpBestStreak: num((state as any).pvpBestStreak),
+    titles: Array.isArray((state as any).titles) ? (state as any).titles.length : 0,
   };
+}
+
+/**
+ * Титулы: выдача и активный. Чистые функции состояния (без DOM).
+ * grantTitle — true если титул новый (первый сразу становится активным).
+ * setActiveTitle — true если id заработан (null — снять).
+ */
+export function grantTitle(id: string): boolean {
+  if (!isTitleId(id)) return false;
+  try {
+    const st = state as any;
+    if (!Array.isArray(st.titles)) st.titles = [];
+    if (st.titles.includes(id)) return false;
+    st.titles.push(id);
+    if (!st.activeTitle) st.activeTitle = id;
+    return true;
+  } catch { return false; }
+}
+
+export function setActiveTitle(id: string | null): boolean {
+  try {
+    const st = state as any;
+    if (id === null) { st.activeTitle = null; return true; }
+    if (!isTitleId(id)) return false;
+    if (!Array.isArray(st.titles) || !st.titles.includes(id)) return false;
+    st.activeTitle = id;
+    return true;
+  } catch { return false; }
+}
+
+/** Активный титул (деф) или undefined. */
+export function getActiveTitle() {
+  try {
+    const id = (state as any).activeTitle;
+    if (!isTitleId(id)) return undefined;
+    if (!((state as any).titles || []).includes(id)) return undefined;
+    return getTitleById(id);
+  } catch { return undefined; }
 }
 
 /**
@@ -303,6 +345,100 @@ function renderTrainerProgress(): void {
   } catch { /* ignore */ }
 }
 
+/**
+ * Витрина титулов: активный под именем (клик — выбор из заработанных).
+ * Пусто (нет титулов) — строка не рисуется.
+ */
+function renderTrainerTitle(): void {
+  try {
+    if (typeof document === 'undefined') return;
+    const doc = document as any;
+    let row = doc.getElementById('trainer-card-title');
+    const earned: string[] = ((state as any).titles || []).filter((t: unknown) => isTitleId(t));
+    if (earned.length === 0) { if (row) row.style.display = 'none'; return; }
+    if (!row) {
+      row = doc.createElement('div');
+      if (!row) return;
+      row.id = 'trainer-card-title';
+      row.className = 'trainer-card-title';
+      const anchor = doc.getElementById('trainer-name');
+      if (anchor && anchor.parentNode && typeof anchor.parentNode.insertBefore === 'function') {
+        anchor.parentNode.insertBefore(row, (anchor as any).nextSibling || null);
+      } else if (doc.body && typeof doc.body.appendChild === 'function') {
+        doc.body.appendChild(row);
+      } else return;
+    }
+    const active = getActiveTitle();
+    row.style.display = 'block';
+    row.style.cursor = 'pointer';
+    row.style.fontSize = '0.85rem';
+    row.style.opacity = '0.95';
+    row.title = 'Нажмите чтобы сменить титул';
+    row.textContent = active ? `${active.icon} ${active.name}` : '— без титула —';
+    row.onclick = () => {
+      const choices = [{ label: '— без титула —', value: '' }]
+        .concat(earned.map((id) => {
+          const t = getTitleById(id)!;
+          return { label: `${t.icon} ${t.name}`, value: id };
+        }));
+      showSelectionModal('Титул тренера', choices, (idx: number) => {
+        const v = choices[idx]?.value;
+        setActiveTitle(v || null);
+        try { autoSave(); } catch { /* ignore */ }
+        renderTrainerCard();
+      });
+    };
+  } catch { /* ignore */ }
+}
+
+/**
+ * Богатая карточка: шапка (аватар + имя + титул + локация), сетка статов,
+ * значки. Строится в #trainer-card-box (создаётся у chat-top-bar).
+ * Старые id (trainer-name/badges/caught) заполняются как раньше.
+ */
+export function renderTrainerCardBox(): void {
+  try {
+    if (typeof document === 'undefined') return;
+    const doc = document as any;
+    let box = doc.getElementById('trainer-card-box');
+    if (!box) {
+      box = doc.createElement('div');
+      if (!box) return;
+      box.id = 'trainer-card-box';
+      box.className = 'trainer-card-box';
+      const anchor = doc.getElementById('chat-top-bar');
+      if (anchor && anchor.parentNode && typeof anchor.parentNode.insertBefore === 'function') {
+        anchor.parentNode.insertBefore(box, (anchor as any).nextSibling || null);
+      } else if (doc.body && typeof doc.body.appendChild === 'function') {
+        doc.body.appendChild(box);
+      } else return;
+    }
+    const s = getTrainerSummary();
+    const avId = getTrainerAvatarId();
+    const active = getActiveTitle();
+    const name = esc((state as any).trainerNickname
+      || (state as any).tgUser?.first_name
+      || (state as any).tgUser?.username
+      || '---');
+    const loc = esc((state as any).currentLocationName || (state as any).currentLocationId || '');
+    box.innerHTML =
+      `<div class="tcb-head" style="display:flex;gap:10px;align-items:center;">`
+      + `<div class="tcb-avatar">${trainerAvatarSvg(avId, 64)}</div>`
+      + `<div class="tcb-id"><div class="tcb-name" style="font-weight:700;font-size:1.05rem;">${name}</div>`
+      + `<div class="tcb-title" style="font-size:0.85rem;opacity:0.95;">${active ? `${active.icon} ${esc(active.name)}` : '— без титула —'}</div>`
+      + (loc ? `<div class="tcb-loc" style="font-size:0.75rem;opacity:0.7;">📍 ${loc}</div>` : '')
+      + `</div></div>`
+      + `<div class="tcb-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;font-size:0.8rem;">`
+      + `<div class="tcb-cell">🏅<br><b>${s.badges}</b><br><span>значки</span></div>`
+      + `<div class="tcb-cell">🐾<br><b>${s.dexCaught}/${s.dexTotal}</b><br><span>декс</span></div>`
+      + `<div class="tcb-cell">👥<br><b>${s.teamSize}</b><br><span>команда</span></div>`
+      + `<div class="tcb-cell">⚔️<br><b>${s.pvpWins}В/${s.pvpLosses}П</b><br><span>pvp</span></div>`
+      + `<div class="tcb-cell">🔥<br><b>${s.pvpStreak}</b><br><span>стрик (макс ${s.pvpBestStreak})</span></div>`
+      + `<div class="tcb-cell">🎖️<br><b>${s.titles}</b><br><span>титулы</span></div>`
+      + `</div>`;
+  } catch { /* ignore */ }
+}
+
 function renderTrainerAvatar(): void {
   try {
     if (typeof document === 'undefined') return;
@@ -330,6 +466,8 @@ export function renderTrainerCard() {
   // но базовые поля пропускаем (страница не загружена или другая вкладка)
   if (!nameEl || !badgesEl || !caughtEl) {
     try { renderTrainerProgress(); } catch { /* ignore */ }
+    try { renderTrainerTitle(); } catch { /* ignore */ }
+    try { renderTrainerCardBox(); } catch { /* ignore */ }
     try { renderAvatarPicker(); } catch { /* ignore */ }
     try { ensureTrainerCardActions(); } catch { /* ignore */ }
     try { loadLocationTrainers(); } catch { /* ignore */ }
@@ -371,6 +509,8 @@ export function renderTrainerCard() {
 
   // ── Блок G: поверхностный прогресс + аватар + сетка + место под арену ──
   try { renderTrainerAvatar(); } catch { /* ignore */ }
+  try { renderTrainerTitle(); } catch { /* ignore */ }
+  try { renderTrainerCardBox(); } catch { /* ignore */ }
   try { renderTrainerProgress(); } catch { /* ignore */ }
   try { renderAvatarPicker(); } catch { /* ignore */ }
   try { ensureTrainerCardActions(); } catch { /* ignore */ }

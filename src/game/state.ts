@@ -66,6 +66,8 @@ export const state: Record<string, any> = {
   pvpLosses: 0,                      // Поражений в PvP (поверхностно)
   pvpStreak: 0,                      // Текущий стрик: +N победы / -N поражения
   pvpBestStreak: 0,                  // Лучший победный стрик
+  titles: [] as Array<string>,        // Заработанные титулы (id из data/titles.ts)
+  activeTitle: null as string | null, // Активный титул (показ под именем)
 
   // ── Daycare / Breeding ───────────────────────────────────
   daycareMons: [] as Array<any>,  // Покемоны в питомнике
