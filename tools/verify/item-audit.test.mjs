@@ -105,8 +105,14 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
   const questIds = new Set([...npc.matchAll(/rewardItem: '([^']+)'/g)].map((m) => m[1]));
   const cr = R('src/ui/crafting.ts');
   const craftIds = new Set([...cr.matchAll(/result: '([^']+)'/g)].map((m) => m[1]));
+  // Коробка типовых конфет: содержимое падает из typeCandyBox (только так,
+  // в маркете синглов нет). Ключи TYPE_CANDY_TYPE = валидный источник.
+  const inv = R('src/ui/inventory.ts');
+  const boxIds = new Set();
+  const tcm = inv.match(/TYPE_CANDY_TYPE[^=]*=\s*\{([\s\S]*?)\};/);
+  if (tcm) for (const k of tcm[1].matchAll(/(\w+Candy):/g)) boxIds.add(k[1]);
   const sourceless = [...ITEMS.entries()]
-    .filter(([id, it]) => it.impl && it.price === 0 && id !== 'credit' && !dropIds.has(id) && !questIds.has(id) && !craftIds.has(id))
+    .filter(([id, it]) => it.impl && it.price === 0 && id !== 'credit' && !dropIds.has(id) && !questIds.has(id) && !craftIds.has(id) && !boxIds.has(id))
     .map(([id]) => id);
   suite.check('I-source', 'бесплатное добывается (дроп/квест/крафт)', sourceless.length === 0, sourceless.length ? `взять негде: ${sourceless.slice(0, 15).join(', ')}${sourceless.length > 15 ? ` +${sourceless.length - 15}` : ''}` : 'ок');
 }
