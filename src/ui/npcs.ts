@@ -214,6 +214,55 @@ function renderNPCQuests(npc: any) {
   });
 }
 
+// ── parcelButton: декларативная кнопка «взять груз» ───────
+// NPC-запись может иметь поле `parcel: { questId, itemId, label, doneQuestId?, doneText?, toastText? }`
+// (поле декларативное — живёт в src/data/npc.ts, здесь только чтение).
+// `inline` — инлайн-конфиг для старых id (viridian_sender): запись в NPC_DATA
+// принадлежит другому агенту, поэтому поведение сохранено байт-в-байт здесь.
+export function parcelButton(npc: any, modal: HTMLElement, actionsContainer: HTMLElement, inline?: { questId: string; itemId: string; label: string; doneQuestId?: string; doneText?: string; toastText?: string }): void {
+  // Декларативное поле в приоритете, инлайн — только для старых id
+  const cfg = (npc as any).parcel ?? inline;
+  if (!cfg) return;  // У NPC нет груза — кнопки нет
+  const doneQuestId = cfg.doneQuestId ?? cfg.questId;  // Какой квест считать сданным
+  const btnParcel = document.createElement('button');
+  btnParcel.className = 'tma-btn npc-action-extra';
+  btnParcel.style.backgroundColor = '#8e8e93';
+  btnParcel.innerText = cfg.label;
+  btnParcel.onclick = () => {
+    if (state.completedNPCQuests.includes(doneQuestId)) {
+      showToast(cfg.doneText ?? 'Уже доставлено!', false);
+      return;
+    }
+    if (!(cfg.questId in state.npcQuestProgress)) state.npcQuestProgress[cfg.questId] = 0;
+    addItem(cfg.itemId, 1);
+    showToast(cfg.toastText ?? `Получено: ${itemDef(cfg.itemId).nameRu} ×1`, false);
+    modal.style.display = 'none';
+    store.emit('save');
+  };
+  actionsContainer.insertBefore(btnParcel, document.getElementById('btn-close-npc'));
+}
+
+// ── miniBossButton: декларативная кнопка мини-босса ───────
+// NPC-запись может иметь поле `miniBoss: { leaderKey, label }`
+// (поле декларативное — живёт в src/data/npc.ts, здесь только чтение).
+// `inline` — инлайн-конфиг для старых id (pewter_bully) — поведение байт-в-байт.
+export function miniBossButton(npc: any, modal: HTMLElement, actionsContainer: HTMLElement, inline?: { leaderKey: string; label: string }): void {
+  // Декларативное поле в приоритете, инлайн — только для старых id
+  const cfg = (npc as any).miniBoss ?? inline;
+  if (!cfg) return;  // У NPC нет мини-босса — кнопки нет
+  const btnFight = document.createElement('button');
+  btnFight.className = 'tma-btn npc-action-extra';
+  btnFight.style.backgroundColor = '#ff3b30';
+  btnFight.innerText = cfg.label;
+  btnFight.onclick = () => {
+    if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
+    if (!state.myTeam.some((m: any) => (m.currentHp || 0) > 0)) { showToast('Нужен живой покемон!', true); return; }
+    modal.style.display = 'none';
+    startMiniBossBattle(cfg.leaderKey);
+  };
+  actionsContainer.insertBefore(btnFight, document.getElementById('btn-close-npc'));
+}
+
 // ── openNPCDialog: открыть модалку диалога с NPC ────────
 // Принимает npcId — ID NPC из NPC_DATA
 // Показывает: спрайт NPC, имя, текст диалога, список квестов,
@@ -340,42 +389,15 @@ export function openNPCDialog(npcId: string) {
     actionsContainer.insertBefore(btnStyle, document.getElementById('btn-close-npc'));
   }
 
-  // ── NPC: Отправитель (выдача посылки для квеста курьера) ──
+  // ── Декларативная выдача груза (viridian_sender — инлайн, новые NPC — через npc.parcel) ──
+  // Запись viridian_sender в src/data/npc.ts — чужой контент, не трогаем:
+  // старый NPC покрыт инлайн-конфигом, поведение сохранено байт-в-байт.
   // Квест живёт у курьера в Пьютере (там сдача), а посылка выдаётся здесь.
-  if (npcId === 'viridian_sender') {
-    const btnParcel = document.createElement('button');
-    btnParcel.className = 'tma-btn npc-action-extra';
-    btnParcel.style.backgroundColor = '#8e8e93';
-    btnParcel.innerText = '📦 Взять посылку для Пьютера';
-    btnParcel.onclick = () => {
-      if (state.completedNPCQuests.includes('pw_courier')) {
-        showToast('Ты уже доставил посылку!', false);
-        return;
-      }
-      if (!('pw_courier' in state.npcQuestProgress)) state.npcQuestProgress['pw_courier'] = 0;
-      addItem('courierParcel', 1);
-      showToast('Получено: Посылка курьера ×1 (вези в Пьютер, не вскрывать!)', false);
-      modal.style.display = 'none';
-      store.emit('save');
-    };
-    actionsContainer.insertBefore(btnParcel, document.getElementById('btn-close-npc'));
-  }
+  parcelButton(npc, modal, actionsContainer, npcId === 'viridian_sender' ? { questId: 'pw_courier', doneQuestId: 'pw_courier', itemId: 'courierParcel', label: '📦 Взять посылку для Пьютера', doneText: 'Ты уже доставил посылку!', toastText: 'Получено: Посылка курьера ×1 (вези в Пьютер, не вскрывать!)' } : undefined);
 
-  // ── NPC: Задира (мини-босс, бой без значка) ──
+  // ── Декларативный мини-босс (pewter_bully — инлайн, новые NPC — через npc.miniBoss) ──
   // Квест «Кулачный боец»: победа трекается как boss_win.
-  if (npcId === 'pewter_bully') {
-    const btnFight = document.createElement('button');
-    btnFight.className = 'tma-btn npc-action-extra';
-    btnFight.style.backgroundColor = '#ff3b30';
-    btnFight.innerText = '🥊 Сразиться (команда 3×Lv28)';
-    btnFight.onclick = () => {
-      if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
-      if (!state.myTeam.some((m: any) => (m.currentHp || 0) > 0)) { showToast('Нужен живой покемон!', true); return; }
-      modal.style.display = 'none';
-      startMiniBossBattle('pewterBully');
-    };
-    actionsContainer.insertBefore(btnFight, document.getElementById('btn-close-npc'));
-  }
+  miniBossButton(npc, modal, actionsContainer, npcId === 'pewter_bully' ? { leaderKey: 'pewterBully', label: '🥊 Сразиться (команда 3×Lv28)' } : undefined);
 
   // ── NPC: Питомник (PC + боксы разведения) ──
   // C3: кнопки смотрителя-депозита больше нет (openDaycareDeposit удалён из

@@ -19,6 +19,288 @@ export const gymLeaders = {
     ],
   },
 
+  // ── Пловец Финн — мини-босс у стадиона Церулина (water) ──
+  ceruleanFinn: {
+    name: 'Пловец Финн',
+    title: 'Прибойный кулак',
+    type: 'water',
+    badgeName: '',
+    badgeIcon: '🌊',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'psyduck', level: 33 },
+      { name: 'poliwhirl', level: 33 },
+      { name: 'tentacruel', level: 33 },
+    ],
+  },
+
+  // ── Матрос Вольт — мини-босс у стадиона Вермилиона (electric) ──
+  vermilionVolt: {
+    name: 'Матрос Вольт',
+    title: 'Высоковольтный',
+    type: 'electric',
+    badgeName: '',
+    badgeIcon: '⚡',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'pikachu', level: 38 },
+      { name: 'magneton', level: 38 },
+      { name: 'electabuzz', level: 38 },
+    ],
+  },
+
+  // ── Садовница Флора — мини-босс у стадиона Селадона (grass) ──
+  celadonFlora: {
+    name: 'Садовница Флора',
+    title: 'Шипастый кулак',
+    type: 'grass',
+    badgeName: '',
+    badgeIcon: '🍃',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'bellsprout', level: 43 },
+      { name: 'exeggcute', level: 43 },
+      { name: 'tangela', level: 43 },
+      { name: 'vileplume', level: 43 },
+    ],
+  },
+
+  // ── Медиум Эспер — мини-босс у стадиона Шаффрана (psychic) ──
+  saffronEsper: {
+    name: 'Медиум Эспер',
+    title: 'Третий глаз',
+    type: 'psychic',
+    badgeName: '',
+    badgeIcon: '🌀',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'drowzee', level: 48 },
+      { name: 'kadabra', level: 48 },
+      { name: 'mr-mime', level: 48 },
+      { name: 'hypno', level: 48 },
+    ],
+  },
+
+  // ── Ученик Коги — мини-босс у стадиона Фуксии (poison) ──
+  fuchsiaApprentice: {
+    name: 'Ученик Коги',
+    title: 'Тихий шаг',
+    type: 'poison',
+    badgeName: '',
+    badgeIcon: '🥷',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'koffing', level: 53 },
+      { name: 'grimer', level: 53 },
+      { name: 'ekans', level: 53 },
+      { name: 'arbok', level: 53 },
+    ],
+  },
+
+  // ── Пирокинетик Блейз — мини-босс у стадиона Острова Киноварь (fire) ──
+  cinnabarBlaze: {
+    name: 'Пирокинетик Блейз',
+    title: 'Испытание жаром',
+    type: 'fire',
+    badgeName: '',
+    badgeIcon: '🔥',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'ponyta', level: 58 },
+      { name: 'growlithe', level: 58 },
+      { name: 'magmar', level: 58 },
+      { name: 'rapidash', level: 58 },
+    ],
+  },
+
+  // ── Агент R — мини-босс у стадиона Виридиана (ground) ──
+  viridianAgent: {
+    name: 'Агент R',
+    title: 'Операция «Крот»',
+    type: 'ground',
+    badgeName: '',
+    badgeIcon: '🕶️',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'cubone', level: 63 },
+      { name: 'rhyhorn', level: 63 },
+      { name: 'diglett', level: 63 },
+      { name: 'dugtrio', level: 63 },
+      { name: 'marowak', level: 63 },
+    ],
+  },
+
+  // ── Пилот Скай — мини-босс у стадиона Вайолет (flying) ──
+  violetSky: {
+    name: 'Пилот Скай',
+    title: 'Воздушный бой',
+    type: 'flying',
+    badgeName: '',
+    badgeIcon: '🦅',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'pidgeotto', level: 68 },
+      { name: 'fearow', level: 68 },
+      { name: 'noctowl', level: 68 },
+      { name: 'skarmory', level: 68 },
+      { name: 'dodrio', level: 68 },
+    ],
+  },
+
+  // ── Ловец Жуков Рой — мини-босс у стадиона Азалии (bug) ──
+  azaleaSwarm: {
+    name: 'Ловец Жуков Рой',
+    title: 'Роевой гул',
+    type: 'bug',
+    badgeName: '',
+    badgeIcon: '🐝',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'parasect', level: 73 },
+      { name: 'venomoth', level: 73 },
+      { name: 'scyther', level: 73 },
+      { name: 'heracross', level: 73 },
+      { name: 'forretress', level: 73 },
+    ],
+  },
+
+  // ── Суперфанат Норм — мини-босс у стадиона Голденрода (normal) ──
+  goldenrodNorm: {
+    name: 'Суперфанат Норм',
+    title: 'Звёздный час',
+    type: 'normal',
+    badgeName: '',
+    badgeIcon: '🌟',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'raticate', level: 78 },
+      { name: 'clefable', level: 78 },
+      { name: 'wigglytuff', level: 78 },
+      { name: 'persian', level: 78 },
+      { name: 'porygon', level: 78 },
+    ],
+  },
+
+  // ── Медиум Тень — мини-босс у стадиона Эйкрутика (ghost) ──
+  ecruteakShade: {
+    name: 'Медиум Тень',
+    title: 'Шепот башни',
+    type: 'ghost',
+    badgeName: '',
+    badgeIcon: '🎐',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'gastly', level: 83 },
+      { name: 'haunter', level: 83 },
+      { name: 'haunter', level: 83 },
+      { name: 'misdreavus', level: 83 },
+      { name: 'gengar', level: 83 },
+      { name: 'gengar', level: 83 },
+    ],
+  },
+
+  // ── Ученик Чака — мини-босс у стадиона Сианвуда (fighting) ──
+  cianwoodPupil: {
+    name: 'Ученик Чака',
+    title: 'Тысяча первый удар',
+    type: 'fighting',
+    badgeName: '',
+    badgeIcon: '👊',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'primeape', level: 88 },
+      { name: 'machoke', level: 88 },
+      { name: 'hitmonlee', level: 88 },
+      { name: 'hitmonchan', level: 88 },
+      { name: 'machamp', level: 88 },
+      { name: 'heracross', level: 88 },
+    ],
+  },
+
+  // ── Инженер Сталь — мини-босс у стадиона Оливина (steel) ──
+  olivineSteel: {
+    name: 'Инженер Сталь',
+    title: 'Проверка на прочность',
+    type: 'steel',
+    badgeName: '',
+    badgeIcon: '⚙️',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'magneton', level: 88 },
+      { name: 'forretress', level: 88 },
+      { name: 'skarmory', level: 88 },
+      { name: 'steelix', level: 88 },
+      { name: 'scizor', level: 88 },
+      { name: 'magneton', level: 88 },
+    ],
+  },
+
+  // ── Морозко — мини-босс у стадиона Махогани (ice) ──
+  mahoganyFrost: {
+    name: 'Морозко',
+    title: 'Холодный приём',
+    type: 'ice',
+    badgeName: '',
+    badgeIcon: '❄️',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'dewgong', level: 88 },
+      { name: 'cloyster', level: 88 },
+      { name: 'sneasel', level: 88 },
+      { name: 'piloswine', level: 88 },
+      { name: 'delibird', level: 88 },
+      { name: 'jynx', level: 88 },
+    ],
+  },
+
+  // ── Наследница Клер — мини-босс у стадиона Блэкторна (dragon) ──
+  blackthornHeir: {
+    name: 'Наследница Клер',
+    title: 'Кровь и чешуя',
+    type: 'dragon',
+    badgeName: '',
+    badgeIcon: '🐉',
+    trainingStage: 0,
+    moneyReward: 0,
+    friendly: true,
+    team: [
+      { name: 'dragonair', level: 88 },
+      { name: 'kingdra', level: 88 },
+      { name: 'dragonair', level: 88 },
+      { name: 'kingdra', level: 88 },
+      { name: 'dragonite', level: 88 },
+      { name: 'dragonite', level: 88 },
+    ],
+  },
+
   // ── Брок — Лидер Зала Пьютера (rock) ──
   pewterStadium: {
     name: 'Брок',

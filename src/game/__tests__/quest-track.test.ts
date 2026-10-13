@@ -139,4 +139,36 @@ describe('verifyQuest', () => {
     expect(verifyQuest({ verify: { evPool: 100 } }).ok).toBe(true);
     expect(verifyQuest({ verify: { evPool: 200 } }).ok).toBe(false);
   });
+
+  it('typeSpecies: вода (новый ключ)', () => {
+    state.pokedexCaught = new Set(['squirtle', 'psyduck', 'pikachu']);
+    expect(verifyQuest({ verify: { typeSpecies: ['squirtle', 'psyduck', 'staryu'], typeCount: 2 } }).ok).toBe(true);
+    const fail = verifyQuest({ verify: { typeSpecies: ['squirtle', 'psyduck', 'staryu'], typeCount: 3 } });
+    expect(fail.ok).toBe(false);
+    expect(fail.missing).toBe('видов 2/3');
+  });
+
+  it('region/regionLocs: Джото (новый ключ)', () => {
+    state.visitedLocations = new Set(['blackthornCity', 'cherrygroveCity', 'pewterCity']);
+    expect(verifyQuest({ verify: { region: 'johto', regionLocs: 2 } }).ok).toBe(true);
+    const fail = verifyQuest({ verify: { region: 'johto', regionLocs: 3 } });
+    expect(fail.ok).toBe(false);
+    expect(fail.missing).toBe('локаций johto 2/3');
+  });
+
+  it('алиас rockSpecies работает как раньше', () => {
+    state.pokedexCaught = new Set(['geodude', 'onix']);
+    expect(verifyQuest({ verify: { rockSpecies: ['geodude', 'onix', 'rhyhorn'], rockCount: 2 } }).ok).toBe(true);
+    const fail = verifyQuest({ verify: { rockSpecies: ['geodude', 'onix', 'rhyhorn'], rockCount: 3 } });
+    expect(fail.ok).toBe(false);
+    expect(fail.missing).toBe('каменных видов 2/3');
+  });
+
+  it('алиас kantoLocs работает как раньше', () => {
+    state.visitedLocations = new Set(['pewterCity', 'route3']);
+    expect(verifyQuest({ verify: { kantoLocs: 2 } }).ok).toBe(true);
+    const fail = verifyQuest({ verify: { kantoLocs: 3 } });
+    expect(fail.ok).toBe(false);
+    expect(fail.missing).toBe('локаций Канто 2/3');
+  });
 });

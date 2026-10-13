@@ -111,9 +111,11 @@ export interface VerifyResult { ok: boolean; missing: string }
  * verifyQuest — составные условия сдачи (q.verify).
  *   avgLevel: средний эффективный уровень команды ≥ N
  *   maxLevel: хоть один покемон ≥ N
- *   rockSpecies: поймано ≥ N видов из списка
+ *   typeSpecies/typeCount: поймано ≥ N видов из списка
+ *     (rockSpecies/rockCount — алиас для обратной совместимости)
  *   locs: посещены все из списка (visitedLocations)
- *   kantoLocs: посещено ≥ N локаций Канто
+ *   region/regionLocs: посещено ≥ N локаций региона (ключ из REGIONS)
+ *     (kantoLocs — алиас region='kanto' для обратной совместимости)
  *   evPool: суммарный EV-пул команды ≥ N
  */
 export function verifyQuest(q: any): VerifyResult {
@@ -130,11 +132,16 @@ export function verifyQuest(q: any): VerifyResult {
     const mx = team.reduce((s, m) => Math.max(s, eff(m)), 0);
     if (mx < v.maxLevel) return { ok: false, missing: `максимум ${mx} < ${v.maxLevel}` };
   }
-  if (v.rockSpecies) {
+  const speciesList: string[] | undefined = v.typeSpecies ?? v.rockSpecies;
+  if (speciesList) {
+    const need = v.typeSpecies ? v.typeCount : v.rockCount;
     const caught = state.pokedexCaught;
     const has = (s: string) => caught instanceof Set ? caught.has(s) : (caught || []).includes(s);
-    const n = (v.rockSpecies as string[]).filter(has).length;
-    if (n < v.rockCount) return { ok: false, missing: `каменных видов ${n}/${v.rockCount}` };
+    const n = (speciesList as string[]).filter(has).length;
+    if (n < need) {
+      if (v.typeSpecies) return { ok: false, missing: `видов ${n}/${v.typeCount}` };
+      return { ok: false, missing: `каменных видов ${n}/${v.rockCount}` };
+    }
   }
   if (v.locs) {
     const visited: string[] = Array.isArray(state.visitedLocations)
@@ -143,13 +150,18 @@ export function verifyQuest(q: any): VerifyResult {
     const missing = (v.locs as string[]).filter((l) => !visited.includes(l));
     if (missing.length) return { ok: false, missing: `не посещено: ${missing.length}` };
   }
-  if (v.kantoLocs) {
-    const kanto = Object.keys((REGIONS as any).kanto?.locations || {});
+  const regionKey: string | undefined = v.region ?? (v.kantoLocs ? 'kanto' : undefined);
+  if (regionKey) {
+    const need = v.region ? v.regionLocs : v.kantoLocs;
+    const locs = Object.keys((REGIONS as any)[regionKey]?.locations || {});
     const visited: string[] = Array.isArray(state.visitedLocations)
       ? state.visitedLocations
       : [...(state.visitedLocations || [])];
-    const n = visited.filter((l) => kanto.includes(l)).length;
-    if (n < v.kantoLocs) return { ok: false, missing: `локаций Канто ${n}/${v.kantoLocs}` };
+    const n = visited.filter((l) => locs.includes(l)).length;
+    if (n < need) {
+      if (v.region) return { ok: false, missing: `локаций ${v.region} ${n}/${v.regionLocs}` };
+      return { ok: false, missing: `локаций Канто ${n}/${v.kantoLocs}` };
+    }
   }
   if (v.evPool) {
     const sum = team.reduce((s, m) => s + (m.evPool || 0), 0);

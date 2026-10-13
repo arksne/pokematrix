@@ -18,10 +18,10 @@ async function card() {
 }
 
 describe('titles data', () => {
-  it('10 титулов пачки Пьютера, id уникальны', () => {
-    expect(TITLES.length).toBe(10);
+  it('40 титулов пачки Пьютера и лесенки, id уникальны', () => {
+    expect(TITLES.length).toBe(40);
     const ids = TITLES.map((t) => t.id);
-    expect(new Set(ids).size).toBe(10);
+    expect(new Set(ids).size).toBe(40);
     for (const t of TITLES) {
       expect(t.icon.trim().length).toBeGreaterThan(0);
       expect(t.name.trim().length).toBeGreaterThan(0);
@@ -33,6 +33,46 @@ describe('titles data', () => {
     expect(getTitleById('nope')).toBeUndefined();
     expect(isTitleId('undefeated')).toBe(true);
     expect(isTitleId('nope')).toBe(false);
+  });
+
+  it('все 30 id из лесенки существуют', () => {
+    const ladderIds = [
+      'tideMaster',
+      'stormRod',
+      'leafFriend',
+      'mindBender',
+      'fuchsiaShadow',
+      'fireSpirit',
+      'rBane',
+      'skyLord',
+      'swarmKin',
+      'goldenStar',
+      'spiritFriend',
+      'ironFist',
+      'steelWill',
+      'winterHeart',
+      'dragonBlood',
+      'cerUnsinkable',
+      'verGrounded',
+      'celUnfading',
+      'safClosedBook',
+      'fucSilent',
+      'cinUnburnt',
+      'virIncorruptible',
+      'vioFreeWind',
+      'azaSting',
+      'golIdol',
+      'ecrIncorporeal',
+      'ciaUnbroken',
+      'oliStainless',
+      'mahWarmHeart',
+      'blaDragonlord',
+    ];
+    expect(ladderIds.length).toBe(30);
+    for (const id of ladderIds) {
+      expect(getTitleById(id), id).toBeDefined();
+      expect(isTitleId(id), id).toBe(true);
+    }
   });
 });
 

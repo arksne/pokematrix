@@ -91,8 +91,8 @@ const SHOP_STOCK_RAW = {
   'viridianCity_pokemart': [
     // Ворота Виридианского леса: нест-боллы для жуков (отличие от Паллета)
     'nestBall',
-    // Почта: посылки курьера (квест «Гонец»)
-    'courierParcel',
+    // Почта: посылки курьера (квест «Гонец») + плечи доставок лесенки
+    'courierParcel', 'parcelLeg1', 'parcelLeg2',
     'antidote', 'arenaToken', 'assaultVest',
     'awakening', 'berryJuice', 'blackBelt', 'blackGlasses', 'burnHeal', 'charcoal', 'dracoPlate', 'dragonFang',
     'dreadPlate', 'earthPlate',
@@ -624,6 +624,8 @@ const SHOP_STOCK_RAW = {
   'olivineCity_pokemart': [
     // Маяк: Thunder Punch
     'tm68',
+    // Пункт выдачи маяка: зелье для Амфарос (квест Оливина)
+    'secretPotion',
     'abilityCapsule', 'abilityPatch', 'absorbBulb', 'adrenalineOrb',
     'airBalloon', 'amuletCoin', 'antidote', 'arenaToken', 'assaultVest', 'awakening', 'berryJuice',
     'berrySweet', 'bigMalasada', 'bigRoot', 'blackBelt',
