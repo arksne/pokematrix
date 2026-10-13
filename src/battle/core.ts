@@ -79,7 +79,7 @@ import { addNotification } from '../ui/notifications.js';                // Ув
 // Это singleton — один инстанс на весь бой.
 // Экспортируется для тестов (могут создать свой через BattleStateMachine.create())
 import { BattleStateMachine, BattlePhase, recoverStuckTurn, leaveBattleToIdle } from './state-machine.js';
-import { getEncounterRate } from '../data/encounter.js';  // листовой модуль — цикла нет
+import { getEncounterRate, effectiveEncounterRate, tickEncounterCounters } from '../data/encounter.js';  // листовой модуль — цикла нет
 import { specialMechanic, towerLevel, encounterRateFor } from './special-loc.js';  // M-4: механики пещер/башен
 
 /** Singleton state machine — единый автомат фаз для всего боя */
@@ -3333,7 +3333,8 @@ function startAutoHunt() {
     // M-4: в тёмной пещере ночью звери реже (darkRate), а в башне — то же.
     const locHere = store.getLocation(GS.currentLocationId);
     const mech = specialMechanic(locHere);
-    const huntRate = encounterRateFor(getEncounterRate(GS.currentLocationId), mech, GS.isDaytime !== false);
+    const huntRate = effectiveEncounterRate(encounterRateFor(getEncounterRate(GS.currentLocationId), mech, GS.isDaytime !== false));
+    tickEncounterCounters();
     // 20% base chance every tick — базовый шанс найти покемона
     if (Math.random() < huntRate) {
       const pkmName = pickWeightedEncounter(enc);
@@ -7605,6 +7606,15 @@ function initEncounterEvents() {
       } else {
         return showToast('Этот предмет пока не работает в бою.', true);
       }
+    } else if (['pokeDoll', 'pokeToy', 'fluffyTail'].includes(item)) {
+      // Куклы побега: только дикий бой, уход без штрафа (в отличие от кнопки
+      // побега, где активный теряет сознание). Не работает против тренеров.
+      if (S.battleType !== 'wild') return showToast('От тренеров куклой не сбежать!', true);
+      if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
+      store.removeItem(item);
+      store.updateInventoryDisplay();
+      document.getElementById('battle-main-menu').style.display = 'none';
+      fleeWildBattle(`${S.activePlayerMon.apiData.name} отвлекает врага ${itemDef(item).nameRu} и сбегает!`);
     } else if (itemCategory(item) === 'evolutionStones' && item !== 'evolutionStone') {
       if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
       (async () => {

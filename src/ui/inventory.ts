@@ -59,7 +59,7 @@ import { evBudget } from '../battle/core.js';
 import { addItem, removeItem } from '../game/actions.js';
 // getItemQty — возвращает количество предмета по ID из глобального state.inventory
 // Например, getItemQty('pokeball') → 12
-import { getItemQty } from '../game/state.js';
+import { getItemQty, state } from '../game/state.js';
 // refreshProfileUI — обновляет интерфейс профиля покемона (статы, иконки и т.д.)
 // saveActiveMonData — сохраняет данные текущего покемона (EV, тренировка и т.д.)
 import { refreshProfileUI, saveActiveMonData } from './profile.js';
@@ -793,8 +793,11 @@ export async function useItem(itemId) {
   if (!item.isUsable) return showToast(`${item.nameRu} нельзя использовать из рюкзака.`, true);  // Нельзя юзать
 
   // ── Определяем, нужен ли выбранный покемон ──
-  // Некоторые предметы работают без покемона (удочки, крафт, коробки)
-  const noPokemonItems = ['craftersKit', 'oldRod', 'goodRod', 'superRod', 'typeCandyBox'];
+  // Некоторые предметы работают без покемона (удочки, крафт, коробки,
+  // репелленты, приманки, флейты, верёвка; куклы — только в бою)
+  const noPokemonItems = ['craftersKit', 'oldRod', 'goodRod', 'superRod', 'typeCandyBox',
+    'repel', 'superRepel', 'maxRepel', 'lure', 'superLure', 'maxLure',
+    'blackFlute', 'whiteFlute', 'escapeRope'];
   const needsPokemon = !noPokemonItems.includes(itemId);
 
   // Если нужен покемон, но не выбран — ошибка
@@ -867,6 +870,53 @@ export async function useItem(itemId) {
     case 'rareCandy': {
       await feedCandy(mon, 'rareCandy', 'Сладкую Конфету');
       break;
+    }
+
+    // ── Репелленты: N попыток охоты без встреч ──
+    case 'repel': case 'superRepel': case 'maxRepel': {
+      const charges = { repel: 100, superRepel: 200, maxRepel: 250 }[itemId] || 100;
+      removeItem(itemId);
+      state.repelHunts = (state.repelHunts || 0) + charges;
+      state.lureHunts = 0; state.lureMult = 1; // репеллент перебивает приманку
+      store.emit('save');
+      showToast(`Репеллент: ${charges} попыток охоты без встреч!`, false);
+      break;
+    }
+
+    // ── Приманки и флейты: множитель шанса на N попыток ──
+    case 'lure': case 'superLure': case 'maxLure': case 'blackFlute': case 'whiteFlute': {
+      const cfg: Record<string, { mult: number; hunts: number; label: string }> = {
+        lure: { mult: 2, hunts: 50, label: 'Приманка' },
+        superLure: { mult: 3, hunts: 100, label: 'Супер-приманка' },
+        maxLure: { mult: 3, hunts: 150, label: 'Макс-приманка' },
+        blackFlute: { mult: 0.5, hunts: 100, label: 'Чёрная флейта' },
+        whiteFlute: { mult: 2, hunts: 100, label: 'Белая флейта' },
+      };
+      const c = cfg[itemId];
+      removeItem(itemId);
+      state.lureHunts = (state.lureHunts || 0) + c.hunts;
+      state.lureMult = c.mult; // свежая перекрывает старую
+      state.repelHunts = 0; // приманка перебивает репеллент
+      store.emit('save');
+      showToast(`${c.label}: шанс встречи ×${c.mult} на ${c.hunts} попыток!`, false);
+      break;
+    }
+
+    // ── Верёвка: возврат в хаб региона ──
+    case 'escapeRope': {
+      removeItem(itemId);
+      const region = state.currentRegion;
+      const hub = region === 'kanto' ? 'saffronCity' : 'goldenrodCity';
+      const hubRegion = region === 'kanto' ? 'kanto' : 'johto';
+      showToast('Верёвка выводит вас к городу!', false);
+      const m = await import('./location.js');
+      m.travelToRegion(hubRegion, hub);
+      break;
+    }
+
+    // ── Куклы побега: только в бою (вне боя — честный отказ) ──
+    case 'pokeDoll': case 'pokeToy': case 'fluffyTail': {
+      return showToast('Это средство побега — используйте в бою!', true);
     }
 
     // ── Коробка типовых конфет: 10 случайных внутри ──

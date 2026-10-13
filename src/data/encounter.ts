@@ -40,3 +40,23 @@ export function getEncounterRate(locId: string | null | undefined): number {
   if (typeof dataRate === 'number' && dataRate >= 0 && dataRate <= 1) return dataRate;
   return 0.20;
 }
+
+/**
+ * effectiveEncounterRate — шанс с учётом расходников:
+ * репеллент глушит встречи в ноль, приманка/флейта умножают.
+ * Чисто от мира, но читает счётчики state (тесты подменяют объект).
+ */
+export function effectiveEncounterRate(base: number, st: { repelHunts?: number; lureHunts?: number; lureMult?: number } = state): number {
+  if ((st.repelHunts || 0) > 0) return 0;
+  if ((st.lureHunts || 0) > 0) return Math.min(1, base * (st.lureMult || 1));
+  return base;
+}
+
+/** tickEncounterCounters — одна попытка охоты съедает заряд. */
+export function tickEncounterCounters(st: { repelHunts?: number; lureHunts?: number; lureMult?: number } = state): void {
+  if ((st.repelHunts || 0) > 0) st.repelHunts!--;
+  else if ((st.lureHunts || 0) > 0) {
+    st.lureHunts!--;
+    if (st.lureHunts! <= 0) st.lureMult = 1;
+  }
+}

@@ -71,6 +71,9 @@ export const state: Record<string, any> = {
   daycareMons: [] as Array<any>,  // Покемоны в питомнике
   transport: null as any,         // Рейс C3: {vehicle, from, to, departAt, arriveAt} | null
   customEncounterRates: {} as Record<string, number>,  // H1: кастом частоты энкаунтеров по locId (админка)
+  repelHunts: 0,   // репеллент: столько попыток охоты без встреч
+  lureHunts: 0,    // приманка: столько попыток с множителем
+  lureMult: 1,     // множитель шанса от приманки/флейты
   breedingPairs: [] as Array<any>, // LEGACY: авто-пары больше не используются (см. breedBoxes)
   breedBoxes: [] as Array<any>,   // Боксы разведения A1: [{a, b, readyAt} ×3]
   eggs: [] as Array<any>,         // Яйца у игрока
