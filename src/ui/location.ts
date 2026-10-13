@@ -375,12 +375,12 @@ export let renderLocation = function(locId: any) {
   // Теперь гейт отправляет игрока в обычную локацию и говорит почему.
   // Уровень считается ЭФФЕКТИВНЫЙ (baseLevel + candiesEaten) — как везде в UI:
   // иначе покемон 15+2 конфеты (17 на экране) проходил в зону новичков.
-  if (locId === 'goldenrodCity_trainingGrounds' && state.myTeam.length > 0) {
+  if (locId === 'pewterCity_trainingGrounds' && state.myTeam.length > 0) {
     const maxLvl = Math.max(...state.myTeam.map((m: any) => (m.baseLevel || 0) + (m.candiesEaten || 0)));
     if (maxLvl > 15) {
-      state.currentLocationId = 'goldenrodCity';
-      locId = 'goldenrodCity';
-      showToast('Тренировочная зона только для новичков (покемоны до 15 уровня) — вы в Голденроде', true);
+      state.currentLocationId = 'pewterCity';
+      locId = 'pewterCity';
+      showToast('Тренировочная зона только для новичков (покемоны до 15 уровня) — вы в Пьютере', true);
     }
   }
 

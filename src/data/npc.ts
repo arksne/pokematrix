@@ -594,9 +594,9 @@ export const NPC_DATA = {
     quests: [],
   },
   'i1_training_master': {
-    id: 'i1_training_master', name: 'Мастер тренировок Рэй', sprite: '🏋️', location: 'goldenrodCity_trainingGrounds',
+    id: 'i1_training_master', name: 'Мастер тренировок Рэй', sprite: '🏋️', location: 'pewterCity_trainingGrounds',
     dialog: {
-      greet: 'Тренировочная зона Голденрода: пот, зелья и спарринги. Выдержишь мою изнуряющую программу?',
+      greet: 'Тренировочная зона Пьютера: пот, зелья и спарринги. Выдержишь мою изнуряющую программу?',
       default: 'Отдых — тоже тренировка. Но только после спаррингов!',
       quest_offer: 'Программа требует {target} {item}. Полотенце не забудь!',
       quest_complete: 'Мышцы и команда крепнут на глазах! Держи пайку.',

@@ -160,7 +160,7 @@ await stuck.page.evaluate(() => {
   const trainerId = '779000555';
   localStorage.setItem(`league17_save_${trainerId}`, JSON.stringify({
     _v: Date.now(), _ts: Date.now(), starterGiven: true,
-    currentLocationId: 'goldenrodCity_trainingGrounds', currentRegion: 'johto',
+    currentLocationId: 'pewterCity_trainingGrounds', currentRegion: 'kanto',
     myTeam: [{ uid: 'stuck-mon', apiData: { name: 'combusken' }, baseLevel: 19, candiesEaten: 0, currentHp: 30, maxHp: 30, ivs: {}, evs: {} }],
     pcBoxes: [[]], inventory: { credit: 1000, pokeBall: 5 }, money: 1000, badges: [],
   }));
