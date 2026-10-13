@@ -136,8 +136,10 @@ describe('M-23: ассортимент маркетов', () => {
     expect(price('tmWeak')).toBe(200000);
     expect(price('tmMid')).toBe(2000000);
     expect(price('tmTop')).toBe(20000000);
-    expect(price('tm01')).toBe(40000);
-    expect(price('tm02')).toBe(1000);
+    // Интервью ТМ: лестница 200к–20М по силе атаки (tm01 = 1.62М)
+    expect(price('tm01')).toBe(1620000);
+    expect(price('tmWeak')).toBe(200000);
+    expect(price('tmTop')).toBe(20000000);
   });
 
   it('номерные ТМ включены (isUsable) и лежат в маркетах', () => {
