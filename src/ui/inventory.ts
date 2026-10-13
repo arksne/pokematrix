@@ -149,7 +149,24 @@ export function initInventoryEvents() {
     'rareCandy': 'Конфета (уровень)',
     'vanillaCandy': 'Ванильная конфета (+2 EV)',
     'commonCandy': 'Обычная конфета (+3 EV)',
-    'typeCandy': 'Типовая конфета (+3 EV)',
+    'fireCandy': 'Огненная конфета (+3 EV)',
+    'waterCandy': 'Водная конфета (+3 EV)',
+    'electricCandy': 'Электрическая конфета (+3 EV)',
+    'grassCandy': 'Травяная конфета (+3 EV)',
+    'iceCandy': 'Ледяная конфета (+3 EV)',
+    'fightingCandy': 'Боевая конфета (+3 EV)',
+    'poisonCandy': 'Ядовитая конфета (+3 EV)',
+    'groundCandy': 'Земляная конфета (+3 EV)',
+    'flyingCandy': 'Летающая конфета (+3 EV)',
+    'psychicCandy': 'Психическая конфета (+3 EV)',
+    'bugCandy': 'Жучиная конфета (+3 EV)',
+    'rockCandy': 'Каменная конфета (+3 EV)',
+    'ghostCandy': 'Призрачная конфета (+3 EV)',
+    'dragonCandy': 'Драконья конфета (+3 EV)',
+    'darkCandy': 'Тёмная конфета (+3 EV)',
+    'steelCandy': 'Стальная конфета (+3 EV)',
+    'fairyCandy': 'Волшебная конфета (+3 EV)',
+    'normalCandy': 'Нормальная конфета (+3 EV)',
     'hpUp': 'Витамин (+EV)',
     'train': 'Тренировка (усиление стата)',
     'weaken': 'Ослабление (сброс тренировки)',
@@ -178,7 +195,24 @@ export function openItemsMenu(qaMap?: Record<string, string>) {
     'rareCandy': 'Конфета (уровень)',
     'vanillaCandy': 'Ванильная конфета (+2 EV)',
     'commonCandy': 'Обычная конфета (+3 EV)',
-    'typeCandy': 'Типовая конфета (+3 EV)',
+    'fireCandy': 'Огненная конфета (+3 EV)',
+    'waterCandy': 'Водная конфета (+3 EV)',
+    'electricCandy': 'Электрическая конфета (+3 EV)',
+    'grassCandy': 'Травяная конфета (+3 EV)',
+    'iceCandy': 'Ледяная конфета (+3 EV)',
+    'fightingCandy': 'Боевая конфета (+3 EV)',
+    'poisonCandy': 'Ядовитая конфета (+3 EV)',
+    'groundCandy': 'Земляная конфета (+3 EV)',
+    'flyingCandy': 'Летающая конфета (+3 EV)',
+    'psychicCandy': 'Психическая конфета (+3 EV)',
+    'bugCandy': 'Жучиная конфета (+3 EV)',
+    'rockCandy': 'Каменная конфета (+3 EV)',
+    'ghostCandy': 'Призрачная конфета (+3 EV)',
+    'dragonCandy': 'Драконья конфета (+3 EV)',
+    'darkCandy': 'Тёмная конфета (+3 EV)',
+    'steelCandy': 'Стальная конфета (+3 EV)',
+    'fairyCandy': 'Волшебная конфета (+3 EV)',
+    'normalCandy': 'Нормальная конфета (+3 EV)',
     'hpUp': 'Витамин (+EV)',
     'train': 'Тренировка (усиление стата)',
     'weaken': 'Ослабление (сброс тренировки)',
@@ -624,7 +658,24 @@ export function renderInventory() {
   });
 }
 
-// ── feedCandy: скормить конфету (общий путь всех 4 видов) ──
+/** Типовая конфета → тип. Решение: 18 конфет, каждая только своему типу. */
+export const TYPE_CANDY_TYPE: Record<string, string> = {
+  normalCandy: 'normal', fireCandy: 'fire', waterCandy: 'water',
+  electricCandy: 'electric', grassCandy: 'grass', iceCandy: 'ice',
+  fightingCandy: 'fighting', poisonCandy: 'poison', groundCandy: 'ground',
+  flyingCandy: 'flying', psychicCandy: 'psychic', bugCandy: 'bug',
+  rockCandy: 'rock', ghostCandy: 'ghost', dragonCandy: 'dragon',
+  darkCandy: 'dark', steelCandy: 'steel', fairyCandy: 'fairy',
+};
+
+/** Подходит ли типовая конфета покемону (есть ли нужный тип). Чисто, для тестов. */
+export function canEatTypeCandy(mon: any, itemId: string): boolean {
+  const need = TYPE_CANDY_TYPE[itemId];
+  if (!need) return false;
+  return (mon?.apiData?.types || []).some((t: any) => t?.type?.name === need);
+}
+
+// ── feedCandy: скормить конфету (общий путь всех видов) ──
 // +1 уровень всегда, +EV в пул по типу конфеты, пересчёт HP, эволюция,
 // новые атаки. Возвращает false если уровень уже 100.
 async function feedCandy(mon, itemId, label, evGain = 4) {
@@ -816,8 +867,16 @@ export async function useItem(itemId) {
       await feedCandy(mon, 'commonCandy', 'Обычную конфету', 3);
       break;
     }
-    case 'typeCandy': {
-      await feedCandy(mon, 'typeCandy', 'Типовую конфету', 3);
+    case 'fireCandy': case 'waterCandy': case 'electricCandy': case 'grassCandy':
+    case 'iceCandy': case 'fightingCandy': case 'poisonCandy': case 'groundCandy':
+    case 'flyingCandy': case 'psychicCandy': case 'bugCandy': case 'rockCandy':
+    case 'ghostCandy': case 'dragonCandy': case 'darkCandy': case 'steelCandy':
+    case 'fairyCandy': case 'normalCandy': {
+      // Типовая конфета — только своему типу (решение: одна на тип)
+      const need = TYPE_CANDY_TYPE[itemId];
+      const has = (mon.apiData?.types || []).some((t: any) => t?.type?.name === need);
+      if (!has) return showToast(`Эта конфета только для ${need}-типа!`, true);
+      await feedCandy(mon, itemId, itemDef(itemId).nameRu, 3);
       break;
     }
 

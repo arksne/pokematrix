@@ -60,6 +60,16 @@ export const NPC_DATA = {
     quests: [],
   },
 
+  // Stylist: смена характера за деньги (решение: минты убраны, характер только здесь)
+  'goldenrod_stylist': {
+    id: 'goldenrod_stylist', name: 'Стилист', sprite: '💇', location: 'goldenrodCity',
+    dialog: {
+      greet: 'Хочешь изменить характер покемона? Мои услуги стоят ¥100,000 за сеанс.',
+      default: 'Заглядывай, если характер команды перестал устраивать.',
+    },
+    quests: [],
+  },
+
   // Tutorial NPC at starting location
   // === EAST JOHTO NPCs ===
   'goldenrod_officer': {
