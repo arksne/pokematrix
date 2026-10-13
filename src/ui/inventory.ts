@@ -167,6 +167,7 @@ export function initInventoryEvents() {
     'steelCandy': 'Стальная конфета (+3 EV)',
     'fairyCandy': 'Волшебная конфета (+3 EV)',
     'normalCandy': 'Нормальная конфета (+3 EV)',
+    'typeCandyBox': 'Коробка конфет (10 случайных)',
     'hpUp': 'Витамин (+EV)',
     'train': 'Тренировка (усиление стата)',
     'weaken': 'Ослабление (сброс тренировки)',
@@ -213,6 +214,7 @@ export function openItemsMenu(qaMap?: Record<string, string>) {
     'steelCandy': 'Стальная конфета (+3 EV)',
     'fairyCandy': 'Волшебная конфета (+3 EV)',
     'normalCandy': 'Нормальная конфета (+3 EV)',
+    'typeCandyBox': 'Коробка конфет (10 случайных)',
     'hpUp': 'Витамин (+EV)',
     'train': 'Тренировка (усиление стата)',
     'weaken': 'Ослабление (сброс тренировки)',
@@ -675,6 +677,17 @@ export function canEatTypeCandy(mon: any, itemId: string): boolean {
   return (mon?.apiData?.types || []).some((t: any) => t?.type?.name === need);
 }
 
+/**
+ * pickRandomCandies — 10 случайных типовых конфет из коробки.
+ * Чисто, rand инжектится для тестов. Повторы возможны (честный рандом).
+ */
+export function pickRandomCandies(n: number, rand: () => number = Math.random): string[] {
+  const pool = Object.keys(TYPE_CANDY_TYPE);
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) out.push(pool[Math.floor(rand() * pool.length)]);
+  return out;
+}
+
 // ── feedCandy: скормить конфету (общий путь всех видов) ──
 // +1 уровень всегда, +EV в пул по типу конфеты, пересчёт HP, эволюция,
 // новые атаки. Возвращает false если уровень уже 100.
@@ -780,8 +793,8 @@ export async function useItem(itemId) {
   if (!item.isUsable) return showToast(`${item.nameRu} нельзя использовать из рюкзака.`, true);  // Нельзя юзать
 
   // ── Определяем, нужен ли выбранный покемон ──
-  // Некоторые предметы работают без покемона (удочки, крафт)
-  const noPokemonItems = ['craftersKit', 'oldRod', 'goodRod', 'superRod'];
+  // Некоторые предметы работают без покемона (удочки, крафт, коробки)
+  const noPokemonItems = ['craftersKit', 'oldRod', 'goodRod', 'superRod', 'typeCandyBox'];
   const needsPokemon = !noPokemonItems.includes(itemId);
 
   // Если нужен покемон, но не выбран — ошибка
@@ -856,9 +869,19 @@ export async function useItem(itemId) {
       break;
     }
 
+    // ── Коробка типовых конфет: 10 случайных внутри ──
+    case 'typeCandyBox': {
+      removeItem('typeCandyBox');
+      const got = pickRandomCandies(10);
+      for (const id of got) addItem(id);
+      const names = got.map((id) => itemDef(id).nameRu).join(', ');
+      store.emit('save');
+      showToast(`Коробка открыта! Внутри: ${names}.`, false);
+      break;
+    }
+
     // ── Конфеты (B1): +1 уровень всегда + EV в пул по типу ──
-    // ванильная 2, обычная/типовая 3, редкая 4. Ограничение «типовая только
-    // своему типу» — TODO отдельно (нужна таблица соответствия).
+    // ванильная 2, обычная/типовые 3, редкая 4.
     case 'vanillaCandy': {
       await feedCandy(mon, 'vanillaCandy', 'Ванильную конфету', 2);
       break;

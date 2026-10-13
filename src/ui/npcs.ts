@@ -37,7 +37,7 @@ import { NPC_DATA } from '../data/npc.js';                  // Статичес�
 import { healCostForTeam, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
 import { natures } from '../data/natures.js';
 import { showSelectionModal } from '../utils/dom.js';
-import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange } from './nature-change.js';
+import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange, rollRandomNature } from './nature-change.js';
 
 // ── renderNPCQuests: отрисовка списка квестов NPC ───────
 // Принимает npc — объект NPC из NPC_DATA
@@ -242,43 +242,33 @@ export function openNPCDialog(npcId: string) {
     actionsContainer.insertBefore(btnHeal, document.getElementById('btn-close-npc'));
   }
 
-  // ── NPC: Стилист (смена характера за деньги) ──
+  // ── NPC: Стилист (РАНДОМНЫЙ характер за деньги — не на выбор) ──
   if (npcId === 'goldenrod_stylist') {
     const btnStyle = document.createElement('button');
     btnStyle.className = 'tma-btn npc-action-extra';
     btnStyle.style.backgroundColor = '#af52de';
-    btnStyle.innerText = `💇 Сменить характер (¥${NATURE_CHANGE_PRICE.toLocaleString()})`;
+    btnStyle.innerText = `💇 Рандомный характер (¥${NATURE_CHANGE_PRICE.toLocaleString()})`;
     btnStyle.onclick = () => {
       if (state.myTeam.length === 0) { showToast('У вас нет покемонов!', true); return; }
       const monChoices = state.myTeam.map((m: any, i: number) => ({
         label: `${m.nickname || m.apiData?.name} (сейчас: ${natures[m.natureIdx || 0]?.name || '?'})`,
         value: i,
       }));
-      showSelectionModal('Кому меняем характер?', monChoices, (mi: number) => {
+      showSelectionModal('Кому крутим характер? (выпадет случайно)', monChoices, (mi: number) => {
         const mon = state.myTeam[monChoices[mi]?.value];
         if (!mon) return;
-        const natChoices = natures.map((n: any, i: number) => ({
-          label: `${n.name}${i === (mon.natureIdx || 0) ? ' (текущий)' : ''}`,
-          value: i,
-        }));
-        showSelectionModal(`Характер для ${mon.nickname || mon.apiData?.name}:`, natChoices, (ni: number) => {
-          const idx = natChoices[ni]?.value;
-          if (idx === undefined || idx === (mon.natureIdx || 0)) {
-            showToast('Характер не изменился.', false);
-            return;
-          }
-          const credit = state.inventory?.credit || 0;
-          if (!canAffordNatureChange(credit)) {
-            showToast(`Сеанс стоит ¥${NATURE_CHANGE_PRICE.toLocaleString()}! Не хватает кредитов.`, true);
-            return;
-          }
-          state.inventory.credit = credit - NATURE_CHANGE_PRICE;
-          applyNatureChange(mon, idx, natures.length);
-          store.emit('money:changed');
-          store.emit('save');
-          showToast(`Новый характер: ${natures[idx]?.name}! (−¥${NATURE_CHANGE_PRICE.toLocaleString()})`, false);
-          modal.style.display = 'none';
-        });
+        const credit = state.inventory?.credit || 0;
+        if (!canAffordNatureChange(credit)) {
+          showToast(`Сеанс стоит ¥${NATURE_CHANGE_PRICE.toLocaleString()}! Не хватает кредитов.`, true);
+          return;
+        }
+        const idx = rollRandomNature(mon.natureIdx || 0, natures.length);
+        state.inventory.credit = credit - NATURE_CHANGE_PRICE;
+        applyNatureChange(mon, idx, natures.length);
+        store.emit('money:changed');
+        store.emit('save');
+        showToast(`🎰 Выпал характер: ${natures[idx]?.name}! (−¥${NATURE_CHANGE_PRICE.toLocaleString()})`, false);
+        modal.style.display = 'none';
       });
     };
     actionsContainer.insertBefore(btnStyle, document.getElementById('btn-close-npc'));

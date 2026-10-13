@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange } from '../nature-change.js';
-import { TYPE_CANDY_TYPE, canEatTypeCandy } from '../inventory.js';
+import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange, rollRandomNature } from '../nature-change.js';
+import { TYPE_CANDY_TYPE, canEatTypeCandy, pickRandomCandies } from '../inventory.js';
 
 /**
  * Стилист (смена характера за деньги) + типовые конфеты (18, по типам).
@@ -9,7 +9,18 @@ import { TYPE_CANDY_TYPE, canEatTypeCandy } from '../inventory.js';
  */
 describe('стилист', () => {
   it('цена сеанса зафиксирована', () => {
-    expect(NATURE_CHANGE_PRICE).toBe(100000);
+    expect(NATURE_CHANGE_PRICE).toBe(1500000);
+  });
+
+  it('rollRandomNature: выпадает другой, в диапазоне', () => {
+    for (let i = 0; i < 50; i++) {
+      const idx = rollRandomNature(5, 25, Math.random);
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(25);
+      expect(idx).not.toBe(5);
+    }
+    // детерминированно: 0.0 при текущем 0 → сдвиг на 1
+    expect(rollRandomNature(0, 25, () => 0)).toBe(1);
   });
 
   it('applyNatureChange: валидный новый индекс', () => {
@@ -27,8 +38,8 @@ describe('стилист', () => {
   });
 
   it('canAffordNatureChange: порог', () => {
-    expect(canAffordNatureChange(100000)).toBe(true);
-    expect(canAffordNatureChange(99999)).toBe(false);
+    expect(canAffordNatureChange(1500000)).toBe(true);
+    expect(canAffordNatureChange(1499999)).toBe(false);
     expect(canAffordNatureChange(0)).toBe(false);
   });
 });
@@ -53,5 +64,14 @@ describe('типовые конфеты', () => {
     expect(canEatTypeCandy({ apiData: {} }, 'fireCandy')).toBe(false);
     expect(canEatTypeCandy(null, 'fireCandy')).toBe(false);
     expect(canEatTypeCandy({ apiData: { types: [{ type: { name: 'fire' } }] } }, 'potion')).toBe(false);
+  });
+
+  it('pickRandomCandies: 10 штук, все из пула 18', () => {
+    const pool = Object.keys(TYPE_CANDY_TYPE);
+    const got = pickRandomCandies(10, () => 0.5);
+    expect(got).toHaveLength(10);
+    for (const id of got) expect(pool).toContain(id);
+    // детерминированно: 0 → всегда первая
+    expect(pickRandomCandies(3, () => 0)).toEqual([pool[0], pool[0], pool[0]]);
   });
 });

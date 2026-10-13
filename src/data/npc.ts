@@ -64,7 +64,7 @@ export const NPC_DATA = {
   'goldenrod_stylist': {
     id: 'goldenrod_stylist', name: 'Стилист', sprite: '💇', location: 'goldenrodCity',
     dialog: {
-      greet: 'Хочешь изменить характер покемона? Мои услуги стоят ¥100,000 за сеанс.',
+      greet: 'Кручу характер случайно! Что выпадет — то выпадет. Сеанс ¥1,500,000.',
       default: 'Заглядывай, если характер команды перестал устраивать.',
     },
     quests: [],

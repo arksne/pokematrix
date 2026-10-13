@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 
 /** Цена сеанса стилиста в кредитах. */
-export const NATURE_CHANGE_PRICE = 100000;
+export const NATURE_CHANGE_PRICE = 1500000;
 
 /**
  * Сменить характер покемона. Возвращает true если сменился
@@ -24,4 +24,16 @@ export function applyNatureChange(mon: any, natureIdx: unknown, natureCount: num
 /** Хватает ли кредитов на сеанс. */
 export function canAffordNatureChange(credit: unknown): boolean {
   return (Number(credit) || 0) >= NATURE_CHANGE_PRICE;
+}
+
+/**
+ * Рандомный характер, отличный от текущего (стилист — сюрприз, не выбор).
+ * Чисто, rand инжектится для тестов.
+ */
+export function rollRandomNature(current: unknown, natureCount: number, rand: () => number = Math.random): number {
+  const cur = Math.floor(Number(current));
+  if (!Number.isFinite(natureCount) || natureCount < 2) return 0;
+  let idx = Math.floor(rand() * natureCount);
+  if (idx === cur) idx = (idx + 1) % natureCount;
+  return idx;
 }
