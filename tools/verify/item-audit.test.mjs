@@ -111,6 +111,25 @@ const live = (id) => { const it = ITEMS.get(id); return !!it && it.impl; };
   suite.check('I-source', 'бесплатное добывается (дроп/квест/крафт)', sourceless.length === 0, sourceless.length ? `взять негде: ${sourceless.slice(0, 15).join(', ')}${sourceless.length > 15 ? ` +${sourceless.length - 15}` : ''}` : 'ок');
 }
 
+// ── 9. Тень: убранное не просачивается обратно ──
+{
+  const sh = R('src/data/shadow-items.ts');
+  const m = sh.match(/SHADOW_IDS: string\[\] = \[([\s\S]*?)\];/);
+  const shadow = m ? [...m[1].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((x) => x[1]) : [];
+  const leaks: string[] = [];
+  const shops = R('src/data/shops.ts');
+  const drops = R('src/data/drops.js');
+  const eco = R('server/src/routes/economy.ts');
+  for (const id of shadow) {
+    const q = `'${id}'`;
+    if (ITEMS.has(id)) leaks.push(`${id}: в ITEMS`);
+    else if (new RegExp(`${q}(?!\\w)`).test(shops)) leaks.push(`${id}: в маркетах`);
+    else if (drops.includes(q)) leaks.push(`${id}: в дропах`);
+    else if (eco.includes(q)) leaks.push(`${id}: в ценах сервера`);
+  }
+  suite.check('I-shadow', `тень не течёт в игру (${shadow.length})`, leaks.length === 0, leaks.length ? leaks.join(', ') : `теней: ${shadow.length}`);
+}
+
 suite.finish();
 const failed = suite.results.filter((r) => !r.pass);
 if (failed.length) {
