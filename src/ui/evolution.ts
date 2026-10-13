@@ -34,6 +34,8 @@ import { fetchPokeAPI } from '../utils/api.js';          // HTTP-клиент д
 // Например: 'fireStone' → 'fire-stone'
 import { showToast } from '../utils/dom.js';
 import { STONE_ITEM_MAP } from '../data/stones.js';
+import { state } from '../game/state.js';
+import { calculateStat } from '../battle/stats.js';
 
 // ── ЛЕНИВЫЙ ИМПОРТ (циклическая зависимость core.ts ↔ evolution.ts) ──
 // core.ts импортирует evolution.ts (checkEvolution, triggerEvolution)
@@ -182,36 +184,142 @@ export async function getEvolutions(pokemonName) {
       await fetchEvolutionChain(pokemonName);
     }
     // Преобразуем из формата PokeAPI в упрощённый
-    return evolutionCache[pokemonName].map(evo => {
-      // evolution_details — массив деталей (обычно 1 элемент)
-      const d = evo.evolution_details && evo.evolution_details[0]
-        ? evo.evolution_details[0]
-        : {};
-      return {
-        name: evo.species.name,          // Имя следующей эволюции
-        minLevel: d.min_level || null,    // Минимальный уровень (null если не level-up)
-        trigger: d.trigger ? d.trigger.name : null,  // Тип триггера
-        item: d.item ? d.item.name : null,             // Предмет (для камней)
-        held: d.held_item ? d.held_item.name : null   // Держимый (для trade-эв)
-      };
-    });
+    return evolutionCache[pokemonName].map(mapEvoEntry);
   }
 
   // Если нет в кэше — загружаем цепочку
   const chain = await fetchEvolutionChain(pokemonName);
   // Преобразуем так же как выше
-  return chain.map(evo => {
-    const d = evo.evolution_details && evo.evolution_details[0]
-      ? evo.evolution_details[0]
-      : {};
-    return {
-      name: evo.species.name,
-      minLevel: d.min_level || null,
+  return chain.map(mapEvoEntry);
+}
+
+/**
+ * mapEvoEntry — PokeAPI-запись цепочки → наша структура.
+ * ВАЖНО: берём ВСЕ evolution_details (по версиям игр), а не только [0]:
+ * иначе каменные пути новых поколений (leaf-stone у лифеона и т.п.)
+ * невидимы. Плоские поля оставлены для совместимости (покедекс).
+ */
+function mapEvoEntry(evo: any) {
+  const all = Array.isArray(evo.evolution_details) && evo.evolution_details.length > 0
+    ? evo.evolution_details
+    : [{}];
+  const d0 = all[0];
+  return {
+    name: evo.species.name,
+    minLevel: d0.min_level ?? null,
+    trigger: d0.trigger ? d0.trigger.name : null,
+    item: d0.item ? d0.item.name : null,
+    held: d0.held_item ? d0.held_item.name : null,
+    details: all.map((d: any) => ({
       trigger: d.trigger ? d.trigger.name : null,
+      minLevel: d.min_level ?? null,
       item: d.item ? d.item.name : null,
-      held: d.held_item ? d.held_item.name : null
-    };
-  });
+      held: d.held_item ? d.held_item.name : null,
+      gender: d.gender ?? null,                       // 1 = самка, 2 = самец
+      time: d.time_of_day || null,                    // day / night / dusk
+      location: d.location ? d.location.name : null,  // moss-rock / icy-rock / ...
+      knownMove: d.known_move ? d.known_move.name : null,
+      knownMoveType: d.known_move_type ? d.known_move_type.name : null,
+      minHappiness: d.min_happiness ?? null,
+      minAffection: d.min_affection ?? null,
+      minBeauty: d.min_beauty ?? null,
+      rain: !!d.needs_overworld_rain,
+      partySpecies: d.party_species ? d.party_species.name : null,
+      partyType: d.party_type ? d.party_type.name : null,
+      tradeSpecies: d.trade_species ? d.trade_species.name : null,
+      relStats: d.relative_physical_stats ?? null,    // 1 / 0 / -1 (тайрог)
+      upsideDown: !!d.turn_upside_down,
+    })),
+  };
+}
+
+// ── Локации нашей карты для эволюций по месту ──
+const EVO_LOCATION_SETS: Array<{ keys: string[]; locs: string[] }> = [
+  // Мшистый камень (лифеон): наши леса
+  { keys: ['moss', 'forest', 'woods', 'jungle'], locs: ['viridianForest', 'berryForest', 'ilexForest'] },
+  // Ледяной камень (гласеон, крабоминбл): наши льды
+  { keys: ['ice', 'frost', 'snow', 'glacier', 'glaseado', 'lanakila', 'route-217', 'route-17'], locs: ['seafoamIslands', 'icefallCave', 'icePath'] },
+  // Магнитное поле (магнетон, про StreamPass, викавольт): электростанция
+  { keys: ['magnet', 'coronet', 'power', 'poni-canyon', 'route-13'], locs: ['powerPlant'] },
+];
+
+/** evoLocationMet — место PokeAPI покрывается нашей текущей локацией. */
+export function evoLocationMet(locName: string | null, curLoc: string): boolean {
+  if (!locName) return true;
+  const low = String(locName).toLowerCase();
+  const set = EVO_LOCATION_SETS.find((s) => s.keys.some((k) => low.includes(k)));
+  if (!set) return false; // неизвестное место — честно не пускаем
+  return set.locs.includes(curLoc);
+}
+
+export interface EvoCheckCtx {
+  isDaytime: boolean;
+  locationId: string;
+  knownMoves: string[];
+  teamSpecies: string[];
+  teamTypes: string[];
+}
+
+/** buildEvoCtx — контекст проверки из покемона и глобального стейта. */
+export function buildEvoCtx(mon: any): EvoCheckCtx {
+  const known: string[] = [];
+  const mv = mon?.apiData?.moves || [];
+  for (let i = 0; i < Math.min(4, mv.length); i++) {
+    const n = mv[i]?.move?.name;
+    if (n) known.push(String(n).toLowerCase());
+  }
+  const team = state.myTeam || [];
+  return {
+    isDaytime: state.isDaytime !== false,
+    locationId: state.currentLocationId || '',
+    knownMoves: known,
+    teamSpecies: team.map((m: any) => String(m?.apiData?.name || '').toLowerCase()),
+    teamTypes: team.flatMap((m: any) => (m?.apiData?.types || []).map((t: any) => String(t?.type?.name || '').toLowerCase())),
+  };
+}
+
+/**
+ * levelDetailMet — чистая проверка одной детали level-up эволюции.
+ * Упрощения (задокументированы, не баги):
+ *   rain → считаем выполненным (погода боя к моменту эвы сброшена);
+ *   affection → счастье ≥ 220 (трекер привязанности отсутствует);
+ *   known_move_type → пропускаем (типы 4 атак тянуть из сети дорого);
+ *   dusk/full-moon → ночь.
+ * Жёсткие нет: красота, сопартийцы вне команды, переворот.
+ */
+export function levelDetailMet(d: any, mon: any, ctx: EvoCheckCtx, effLevel: number): boolean {
+  if (!d || d.trigger !== 'level-up') return false;
+  if (d.minLevel != null && effLevel < d.minLevel) return false;
+  // Пол (галлейд — только самец, фросласс — только самка)
+  if (d.gender === 1 && mon?.gender !== 'female') return false;
+  if (d.gender === 2 && mon?.gender !== 'male') return false;
+  // Время суток
+  if (d.time === 'day' && !ctx.isDaytime) return false;
+  if ((d.time === 'night' || d.time === 'dusk' || d.time === 'full-moon') && ctx.isDaytime) return false;
+  // Счастье / привязанность
+  const happy = mon?.happiness ?? 70;
+  if (d.minHappiness != null && happy < d.minHappiness) return false;
+  if (d.minAffection != null && happy < 220) return false;
+  // Красота (фиби) — системы нет; у фиби есть трейд-путь через чешую
+  if (d.minBeauty != null) return false;
+  // Место
+  if (!evoLocationMet(d.location, ctx.locationId)) return false;
+  // Выученная атака (майм-младший — мимик, пилосвайн — древняя сила...)
+  if (d.knownMove && !ctx.knownMoves.includes(String(d.knownMove).toLowerCase())) return false;
+  // Сопартийцы (ментайк, панчам)
+  if (d.partySpecies && !ctx.teamSpecies.includes(String(d.partySpecies).toLowerCase())) return false;
+  if (d.partyType && !ctx.teamTypes.includes(String(d.partyType).toLowerCase())) return false;
+  // Тайрог: сравнение атаки и защиты на текущем уровне
+  // (calculateStat ждёт ПОЛНЫЕ имена: 'attack'/'defense', короткие дают мусор)
+  if (d.relStats === 1 || d.relStats === -1 || d.relStats === 0) {
+    const atk = calculateStat(mon, 'attack', { ignoreBattleOnly: true });
+    const def = calculateStat(mon, 'defense', { ignoreBattleOnly: true });
+    const cmp = atk > def ? 1 : atk < def ? -1 : 0;
+    if (cmp !== d.relStats) return false;
+  }
+  // Переворот консоли (инкей) — не реализуемо
+  if (d.upsideDown) return false;
+  return true;
 }
 
 /**
@@ -233,41 +341,95 @@ export function matchStoneEvo(evo: any, mappedName: string | null): boolean {
 //   useStone — true если используется камень (force-эволюция)
 //   stoneItem — ID предмета камня (например, 'fireStone')
 // Возвращает:
-//   объект эволюции {name, minLevel, trigger, item} или null
+//   объект эволюции {name, ...} (+ shedBonus для нинкады) или null
 // Логика:
-//   — Если useStone=false: проверяет effectiveLevel >= minLevel
-//   — Если useStone=true: проверяет trigger='use-item' и сопоставляет stoneItem
+//   — Everstone блокирует ВСЁ (и уровень, и камни — канон).
+//   — useStone=true: use-item И trade по matchStoneEvo (по всем деталям).
+//   — useStone=false: level-up детали через levelDetailMet (пол, время,
+//     счастье, место, атаки, сопартийцы, статы тайрога); при нескольких
+//     совпадениях — рандом (вурмпл); shed-деталь ставит флаг shedBonus.
 export async function checkEvolution(pokemon, useStone = false, stoneItem = null) {
   // Получаем список эволюций для этого покемона
   const evos = await getEvolutions(pokemon.apiData.name);
   // Эффективный уровень = базовый + конфеты
   const effectiveLevel = pokemon.baseLevel + (pokemon.candiesEaten || 0);
 
-  for (const evo of evos) {
-    // ── Эволюция по уровню ──
-    if (evo.minLevel && effectiveLevel >= evo.minLevel) {
-      return evo;  // Подходит по уровню
-    }
+  // Вечный камень блокирует любую эволюцию (канон)
+  if (pokemon.heldItem === 'everstone') return null;
 
-    // ── Эволюция через камень ──
-    // use-item (камни) + trade (держимый предмет: metal-coat, deep-sea-...).
-    // Трейд в игре идёт использованием предмета из сумки (обмена с NPC нет),
-    // поэтому trade-ветка считается тем же путём.
-    if (useStone && (evo.trigger === 'use-item' || evo.trigger === 'trade')) {
-      if (stoneItem && STONE_ITEM_MAP[stoneItem]) {
-        // evo.item — имя в PokeAPI ('fire-stone'), stoneItem — ID предмета ('fireStone')
-        // STONE_ITEM_MAP[stoneItem] — маппинг ID → PokeAPI имя
-        if (matchStoneEvo(evo, STONE_ITEM_MAP[stoneItem])) {
+  // ── Эволюция через камень ──
+  // use-item (камни) + trade (держимый предмет: metal-coat, deep-sea-...).
+  // Трейд в игре идёт использованием предмета из сумки (обмена с NPC нет),
+  // поэтому trade-ветка считается тем же путём.
+  if (useStone) {
+    const mapped = stoneItem ? STONE_ITEM_MAP[stoneItem] : null;
+    for (const evo of evos) {
+      const details = evo.details || [{ trigger: evo.trigger, item: evo.item, held: evo.held }];
+      for (const d of details) {
+        if ((d.trigger === 'use-item' || d.trigger === 'trade')
+          && matchStoneEvo({ trigger: d.trigger, item: d.item, held: d.held }, mapped)) {
           return evo;  // Камень подходит
         }
-      } else {
-        // Если камень не указан — возвращаем первую эволюцию по камню
-        return evo;
+      }
+      // Универсальный камень без ID (evolutionStone): первая каменная эва
+      if (!stoneItem && (evo.trigger === 'use-item' || evo.trigger === 'trade')) return evo;
+    }
+    return null;
+  }
+
+  // ── Эволюция по уровню (все условия) ──
+  const ctx = buildEvoCtx(pokemon);
+  const matches: any[] = [];
+  let shedBonus = false;
+  for (const evo of evos) {
+    for (const d of evo.details || []) {
+      if (d.trigger === 'shed') {
+        if (d.minLevel == null || effectiveLevel >= d.minLevel) shedBonus = true;
+        continue;
+      }
+      if (levelDetailMet(d, pokemon, ctx, effectiveLevel)) {
+        matches.push(evo);
+        break;
       }
     }
   }
+  if (matches.length === 0) return null;
+  // Несколько совпадений (вурмпл → силкун/каскун) — рандом по канону
+  const pick = matches[Math.floor(Math.random() * matches.length)];
+  if (shedBonus) (pick as any).shedBonus = true;
+  return pick;
+}
 
-  return null;  // Нет подходящей эволюции
+/**
+ * maybeGrantShedinja — бонусная Шединья при эволюции нинкады.
+ * Условия канона: в команде есть слот (<6) + в сумке есть покебол (сгорает).
+ * Создаём тем же конструктором, что награды гимов (уровень нинкады).
+ * Возвращает true если выдана.
+ */
+export async function maybeGrantShedinja(mon: any): Promise<boolean> {
+  if (!mon || mon.apiData?.name !== 'nincada') return false;
+  const team = state.myTeam || [];
+  if (team.length >= 6) {
+    showToast('В команде нет места для Шединьи!', true);
+    return false;
+  }
+  if ((state.inventory?.pokeBall || 0) < 1) {
+    showToast('Нужен свободный покебол для Шединьи!', true);
+    return false;
+  }
+  state.inventory.pokeBall -= 1;
+  const lvl = (mon.baseLevel || 1) + (mon.candiesEaten || 0);
+  try {
+    const m = await import('./gym-reward.js');
+    const shed = await m.createAndGivePokemon('shedinja', lvl, {});
+    if (shed) {
+      showToast(`Бонус: из сброшенной оболочки появилась Шединья Lv${lvl}! (−1 покебол)`, false);
+      return true;
+    }
+  } catch (e) {
+    console.error('[evo] shedinja bonus failed:', e);
+  }
+  return false;
 }
 
 // ── triggerEvolution: анимация и применение эволюции ────

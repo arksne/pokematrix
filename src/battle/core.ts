@@ -43,7 +43,7 @@ import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon } from '../utils/sprite
 import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
 import { fetchSiteMoveDetail } from '../data/sitemove.js';              // детали атак — с сайта лиги
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
-import { checkEvolution, triggerEvolution } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
+import { checkEvolution, triggerEvolution, maybeGrantShedinja } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
 import { natures } from '../data/natures.js';                            // Массив характеров (nature) с buff/nerf модификаторами
 import { ITEMS } from '../data/items.js';                                // Массив всех предметов игры (ItemDef[])
 import { getAbilityNameRu } from '../data/abilities.js';                 // Русские названия способностей для UI
@@ -4120,6 +4120,7 @@ async function handleWildFaintRewards(isWild: boolean) {
       const evoTarget = await checkEvolution(S.activePlayerMon);
       if (evoTarget) {
         await triggerEvolution(S.activePlayerMon, evoTarget.name);
+        if (evoTarget.shedBonus) await maybeGrantShedinja(S.activePlayerMon);
         updatePlayerHpUI();
       }
     }

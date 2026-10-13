@@ -110,6 +110,12 @@ async function _triggerEvolution(mon: any, targetName: string) {
   return m.triggerEvolution(mon, targetName);
 }
 
+// _maybeGrantShedinja — бонусная Шединья (нинкада), через тот же модуль
+async function _maybeGrantShedinja(mon: any) {
+  const m = await import('./evolution.js');
+  return m.maybeGrantShedinja(mon);
+}
+
 // showToast — всплывающее уведомление (true=красное, false=зелёное)
 // showConfirmModal — модалка подтверждения с callback
 // showSelectionModal — модалка выбора из списка опций
@@ -647,6 +653,7 @@ async function feedCandy(mon, itemId, label, evGain = 4) {
     const evoTarget = await _checkEvolution(mon);
     if (evoTarget) {
       await _triggerEvolution(mon, evoTarget.name);
+      if (evoTarget.shedBonus) await _maybeGrantShedinja(mon);
       refreshProfileUI();
     }
   })();
@@ -701,6 +708,7 @@ async function feedExp(mon, itemId, label, amount) {
   const evoTarget = await _checkEvolution(mon);
   if (evoTarget) {
     await _triggerEvolution(mon, evoTarget.name);
+    if (evoTarget.shedBonus) await _maybeGrantShedinja(mon);
   }
   await checkNewMovesOnLevelUp(mon, mon.baseLevel + (mon.candiesEaten || 0));
   refreshProfileUI();
