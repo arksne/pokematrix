@@ -50,7 +50,7 @@ import { getAbilityNameRu } from '../data/abilities.js';                 // Ру
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy, TYPE_CHART, SOUND_MOVES, GEM_TYPE } from './logic.js';
-import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, baseDefOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, falseSwipeClamp, crushGripPower, flailPower, finalGambitDmg, flingPower, naturalGift, presentRoll, spitUpPower, swallowPct, lastRespectsPower, rageFistPower, populationBombHits, confuseChance, confusionTurns, confusionSelfHit, confusionDamage, attractBlocks, tauntBlocks, encoreForces, disableBlocks, tormentBlocks, perishTick, yawnWakes, WEATHER_SET, TERRAIN_SET, FIELD_TURNS, TAILWIND_TURNS, TRICK_ROOM_TURNS, collisionCourseMult, saltCureChip, resistantType, METRONOME_POOL, metronomePick, meFirstCopy, ALWAYS_CRIT, normMoveName } from './special-moves.js';
+import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, baseDefOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, falseSwipeClamp, crushGripPower, flailPower, finalGambitDmg, flingPower, naturalGift, presentRoll, spitUpPower, swallowPct, lastRespectsPower, rageFistPower, populationBombHits, confuseChance, confusionTurns, confusionSelfHit, confusionDamage, attractBlocks, tauntBlocks, encoreForces, disableBlocks, tormentBlocks, perishTick, yawnWakes, WEATHER_SET, TERRAIN_SET, FIELD_TURNS, TAILWIND_TURNS, TRICK_ROOM_TURNS, collisionCourseMult, saltCureChip, resistantType, METRONOME_POOL, metronomePick, meFirstCopy, ALWAYS_CRIT, normMoveName, TERRAIN_SEEDS, TERRAIN_SEED_STAT, trapTurns } from './special-moves.js';
 import { calculateStat as calculateStatShared } from './stats.js';
 import { HEAL_HP, CURE_ONE, CURE_ALL } from '../data/item-effects.js';  // аудит итемов: общие таблицы с рюкзаком
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
@@ -937,7 +937,7 @@ function handlePlayerStatusEffects(move) {
       }
       if (ok && !isStatusImmune(ail, S.activeWild)) {
         const src = S.activePlayerMon.nickname || S.activePlayerMon.apiData.name;
-        applyVolatileAilment(S.activeWild, true, ail, src, S.lastWildMove);
+        applyVolatileAilment(S.activeWild, true, ail, src, S.lastWildMove, S.activePlayerMon.heldItem);
         if (normMoveName(move.name) === 'perish-song') {
           applyVolatileAilment(S.activePlayerMon, false, ail, src, S.lastPlayerMove);
         }
@@ -1146,7 +1146,7 @@ function handleEnemyStatusEffects(move) {
         ok = ch <= 0 ? true : Math.random() * 100 < Math.min(100, ch);
       }
       if (ok && !isStatusImmune(ail, S.activePlayerMon)) {
-        applyVolatileAilment(S.activePlayerMon, false, ail, S.activeWild.name, S.lastPlayerMove);
+        applyVolatileAilment(S.activePlayerMon, false, ail, S.activeWild.name, S.lastPlayerMove, S.activeWild.heldItem);
         if (normMoveName(move.name) === 'perish-song') {
           applyVolatileAilment(S.activeWild, true, ail, S.activeWild.name, S.lastWildMove);
         }
@@ -1382,6 +1382,41 @@ function statStageModify(pokemon, stat, delta, fromOpponent = false) {
 const STAT_LABELS: Record<string, string> = {
   atk: 'Атаку', def: 'Защиту', spa: 'Сп. Атаку', spd: 'Сп. Защиту', spe: 'Скорость',
 };
+
+/**
+ * tickBindTurns — счётчик ловушки: 5 ходов (7 с Когтем), потом хватка
+ * отпускает (урон прекращается). Флаг trapped не трогаем — он может быть
+ * от mean-look и т.п. Старые сейвы без bindTurns получают 5 по умолчанию.
+ */
+function tickBindTurns(mon: any, isWild: boolean): void {
+  const vol = mon?.vol;
+  if (!vol || !vol.bindChip) return;
+  if (vol.bindTurns === undefined || vol.bindTurns === null) vol.bindTurns = 5;
+  vol.bindTurns -= 1;
+  if (vol.bindTurns <= 0) {
+    vol.bindChip = false;
+    const label = isWild ? `Дикий ${mon.name}` : (mon.apiData?.name || 'Покемон');
+    appendToLog(`${label} вырвался из хватки!`, false, 'system');
+  }
+}
+
+/**
+ * maybeConsumeTerrainSeed — семя поля: держатель съедает семя, если активно
+ * его поле (Electric/Grassy → +1 защиты, Misty/Psychic → +1 спецзащиты).
+ * Вызывается в начале ходов обоих + при установке поля. Возвращает bool.
+ */
+function maybeConsumeTerrainSeed(mon: any): boolean {
+  if (!mon || !mon.heldItem || !S.terrain || !S.terrain.kind) return false;
+  const need = TERRAIN_SEEDS[mon.heldItem];
+  if (!need || S.terrain.kind !== need) return false;
+  const stat = TERRAIN_SEED_STAT[mon.heldItem];
+  const seedName = mon.heldItem;
+  mon.heldItem = null;
+  statStageModify(mon, stat, 1);
+  const label = mon.apiData?.name || 'Покемон';
+  appendToLog(`${label} съел семя (${seedName}): ${STAT_LABELS[stat] || stat} +1!`, false, 'system');
+  return true;
+}
 
 /**
  * updateStatBadges — обновить отображение стат-стадий в UI.
@@ -1934,7 +1969,7 @@ function volatileAction(mon: any, foe: any, isWild: boolean, move: any, moveInde
  * disable из ailment-слоя данных. Возвращает true если обработано
  * (вызывающий пропускает обычный applyStatusEffect).
  */
-function applyVolatileAilment(target: any, isWildTarget: boolean, ailment: string, sourceName: string, foeLastMove?: string | null): boolean {
+function applyVolatileAilment(target: any, isWildTarget: boolean, ailment: string, sourceName: string, foeLastMove?: string | null, userHeld?: unknown): boolean {
   // Аудит итемов: Mental Herb съедается вместо волатильного состояния
   if (target.heldItem === 'mentalHerb' && ['infatuation', 'taunt'].includes(ailment)) {
     target.heldItem = null;
@@ -1982,10 +2017,12 @@ function applyVolatileAilment(target: any, isWildTarget: boolean, ailment: strin
       return true;
     }
     case 'trap': {
-      // Проход-741: fire-spin и семья — держат и щиплют 1/8
+      // L5-741: fire-spin и семья - ловим в ловушку 1/8.
+      // Длительность: 5 ходов, с Когтем захвата у бьющего — 7.
       vol.trapped = true;
       vol.bindChip = true;
-      appendToLog(`${tnm} попал в хватку!`, false, 'system');
+      vol.bindTurns = trapTurns(userHeld);
+      appendToLog(`${tnm} пойман в ловушку!`, false, 'system');
       return true;
     }
     case 'ingrain': {
@@ -2092,12 +2129,27 @@ function tickFieldEndOfRound() {
     S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - chip);
     updatePlayerHpUI();
     appendToLog(`${S.activePlayerMon.apiData.name} страдает в хватке! (−${chip} HP)`, false, 'dmg');
+    tickBindTurns(S.activePlayerMon, false);
   }
   if (S.activeWild.vol?.bindChip && S.wildCurHP > 0) {
     const chip = Math.max(1, Math.floor(S.wildMaxHP / 8));
     S.wildCurHP = Math.max(0, S.wildCurHP - chip);
     updateWildHpUI();
     appendToLog(`Дикий ${S.activeWild.name} страдает в хватке! (−${chip} HP)`, false, 'dmg');
+    tickBindTurns(S.activeWild, true);
+  }
+  // Липкий шип: держатель теряет 1/8 в конце хода
+  if (S.activePlayerMon.heldItem === 'stickyBarb' && S.activePlayerMon.currentHp > 0) {
+    const chip = Math.max(1, Math.floor(S.activePlayerMon.maxHp / 8));
+    S.activePlayerMon.currentHp = Math.max(0, S.activePlayerMon.currentHp - chip);
+    updatePlayerHpUI();
+    appendToLog(`${S.activePlayerMon.apiData.name} страдает от липкого шипа! (−${chip} HP)`, false, 'dmg');
+  }
+  if (S.activeWild.heldItem === 'stickyBarb' && S.wildCurHP > 0) {
+    const chip = Math.max(1, Math.floor(S.wildMaxHP / 8));
+    S.wildCurHP = Math.max(0, S.wildCurHP - chip);
+    updateWildHpUI();
+    appendToLog(`Дикий ${S.activeWild.name} страдает от липкого шипа! (−${chip} HP)`, false, 'dmg');
   }
   // Кошмар: спит — теряет 1/4
   if (S.activePlayerMon.vol?.nightmare && S.activePlayerMon.status === 'slp' && S.activePlayerMon.currentHp > 0) {
@@ -2183,7 +2235,10 @@ function handleFieldAndTrickMoves(move: any, isPlayer: boolean): boolean {
     case 'electric-terrain': case 'misty-terrain': case 'grassy-terrain': case 'psychic-terrain': {
       const kind = TERRAIN_SET[slug];
       S.terrain = { kind, turns: FIELD_TURNS };
-      return done(`${uname} создаёт террейн: ${kind}!`);
+      // Поле встало — держатели семян тут же едят
+      maybeConsumeTerrainSeed(S.activePlayerMon);
+      maybeConsumeTerrainSeed(S.activeWild);
+      return done(`${uname} поднял поле: ${kind}!`);
     }
     case 'tailwind': {
       if (isPlayer) S.tailwindP = TAILWIND_TURNS; else S.tailwindW = TAILWIND_TURNS;
@@ -4228,6 +4283,9 @@ async function useMove(moveIndex) {
   let move = S.playerMovesDetailed[moveIndex];
   if (!move) return;
 
+  // Семя поля держателя — до хода (поле могли поднять раньше)
+  maybeConsumeTerrainSeed(S.activePlayerMon);
+
   // ═══ 1. PP CHECK ═══
   // Если PP закончились — атака недоступна
   if (S.activePlayerMon.movesPP && S.activePlayerMon.movesPP[moveIndex]) {
@@ -5253,7 +5311,7 @@ async function useMove(moveIndex) {
             ? Math.random() * 100 < confuseChance(move.name) * playerSereneGrace
             : true;
           if (ok && !isStatusImmune(vAil, S.activeWild)) {
-            applyVolatileAilment(S.activeWild, true, vAil, S.activePlayerMon.nickname || S.activePlayerMon.apiData.name, S.lastWildMove);
+            applyVolatileAilment(S.activeWild, true, vAil, S.activePlayerMon.nickname || S.activePlayerMon.apiData.name, S.lastWildMove, S.activePlayerMon.heldItem);
           }
         } else {
         // ailment_chance === 0 — валидное значение («эффект есть, но шанс 0»), поэтому ?? а не ||
@@ -5320,6 +5378,15 @@ async function useMove(moveIndex) {
         S.activePlayerMon.currentHp -= recoil;
         if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
         updatePlayerHpUI();
+      }
+
+      // Sticky Barb: при контакте переползает на бьющего (если руки пустые)
+      if (power && isPhysical && S.activeWild.heldItem === 'stickyBarb') {
+        if (!S.activePlayerMon.heldItem) {
+          S.activeWild.heldItem = null;
+          S.activePlayerMon.heldItem = 'stickyBarb';
+          appendToLog(`Липкий шип переполз на ${S.activePlayerMon.apiData.name}!`, false, 'system');
+        }
       }
 
       // Stat changes per hit (with stat_chance probability, подавляется Sheer Force)
@@ -6060,6 +6127,8 @@ async function finishEnemyTurn() {
 }
 
 async function runEnemyTurnBody() {
+  // Семя поля держателя — до хода
+  maybeConsumeTerrainSeed(S.activeWild);
   battle.transition(BattlePhase.ENEMY_TURN);
   // Проход-741: флаги прямого урона свежие каждый ход (для endure)
   S.wildTookHit = false;
@@ -6708,6 +6777,15 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
       updateWildHpUI();
     }
 
+    // Sticky Barb: при контакте переползает на бьющего (если руки пустые)
+    if (power && isPhysical && S.activePlayerMon.heldItem === 'stickyBarb') {
+      if (!S.activeWild.heldItem) {
+        S.activePlayerMon.heldItem = null;
+        S.activeWild.heldItem = 'stickyBarb';
+        appendToLog(`Липкий шип переполз на дикого ${S.activeWild.name}!`, false, 'system');
+      }
+    }
+
     // Wild Life Orb per hit
     if (S.activeWild.heldItem === 'lifeOrb' && power) {
       S.wildCurHP -= Math.max(1, Math.floor(S.wildMaxHP / 10));
@@ -6738,7 +6816,7 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
           ? Math.random() * 100 < effectiveSecondaryChance(confuseChance(chosenMove.name), wildSereneGrace)
           : true;
         if (ok && !isStatusImmune(vAil, S.activePlayerMon)) {
-          applyVolatileAilment(S.activePlayerMon, false, vAil, S.activeWild.name, S.lastPlayerMove);
+          applyVolatileAilment(S.activePlayerMon, false, vAil, S.activeWild.name, S.lastPlayerMove, S.activeWild.heldItem);
         }
       } else {
       const chance = effectiveSecondaryChance(chosenMove.meta.ailment_chance, wildSereneGrace);

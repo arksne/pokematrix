@@ -191,7 +191,8 @@ export async function getEvolutions(pokemonName) {
         name: evo.species.name,          // Имя следующей эволюции
         minLevel: d.min_level || null,    // Минимальный уровень (null если не level-up)
         trigger: d.trigger ? d.trigger.name : null,  // Тип триггера
-        item: d.item ? d.item.name : null              // Предмет (для камней)
+        item: d.item ? d.item.name : null,             // Предмет (для камней)
+        held: d.held_item ? d.held_item.name : null   // Держимый (для trade-эв)
       };
     });
   }
@@ -207,9 +208,23 @@ export async function getEvolutions(pokemonName) {
       name: evo.species.name,
       minLevel: d.min_level || null,
       trigger: d.trigger ? d.trigger.name : null,
-      item: d.item ? d.item.name : null
+      item: d.item ? d.item.name : null,
+      held: d.held_item ? d.held_item.name : null
     };
   });
+}
+
+/**
+ * matchStoneEvo — чистая проверка: подходит ли предмет эволюции.
+ * mappedName — имя из STONE_ITEM_MAP (например, 'metal-coat').
+ * Совпадение: use-item по evo.item ИЛИ trade по evo.held.
+ * (Раньше была только use-item ветка — все трейд-эвы молча не работали.)
+ */
+export function matchStoneEvo(evo: any, mappedName: string | null): boolean {
+  if (!evo || !mappedName) return false;
+  if (evo.trigger === 'use-item' && evo.item && evo.item === mappedName) return true;
+  if (evo.trigger === 'trade' && evo.held && evo.held === mappedName) return true;
+  return false;
 }
 
 // ── checkEvolution: проверка, может ли покемон эволюционировать ──
@@ -235,11 +250,14 @@ export async function checkEvolution(pokemon, useStone = false, stoneItem = null
     }
 
     // ── Эволюция через камень ──
-    if (useStone && evo.trigger === 'use-item') {
+    // use-item (камни) + trade (держимый предмет: metal-coat, deep-sea-...).
+    // Трейд в игре идёт использованием предмета из сумки (обмена с NPC нет),
+    // поэтому trade-ветка считается тем же путём.
+    if (useStone && (evo.trigger === 'use-item' || evo.trigger === 'trade')) {
       if (stoneItem && STONE_ITEM_MAP[stoneItem]) {
         // evo.item — имя в PokeAPI ('fire-stone'), stoneItem — ID предмета ('fireStone')
         // STONE_ITEM_MAP[stoneItem] — маппинг ID → PokeAPI имя
-        if (evo.item && evo.item === STONE_ITEM_MAP[stoneItem]) {
+        if (matchStoneEvo(evo, STONE_ITEM_MAP[stoneItem])) {
           return evo;  // Камень подходит
         }
       } else {

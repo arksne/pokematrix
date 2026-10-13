@@ -26,7 +26,13 @@
 
 /** ID предметов, лежащих в тени. Аудит следит, что их нет в игре. */
 export const SHADOW_IDS: string[] = [
-  // пока пусто — будущие «убери» складываем сюда вместе с дефом ниже
+  'ironBall',
+  'laggingTail',
+  'lightClay',
+  'smokeBall',
+  'shedShell',
+  'wideLens',
+  'luckyPunch',
 ];
 
 /** Полные дефы убранных предметов (копия строк из items.ts на момент уборки). */

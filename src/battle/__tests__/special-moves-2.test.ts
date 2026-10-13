@@ -3,7 +3,8 @@ import {
   counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg,
   gyroBallPower, electroBallPower, beatUpHits, beatUpPower,
   isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount,
-  bideRelease, BIDE_TURNS, falseSwipeClamp,
+  bideRelease, BIDE_TURNS, falseSwipeClamp, trapTurns,
+  TERRAIN_SEEDS, TERRAIN_SEED_STAT,
 } from '../special-moves.js';
 
 /** L2-остаток: проход по всем «таким» атакам — у каждой своя механика. */
@@ -179,5 +180,30 @@ describe('перезарядка и лечение', () => {
     expect(bideRelease(40)).toBe(80);
     expect(bideRelease(0)).toBeNull();
     expect(bideRelease(null)).toBeNull();
+  });
+});
+
+/** Семена полей и коготь захвата (аудит итемов: чиним молчавшие предметы). */
+describe('семена полей и ловушки', () => {
+  it('каждое семя знает своё поле и стат', () => {
+    expect(TERRAIN_SEEDS).toEqual({
+      electricSeed: 'electric',
+      grassySeed: 'grassy',
+      mistySeed: 'misty',
+      psychicSeed: 'psychic',
+    });
+    expect(TERRAIN_SEED_STAT).toEqual({
+      electricSeed: 'def',
+      grassySeed: 'def',
+      mistySeed: 'spd',
+      psychicSeed: 'spd',
+    });
+  });
+
+  it('trapTurns: коготь — 7, иначе 5', () => {
+    expect(trapTurns('gripClaw')).toBe(7);
+    expect(trapTurns(null)).toBe(5);
+    expect(trapTurns('leftovers')).toBe(5);
+    expect(trapTurns(undefined)).toBe(5);
   });
 });

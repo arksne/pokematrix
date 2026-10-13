@@ -182,6 +182,26 @@ export function getMultiHitCount(move: any, rand: () => number = Math.random, ho
   return 5;
 }
 
+// ── Ловушка: длительность в ходах. Коготь захвата — 7, иначе 5 (канон 4–5) ──
+export function trapTurns(holderItem: unknown): number {
+  return holderItem === 'gripClaw' ? 7 : 5;
+}
+
+// ── Семена полей: id → вид поля; съеденное семя даёт +1 стадии ──
+// Electric/Grassy → защита, Misty/Psychic → спецзащита (канон).
+export const TERRAIN_SEEDS: Record<string, string> = {
+  electricSeed: 'electric',
+  grassySeed: 'grassy',
+  mistySeed: 'misty',
+  psychicSeed: 'psychic',
+};
+export const TERRAIN_SEED_STAT: Record<string, string> = {
+  electricSeed: 'def',
+  grassySeed: 'def',
+  mistySeed: 'spd',
+  psychicSeed: 'spd',
+};
+
 // ── Дрэйн / отдача / лечение ─────────────────────────────────
 /** Лечение от дрэйна: % нанесённого урона, Big Root ×1.3. */
 export function calcDrainHeal(hitDmg: number, drainPct: number, bigRoot = false): number {

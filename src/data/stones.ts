@@ -32,6 +32,10 @@ export const STONE_ITEM_MAP = {
   'prismScale': 'prism-scale',
   'sachet': 'sachet',
   'whippedDream': 'whipped-dream',
+  // ── Починка (аудит): эволь через эти предметы не было — маппинга не было
+  'metalCoat': 'metal-coat',
+  'deepSeaScale': 'deep-sea-scale',
+  'deepSeaTooth': 'deep-sea-tooth',
   'peatBlock': 'peat-block',
   'blackAugurite': 'black-augurite',
   'berrySweet': 'berry-sweet',
