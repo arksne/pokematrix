@@ -69,11 +69,13 @@ describe('iconFor/kindFor', () => {
 
 describe('isMapLocked', () => {
   it('стартовая зона открыта, остальное закрыто до туториала', () => {
-    // state по умолчанию: tutorialStep 0, completedNPCQuests [] → гейт закрыт
-    expect(isMapLocked('goldenrodCity')).toBe(false);
-    expect(isMapLocked('goldenrodCity_pokecenter')).toBe(false);
+    // state по умолчанию: tutorialStep 0, completedNPCQuests [] → гейт закрыт.
+    // Старт — Пьютер: город, центр и стадион открыты; Голденрод закрыт.
+    expect(isMapLocked('pewterCity')).toBe(false);
+    expect(isMapLocked('pewterCity_pokecenter')).toBe(false);
+    expect(isMapLocked('pewterStadium')).toBe(false);
+    expect(isMapLocked('goldenrodCity')).toBe(true);
     expect(isMapLocked('palletTown')).toBe(true);
-    expect(isMapLocked('pewterStadium')).toBe(true);
   });
 });
 

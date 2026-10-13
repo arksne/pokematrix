@@ -119,8 +119,8 @@ export function testSave(over = {}) {
     saveData: {
       _v: Date.now(),
       starterGiven: true,
-      currentLocationId: 'goldenrodCity',
-      currentRegion: 'johto',
+      currentLocationId: 'pewterCity',
+      currentRegion: 'kanto',
       inventory: { credit: 500, pokeBall: 5 },
       money: 500,
       badges: [],

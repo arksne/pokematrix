@@ -284,16 +284,16 @@ export async function loadGame() {
     // каждом холодном старте, и пустое состояние выкладывалось поверх реального.
     state.lastCloudSync = parseInt(localStorage.getItem(lsKey('save_sync')) || '0');
 
-    state.currentLocationId = data.currentLocationId || 'goldenrodCity';
+    state.currentLocationId = data.currentLocationId || 'pewterCity';
   state.towerFloor = Number.isFinite(data.towerFloor) ? Math.max(0, Math.floor(data.towerFloor)) : 0;
-    state.currentRegion = data.currentRegion || 'johto';
+    state.currentRegion = data.currentRegion || 'kanto';
     // Migrate old region keys
     if (state.currentRegion === 'tevas_islands') state.currentRegion = 'johto' // was southern_archipelago;
-    if (!REGIONS[state.currentRegion]) state.currentRegion = 'johto';
+    if (!REGIONS[state.currentRegion]) state.currentRegion = 'kanto';
     // Validate location exists
     if (!(await getLocationLazy(state.currentLocationId))) {
-      state.currentLocationId = 'goldenrodCity';
-      state.currentRegion = 'johto';
+      state.currentLocationId = 'pewterCity';
+      state.currentRegion = 'kanto';
     }
 
     if (data.inventory) {
@@ -770,10 +770,10 @@ export async function applyCloudSave(data) {
   state.currentLocationId = data.currentLocationId || state.currentLocationId;
   state.currentRegion = data.currentRegion || state.currentRegion;
   if (state.currentRegion === 'tevas_islands') state.currentRegion = 'johto' // was southern_archipelago;
-  if (!REGIONS[state.currentRegion]) state.currentRegion = 'johto';
+  if (!REGIONS[state.currentRegion]) state.currentRegion = 'kanto';
   if (!(await getLocationLazy(state.currentLocationId))) {
-    state.currentLocationId = 'goldenrodCity';
-    state.currentRegion = 'johto';
+    state.currentLocationId = 'pewterCity';
+    state.currentRegion = 'kanto';
   }
   if (data.inventory) {
     // inventory: полностью заменяем локальное облачным (облако — источник).

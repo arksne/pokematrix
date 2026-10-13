@@ -32,7 +32,7 @@ describe('карта связная: нет локаций-тупиков', () =
   });
 
   it('в каждую локацию можно войти (кроме стартовой и «без двери»)', () => {
-    const START = 'goldenrodCity';
+    const START = 'pewterCity';
     const orphans: string[] = [];
     for (const id of ids) {
       if (id === START || isDoorless(id)) continue;

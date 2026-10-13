@@ -86,7 +86,7 @@ const browser = await chromium.launch({
   args: [`--host-resolver-rules=MAP ${HOST_ALIAS} 127.0.0.1`, '--no-sandbox'],
 });
 
-// ── Игрок в Голденрод-Сити: штатный случай ──────────────────────────────
+// ── Игрок в Пьютер-Сити (старт): штатный случай ──────────────────────────
 const reg = await register(779000444, 'world_probe');
 t('W1', 'игрок зарегистрирован (иначе init стоит на экране профиля)', reg.ok, reg.detail);
 

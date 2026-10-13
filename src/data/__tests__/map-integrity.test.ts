@@ -20,8 +20,8 @@ describe('карта', () => {
     }
   });
 
-  it('локация по умолчанию goldenrodCity существует', () => {
-    expect(Object.values(regions).some((r) => r.locations['goldenrodCity'])).toBe(true);
+  it('стартовая локация pewterCity существует', () => {
+    expect(Object.values(regions).some((r) => r.locations['pewterCity'])).toBe(true);
   });
 
   it('все ссылки локаций ведут в существующие локации', () => {

@@ -60,7 +60,7 @@ const { check, finish } = createSuite('Безопасность');
       avatar: '<img src=x onerror="fetch(`/api/admin/api`,{method:`POST`})">',
     },
   });
-  const trainers = await api('/api/profile/trainers?locationId=goldenrodCity');
+  const trainers = await api('/api/profile/trainers?locationId=pewterCity');
   const body = trainers.text || '';
   const payloadLeaked = /onerror/i.test(body);
   check('S5', 'avatar санитизируется (stored XSS закрыт)', !payloadLeaked,

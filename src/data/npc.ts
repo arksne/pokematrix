@@ -19,7 +19,7 @@
 // ─────────────────────────────────────────────────────────────
 export const NPC_DATA = {
   'professor_tutorial': {
-    id: 'professor_tutorial', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'goldenrodCity_trainingGrounds',
+    id: 'professor_tutorial', name: 'Профессор Оук', sprite: '👨‍🔬', location: 'pewterCity',
     dialog: {
       greet: 'Приветствую, молодой тренер! Покематрикс ждёт тебя. Я помогу тебе освоиться.',
       default: 'Продолжай тренироваться. У тебя большой потенциал!',

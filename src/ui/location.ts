@@ -189,8 +189,8 @@ export function travelToRegion(targetRegion: string, targetLoc: string, ticketIt
 // все 6 шагов обучения (tutorial_6 в сданных). Стартовый город и его
 // сервисы доступны всегда.
 const STARTER_AREA = new Set([
-  'goldenrodCity', 'goldenrodCity_pokemart', 'goldenrodCity_pokecenter',
-  'goldenrodStadium', 'goldenrodCity_trainingGrounds',
+  'pewterCity', 'pewterCity_pokemart', 'pewterCity_pokecenter',
+  'pewterStadium',
 ]);
 export function isTutorialGateOpen(): boolean {
   if ((state.tutorialStep || 0) > 6) return true;

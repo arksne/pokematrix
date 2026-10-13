@@ -166,7 +166,7 @@ export async function giveStarterMon(pokemonName: string) {
 
     // ── 7. Запуск туториала NPC ──
     state.tutorialStep = 1;
-    addNotification('🎓 Обучение', 'Поговорите с Профессором Оуком в Goldenrod City, чтобы начать обучение!');
+    addNotification('🎓 Обучение', 'Поговорите с Профессором Оуком в Pewter City, чтобы начать обучение!');
 
   } catch (e) {
     console.error('Failed to give starter', e);

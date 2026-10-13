@@ -26,8 +26,8 @@
 export const state: Record<string, any> = {
 
   // ── Локация / Навигация ──────────────────────────────────
-  currentLocationId: 'goldenrodCity',  // ID текущей локации (где игрок сейчас)
-  currentRegion: 'johto',          // Регион (kanto, johto)
+  currentLocationId: 'pewterCity',  // ID текущей локации (старт — Пьютер)
+  currentRegion: 'kanto',          // Регион (старт — Канто)
   lastLocation: null,              // Последняя посещённая локация (для кнопки)
   visitedLocations: new Set<string>(), // Set посещённых локаций (для карты/путешествий)
   isDaytime: true,                 // bool: день или ночь (влияет на покемонов)
