@@ -42,7 +42,13 @@ export const SHADOW_ITEMS: Array<{
   removedFrom: string[];
   commit: string;
 }> = [
-
+  { id: 'ironBall', commit: 'af108bd', removedFrom: ['items', 'shops', 'economy', 'drops'], def: `{ id: 'ironBall', nameRu: 'Железный Шар', category: 'battle', price: 4000, sellPrice: 2000, isUsable: false, implemented: true },` },
+  { id: 'laggingTail', commit: 'af108bd', removedFrom: ['items', 'shops', 'economy', 'drops'], def: `{ id: 'laggingTail', nameRu: 'Медлительный Хвост', category: 'battle', desc: 'Held: Holder moves last in its priority bracket.', price: 4000, sellPrice: 2000, isUsable: true, implemented: true },` },
+  { id: 'lightClay', commit: 'af108bd', removedFrom: ['items', 'shops', 'economy', 'drops'], def: `{ id: 'lightClay', nameRu: 'Лёгкая Глина', category: 'battle', desc: 'Held: Light Screen and Reflect used by the holder last 8 rounds instead of 5.', price: 4000, sellPrice: 2000, isUsable: true, implemented: true },` },
+  { id: 'luckyPunch', commit: 'af108bd', removedFrom: ['items', 'shops', 'economy', 'drops'], def: `{ id: 'luckyPunch', nameRu: 'Lucky Punch', category: 'battle', desc: 'Raises Chansey’s critical hit ratio by two stages.', price: 1000, sellPrice: 500, isUsable: true, implemented: true },` },
+  { id: 'shedShell', commit: 'af108bd', removedFrom: ['items', 'shops', 'economy', 'drops'], def: `{ id: 'shedShell', nameRu: 'Сброшенная Оболочка', category: 'battle', desc: 'Held: Holder can bypass all trapping effects and switch out.', price: 4000, sellPrice: 2000, isUsable: true, implemented: true },` },
+  { id: 'smokeBall', commit: 'af108bd', removedFrom: ['items', 'shops', 'economy', 'drops'], def: `{ id: 'smokeBall', nameRu: 'Дымовой Шар', category: 'battle', desc: 'Held: Allows the Holder to escape from any wild battle.', price: 4000, sellPrice: 2000, isUsable: true, implemented: true },` },
+  { id: 'wideLens', commit: 'af108bd', removedFrom: ['items', 'shops', 'economy', 'drops'], def: `{ id: 'wideLens', nameRu: 'Широкая Линза', category: 'battle', desc: 'Held: Provides a 1/10 (10%) boost in accuracy to the holder.', price: 4000, sellPrice: 2000, isUsable: true, implemented: true },` },
   // пример:
   // { id: 'pinkNectar', def: `{ id: 'pinkNectar', ... }`, removedFrom: ['items', 'shops', 'economy'], commit: '16c97f5' },
 ];
