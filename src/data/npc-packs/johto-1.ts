@@ -31,7 +31,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Сбор не окончен. Руины ждут, маршруты ждут...',
     },
     quests: [
-      { id: 'vio_trail', type: 'defeat_x', targetItem: null, targetQty: 305, desc: 'Победи 305 диких летающих + исходи 13 локаций (средний уровень 55)', rewardMoney: 45000, rewardItem: 'tmMid', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 3 }], prereqQuest: null, filter: { types: ['flying'] }, verify: { avgLevel: 55, locs: ['violetCity', 'sproutTower', 'ruinsOfAlph', 'route31', 'route32', 'unionCave', 'route33', 'route36', 'route37', 'nationalPark', 'cherrygroveCity', 'route29', 'route30'] } },
+      { id: 'vio_trail', type: 'defeat_x', targetItem: null, targetQty: 305, desc: 'Победи 305 диких летающих + исходи 13 локаций (средний уровень 55)', rewardMoney: 45000, rewardItem: 'skyPlate', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 3 }], prereqQuest: null, filter: { types: ['flying'] }, verify: { avgLevel: 55, locs: ['violetCity', 'sproutTower', 'ruinsOfAlph', 'route31', 'route32', 'unionCave', 'route33', 'route36', 'route37', 'nationalPark', 'cherrygroveCity', 'route29', 'route30'] } },
       { id: 'vio_unown', type: 'catch_x', targetItem: null, targetQty: 26, desc: 'Поймай 26 Unown (весь алфавит руин Альф!)', rewardMoney: 45000, rewardItem: 'fullHeal', rewardQty: 5, prereqQuest: null, filter: { species: 'unown' } },
     ],
   },
@@ -99,7 +99,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня в небе. Ветер не прощает суеты.',
     },
     quests: [
-      { id: 'vio_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пилота Ская (команда 5×Lv68)', rewardMoney: 135000, rewardItem: 'tm40', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 2 }], rewardTitle: 'skyLord', prereqQuest: null, filter: { bossId: 'violetSky' } },
+      { id: 'vio_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пилота Ская (команда 5×Lv68)', rewardMoney: 135000, rewardItem: 'whiteHerb', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'skyLord', prereqQuest: null, filter: { bossId: 'violetSky' } },
     ],
   },
   'vio_stareishina': {
@@ -112,7 +112,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Ещё не все точки исхожены. Камни молчат...',
     },
     quests: [
-      { id: 'vio_pillar', type: 'special', targetItem: null, targetQty: 1, desc: 'Исходи 7 точек Джото (город, башня Росток, руины, маршруты, пещера, парк)', rewardMoney: 45000, rewardItem: 'escapeRope', rewardQty: 3, rewardItems: [{ id: 'maxRepel', qty: 5 }], prereqQuest: null, verify: { locs: ['violetCity', 'sproutTower', 'ruinsOfAlph', 'route32', 'unionCave', 'route36', 'nationalPark'] } },
+      { id: 'vio_pillar', type: 'special', targetItem: null, targetQty: 1, desc: 'Исходи 7 точек Джото (город, башня Росток, руины, маршруты, пещера, парк)', rewardMoney: 45000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 5 }], prereqQuest: null, verify: { locs: ['violetCity', 'sproutTower', 'ruinsOfAlph', 'route32', 'unionCave', 'route36', 'nationalPark'] } },
     ],
   },
   'vio_perelet': {
@@ -151,7 +151,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Рой ещё не весь пересчитан...',
     },
     quests: [
-      { id: 'aza_trail', type: 'defeat_x', targetItem: null, targetQty: 375, desc: 'Победи 375 диких жуков + исходи 14 локаций (средний уровень 60)', rewardMoney: 50000, rewardItem: 'tmMid', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 4 }], prereqQuest: null, filter: { types: ['bug'] }, verify: { avgLevel: 60, locs: ['azaleaTown', 'ilexForest', 'slowpokeWell', 'route32', 'route33', 'route34', 'route35', 'route36', 'route37', 'unionCave', 'goldenrodCity', 'nationalPark', 'ruinsOfAlph', 'violetCity'] } },
+      { id: 'aza_trail', type: 'defeat_x', targetItem: null, targetQty: 375, desc: 'Победи 375 диких жуков + исходи 14 локаций (средний уровень 60)', rewardMoney: 50000, rewardItem: 'insectPlate', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 4 }], prereqQuest: null, filter: { types: ['bug'] }, verify: { avgLevel: 60, locs: ['azaleaTown', 'ilexForest', 'slowpokeWell', 'route32', 'route33', 'route34', 'route35', 'route36', 'route37', 'unionCave', 'goldenrodCity', 'nationalPark', 'ruinsOfAlph', 'violetCity'] } },
     ],
   },
   'aza_pautina': {
@@ -220,7 +220,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня. Рой не сдаётся!',
     },
     quests: [
-      { id: 'aza_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ловца Жуков Роя (команда 5×Lv73)', rewardMoney: 150000, rewardItem: 'tm81', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 2 }], rewardTitle: 'swarmKin', prereqQuest: null, filter: { bossId: 'azaleaSwarm' } },
+      { id: 'aza_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ловца Жуков Роя (команда 5×Lv73)', rewardMoney: 150000, rewardItem: 'mentalHerb', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'swarmKin', prereqQuest: null, filter: { bossId: 'azaleaSwarm' } },
     ],
   },
   'aza_les': {
@@ -339,7 +339,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня. Звёзды не сдаются!',
     },
     quests: [
-      { id: 'gol_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Суперфаната Норма (команда 5×Lv78)', rewardMoney: 165000, rewardItem: 'tm42', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 2 }], rewardTitle: 'goldenStar', prereqQuest: null, filter: { bossId: 'goldenrodNorm' } },
+      { id: 'gol_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Суперфаната Норма (команда 5×Lv78)', rewardMoney: 165000, rewardItem: 'powerHerb', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'goldenStar', prereqQuest: null, filter: { bossId: 'goldenrodNorm' } },
     ],
   },
   'gol_vokzal': {
@@ -352,7 +352,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Ещё не все точки исхожены. Состав уже подан...',
     },
     quests: [
-      { id: 'gol_hq', type: 'special', targetItem: null, targetQty: 1, desc: 'Исходи 6 точек (город, штаб, вокзал, маршруты, парк)', rewardMoney: 55000, rewardItem: 'escapeRope', rewardQty: 3, rewardItems: [{ id: 'fullHeal', qty: 3 }], prereqQuest: null, verify: { locs: ['goldenrodCity', 'teamRocketHq', 'goldenrodStation', 'route34', 'route35', 'nationalPark'] } },
+      { id: 'gol_hq', type: 'special', targetItem: null, targetQty: 1, desc: 'Исходи 6 точек (город, штаб, вокзал, маршруты, парк)', rewardMoney: 55000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'fullHeal', qty: 3 }], prereqQuest: null, verify: { locs: ['goldenrodCity', 'teamRocketHq', 'goldenrodStation', 'route34', 'route35', 'nationalPark'] } },
     ],
   },
   'gol_express': {
@@ -403,7 +403,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Духи ещё не все пересчитаны...',
     },
     quests: [
-      { id: 'ecr_trail', type: 'defeat_x', targetItem: null, targetQty: 545, desc: 'Победи 545 диких призрачных + исходи 16 локаций (средний уровень 70)', rewardMoney: 60000, rewardItem: 'tmTop', rewardQty: 1, rewardItems: [{ id: 'fullRestore', qty: 2 }], prereqQuest: null, filter: { types: ['ghost'] }, verify: { avgLevel: 70, locs: ['ecruteakCity', 'bellTower', 'burnedTower', 'route34', 'route35', 'route36', 'route37', 'route38', 'route39', 'olivineCity', 'seaRoute40', 'route42', 'mtMortar', 'goldenrodCity', 'unionCave', 'nationalPark'] } },
+      { id: 'ecr_trail', type: 'defeat_x', targetItem: null, targetQty: 545, desc: 'Победи 545 диких призрачных + исходи 16 локаций (средний уровень 70)', rewardMoney: 60000, rewardItem: 'spookyPlate', rewardQty: 1, rewardItems: [{ id: 'fullRestore', qty: 2 }], prereqQuest: null, filter: { types: ['ghost'] }, verify: { avgLevel: 70, locs: ['ecruteakCity', 'bellTower', 'burnedTower', 'route34', 'route35', 'route36', 'route37', 'route38', 'route39', 'olivineCity', 'seaRoute40', 'route42', 'mtMortar', 'goldenrodCity', 'unionCave', 'nationalPark'] } },
     ],
   },
   'ecr_polnoch': {

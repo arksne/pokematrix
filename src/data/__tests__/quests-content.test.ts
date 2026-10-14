@@ -111,8 +111,30 @@ describe('quests-content (пачка Пьютера)', () => {
     const has = (qid: string, id: string) =>
       (byId.get(qid)?.rewardItems || []).some((r: any) => r.id === id);
     expect(has('pw_trail', 'superPotion')).toBe(true);
-    expect(has('pw_fist', 'rareCandy')).toBe(true);
-    expect(has('pw_wanderer', 'maxRepel')).toBe(true);
+    // Ребаланс продаваемости: кулак — ppUp вместо редкой конфеты (400k в слив
+    // на нулевом тире), странник — superPotion вместо maxRepel (750k в слив).
+    expect(has('pw_fist', 'ppUp')).toBe(true);
+    expect(has('pw_wanderer', 'superPotion')).toBe(true);
+  });
+
+  it('продаваемость наград в лимитах тира (анти-дыра)', () => {
+    // Суммарная цена продажи награды (без денег) не должна взрывать экономику
+    // тира: n0–n5 ≤150k, n6–n7 ≤300k, n8–n10 ≤750k, n11+ ≤5M.
+    // Цены — из ITEMS sellPrice (половина покупки).
+    const priceOf = (id: string) => ITEMS.find((i) => i.id === id)?.sellPrice ?? 0;
+    const tierOf = (qid: string): number => {
+      const p = qid.split('_')[0];
+      const order = ['pw', 'cer', 'ver', 'cel', 'saf', 'fuc', 'cin', 'vir',
+        'vio', 'aza', 'gol', 'ecr', 'cia', 'oli', 'mah', 'bla'];
+      return order.indexOf(p);
+    };
+    const cap = (n: number) =>
+      n <= 5 ? 150000 : n <= 7 ? 300000 : n <= 10 ? 750000 : 5000000;
+    for (const q of allQuests) {
+      const sell = priceOf(q.rewardItem) * q.rewardQty
+        + (q.rewardItems || []).reduce((s: number, r: any) => s + priceOf(r.id) * r.qty, 0);
+      expect(sell, `${q.id}: sell ${sell}`).toBeLessThanOrEqual(cap(tierOf(q.id)));
+    }
   });
 
   it('NPC и verify-локации существуют', () => {

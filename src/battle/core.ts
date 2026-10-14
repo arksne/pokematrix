@@ -1571,13 +1571,38 @@ function giveBerryToMon(berryType) {
  * ГДЕ ВЫЗЫВАЕТСЯ: при старте игры или при смене дня
  * ХРАНИТ ДАННЫЕ В: GS.quests (массив активных заданий), GS.questProgress (прогресс по ID)
  */
+/**
+ * isValidDailyConfig — конфиг ежедневки ссылается на живые предметы.
+ * Мёртвый targetItem/rewardItem (нет в ITEMS) = невыполнимый квест:
+ * игрок видит задание, а дропа/награды не существует. Такие конфиги
+ * в ротацию не берём, а загруженные сегодня с битыми предметами —
+ * перегенерируем сразу (самолечение старых сейвов).
+ */
+function isValidDailyConfig(q) {
+  if (!q || typeof q.id !== 'string' || !q.type || !(q.target > 0)) return false;
+  if (q.rewardItem && !ITEMS.some(i => i.id === q.rewardItem)) return false;
+  if (q.type === 'collect_items') {
+    if (!q.targetItem || !ITEMS.some(i => i.id === q.targetItem)) return false;
+  }
+  return true;
+}
+
 function generateDailyQuests() {
   const today = new Date().toISOString().slice(0, 10);           // Сегодняшняя дата YYYY-MM-DD
   const lastGen = localStorage.getItem(store.lsKey('quest_date')); // Дата последней генерации
-  if (lastGen === today && GS.quests.length > 0) return;          // Уже сгенерированы сегодня
+  // Ротация только из валидных конфигов (битые предметы не предлагаем).
+  const validPool = QUEST_CONFIGS.filter(isValidDailyConfig);
+  const pool = validPool.length >= 3 ? validPool : QUEST_CONFIGS;
+  if (lastGen === today && GS.quests.length > 0) {
+    // Уже сгенерированы сегодня — прогресс не сбрасываем.
+    // Исключение: в сегодняшнем наборе затесался битый конфиг
+    // (старый сейв до фикса предметов) — тогда перегенерируем сразу,
+    // иначе игрок сидит с невыполнимым заданием до завтра.
+    if (GS.quests.every(isValidDailyConfig)) return;
+  }
 
   // Перемешиваем и берём 3 случайных конфига
-  const shuffled = [...QUEST_CONFIGS].sort(() => Math.random() - 0.5);
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
   const newQuests = shuffled.slice(0, 3).map(q => ({
     ...q,
     progress: 0,        // Прогресс: 0 из target
@@ -7517,8 +7542,8 @@ function initEncounterEvents() {
         }, 1500);
       })();
     } else if (item === 'tm') {
-      if (store.getItemQty('tm') <= 0) return showToast('Нет TM-совместимости!', true);
-      showToast('Используйте TM из профиля покемона.', true);
+      // Диск убран из игры (дисбаланс: учил любую атаку за 500)
+      return showToast('Этот диск убран из игры.', true);
     } else if (HEAL_HP[item] !== undefined && !['potion', 'superPotion', 'fullRestore'].includes(item)) {
       // Аудит итемов: остальные лечилки (hyperPotion, maxPotion, воды, корни...)
       if (store.getItemQty(item) <= 0) return showToast(`Нет ${itemDef(item).nameRu}!`, true);
@@ -7982,7 +8007,11 @@ async function startGymNextPokemon() {
       });
       if (resp.ok) {
         const data = await resp.json();
-        state.badges.push(data.badgeName);                               // Добавляем бадж (из ответа сервера)
+        // Гард от дублей (значков было 32 вместо 16): сервер мог выдать 200
+        // повторно (ретрай после таймаута), а push шёл безусловно.
+        if (!state.badges.includes(data.badgeName)) {
+          state.badges.push(data.badgeName);                               // Добавляем бадж (из ответа сервера)
+        }
         store.giveReward(data.moneyReward, []);                          // Деньги (из ответа сервера)
         checkQuestProgress('earn_money', data.moneyReward);
         appendToLog(`Победа! Вы получили ${data.badgeName} и ¥${data.moneyReward}!`);
@@ -7998,8 +8027,10 @@ async function startGymNextPokemon() {
     } catch (e) {
       console.error('[gym] badge-reward error:', e);
       appendToLog('Ошибка связи с сервером, награда выдана локально');
-      // Fallback: выдаём локально если сервер недоступен
-      state.badges.push(leader.badgeName);
+      // Fallback: выдаём локально если сервер недоступен (тоже с гардом от дублей)
+      if (!state.badges.includes(leader.badgeName)) {
+        state.badges.push(leader.badgeName);
+      }
       store.giveReward(leader.moneyReward, []);
       checkQuestProgress('earn_money', leader.moneyReward);
       store.updateMoneyDisplay();

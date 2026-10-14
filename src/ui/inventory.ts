@@ -701,14 +701,23 @@ async function feedCandy(mon, itemId, label, evGain = 4) {
   mon.candiesEaten++;          // Увеличиваем съеденные конфеты
   if (typeof mon.evPool !== 'number') mon.evPool = 0;
   mon.evPool += evGain;        // EV в пул на ручное распределение
+  // Счастье могло отсутствовать у старых сейвов — NaN вместо числа ломал
+  // всю дальнейшую арифметику молча. Дефолт 70 (канон).
+  if (typeof mon.happiness !== 'number' || Number.isNaN(mon.happiness)) mon.happiness = 70;
   mon.happiness += 2;          // +2 к счастью
   if (mon.happiness > 255) mon.happiness = 255;
 
-  // ── Пересчёт HP при повышении уровня ──
-  const baseHp = mon.apiData.stats[0].base_stat;
+  // ── Пересчёт HP при повышении уровня (с защитой от кривых данных) ──
+  // mon без apiData/ivs/evs (старые сейвы, трейд-заглушки) раньше роняли
+  // feedCandy исключением ПОСЛЕ списания конфеты: предмет съеден, эффекта нет
+  // («нерабочие конфеты»). Теперь — фолбэки по канону средних значений.
+  const stats = mon.apiData?.stats;
+  const baseHp = (stats && typeof stats[0]?.base_stat === 'number') ? stats[0].base_stat : 45;
+  const ivHp = (mon.ivs && typeof mon.ivs.hp === 'number') ? mon.ivs.hp : 15;
+  const evHp = (mon.evs && typeof mon.evs.hp === 'number') ? mon.evs.hp : 0;
   const curLvl = mon.baseLevel + mon.candiesEaten;  // Новый уровень
   const oldMax = mon.maxHp;
-  mon.maxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * curLvl) + curLvl + 10;
+  mon.maxHp = Math.floor(0.01 * (2 * baseHp + ivHp + Math.floor(0.25 * evHp)) * curLvl) + curLvl + 10;
   // Добавляем разницу к текущему HP (чтобы не было потери HP при левелапе)
   mon.currentHp += (mon.maxHp - oldMax);
 
@@ -768,14 +777,18 @@ async function feedExp(mon, itemId, label, amount) {
   removeItem(itemId);
   mon.exp += amount;
   let ups = 0;
+  // Тот же фолбэк, что в feedCandy: кривые данные не должны съедать конфету.
+  const st = mon.apiData?.stats;
+  const bHp = (st && typeof st[0]?.base_stat === 'number') ? st[0].base_stat : 45;
+  const iHp = (mon.ivs && typeof mon.ivs.hp === 'number') ? mon.ivs.hp : 15;
+  const eHp = (mon.evs && typeof mon.evs.hp === 'number') ? mon.evs.hp : 0;
   while (mon.exp >= mon.expToNext && (mon.baseLevel + (mon.candiesEaten || 0)) < 100) {
     mon.baseLevel++;
     ups++;
     mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
-    const baseHp = mon.apiData.stats[0].base_stat;
     const lvl = mon.baseLevel + (mon.candiesEaten || 0);
     const oldMax = mon.maxHp;
-    mon.maxHp = Math.floor(0.01 * (2 * baseHp + mon.ivs.hp + Math.floor(0.25 * mon.evs.hp)) * lvl) + lvl + 10;
+    mon.maxHp = Math.floor(0.01 * (2 * bHp + iHp + Math.floor(0.25 * eHp)) * lvl) + lvl + 10;
     mon.currentHp += (mon.maxHp - oldMax);
     const m = await import('../battle/core.js');
     if (typeof m.grantLevelUpEVs === 'function') {
@@ -790,7 +803,11 @@ async function feedExp(mon, itemId, label, amount) {
   await checkNewMovesOnLevelUp(mon, mon.baseLevel + (mon.candiesEaten || 0));
   refreshProfileUI();
   autoSave();
-  showToast(`${label}: +${amount.toLocaleString()} EXP${ups ? `, уровень повышен (${ups})` : ''}!`, false);
+  // Видимый прогресс: маленькая конфета на высоком уровне иначе выглядит
+  // «нерабочей» (+3000 EXP в никуда). Показываем, сколько осталось до уровня.
+  const lvlNow = mon.baseLevel + (mon.candiesEaten || 0);
+  const need = Math.max(0, (mon.expToNext || 0) - (mon.exp || 0));
+  showToast(`${label}: +${amount.toLocaleString()} EXP${ups ? `, уровень повышен (${ups})` : ` (до Ур.${lvlNow + 1} осталось ${need.toLocaleString()})`}!`, false);
   return true;
 }
 
@@ -1043,10 +1060,9 @@ export async function useItem(itemId) {
       break;
     }
 
-    // ── TM-диск (шарф) — открывает репитер атак ──
+    // ── TM-диск (шарф) — УБРАН (дисбаланс: учил любую атаку за 500) ──
     case 'tm': {
-      openMoveRelearner('tm');
-      break;
+      return showToast('Этот диск убран из игры. Остатки не работают.', true);
     }
 
     // ── Тировые TM (B5): слабые <60, средние ≤90, топ — всё ──

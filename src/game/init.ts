@@ -49,7 +49,7 @@ import { giveStarter } from '../ui/starter.js';
 import { startBreedingCheck } from '../ui/daycare.js';
 import { openMap, setTravelCallback, setExploredLocs } from '../ui/map.js';
 import { setBeforeRenderLocation } from '../ui/location.js';
-import { startOnboarding, markLocationExplored, getExploredLocations, openHelp, isTutorialComplete } from '../ui/tutorial.js';
+import { startOnboarding, markLocationExplored, getExploredLocations, openHelp, isTutorialComplete, ensureTutorialQuests } from '../ui/tutorial.js';
 import { openAchievements } from '../ui/achievements.js';
 import { showToast } from '../utils/dom.js';
 import { checkTutorialProgress } from '../ui/npcs.js';
@@ -92,6 +92,10 @@ import { API_BASE } from './config.js';
     });
     store.on('gym:reward', (locId) => showGymRewardSelection(locId));
     store.on('toast', (msg, isErr) => showToast(msg, isErr));
+
+    // Квесты обучения должны существовать до первого диалога с Оуком:
+    // wipe квестов оставил professor_tutorial с quests: [] (см. tutorial.ts).
+    try { ensureTutorialQuests(); } catch (e) { console.warn('[tutorial] ensure failed', e); }
 
     initAppNav();
     initShopEvents();
@@ -329,7 +333,12 @@ initGymEvents();
       //
       // Теперь стартовик выдаётся параллельно: модалка поверх игры, а мир
       // рендерится сразу. Ошибка выбора стартовика не должна отменять рендер.
-      giveStarter().catch((e) => console.error('Выдача стартовика не удалась:', e));
+      // Дотяжка онбординга: на 500мс у новичка команды ещё нет (стартер
+      // выбирается дольше), поэтому после выдачи пробуем ещё раз — иначе
+      // обучение для свежих игроков стартовало только по кнопке.
+      giveStarter()
+        .then(() => { try { tryStartOnboarding(); } catch {} })
+        .catch((e) => console.error('Выдача стартовика не удалась:', e));
       // giveStarterMon() уже вызвала store.emit('save') → autoSave() → cloudSave()
       // Дополнительное сохранение здесь не нужно — оно перезатрёт корректный
       // save пустым состоянием.
@@ -364,11 +373,17 @@ initGymEvents();
     updateBadgeDisplay();
 
     // ── Запуск туториала (после загрузки сохранения и рендера UI) ──
-    setTimeout(() => {
+    // tryStartOnboarding переиспользуется и после выдачи стартера (см. выше):
+    // первый тик новичка застаёт пустую команду и молча пропускает старт.
+    function tryStartOnboarding() {
+      try { ensureTutorialQuests(); } catch {}
       const tutorialDone = isTutorialComplete();
       if (!tutorialDone && state.myTeam && state.myTeam.length > 0) {
         startOnboarding();
       }
+    }
+    setTimeout(() => {
+      tryStartOnboarding();
     }, 500);
 
     initProfileEvents();

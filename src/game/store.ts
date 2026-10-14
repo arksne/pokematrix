@@ -35,7 +35,7 @@ import { ITEMS } from '../data/items.js';
  * Queries (getLocation, lsKey, processMonsterDrop) use direct callbacks
  * since they return values — cannot be event-based.
  */
-class GameStore {
+export class GameStore {
   _state: Record<string, any>;
   _dirty: Set<string>;
   _listeners: Map<string, Set<Function>>;
@@ -213,7 +213,32 @@ class GameStore {
   updateMoneyDisplay() { this.emit('money:changed'); }
   updateInventoryDisplay() { this.emit('inventory:changed'); }
   autoSave() { this.emit('save'); }
-  checkTutorialProgress(type, amount, itemId) { this.emit('tutorial:progress', type, amount, itemId); }
+  // ── Алиасы типов туториала (канон *_x + легаси-короткие) ──
+  // Комментарий в npcs.ts обещает ('catch','battle','heal','item'), а квесты
+  // и эмиттеры battle/core.ts используют catch_x/defeat_x/use_item/... .
+  // Без нормализации вызов с коротким именем молча никуда не попадает
+  // (quest.type !== type). Внутренние 'take'/'complete' — не типы квестов,
+  // пропускаем как есть.
+  static TUTORIAL_TYPE_ALIASES: Record<string, string> = {
+    catch: 'catch_x',
+    battle: 'defeat_x',
+    defeat: 'defeat_x',
+    heal: 'use_item',
+    item: 'use_item',
+    use: 'use_item',
+    money: 'earn_money',
+    earn: 'earn_money',
+    drop: 'collect_drop',
+    collect: 'collect_drop',
+  };
+  static normalizeTutorialType(type: string): string {
+    if (!type) return type;
+    if (type === 'catch_x' || type === 'defeat_x' || type === 'use_item'
+      || type === 'explore' || type === 'earn_money' || type === 'collect_drop'
+      || type === 'take' || type === 'complete') return type;
+    return GameStore.TUTORIAL_TYPE_ALIASES[type] ?? type;
+  }
+  checkTutorialProgress(type, amount, itemId) { this.emit('tutorial:progress', GameStore.normalizeTutorialType(type), amount, itemId); }
   showGymRewardSelection(locId) { this.emit('gym:reward', locId); }
 }
 

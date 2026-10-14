@@ -258,7 +258,6 @@ const ITEMS: ItemDef[] = [
   { id: 'throatSpray', price: 4000 },
   { id: 'thunderStone', price: 100000 },
   { id: 'timerBall', price: 800 },
-  { id: 'tm', price: 500 },
   { id: 'tm01', price: 1620000 },
   { id: 'tm02', price: 2460000 },
   { id: 'tm03', price: 2460000 },

@@ -975,15 +975,20 @@ export function updateMoneyDisplay() {
 
 // ── updateBadgeDisplay: обновление отображения значков ──
 // Показывает количество собранных значков и их иконки
-// Формат: "Значки (4/8): 🏅🏅🏅🏅"
+// Формат: "Значки (4/16): 🏅🏅🏅🏅"
+// Знаменатель — ТОЛЬКО настоящие залы (у мини-боссов badgeName пустой,
+// иначе после пачки лесенки показывало бы "/32"). Дубли режутся dedupeBadges
+// на загрузке, здесь — страховка уникальности иконок.
 export function updateBadgeDisplay() {
   const el = document.getElementById('badge-display');
   if (el) {
+    const gymTotal = Object.values(gymLeaders).filter((l: any) => l && l.badgeName && !l.friendly).length;
+    const uniq = [...new Set(state.badges)];
     // Маппим названия значков на иконки лидеров
-    const icons = state.badges.map(b => {
+    const icons = uniq.map(b => {
       const leader = Object.values(gymLeaders).find(l => l.badgeName === b);
       return leader?.badgeIcon || '🏅';  // Если иконки нет — используем 🏅
     });
-    el.innerText = `Значки (${state.badges.length}/${Object.keys(gymLeaders).length}): ${icons.join(' ')}`;
+    el.innerText = `Значки (${uniq.length}/${gymTotal}): ${icons.join(' ')}`;
   }
 }

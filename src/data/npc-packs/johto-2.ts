@@ -27,7 +27,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Сбор данных не окончен. Бойцы ждут...',
     },
     quests: [
-      { id: 'cia_trail', type: 'defeat_x', targetItem: null, targetQty: 645, desc: 'Победи 645 диких бойцовых + исходи 18 локаций (средний уровень 75)', rewardMoney: 65000, rewardItem: 'tmTop', rewardQty: 1, rewardItems: [{ id: 'fullRestore', qty: 3 }], prereqQuest: null, filter: { types: ['fighting'] }, verify: { avgLevel: 75, locs: ['cianwoodCity', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'olivineCity', 'route37', 'route38', 'route39', 'mtMortar', 'route42', 'route43', 'lakeOfRage', 'mahoganyTown', 'route44', 'icePath', 'ecruteakCity', 'bellTower', 'blackthornCity'] } },
+      { id: 'cia_trail', type: 'defeat_x', targetItem: null, targetQty: 645, desc: 'Победи 645 диких бойцовых + исходи 18 локаций (средний уровень 75)', rewardMoney: 65000, rewardItem: 'fistPlate', rewardQty: 1, rewardItems: [{ id: 'fullRestore', qty: 3 }], prereqQuest: null, filter: { types: ['fighting'] }, verify: { avgLevel: 75, locs: ['cianwoodCity', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'olivineCity', 'route37', 'route38', 'route39', 'mtMortar', 'route42', 'route43', 'lakeOfRage', 'mahoganyTown', 'route44', 'icePath', 'ecruteakCity', 'bellTower', 'blackthornCity'] } },
       { id: 'cia_roids', type: 'use_item', targetItem: null, targetQty: 45, desc: 'Используй 45 X Attack (раздай спарринг-партнёрам додзё)', rewardMoney: 59000, rewardItem: 'protein', rewardQty: 1, prereqQuest: null, filter: { itemId: 'xAttack' } },
     ],
   },
@@ -108,7 +108,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Сначала победи меня в додзё. Маты не прощают суеты.',
     },
     quests: [
-      { id: 'cia_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Чака (команда 6×Lv88)', rewardMoney: 195000, rewardItem: 'tmTop', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 3 }], rewardTitle: 'ironFist', prereqQuest: null, filter: { bossId: 'cianwoodPupil' } },
+      { id: 'cia_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Чака (команда 6×Lv88)', rewardMoney: 195000, rewardItem: 'choiceBand', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 3 }], rewardTitle: 'ironFist', prereqQuest: null, filter: { bossId: 'cianwoodPupil' } },
     ],
   },
   'cia_volna': {
@@ -159,7 +159,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Сбор данных не окончен. Рельсы ждут...',
     },
     quests: [
-      { id: 'oli_trail', type: 'defeat_x', targetItem: null, targetQty: 755, desc: 'Победи 755 диких стальных + исходи 20 локаций (средний уровень 75)', rewardMoney: 70000, rewardItem: 'tmTop', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 1 }], prereqQuest: null, filter: { types: ['steel'] }, verify: { avgLevel: 75, locs: ['olivineCity', 'olivinePier', 'route34', 'route35', 'route36', 'route37', 'route38', 'route39', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'cianwoodCity', 'mtMortar', 'route42', 'ecruteakCity', 'bellTower', 'burnedTower', 'nationalPark', 'goldenrodCity', 'unionCave'] } },
+      { id: 'oli_trail', type: 'defeat_x', targetItem: null, targetQty: 755, desc: 'Победи 755 диких стальных + исходи 20 локаций (средний уровень 75)', rewardMoney: 70000, rewardItem: 'metalCoat', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 1 }], prereqQuest: null, filter: { types: ['steel'] }, verify: { avgLevel: 75, locs: ['olivineCity', 'olivinePier', 'route34', 'route35', 'route36', 'route37', 'route38', 'route39', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'cianwoodCity', 'mtMortar', 'route42', 'ecruteakCity', 'bellTower', 'burnedTower', 'nationalPark', 'goldenrodCity', 'unionCave'] } },
     ],
   },
   'oli_storm': {
@@ -265,7 +265,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Без зелья не справлюсь... Поторопись к Амфарос!',
     },
     quests: [
-      { id: 'oli_potion', type: 'collect_items', targetItem: 'secretPotion', targetQty: 1, desc: 'Довези Secret Potion из Сианвуда для больной Амфарос с маяка', rewardMoney: 63000, rewardItem: 'rareCandy', rewardQty: 10, prereqQuest: null },
+      { id: 'oli_potion', type: 'collect_items', targetItem: 'secretPotion', targetQty: 1, desc: 'Довези Secret Potion из Сианвуда для больной Амфарос с маяка', rewardMoney: 63000, rewardItem: 'rareCandy', rewardQty: 6, prereqQuest: null },
     ],
   },
   // ══════════ МАХОГАНИ (n=14, лёд) ══════════

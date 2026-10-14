@@ -439,21 +439,33 @@ NPC: Драконовед 🐲 (`blackthornCity`), Наследница 👑 (`b
 > Таблицы городов выше фиксируют МЕХАНИКИ и ЧИСЛА. Награды — по §A2
 > (этот раздел новее таблиц). Доставки — по §A3. Ключи боссов — §A4.
 
-### A1. ТМ-награды троп и кулаков — НАСТОЯЩИЕ номерные ТМ (v4, разнообразие!)
+### A1. ТМ-награды: только там, где не дыра (v5, баланс продаваемости!)
 
-Именные ТМ нашлись в items.ts (`tmNN` с мувами в desc). Кулаку (престиж выше) —
-настоящий ТМ его STAB/мува, тропе при дубле — тировый. Итог в коде:
-- Настоящие: ver_trail tm78, gol_trail tm31, mah_trail tm52, bla_trail tm14,
-  ver_fist tm24, saf_fist tm29, fuc_fist tm36, cin_fist tm35, vir_fist tm26,
-  vio_fist tm40, aza_fist tm81, gol_fist tm42, ecr_fist tm30, oli_fist tm91,
-  mah_fist tm13, bla_fist tm02 (16 уникальных).
-- Тировые (дубли мувов): тропы cer/cel/saf/fuc → tmWeak; cin/vir/vio/aza → tmMid;
-  oli/ecr/cia → tmTop; кулаки cer/cel → tmWeak; cia → tmTop.
+Продажа ТМ (100k–10M) в ранних городах ломала дефицитную экономику
+(кулак Пьютера tm64 = 1.8M в слив при спросе кошелька 100k).
+Правило: ТМ и редкие конфеты как награда — только с n8 (там это ≤25%
+от требований кошелька). В коде:
+- Тропы n0–n10: усиливающие held типа (500–25k в слив): hardStone,
+  mysticWater, zapPlate, miracleSeed, twistedSpoon, poisonBarb, charcoal,
+  earthPlate, skyPlate, insectPlate. Тропы n11+: metalCoat/spookyPlate/
+  fistPlate (25–125k); gol/mah/bla — настоящие tm31/tm52/tm14.
+- Кулаки n0–n10: held + ppUp×2 (focusBand/splashPlate/magnet/meadowPlate/
+  mindPlate/toxicPlate/flamePlate/hardStone/whiteHerb/mentalHerb/powerHerb).
+- Кулаки n11+: настоящие tm30/tm91/tm13/tm02 + редкие ×3; cia — choiceBand.
+- Редкие конфеты: только n8+ (кулаки vio/aza/gol ×2, ecr/cia/oli/mah/bla ×3,
+  курьеры oli/mah/bla, зелье, кладовая n8+); n0–n7 — ppUp×2.
 - Нет в items (Surf, Giga Drain, Dark Pulse, Close Combat, Solar Beam) —
-  там тировые (см. выше).
+  там held (см. выше).
 
 ### A2. Замены наград (слева было в таблицах → справа в код)
 
+- Маршруты (верёвки были дырой: esc×3+maxRepel×5 = 900k в нулевом тире):
+  anne/pillar/journals/wanderer → escapeRope×1 + fullHeal×3 / superPotion×5 /
+  antidote×5 / superPotion×5; hq → escapeRope×1 + revive×2.
+- Курьеры: cin expCandyM×10, vio expCandyL×15, aza protein×2, gol calcium×2,
+  ecr zinc×2, cia carbos×2 (ранние — expCandyM×3–20, финалы oli/mah/bla — rareCandy).
+- Кошелёк: мёд уполовинен в n1–n7 (qty 1/2/2/3/3/4/5), дальше как было.
+  Мёд — фирменная награда кошелька, альтернатив-сокровищ в items нет.
 - `luxuryBall` → по городам: lapras netBall×2, electabuzz quickBall×3,
   tangela nestBall×4, grimer ultraBall×3, growlithe repeatBall×8,
   shuckle friendBall×5, dratini loveBall×6 (abra premierBall×5, magnemite
@@ -552,3 +564,11 @@ NPC босса держит квест кулака И кнопку `npc.miniBos
 - Мульти-видовые охоты/уловы (кимоно, крысы, пауки, ярость, красные, кроты,
   вольторбы) — через `filter.speciesList` (любой-из; реализует движок
   параллельно, см. «Что допилить»). Использовать смело — приемка проверит связку.
+
+### A7. Лимиты продаваемости наград (v5, анти-дыра; locked тестом!)
+
+Суммарная цена продажи награды (без денег, по sellPrice) ограничена тиром:
+n0–n5 ≤150k, n6–n7 ≤300k, n8–n10 ≤750k, n11+ ≤5M.
+Проверка — тест «продаваемость наград в лимитах тира» в quests-content.test.ts
+(краснеет при любой новой дыре). Исключение одно: камни Иви (150k, n3) —
+иконика, дешевле нечем.

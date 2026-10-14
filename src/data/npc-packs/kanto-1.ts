@@ -28,7 +28,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Ещё не всё. Река ждёт, маршруты ждут...',
     },
     quests: [
-      { id: 'cer_trail', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 диких водных + исходи 6 локаций (средний уровень 20)', rewardMoney: 10000, rewardItem: 'tmWeak', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], prereqQuest: null, filter: { types: ['water'] }, verify: { avgLevel: 20, locs: ['ceruleanCity', 'route24', 'route25', 'route4', 'mtMoon', 'ceruleanCave'] } },
+      { id: 'cer_trail', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 диких водных + исходи 6 локаций (средний уровень 20)', rewardMoney: 10000, rewardItem: 'mysticWater', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], prereqQuest: null, filter: { types: ['water'] }, verify: { avgLevel: 20, locs: ['ceruleanCity', 'route24', 'route25', 'route4', 'mtMoon', 'ceruleanCave'] } },
       { id: 'cer_fossil', type: 'use_item', targetItem: null, targetQty: 2, desc: 'Используй 2 Moon Stone (камни с горы Мун)', rewardMoney: 9000, rewardItem: 'expCandyM', rewardQty: 3, prereqQuest: null, filter: { itemId: 'moonStone' } },
     ],
   },
@@ -43,7 +43,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня в воде. Прибой не прощает суеты.',
     },
     quests: [
-      { id: 'cer_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пловца Финна (команда 3×Lv33)', rewardMoney: 30000, rewardItem: 'tmWeak', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 1 }], rewardTitle: 'tideMaster', prereqQuest: null, filter: { bossId: 'ceruleanFinn' } },
+      { id: 'cer_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пловца Финна (команда 3×Lv33)', rewardMoney: 30000, rewardItem: 'splashPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'tideMaster', prereqQuest: null, filter: { bossId: 'ceruleanFinn' } },
     ],
   },
   'cer_garpun': {
@@ -69,7 +69,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Касса пока мелкая... Греби дальше!',
     },
     quests: [
-      { id: 'cer_money', type: 'earn_money', targetItem: null, targetQty: 160000, desc: 'Заработай 160 000 боями и торговлей', rewardMoney: 10000, rewardItem: 'maxHoney', rewardQty: 2, prereqQuest: null },
+      { id: 'cer_money', type: 'earn_money', targetItem: null, targetQty: 160000, desc: 'Заработай 160 000 боями и торговлей', rewardMoney: 10000, rewardItem: 'maxHoney', rewardQty: 1, prereqQuest: null },
     ],
   },
   'cer_laguna': {
@@ -148,7 +148,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Разряды ещё не все посчитаны...',
     },
     quests: [
-      { id: 'ver_trail', type: 'defeat_x', targetItem: null, targetQty: 60, desc: 'Победи 60 диких электрических + исходи 7 локаций (средний уровень 25)', rewardMoney: 15000, rewardItem: 'tm78', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 4 }], prereqQuest: null, filter: { types: ['electric'] }, verify: { avgLevel: 25, locs: ['vermilionCity', 'route6', 'route11', 'diglettsCave', 'route2', 'viridianForest', 'ssAnne'] } },
+      { id: 'ver_trail', type: 'defeat_x', targetItem: null, targetQty: 60, desc: 'Победи 60 диких электрических + исходи 7 локаций (средний уровень 25)', rewardMoney: 15000, rewardItem: 'zapPlate', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 4 }], prereqQuest: null, filter: { types: ['electric'] }, verify: { avgLevel: 25, locs: ['vermilionCity', 'route6', 'route11', 'diglettsCave', 'route2', 'viridianForest', 'ssAnne'] } },
     ],
   },
   'ver_volt': {
@@ -162,7 +162,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня. Искри, но не сгорай!',
     },
     quests: [
-      { id: 'ver_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Матроса Вольта (команда 3×Lv38)', rewardMoney: 45000, rewardItem: 'tm24', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 1 }], rewardTitle: 'stormRod', prereqQuest: null, filter: { bossId: 'vermilionVolt' } },
+      { id: 'ver_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Матроса Вольта (команда 3×Lv38)', rewardMoney: 45000, rewardItem: 'magnet', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'stormRod', prereqQuest: null, filter: { bossId: 'vermilionVolt' } },
     ],
   },
   'ver_katushka': {
@@ -175,7 +175,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Вольторбы всё ещё тикают у свай...',
     },
     quests: [
-      { id: 'ver_volatile', type: 'defeat_x', targetItem: null, targetQty: 30, desc: 'Победи 30 Voltorb/Electrode (самоуничтожение — добивай первым!)', rewardMoney: 15000, rewardItem: 'magnet', rewardQty: 1, prereqQuest: null, filter: { speciesList: ['voltorb', 'electrode'] } },
+      { id: 'ver_volatile', type: 'defeat_x', targetItem: null, targetQty: 30, desc: 'Победи 30 Voltorb/Electrode (самоуничтожение — добивай первым!)', rewardMoney: 15000, rewardItem: 'cellBattery', rewardQty: 1, prereqQuest: null, filter: { speciesList: ['voltorb', 'electrode'] } },
       { id: 'ver_sky', type: 'catch_x', targetItem: null, targetQty: 1, desc: 'Поймай Electabuzz ×1', rewardMoney: 75000, rewardItem: 'quickBall', rewardQty: 3, prereqQuest: null, filter: { species: 'electabuzz' } },
     ],
   },
@@ -189,7 +189,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Трюмы ещё полупусты...',
     },
     quests: [
-      { id: 'ver_money', type: 'earn_money', targetItem: null, targetQty: 250000, desc: 'Заработай 250 000 боями и торговлей', rewardMoney: 15000, rewardItem: 'maxHoney', rewardQty: 3, prereqQuest: null },
+      { id: 'ver_money', type: 'earn_money', targetItem: null, targetQty: 250000, desc: 'Заработай 250 000 боями и торговлей', rewardMoney: 15000, rewardItem: 'maxHoney', rewardQty: 2, prereqQuest: null },
     ],
   },
   'ver_iskra': {
@@ -229,7 +229,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Ещё не все точки исхожены. Трап уже скрипит...',
     },
     quests: [
-      { id: 'ver_anne', type: 'special', targetItem: null, targetQty: 1, desc: 'Исходи S.S. Anne, причал и Вермилион (корабль уплывает — успей!)', rewardMoney: 15000, rewardItem: 'escapeRope', rewardQty: 3, rewardItems: [{ id: 'superRepel', qty: 5 }], prereqQuest: null, verify: { locs: ['ssAnne', 'vermilionPier', 'vermilionCity'] } },
+      { id: 'ver_anne', type: 'special', targetItem: null, targetQty: 1, desc: 'Исходи S.S. Anne, причал и Вермилион (корабль уплывает — успей!)', rewardMoney: 15000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'fullHeal', qty: 3 }], prereqQuest: null, verify: { locs: ['ssAnne', 'vermilionPier', 'vermilionCity'] } },
     ],
   },
   'ver_provod': {
@@ -268,9 +268,9 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сбор не окончен. Клумбы ждут...',
     },
     quests: [
-      { id: 'cel_trail', type: 'defeat_x', targetItem: null, targetQty: 85, desc: 'Победи 85 диких травяных + исходи 8 локаций (средний уровень 30)', rewardMoney: 20000, rewardItem: 'tmWeak', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 5 }], prereqQuest: null, filter: { types: ['grass'] }, verify: { avgLevel: 30, locs: ['celadonCity', 'route7', 'route16', 'route17', 'route8', 'lavenderTown', 'pokemonTower', 'saffronCity'] } },
+      { id: 'cel_trail', type: 'defeat_x', targetItem: null, targetQty: 85, desc: 'Победи 85 диких травяных + исходи 8 локаций (средний уровень 30)', rewardMoney: 20000, rewardItem: 'miracleSeed', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 5 }], prereqQuest: null, filter: { types: ['grass'] }, verify: { avgLevel: 30, locs: ['celadonCity', 'route7', 'route16', 'route17', 'route8', 'lavenderTown', 'pokemonTower', 'saffronCity'] } },
       { id: 'cel_hoard', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 40 и поймай 11 видов травы', rewardMoney: 200000, rewardItem: 'ultraBall', rewardQty: 10, prereqQuest: null, verify: { maxLevel: 40, typeSpecies: ['bulbasaur', 'oddish', 'gloom', 'bellsprout', 'weepinbell', 'exeggcute', 'tangela', 'chikorita', 'sunkern', 'hoppip', 'paras'], typeCount: 11 } },
-      { id: 'cel_stone', type: 'use_item', targetItem: null, targetQty: 3, desc: 'Используй 3 Leaf Stone (камни дорогие — считай каждый!)', rewardMoney: 18000, rewardItem: 'miracleSeed', rewardQty: 1, prereqQuest: null, filter: { itemId: 'leafStone' } },
+      { id: 'cel_stone', type: 'use_item', targetItem: null, targetQty: 3, desc: 'Используй 3 Leaf Stone (камни дорогие — считай каждый!)', rewardMoney: 18000, rewardItem: 'absorbBulb', rewardQty: 1, prereqQuest: null, filter: { itemId: 'leafStone' } },
     ],
   },
   'cel_flora': {
@@ -284,7 +284,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня. Сорняки не сдаются!',
     },
     quests: [
-      { id: 'cel_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Садовницу Флору (команда 4×Lv43)', rewardMoney: 60000, rewardItem: 'tmWeak', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 1 }], rewardTitle: 'leafFriend', prereqQuest: null, filter: { bossId: 'celadonFlora' } },
+      { id: 'cel_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Садовницу Флору (команда 4×Lv43)', rewardMoney: 60000, rewardItem: 'meadowPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'leafFriend', prereqQuest: null, filter: { bossId: 'celadonFlora' } },
     ],
   },
   'cel_sachok': {
@@ -310,7 +310,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Касса ещё не цветёт...',
     },
     quests: [
-      { id: 'cel_coins', type: 'earn_money', targetItem: null, targetQty: 400000, desc: 'Заработай 400 000 боями и торговлей (казино не в счёт!)', rewardMoney: 20000, rewardItem: 'maxHoney', rewardQty: 4, prereqQuest: null },
+      { id: 'cel_coins', type: 'earn_money', targetItem: null, targetQty: 400000, desc: 'Заработай 400 000 боями и торговлей (казино не в счёт!)', rewardMoney: 20000, rewardItem: 'maxHoney', rewardQty: 2, prereqQuest: null },
     ],
   },
   'cel_oranzhereya': {
@@ -387,7 +387,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Разумы ещё не все пересчитаны...',
     },
     quests: [
-      { id: 'saf_trail', type: 'defeat_x', targetItem: null, targetQty: 115, desc: 'Победи 115 диких психов + исходи 9 локаций (средний уровень 35)', rewardMoney: 25000, rewardItem: 'tmWeak', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 3 }], prereqQuest: null, filter: { types: ['psychic'] }, verify: { avgLevel: 35, locs: ['saffronCity', 'route5', 'route6', 'route7', 'route8', 'saffronStation', 'route9', 'route10', 'powerPlant'] } },
+      { id: 'saf_trail', type: 'defeat_x', targetItem: null, targetQty: 115, desc: 'Победи 115 диких психов + исходи 9 локаций (средний уровень 35)', rewardMoney: 25000, rewardItem: 'twistedSpoon', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 3 }], prereqQuest: null, filter: { types: ['psychic'] }, verify: { avgLevel: 35, locs: ['saffronCity', 'route5', 'route6', 'route7', 'route8', 'saffronStation', 'route9', 'route10', 'powerPlant'] } },
       { id: 'saf_files', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 45 и поймай 12 видов психов', rewardMoney: 250000, rewardItem: 'timerBall', rewardQty: 6, prereqQuest: null, verify: { maxLevel: 45, typeSpecies: ['abra', 'kadabra', 'drowzee', 'hypno', 'mr-mime', 'espeon', 'unown', 'girafarig', 'slowpoke', 'slowbro', 'natu', 'xatu'], typeCount: 12 } },
     ],
   },
@@ -402,7 +402,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня. Мысли — в кулак!',
     },
     quests: [
-      { id: 'saf_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Медиума Эспера (команда 4×Lv48)', rewardMoney: 75000, rewardItem: 'tm29', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 1 }], rewardTitle: 'mindBender', prereqQuest: null, filter: { bossId: 'saffronEsper' } },
+      { id: 'saf_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Медиума Эспера (команда 4×Lv48)', rewardMoney: 75000, rewardItem: 'mindPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'mindBender', prereqQuest: null, filter: { bossId: 'saffronEsper' } },
     ],
   },
   'saf_lovets': {
@@ -428,7 +428,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Цифры ещё не сошлись...',
     },
     quests: [
-      { id: 'saf_money', type: 'earn_money', targetItem: null, targetQty: 650000, desc: 'Заработай 650 000 боями и торговлей', rewardMoney: 25000, rewardItem: 'maxHoney', rewardQty: 5, prereqQuest: null },
+      { id: 'saf_money', type: 'earn_money', targetItem: null, targetQty: 650000, desc: 'Заработай 650 000 боями и торговлей', rewardMoney: 25000, rewardItem: 'maxHoney', rewardQty: 3, prereqQuest: null },
     ],
   },
   'saf_telepatka': {

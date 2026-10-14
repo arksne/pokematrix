@@ -128,6 +128,28 @@ export function slimApiData(api: any): any {
   return out;
 }
 
+/**
+ * num — санация числа для сейва (анти-422).
+ * Контекст: NaN в любом числовом поле (счастье/EV/опыт/PP) превращается
+ * JSON'ом в null, а серверный Zod (int/min/max, без nullable) отвечает 422
+ * на КАЖДЫЙ сейв — молча, вечно. Ловим здесь: NaN/не-число → дефолт,
+ * выход за [min,max] → clamp. Дешёво и покрывает все будущие NaN-источники.
+ */
+function num(v: unknown, dflt: number, min = 0, max?: number): number {
+  let n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : dflt;
+  if (n < min) n = min;
+  if (max !== undefined && n > max) n = max;
+  return n;
+}
+
+/** Санация IV/EV-объектов (6 статов, NaN → 0). */
+function statObj(o: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  const src = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>;
+  for (const k of ['hp', 'atk', 'def', 'spa', 'spd', 'spe']) out[k] = num(src[k], 0, 0);
+  return out;
+}
+
 export function getFullSaveData() {
   return {
     _v: state.saveVersion,
@@ -153,17 +175,17 @@ export function getFullSaveData() {
     myTeam: state.myTeam.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
       caughtLocation: m.caughtLocation, previousOwner: m.previousOwner,
-      apiData: slimApiData(m.apiData), maxHp: m.maxHp, currentHp: m.currentHp,
+      apiData: slimApiData(m.apiData), maxHp: num(m.maxHp, 50, 1), currentHp: num(m.currentHp, m.maxHp, 0),
       isShiny: !!m.isShiny,
-      ivs: m.ivs, evs: m.evs, evFromLevel: m.evFromLevel, baseLevel: m.baseLevel,
-      exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
-      vitaminsEaten: m.vitaminsEaten, training: m.training, trainingStage: m.trainingStage,
-      trainingStat: m.trainingStat, happiness: m.happiness, natureIdx: m.natureIdx,
-      breedLetter: m.breedLetter, gender: m.gender,       status: m.status, sleepTurns: m.sleepTurns,
-      movesPP: m.movesPP, statStages: m.statStages, abilityName: m.abilityName,
-      heldItem: m.heldItem, berries: m.berries, learnableMoves: m.learnableMoves,
+      ivs: statObj(m.ivs), evs: statObj(m.evs), evFromLevel: m.evFromLevel, baseLevel: num(m.baseLevel, 1, 1, 100),
+      exp: num(m.exp, 0, 0), expToNext: num(m.expToNext, 0, 0), candiesEaten: num(m.candiesEaten, 0, 0),
+      vitaminsEaten: num(m.vitaminsEaten, 0, 0), training: m.training, trainingStage: num(m.trainingStage, 0, 0),
+      trainingStat: m.trainingStat, happiness: num(m.happiness, 70, 0, 255), natureIdx: num(m.natureIdx, 0, 0, 24), breedLetter: m.breedLetter, gender: m.gender,       status: m.status, sleepTurns: num(m.sleepTurns, 0, 0),
+      movesPP: Array.isArray(m.movesPP) ? m.movesPP.filter((p: any) => p && typeof p === 'object').map((p: any) => ({ current: num(p.current, 0, 0), max: num(p.max, 1, 1) })) : m.movesPP,
+      statStages: m.statStages, abilityName: m.abilityName, heldItem: m.heldItem,
+      berries: m.berries, learnableMoves: m.learnableMoves,
       lastMoveCheckLevel: m.lastMoveCheckLevel, hasBred: !!m.hasBred,
-      evPool: m.evPool || 0, evsLocked: !!m.evsLocked, trainingFails: m.trainingFails || 0,
+      evPool: num(m.evPool, 0, 0), evsLocked: !!m.evsLocked, trainingFails: num(m.trainingFails, 0, 0),
       evVitMigrated: !!m.evVitMigrated,
     })),
     currentPokemonIndex: state.currentPokemonIndex,
@@ -181,17 +203,17 @@ export function getFullSaveData() {
     visitedLocations: Array.from(state.visitedLocations), itemsUsedInBattle: state.itemsUsedInBattle, itemHistory: state.itemHistory,
     pcBoxes: state.pcBoxes.map(box => box.map(m => ({
       uid: m.uid, originalTrainer: m.originalTrainer, createdAt: m.createdAt,
-      caughtLocation: m.caughtLocation, apiData: slimApiData(m.apiData), maxHp: m.maxHp,
-      currentHp: m.currentHp, isShiny: !!m.isShiny,
-      ivs: m.ivs, evs: m.evs, evFromLevel: m.evFromLevel, baseLevel: m.baseLevel,
-      exp: m.exp, expToNext: m.expToNext, candiesEaten: m.candiesEaten,
-      vitaminsEaten: m.vitaminsEaten, trainingStage: m.trainingStage, trainingStat: m.trainingStat,
-      happiness: m.happiness, natureIdx: m.natureIdx, breedLetter: m.breedLetter, gender: m.gender,
-      status: m.status, sleepTurns: m.sleepTurns, movesPP: m.movesPP,
+      caughtLocation: m.caughtLocation, apiData: slimApiData(m.apiData), maxHp: num(m.maxHp, 50, 1),
+      currentHp: num(m.currentHp, m.maxHp, 0), isShiny: !!m.isShiny,
+      ivs: statObj(m.ivs), evs: statObj(m.evs), evFromLevel: m.evFromLevel, baseLevel: num(m.baseLevel, 1, 1, 100),
+      exp: num(m.exp, 0, 0), expToNext: num(m.expToNext, 0, 0), candiesEaten: num(m.candiesEaten, 0, 0),
+      vitaminsEaten: num(m.vitaminsEaten, 0, 0), training: m.training, trainingStage: num(m.trainingStage, 0, 0), trainingStat: m.trainingStat, happiness: num(m.happiness, 70, 0, 255),
+      breedLetter: m.breedLetter, gender: m.gender,
+      status: m.status, sleepTurns: num(m.sleepTurns, 0, 0), movesPP: Array.isArray(m.movesPP) ? m.movesPP.filter((p: any) => p && typeof p === 'object').map((p: any) => ({ current: num(p.current, 0, 0), max: num(p.max, 1, 1) })) : m.movesPP,
       statStages: m.statStages, abilityName: m.abilityName, heldItem: m.heldItem,
       berries: m.berries, learnableMoves: m.learnableMoves,
       lastMoveCheckLevel: m.lastMoveCheckLevel, hasBred: !!m.hasBred,
-      evPool: m.evPool || 0, evsLocked: !!m.evsLocked, trainingFails: m.trainingFails || 0,
+      evPool: num(m.evPool, 0, 0), evsLocked: !!m.evsLocked, trainingFails: num(m.trainingFails, 0, 0),
       evVitMigrated: !!m.evVitMigrated,
     }))),
     daycareMons: state.daycareMons.map((d: any) => ({
@@ -220,6 +242,7 @@ export function validateGameState() {
   if (!state.myTeam) state.myTeam = [];
   if (!state.pcBoxes) state.pcBoxes = [[]];
   if (!state.badges) state.badges = [];
+  else state.badges = dedupeBadges(state.badges);
   if (!state.inventory) state.inventory = {};
   // НЕ добавляем все 1300+ предметов с нулём — getItemQty() и так возвращает 0 для отсутствующих
   // Ensure credit exists (it IS money)
@@ -322,7 +345,7 @@ export async function loadGame() {
     }
     // Money: credit IS money now, read from save (backward compat: try data.money too)
     state.inventory['credit'] = data.inventory?.credit ?? data.money ?? 500;
-    state.badges = data.badges || [];
+    state.badges = dedupeBadges(data.badges || []);
     state.trainerNickname = data.trainerNickname || '';
     state.myTeam = data.myTeam || [];
     // Rehydrate team
@@ -525,6 +548,25 @@ export function totalPokemonCountOf(data: any): number {
 }
 
 /**
+ * dedupeBadges — чистка дублей значков (миграция).
+ * Контекст: победа над залом пушила значок безусловно (и по 200 от сервера,
+ * и по фолбэку без сети) — повторы и ретраи давали 32 вместо 16, а следом
+ * ехали рассинхроны счётчиков и 422. Вызывается на каждой загрузке сейва,
+ * лечит молча; следующий автосейв фиксирует чистый список.
+ */
+export function dedupeBadges(badges: unknown): string[] {
+  if (!Array.isArray(badges)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const b of badges) {
+    if (typeof b !== 'string' || !b || seen.has(b)) continue;
+    seen.add(b);
+    out.push(b);
+  }
+  return out;
+}
+
+/**
  * Слияние списков покемонов по uid при наложении облачного сейва.
  * Контекст: сервер штампует `_ts` при КАЖДОЙ своей правке (покупка, крафт,
  * награда — stampSave), поэтому облако может быть «новее по времени», но
@@ -682,7 +724,18 @@ export async function doCloudSave(attempt = 0) {
       return null;
     }
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      // 422 — читаем детали валидации СРАЗУ (иначе «очень много ошибок 422»
+      // без единой подсказки что именно серверу не нравится).
+      if (res.status === 422) {
+        const body = await res.clone().json().catch(() => null);
+        const details = (body as any)?.details || (body as any)?.error || 'без деталей';
+        console.warn('[save] 422 validation failed:', JSON.stringify(details).slice(0, 500));
+        showToast('☁️ Сервер отклонил сейв (422) — смотри консоль (F12).', true);
+        return null; // ретраить бессмысленно: тот же сейв снова не примут
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
     result = await res.json();
     // Версию назначает сервер: клиентский счётчик тикал на каждом локальном
     // сохранении и разъезжался с серверным, из-за чего блокировка версий
@@ -794,7 +847,7 @@ export async function applyCloudSave(data) {
   // credit IS money — используем облачное значение (сервер — источник истины)
   const cloudCredit = data.inventory?.credit ?? data.money ?? 0;
   if (cloudCredit) state.inventory['credit'] = cloudCredit;
-  state.badges = data.badges || state.badges;
+  state.badges = dedupeBadges(data.badges || state.badges);
   state.trainerNickname = data.trainerNickname || state.trainerNickname;
   // Флаг восстанавливается из сейва, иначе после перезагрузки он забывался бы
   // и игрок с пустой командой получил бы нового стартовика.

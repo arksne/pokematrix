@@ -50,7 +50,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Сбор не окончен. Болота ждут...',
     },
     quests: [
-      { id: 'fuc_trail', type: 'defeat_x', targetItem: null, targetQty: 150, desc: 'Победи 150 диких ядовитых + исходи 10 локаций (средний уровень 40)', rewardMoney: 30000, rewardItem: 'tmWeak', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 4 }], prereqQuest: null, filter: { types: ['poison'] }, verify: { avgLevel: 40, locs: ['fuchsiaCity', 'route15', 'seaRoute19', 'seaRoute20', 'safariZone', 'route12', 'route13', 'route14', 'route18', 'lavenderTown'] } },
+      { id: 'fuc_trail', type: 'defeat_x', targetItem: null, targetQty: 150, desc: 'Победи 150 диких ядовитых + исходи 10 локаций (средний уровень 40)', rewardMoney: 30000, rewardItem: 'poisonBarb', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 4 }], prereqQuest: null, filter: { types: ['poison'] }, verify: { avgLevel: 40, locs: ['fuchsiaCity', 'route15', 'seaRoute19', 'seaRoute20', 'safariZone', 'route12', 'route13', 'route14', 'route18', 'lavenderTown'] } },
       { id: 'fuc_hoard', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 50 и поймай 13 видов яда', rewardMoney: 300000, rewardItem: 'timerBall', rewardQty: 8, prereqQuest: null, verify: { maxLevel: 50, typeSpecies: ['ekans', 'arbok', 'zubat', 'golbat', 'grimer', 'muk', 'gastly', 'haunter', 'koffing', 'weezing', 'tentacool', 'tentacruel', 'spinarak'], typeCount: 13 } },
     ],
   },
@@ -65,7 +65,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Сначала победи меня. Яд не прощает шума!',
     },
     quests: [
-      { id: 'fuc_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Коги (команда 4×Lv53)', rewardMoney: 90000, rewardItem: 'tm36', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 1 }], rewardTitle: 'fuchsiaShadow', prereqQuest: null, filter: { bossId: 'fuchsiaApprentice' } },
+      { id: 'fuc_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Коги (команда 4×Lv53)', rewardMoney: 90000, rewardItem: 'toxicPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'fuchsiaShadow', prereqQuest: null, filter: { bossId: 'fuchsiaApprentice' } },
     ],
   },
   'fuc_sledopyt': {
@@ -91,7 +91,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Касса ещё не полна...',
     },
     quests: [
-      { id: 'fuc_money', type: 'earn_money', targetItem: null, targetQty: 1000000, desc: 'Заработай 1 000 000 боями и торговлей (сафари-прибыль!)', rewardMoney: 30000, rewardItem: 'maxHoney', rewardQty: 6, prereqQuest: null },
+      { id: 'fuc_money', type: 'earn_money', targetItem: null, targetQty: 1000000, desc: 'Заработай 1 000 000 боями и торговлей (сафари-прибыль!)', rewardMoney: 30000, rewardItem: 'maxHoney', rewardQty: 3, prereqQuest: null },
     ],
   },
   'fuc_volier': {
@@ -182,7 +182,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Искры ещё не все посчитаны...',
     },
     quests: [
-      { id: 'cin_trail', type: 'defeat_x', targetItem: null, targetQty: 195, desc: 'Победи 195 диких огненных + исходи 11 локаций (средний уровень 45)', rewardMoney: 35000, rewardItem: 'tmMid', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 5 }], prereqQuest: null, filter: { types: ['fire'] }, verify: { avgLevel: 45, locs: ['cinnabarIsland', 'seaRoute20', 'seaRoute21', 'seafoamIslands', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'route22', 'palletTown', 'route1', 'route2'] } },
+      { id: 'cin_trail', type: 'defeat_x', targetItem: null, targetQty: 195, desc: 'Победи 195 диких огненных + исходи 11 локаций (средний уровень 45)', rewardMoney: 35000, rewardItem: 'charcoal', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 5 }], prereqQuest: null, filter: { types: ['fire'] }, verify: { avgLevel: 45, locs: ['cinnabarIsland', 'seaRoute20', 'seaRoute21', 'seafoamIslands', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'route22', 'palletTown', 'route1', 'route2'] } },
     ],
   },
   'cin_bleiz': {
@@ -196,7 +196,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Сначала победи меня. Жар не прощает дрожи!',
     },
     quests: [
-      { id: 'cin_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пирокинетика Блейза (команда 4×Lv58)', rewardMoney: 105000, rewardItem: 'tm35', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 2 }], rewardTitle: 'fireSpirit', prereqQuest: null, filter: { bossId: 'cinnabarBlaze' } },
+      { id: 'cin_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пирокинетика Блейза (команда 4×Lv58)', rewardMoney: 105000, rewardItem: 'flamePlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'fireSpirit', prereqQuest: null, filter: { bossId: 'cinnabarBlaze' } },
     ],
   },
   'cin_pepel': {
@@ -209,7 +209,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Особняк ещё хранит тайны...',
     },
     quests: [
-      { id: 'cin_amber', type: 'use_item', targetItem: null, targetQty: 1, desc: 'Используй 1 Fire Stone (янтарь из подвала особняка!)', rewardMoney: 32000, rewardItem: 'charcoal', rewardQty: 1, prereqQuest: null, filter: { itemId: 'fireStone' } },
+      { id: 'cin_amber', type: 'use_item', targetItem: null, targetQty: 1, desc: 'Используй 1 Fire Stone (янтарь из подвала особняка!)', rewardMoney: 32000, rewardItem: 'spellTag', rewardQty: 1, prereqQuest: null, filter: { itemId: 'fireStone' } },
       { id: 'cin_sky', type: 'catch_x', targetItem: null, targetQty: 3, desc: 'Поймай Growlithe ×3 (огненные щенки особняка!)', rewardMoney: 175000, rewardItem: 'repeatBall', rewardQty: 8, prereqQuest: null, filter: { species: 'growlithe' } },
     ],
   },
@@ -223,7 +223,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Цифры ещё не сошлись...',
     },
     quests: [
-      { id: 'cin_money', type: 'earn_money', targetItem: null, targetQty: 1600000, desc: 'Заработай 1 600 000 боями и торговлей (геотермальный фонд!)', rewardMoney: 35000, rewardItem: 'maxHoney', rewardQty: 8, prereqQuest: null },
+      { id: 'cin_money', type: 'earn_money', targetItem: null, targetQty: 1600000, desc: 'Заработай 1 600 000 боями и торговлей (геотермальный фонд!)', rewardMoney: 35000, rewardItem: 'maxHoney', rewardQty: 4, prereqQuest: null },
     ],
   },
   'cin_terma': {
@@ -263,7 +263,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Трубы ещё шипят... Не все точки исхожены.',
     },
     quests: [
-      { id: 'cin_journals', type: 'defeat_x', targetItem: null, targetQty: 30, desc: 'Победи 30 Koffing/Grimer особняка + исходи 6 точек (мутанты из труб!)', rewardMoney: 35000, rewardItem: 'escapeRope', rewardQty: 3, rewardItems: [{ id: 'revive', qty: 2 }], prereqQuest: null, filter: { speciesList: ['koffing', 'grimer'] }, verify: { locs: ['cinnabarIsland', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'seafoamIslands', 'seaRoute21'] } },
+      { id: 'cin_journals', type: 'defeat_x', targetItem: null, targetQty: 30, desc: 'Победи 30 Koffing/Grimer особняка + исходи 6 точек (мутанты из труб!)', rewardMoney: 35000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'revive', qty: 2 }], prereqQuest: null, filter: { speciesList: ['koffing', 'grimer'] }, verify: { locs: ['cinnabarIsland', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'seafoamIslands', 'seaRoute21'] } },
     ],
   },
   'cin_parom': {
@@ -314,7 +314,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Тропы ещё не все исхожены...',
     },
     quests: [
-      { id: 'vir_trail', type: 'defeat_x', targetItem: null, targetQty: 245, desc: 'Победи 245 диких земляных + исходи 12 локаций (средний уровень 50)', rewardMoney: 40000, rewardItem: 'tmMid', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 2 }], prereqQuest: null, filter: { types: ['ground'] }, verify: { avgLevel: 50, locs: ['viridianCity', 'palletTown', 'route1', 'route2', 'route22', 'route23', 'viridianForest', 'diglettsCave', 'route3', 'route4', 'mtMoon', 'ceruleanCity'] } },
+      { id: 'vir_trail', type: 'defeat_x', targetItem: null, targetQty: 245, desc: 'Победи 245 диких земляных + исходи 12 локаций (средний уровень 50)', rewardMoney: 40000, rewardItem: 'earthPlate', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 2 }], prereqQuest: null, filter: { types: ['ground'] }, verify: { avgLevel: 50, locs: ['viridianCity', 'palletTown', 'route1', 'route2', 'route22', 'route23', 'viridianForest', 'diglettsCave', 'route3', 'route4', 'mtMoon', 'ceruleanCity'] } },
     ],
   },
   'vir_agent': {
@@ -328,7 +328,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Сначала победи меня. Крот не сдаётся!',
     },
     quests: [
-      { id: 'vir_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Агента R (команда 5×Lv63)', rewardMoney: 120000, rewardItem: 'tm26', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 2 }], rewardTitle: 'rBane', prereqQuest: null, filter: { bossId: 'viridianAgent' } },
+      { id: 'vir_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Агента R (команда 5×Lv63)', rewardMoney: 120000, rewardItem: 'hardStone', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'rBane', prereqQuest: null, filter: { bossId: 'viridianAgent' } },
     ],
   },
   'vir_kapkan': {
@@ -355,7 +355,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Цифры ещё не сошлись...',
     },
     quests: [
-      { id: 'vir_money', type: 'earn_money', targetItem: null, targetQty: 2500000, desc: 'Заработай 2 500 000 боями и торговлей (общак R!)', rewardMoney: 40000, rewardItem: 'maxHoney', rewardQty: 10, prereqQuest: null },
+      { id: 'vir_money', type: 'earn_money', targetItem: null, targetQty: 2500000, desc: 'Заработай 2 500 000 боями и торговлей (общак R!)', rewardMoney: 40000, rewardItem: 'maxHoney', rewardQty: 5, prereqQuest: null },
     ],
   },
   'vir_nora': {

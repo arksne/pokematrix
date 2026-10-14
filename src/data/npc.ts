@@ -623,7 +623,7 @@ export const NPC_DATA = {
       quest_incomplete: 'Сбор данных не окончен. Скалы ждут...',
     },
     quests: [
-      { id: 'pw_trail', type: 'defeat_x', targetItem: null, targetQty: 25, desc: 'Победи 25 диких каменных/земляных + исходи 5 локаций (средний уровень 15)', rewardMoney: 5000, rewardItem: 'tm28', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], rewardTitle: 'pathfinder', prereqQuest: null, filter: { types: ['rock', 'ground'] }, verify: { avgLevel: 15, locs: ['pewterCity', 'viridianForest', 'route3', 'mtMoon', 'rockTunnel'] } },
+      { id: 'pw_trail', type: 'defeat_x', targetItem: null, targetQty: 25, desc: 'Победи 25 диких каменных/земляных + исходи 5 локаций (средний уровень 15)', rewardMoney: 5000, rewardItem: 'hardStone', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], rewardTitle: 'pathfinder', prereqQuest: null, filter: { types: ['rock', 'ground'] }, verify: { avgLevel: 15, locs: ['pewterCity', 'viridianForest', 'route3', 'mtMoon', 'rockTunnel'] } },
       { id: 'pw_rockbane', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 25 и поймай 8 видов каменных', rewardMoney: 50000, rewardItem: 'greatBall', rewardQty: 6, rewardTitle: 'rockBane', prereqQuest: 'pw_trail', verify: { maxLevel: 25, rockSpecies: ['geodude', 'onix', 'rhyhorn', 'omanyte', 'kabuto', 'aerodactyl', 'nosepass', 'larvitar', 'cranidos', 'shieldon', 'roggenrola', 'boldore'], rockCount: 8 } },
     ],
   },
@@ -637,7 +637,7 @@ export const NPC_DATA = {
       quest_incomplete: 'Сначала победи меня в честном бою!',
     },
     quests: [
-      { id: 'pw_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Бруно (команда 3×Lv28)', rewardMoney: 15000, rewardItem: 'tm64', rewardQty: 1, rewardItems: [{ id: 'rareCandy', qty: 1 }], rewardTitle: 'fistFighter', prereqQuest: null, filter: { bossId: 'pewterBully' } },
+      { id: 'pw_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Бруно (команда 3×Lv28)', rewardMoney: 15000, rewardItem: 'focusBand', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'fistFighter', prereqQuest: null, filter: { bossId: 'pewterBully' } },
     ],
   },
   'pewter_hunter': {
@@ -650,7 +650,7 @@ export const NPC_DATA = {
       quest_incomplete: 'Аэродактиль всё ещё кружит над скалами...',
     },
     quests: [
-      { id: 'pw_sky', type: 'catch_x', targetItem: null, targetQty: 1, desc: 'Поймай Aerodactyl', rewardMoney: 25000, rewardItem: 'tm27', rewardQty: 1, rewardTitle: 'skyHunter', prereqQuest: null, filter: { species: 'aerodactyl' } },
+      { id: 'pw_sky', type: 'catch_x', targetItem: null, targetQty: 1, desc: 'Поймай Aerodactyl', rewardMoney: 25000, rewardItem: 'sharpBeak', rewardQty: 1, rewardTitle: 'skyHunter', prereqQuest: null, filter: { species: 'aerodactyl' } },
     ],
   },
   'pewter_trader': {
@@ -689,7 +689,7 @@ export const NPC_DATA = {
       quest_incomplete: 'Карта ещё полна белых пятен...',
     },
     quests: [
-      { id: 'pw_wanderer', type: 'explore', targetItem: null, targetQty: 12, desc: 'Побывай в локациях Канто 12 раз', rewardMoney: 5000, rewardItem: 'escapeRope', rewardQty: 3, rewardItems: [{ id: 'maxRepel', qty: 5 }], rewardTitle: 'wanderer', prereqQuest: null, filter: { region: 'kanto' } },
+      { id: 'pw_wanderer', type: 'explore', targetItem: null, targetQty: 12, desc: 'Побывай в локациях Канто 12 раз', rewardMoney: 5000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 5 }], rewardTitle: 'wanderer', prereqQuest: null, filter: { region: 'kanto' } },
     ],
   },
   'viridian_sender': {

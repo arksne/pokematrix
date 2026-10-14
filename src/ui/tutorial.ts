@@ -26,6 +26,8 @@
 
 import { REGIONS } from '../data/regions.js';
 import { lsKey } from '../utils/state.js';
+import { store } from '../game/store.js';
+import { NPC_DATA } from '../data/npc.js';
 
 // ── ИНТЕРФЕЙСЫ ───────────────────────────────────────────
 export interface TutorialStep {
@@ -132,6 +134,81 @@ const TUTORIAL_LESSONS: TutorialLesson[] = [
 const TUTORIAL_KEY = 'tutorial';
 const HELP_SEEN_KEY = 'help_seen';
 
+// ── КВЕСТЫ ОБУЧЕНИЯ (NPC-цепочка professor_tutorial) ───
+// Канон из истории (23fbda0, до wipe 3f47a01): 6 шагов со строгой
+// prereq-лесенкой tutorial_1 → … → tutorial_6. Типы обязаны совпадать
+// с эмиттерами battle/core.ts: catch_x / defeat_x / use_item / explore /
+// earn_money / collect_drop (см. checkQuestProgress + прямой emit
+// collect_drop в handleWildFaintRewards).
+// Награды — существующие id из data/items.ts.
+export const TUTORIAL_QUEST_DEFS = [
+  { id: 'tutorial_1', type: 'catch_x', targetItem: null, targetQty: 1, desc: 'Поймайте первого дикого покемона', rewardMoney: 500, rewardItem: 'pokeBall', rewardQty: 5, prereqQuest: null },
+  { id: 'tutorial_2', type: 'defeat_x', targetItem: null, targetQty: 3, desc: 'Победите 3 диких покемонов', rewardMoney: 800, rewardItem: 'potion', rewardQty: 3, prereqQuest: 'tutorial_1' },
+  { id: 'tutorial_3', type: 'use_item', targetItem: null, targetQty: 1, desc: 'Используйте предмет в бою', rewardMoney: 600, rewardItem: 'superPotion', rewardQty: 2, prereqQuest: 'tutorial_2' },
+  { id: 'tutorial_4', type: 'explore', targetItem: null, targetQty: 2, desc: 'Посетите 2 разные локации', rewardMoney: 700, rewardItem: 'paralyzeHeal', rewardQty: 3, prereqQuest: 'tutorial_3' },
+  { id: 'tutorial_5', type: 'earn_money', targetItem: null, targetQty: 500, desc: 'Заработайте ¥500', rewardMoney: 1000, rewardItem: 'rareCandy', rewardQty: 1, prereqQuest: 'tutorial_4' },
+  { id: 'tutorial_6', type: 'collect_drop', targetItem: null, targetQty: 1, desc: 'Выбейте предмет с дикого покемона', rewardMoney: 1500, rewardItem: 'ultraBall', rewardQty: 3, prereqQuest: 'tutorial_5' },
+];
+
+// ── ensureTutorialQuests: вернуть квесты обучения в NPC_DATA ──
+// Корень затыка: wipe 3f47a01 вытер quests у professor_tutorial в
+// src/data/npc.ts (сейчас quests: []), а пачки npc-packs/* их не вернули.
+// Без дефов checkTutorialProgress (npcs.ts) находит undefined и молча
+// return, у Оука нет кнопок Взять/Сдать, tutorialStep вечно 1, гейт
+// (isTutorialGateOpen ждёт tutorial_6) закрыт навсегда.
+// Идемпотентно: недостающие дефы дописываются, существующие не дублируются.
+// Возвращает true, если после вызова все 6 на месте.
+export function ensureTutorialQuests(): boolean {
+  try {
+    const npc = (NPC_DATA as any)?.['professor_tutorial'];
+    if (!npc) return false;
+    if (!Array.isArray(npc.quests)) npc.quests = [];
+    for (const def of TUTORIAL_QUEST_DEFS) {
+      if (!npc.quests.some((q: any) => q && q.id === def.id)) {
+        npc.quests.push({ ...def });
+      }
+    }
+    return npc.quests.filter((q: any) => q && String(q.id || '').startsWith('tutorial_')).length >= 6;
+  } catch { return false; }
+}
+
+// ── applyTutorialCompletion: чистая смена гейта (для тестов) ──
+// Переводит переданный срез сейва в «обучение пройдено»: шаг ≥ 7,
+// все tutorial_1..6 в сданных, их прогресс-ключи вычищены.
+export function applyTutorialCompletion(s: {
+  tutorialStep: number;
+  completedNPCQuests: string[];
+  npcQuestProgress: Record<string, number>;
+}): void {
+  s.tutorialStep = Math.max(s.tutorialStep || 0, 7);
+  if (!Array.isArray(s.completedNPCQuests)) s.completedNPCQuests = [];
+  for (let i = 1; i <= 6; i++) {
+    const qid = 'tutorial_' + i;
+    if (!s.completedNPCQuests.includes(qid)) s.completedNPCQuests.push(qid);
+  }
+  if (!s.npcQuestProgress) s.npcQuestProgress = {};
+  for (const k of Object.keys(s.npcQuestProgress)) {
+    if (k.startsWith('tutorial_')) delete s.npcQuestProgress[k];
+  }
+}
+
+// ── completeTutorialGate: мост UI-тур → NPC-гейт ──
+// UI-онбординг (этот файл) раньше заканчивался только localStorage-меткой,
+// а гейт смотрит на state.tutorialStep/completedNPCQuests — системы были
+// разъединены: проклик «Готово!» не открывал карту. Мост ставит шаг 7 +
+// сдаёт tutorial_1..6 и просит сейв. Идемпотентен.
+//
+// Живое состояние берём из store.getState(): init.ts делает
+// store.setState(state), так что это та же ссылка. Прямой импорт
+// game/state.js здесь не нужен (и ломал бы лёгкие моки utils/state).
+export function completeTutorialGate(): void {
+  try {
+    const s: any = (store as any)?.getState?.() ?? {};
+    applyTutorialCompletion(s);
+  } catch { /* состояние не роняет UI */ }
+  try { store.emit('save'); } catch { /* без подписчиков — не страшно */ }
+}
+
 // ── СОСТОЯНИЕ МОДУЛЯ ─────────────────────────────────────
 let currentSteps: TutorialStep[] = [];          // Текущий список шагов
 let currentStepIndex = 0;                       // Индекс текущего шага
@@ -153,6 +230,7 @@ export function markTutorialComplete() {
 // ── startLesson: запуск урока по ID ─────────────────────
 // Загружает шаги урока, сбрасывает индекс, показывает первый шаг
 export function startLesson(lessonId: string, callback?: () => void) {
+  ensureTutorialQuests();
   const lesson = TUTORIAL_LESSONS.find(l => l.id === lessonId);
   if (!lesson) return;
   currentSteps = [...lesson.steps];  // Копируем шаги
@@ -163,9 +241,14 @@ export function startLesson(lessonId: string, callback?: () => void) {
 
 // ── startOnboarding: запуск вводного обучения ────────────
 // Показывает первые 2 шага из урока "Основы", затем цепочку:
-// → "Бои" → "Предметы" → markTutorialComplete()
+// → "Бои" → "Предметы" → markTutorialComplete() + completeTutorialGate()
 export function startOnboarding(callback?: () => void) {
+  ensureTutorialQuests();
   if (isTutorialComplete()) {
+    // Метка уже стоит (этот акк на этом устройстве тур проходил),
+    // а гейт мог остаться закрытым (сейв с другого устройства / старый
+    // сейв до моста). Дотягиваем гейт — идемпотентно.
+    completeTutorialGate();
     if (callback) callback();
     return;
   }
@@ -178,6 +261,7 @@ export function startOnboarding(callback?: () => void) {
     startLesson('battles', () => {
       startLesson('items', () => {
         markTutorialComplete();
+        completeTutorialGate();
         if (callback) callback();
       });
     });

@@ -347,11 +347,15 @@ describe('legacy convenience methods', () => {
     expect(fn).toHaveBeenCalledWith('pewter');
   });
 
-  it('checkTutorialProgress emits tutorial:progress', () => {
+  it('checkTutorialProgress emits tutorial:progress (legacy alias нормализуется)', () => {
     const fn = vi.fn();
-    store.on('tutorial:progress', fn);
-    store.checkTutorialProgress('catch', 1, 'pokeball');
-    expect(fn).toHaveBeenCalledWith('catch', 1, 'pokeball');
+    const off = store.on('tutorial:progress', fn);
+    try {
+      store.checkTutorialProgress('catch', 1, 'pokeball');
+      expect(fn).toHaveBeenCalledWith('catch_x', 1, 'pokeball');
+    } finally {
+      off();
+    }
   });
 });
 

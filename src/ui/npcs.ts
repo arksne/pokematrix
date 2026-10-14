@@ -154,8 +154,11 @@ function renderNPCQuests(npc: any) {
           addItem(q.giveItem, q.giveQty || 1);
           showToast(`Получено: ${itemDef(q.giveItem).nameRu} ×${q.giveQty || 1} (для квеста)`, false);
         }
-        // Составной квест могут уже выполнить заранее — сразу готов
-        if (q.verify) {
+        // Составной квест могли уже выполнить заранее — сразу готов.
+        // НО только чистый special (без счётчика)! У счётчиковых (улов Пикачу
+        // + исхоженный лес) verify про лес проходил на взятии — и квест
+        // сдавался сразу с нулевым уловом. Счётчик всегда начинаем с нуля.
+        if (q.type === 'special' && q.verify) {
           import('../game/quest-track.js').then((m) => {
             if (m.verifyQuest(q).ok) state.npcQuestProgress[q.id] = q.targetQty;
             renderNPCQuests(npc);
@@ -239,6 +242,14 @@ export function parcelButton(npc: any, modal: HTMLElement, actionsContainer: HTM
   btnParcel.onclick = () => {
     if (state.completedNPCQuests.includes(doneQuestId)) {
       showToast(cfg.doneText ?? 'Уже доставлено!', false);
+      return;
+    }
+    // Анти-спам (Виридиан раздавал «миллион посылок»): груз выдаём только
+    // если его нет на руках. Иначе каждое открытие диалога плодило посылки.
+    if ((state.inventory?.[cfg.itemId] || 0) > 0) {
+      if (!(cfg.questId in state.npcQuestProgress)) state.npcQuestProgress[cfg.questId] = 0;
+      showToast('Груз уже у тебя — вези, не теряй!', false);
+      modal.style.display = 'none';
       return;
     }
     if (!(cfg.questId in state.npcQuestProgress)) state.npcQuestProgress[cfg.questId] = 0;
