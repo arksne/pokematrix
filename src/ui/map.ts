@@ -69,9 +69,11 @@ const REGION_START: Record<string, string> = {
 // ── Гейт туториала (зеркало ui/location.ts: isTutorialGateOpen + STARTER_AREA) ──
 // Дальше стартовой зоны — только после сдачи обучения (tutorial_6).
 // Дублируется здесь, чтобы map.ts не тянул тяжёлый location.ts (циклы импорта).
+// Тренировочная зона — в стартовой зоне (синхронно с location.ts): иначе
+// новичку негде делать шаги 1–2, а гейт требует их сдачи.
 const STARTER_AREA = new Set([
   'pewterCity', 'pewterCity_pokemart', 'pewterCity_pokecenter',
-  'pewterStadium',
+  'pewterStadium', 'pewterCity_trainingGrounds',
 ]);
 function isGateOpen(): boolean {
   if ((state.tutorialStep || 0) > 6) return true;

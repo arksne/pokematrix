@@ -188,11 +188,18 @@ export function travelToRegion(targetRegion: string, targetLoc: string, ticketIt
 
 // ── Туториал-гейт (G1): карта дальше стартовой зоны закрыта, пока не сданы
 // все 6 шагов обучения (tutorial_6 в сданных). Стартовый город и его
-// сервисы доступны всегда.
+// сервисы доступны всегда. Тренировочная зона — ТОЖЕ в стартовой зоне:
+// шаги 1–2 (поймай/победи) делаются только там (дикие ур. 2–5), а без неё
+// новичок упирался в «пройдите обучение», которое нельзя пройти.
+// Хайлевелов оттуда всё равно выгоняет уровневый гейт в renderLocation.
 const STARTER_AREA = new Set([
   'pewterCity', 'pewterCity_pokemart', 'pewterCity_pokecenter',
-  'pewterStadium',
+  'pewterStadium', 'pewterCity_trainingGrounds',
 ]);
+/** Публичная проверка для тестов (сама константа приватна). */
+export function isStarterArea(locId: string): boolean {
+  return STARTER_AREA.has(locId);
+}
 export function isTutorialGateOpen(): boolean {
   if ((state.tutorialStep || 0) > 6) return true;
   return (state.completedNPCQuests || []).includes('tutorial_6');

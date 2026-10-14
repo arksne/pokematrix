@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isTutorialGateOpen, isVeteranForTutorial } from '../location.js';
+import { isTutorialGateOpen, isVeteranForTutorial, isStarterArea } from '../location.js';
+import { isMapLocked } from '../map.js';
 import { state } from '../../game/state.js';
 
 /**
@@ -64,5 +65,24 @@ describe('isVeteranForTutorial', () => {
 
   it('пустая команда без прогресса: не ветеран', () => {
     expect(isVeteranForTutorial([], [], 0)).toBe(false);
+  });
+});
+
+describe('тренировочная зона в стартовой зоне', () => {
+  beforeEach(() => {
+    state.tutorialStep = 0;
+    state.completedNPCQuests = [];
+  });
+
+  it('location: трензона — стартовая (шаги 1–2 делать больше негде)', () => {
+    expect(isStarterArea('pewterCity_trainingGrounds')).toBe(true);
+    expect(isStarterArea('pewterCity')).toBe(true);
+    expect(isStarterArea('route3')).toBe(false);
+  });
+
+  it('map: трензона не залочена до сдачи обучения', () => {
+    expect(isTutorialGateOpen()).toBe(false);
+    expect(isMapLocked('pewterCity_trainingGrounds')).toBe(false);
+    expect(isMapLocked('route3')).toBe(true);
   });
 });
