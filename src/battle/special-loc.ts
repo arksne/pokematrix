@@ -68,3 +68,22 @@ export function nextFloor(currentLocId: string | null, targetLocId: string, mech
   // В ту же башню, что и сейчас — этаж прежний (перерисовка/открытие меню).
   return currentLocId === targetLocId ? 0 : 1;
 }
+
+/**
+ * Подъём на следующий этаж башни (явное действие игрока — кнопка «Подняться»
+ * в локации). Чистая функция: +1, но не выше floors (cap).
+ *
+ * Почему отдельная функция, а не рост на входе/победе: вход даёт 1-й этаж
+ * (nextFloor), перерисовка этаж не двигает (иначе любое открытие меню качало
+ * бы силу врагов), выход наружу сбрасывает в 0 (location.ts). Без явного
+ * подъёма этаж вечно стоял бы на 1: из башни ведут только наружные ссылки,
+ * повторный вход даёт 1 снова. Сила врагов растёт через towerLevel() —
+ * getWildLevel в battle/core.ts её уже учитывает, изменений там не надо.
+ */
+export function climbFloor(floor: number, mechanic: SpecialMechanic | null): number {
+  const cur = Math.floor(floor || 0);
+  if (!mechanic || mechanic.kind !== 'tower') return Math.max(0, cur);
+  const cap = Math.max(1, Math.floor(mechanic.floors || 10));
+  if (cur < 1) return 1;
+  return Math.min(cap, cur + 1);
+}

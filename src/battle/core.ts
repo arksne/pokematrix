@@ -50,7 +50,7 @@ import { getAbilityNameRu } from '../data/abilities.js';                 // Ру
 import { checkNewMovesOnLevelUp } from '../ui/levelup_moves.js';         // Проверка новых атак при повышении уровня
 // Импорт чистых функций из logic.ts — все БЕЗ сайд-эффектов, работают с переданными данными
 import { calculateDamage, getTypeMultiplier, checkAccuracy, isStatusImmune, checkSuckerPunchFail, checkSturdy, TYPE_CHART, SOUND_MOVES, GEM_TYPE } from './logic.js';
-import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, baseDefOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, falseSwipeClamp, crushGripPower, flailPower, finalGambitDmg, flingPower, naturalGift, presentRoll, spitUpPower, swallowPct, lastRespectsPower, rageFistPower, populationBombHits, confuseChance, confusionTurns, confusionSelfHit, confusionDamage, attractBlocks, tauntBlocks, encoreForces, disableBlocks, tormentBlocks, perishTick, yawnWakes, WEATHER_SET, TERRAIN_SET, FIELD_TURNS, TAILWIND_TURNS, TRICK_ROOM_TURNS, collisionCourseMult, saltCureChip, resistantType, METRONOME_POOL, metronomePick, meFirstCopy, ALWAYS_CRIT, normMoveName, TERRAIN_SEEDS, TERRAIN_SEED_STAT, trapTurns } from './special-moves.js';
+import { isChargeMove, isOhkoMove, getFixedDamage, getMultiHitCount, calcDrainHeal, calcRecoilDamage, calcHealAmount, calcHpCost, effectiveSecondaryChance, decideMoveOrder, counterDamage, weightPowerKg, heavySlamPower, pokeWeightKg, gyroBallPower, electroBallPower, beatUpHits, beatUpPower, baseAttackOf, baseDefOf, effectivePowerMove, isSemiInvuln, canHitHidden, hideVerb, needsRecharge, healPulseAmount, bideRelease, BIDE_TURNS, falseSwipeClamp, crushGripPower, flailPower, finalGambitDmg, flingPower, naturalGift, presentRoll, spitUpPower, swallowPct, lastRespectsPower, rageFistPower, populationBombHits, confuseChance, confusionTurns, confusionSelfHit, confusionDamage, attractBlocks, tauntBlocks, encoreForces, disableBlocks, tormentBlocks, perishTick, yawnWakes, WEATHER_SET, TERRAIN_SET, FIELD_TURNS, TAILWIND_TURNS, TRICK_ROOM_TURNS, collisionCourseMult, saltCureChip, resistantType, METRONOME_POOL, metronomePick, meFirstCopy, ALWAYS_CRIT, normMoveName, TERRAIN_SEEDS, TERRAIN_SEED_STAT, trapTurns, clearLeechSeedFlags, clearMonBattleFlags, restoreMonAbility, applyDrainHeal, drainPctOf, isForcedFleeMove, canEscapeFromTrap, isTrapChipMove, isHeldByTrap, tickTrapBind, clearTrapState, calcCatchExp } from './special-moves.js';
 import { calculateStat as calculateStatShared } from './stats.js';
 import { HEAL_HP, CURE_ONE, CURE_ALL } from '../data/item-effects.js';  // аудит итемов: общие таблицы с рюкзаком
 import { selectEnemyMove } from './ai.js';                               // AI: выбирает атаку для противника на основе ситуации
@@ -80,7 +80,7 @@ import { addNotification } from '../ui/notifications.js';                // Ув
 // BattleStateMachine — класс из state-machine.ts, управляющий фазами боя.
 // Это singleton — один инстанс на весь бой.
 // Экспортируется для тестов (могут создать свой через BattleStateMachine.create())
-import { BattleStateMachine, BattlePhase, recoverStuckTurn, leaveBattleToIdle } from './state-machine.js';
+import { BattleStateMachine, BattlePhase, recoverStuckTurn, leaveBattleToIdle, ensurePlayerTurnAfterFaint } from './state-machine.js';
 import { getEncounterRate, effectiveEncounterRate, tickEncounterCounters } from '../data/encounter.js';  // листовой модуль — цикла нет
 import { specialMechanic, towerLevel, encounterRateFor } from './special-loc.js';  // M-4: механики пещер/башен
 
@@ -232,8 +232,17 @@ function resetBattleField() {
   S.lastWildMove = null; S.lastWildMoveDetail = null;
   S.pendingHeal = null;
   S.playerActedRound = -1;
+  // Жалоба 2: сид жил между боями — чистим здесь (старт нового боя).
+  clearLeechSeedFlags(S);
+  // Жалоба 3: кеш хода врага и прочий мусор не должны течь в следующий бой.
+  S.enemyChosenMove = null;
   for (const m of (GS.myTeam || [])) {
     if (!m) continue;
+    // Жалоба 6: ловушки/чипы/соль чистятся вместе с vol (см. clearMonBattleFlags).
+    clearMonBattleFlags(m);
+    // Жалоба 3: сменённые в бою способности возвращаем (skill-swap/mummy/...).
+    // Статусы/сон/стадии не трогаем (существующее поведение).
+    try { restoreMonAbility(m); } catch (_) {}
     m.vol = {};
     m.typeOverride = null;
     m.lockedOn = false;
@@ -266,6 +275,13 @@ function resetBattleField() {
 function clearBattleState() {
   try { localStorage.removeItem(store.lsKey('battle_state')); } catch(e) {}
   clearScreens(); // Сбросить все барьеры (Reflect, Light Screen, Protect, Substitute)
+  // Жалоба 2: сид не должен жить после конца боя (и на старте нового — см. resetBattleField).
+  try { clearLeechSeedFlags(S); } catch (_) {}
+  // Жалоба 6: ловушка/шип на активном не должны залипать после конца боя.
+  try {
+    if (S.activePlayerMon) clearTrapState(S.activePlayerMon);
+    if (S.activeWild) clearTrapState(S.activeWild);
+  } catch (_) {}
   // Бой кончился по-настоящему (победа/поражение/побег/поимка/выход), а не переход
   // между покемонами лидера (там clear не вызывается). Если автоохота была
   // включена, поднимаем цикл заново: на обычной сессии тики идут всё время и
@@ -1387,16 +1403,21 @@ const STAT_LABELS: Record<string, string> = {
 
 /**
  * tickBindTurns — счётчик ловушки: 5 ходов (7 с Когтем), потом хватка
- * отпускает (урон прекращается). Флаг trapped не трогаем — он может быть
- * от mean-look и т.п. Старые сейвы без bindTurns получают 5 по умолчанию.
+ * отпускает (урон прекращается). Жалоба 6: раньше чистили только bindChip,
+ * а vol.trapped залипал навсегда — ловушка «оставалась на перед».
+ * Теперь чистим и vol.trapped через tickTrapBind. Прямой m.trapped
+ * (mean-look/jaw-lock) не трогаем — у него свой жизненный цикл.
  */
 function tickBindTurns(mon: any, isWild: boolean): void {
   const vol = mon?.vol;
   if (!vol || !vol.bindChip) return;
   if (vol.bindTurns === undefined || vol.bindTurns === null) vol.bindTurns = 5;
-  vol.bindTurns -= 1;
-  if (vol.bindTurns <= 0) {
-    vol.bindChip = false;
+  // Чистое ядро считает остаток (тестируется без DOM/S).
+  const next = tickTrapBind(vol);
+  vol.bindChip = next.bindChip;
+  vol.bindTurns = next.bindTurns;
+  if (!next.bindChip) vol.trapped = next.trapped;
+  if (!next.bindChip) {
     const label = isWild ? `Дикий ${mon.name}` : (mon.apiData?.name || 'Покемон');
     appendToLog(`${label} вырвался из хватки!`, false, 'system');
   }
@@ -3074,19 +3095,33 @@ function applyStatusEndOfTurn(target, isPlayer) {
 /**
  * fleeWildBattle — принудительный конец дикого боя (roar/whirlwind/teleport).
  * Без наград и без самоподрыва: противник сбежал или игрок телепортировался.
+ * Жалоба 5: раньше делали battle.transition(IDLE) напрямую — из ENEMY_TURN
+ * (телепорт дикого) такой переход запрещён картой, фаза залипала в ENEMY_TURN.
+ * Теперь уходим через leaveBattleToIdle (forcePhase-фолбэк) и гасим модалку,
+ * иначе бой «кончился», а окно висит без кнопок. Кнопки переиспользуем:
+ * btn-run (побег) и btn-leave-battle уже есть, новых id не добавляем.
  */
 function fleeWildBattle(msg: string) {
-  document.getElementById('battle-main-menu').style.display = 'none';
+  try { document.getElementById('battle-main-menu').style.display = 'none'; } catch (_) {}
   appendToLog(msg);
-  battle.transition(BattlePhase.IDLE);
+  leaveBattleToIdle(battle);
   clearBattleState();
   S.escapeAttempts = 0;
+  // Модалку гасим сразу (бой кончился): раньше она оставалась открытой
+  // с пустым меню — выглядело как «кнопки уйти нет».
+  try {
+    const modal = document.getElementById('encounter-modal');
+    if (modal) modal.style.display = 'none';
+    const endMenu = document.getElementById('battle-end-menu');
+    if (endMenu) endMenu.style.display = 'none';
+  } catch (_) {}
   store.autoSave();
 }
 
 function switchPokemon() {
-  // Проход-741: ловушка не даёт смениться
-  if (S.activePlayerMon.trapped) {
+  // Проход-741: ловушка не даёт смениться. Жалоба 6: bind-семья ставит
+  // vol.trapped, mean-look — прямой trapped — проверяем оба через isHeldByTrap.
+  if (isHeldByTrap(S.activePlayerMon)) {
     showToast('Ловушка держит покемона — смена невозможна!', true);
     return;
   }
@@ -3105,6 +3140,23 @@ function switchPokemon() {
 
     // Способности ухода с поля срабатывают ДО фактической смены.
     applySwitchOutAbilities(oldActive);
+
+    // Жалоба 3/6: уход с поля сбрасывает волатильное уходящего (confusion/
+    // ловушка/заряды) — иначе оно «переходит на новых» при возврате.
+    try {
+      if (oldActive) {
+        oldActive.vol = {};
+        clearTrapState(oldActive);
+        oldActive.lockedOn = false;
+        oldActive.recharging = false;
+        oldActive.hiddenIn = null;
+        oldActive.bide = null;
+        oldActive.stock = 0;
+        oldActive.laserFocus = false;
+        oldActive.focusEnergy = false;
+        oldActive.flinch = false;
+      }
+    } catch (_) {}
 
     // Меняем активного покемона (порядок в команде не меняется)
     S.activePlayerMon = newActive;
@@ -4649,8 +4701,11 @@ async function useMove(moveIndex) {
       return;
     } else if (gslug === 'roar' || gslug === 'whirlwind' || gslug === 'teleport') {
       if (S.battleType !== 'wild') { failGimmick('Лидер не даёт уйти из боя!'); return; }
-      // Проход-741: ловушка не даёт телепортироваться (рык выгоняет дикого — работает)
-      if (gslug === 'teleport' && S.activePlayerMon.trapped) { failGimmick('Ловушка держит — телепорт не работает!'); return; }
+      // Проход-741: ловушка не даёт телепортироваться (рык выгоняет дикого — работает).
+      // Жалоба 6: проверяем оба флага (прямой + vol) — bind-семья тоже держит.
+      if (gslug === 'teleport' && !canEscapeFromTrap(S.activePlayerMon.trapped, S.activePlayerMon.vol?.trapped)) { failGimmick('Ловушка держит — телепорт не работает!'); return; }
+      // Жалоба 5: isForcedFleeMove — единая проверка имени (тестируется).
+      if (!isForcedFleeMove(gslug)) { failGimmick('Не получилось сбежать!'); return; }
       appendToLog(gslug === 'teleport' ? `${pname} телепортируется из боя!` : `Дикий ${S.activeWild.name} в ужасе убегает!`, false, 'system');
       fleeWildBattle(gslug === 'teleport' ? 'Вам удалось сбежать!' : 'Противник сбежал!');
       return;
@@ -5388,13 +5443,17 @@ async function useMove(moveIndex) {
       // Одна строка на удар: урон и модификаторы вместе
       appendToLog(`−${hitDmg} HP${hitMods ? ` — ${hitMods}` : ''}`, false, 'dmg');
 
-      // Drain / Recoil per hit
+      // Drain / Recoil per hit. Жалоба 4: дрэйн-лечение чиним через
+      // чистое ядро applyDrainHeal (Big Root ×1.3, кап по maxHp) + лог,
+      // иначе «Мега/Гига Дрейн не пополняют ХП» — healing молча терялся.
       if (move.meta?.drain) {
         if (move.meta.drain > 0) {
-          const heal = calcDrainHeal(hitDmg, move.meta.drain, S.activePlayerMon.heldItem === 'bigRoot');
-          if (heal > 0) {
-            S.activePlayerMon.currentHp = Math.min(S.activePlayerMon.maxHp, S.activePlayerMon.currentHp + heal);
+          const before = S.activePlayerMon.currentHp;
+          const after = applyDrainHeal(before, S.activePlayerMon.maxHp, hitDmg, move.meta.drain, S.activePlayerMon.heldItem === 'bigRoot');
+          if (after > before) {
+            S.activePlayerMon.currentHp = after;
             updatePlayerHpUI();
+            appendToLog(`${S.activePlayerMon.apiData.name} высасывает здоровье! (+${after - before} HP)`, false, 'heal');
           }
         } else {
           // Rock Head: способность полностью снимает отдачу от своих атак.
@@ -5838,6 +5897,11 @@ function handlePlayerFaint() {
     updateAbilityDisplay();
     loadMoveButtons(S.activePlayerMon, useMove);              // Загружаем атаки нового покемона
     saveBattleState();
+    // Жалоба 1: фаза застревала в ENEMY_TURN после авто-замены — атаки
+    // работали (re-entry), а предмет/смена/побег требовали строго PLAYER_TURN
+    // и отвечали «Подождите... идёт ход противника». Возвращаем ход игроку
+    // сразу (переход ENEMY_TURN→PLAYER_TURN разрешён картой), меню — по таймеру.
+    ensurePlayerTurnAfterFaint(battle);
     setTimeout(() => {
       // Гонка: пока шёл таймер, дикий мог упасть (яд/ожог/отдача) и бой уже
       // закрыт (end-menu, фаза IDLE/VICTORY/DEFEAT). Без гарда меню показывалось
@@ -6553,9 +6617,17 @@ async function runEnemyTurnBody() {
       appendToLog(`${wnm} один — эстафета не работает!`, false, 'system');
       await finishEnemyTurn(); return;
     } else if (gslug === 'roar' || gslug === 'whirlwind') {
-      // Дикий рыком вынуждает смену игрока: случайный живой запасной
+      // Дикий рыком вынуждает смену игрока: случайный живой запасной.
+      // Жалоба 5: кнопки хватает — переиспользуем смену (без новых id).
+      // Уходящий сбрасывает vol/ловушку, иначе она «переходит на новых».
       const alts = (GS.myTeam || []).filter((m: any) => m !== S.activePlayerMon && (m.currentHp ?? 1) > 0);
       if (!alts.length) { appendToLog(`${wnm} рычит — но смена невозможна!`, false, 'system'); await finishEnemyTurn(); return; }
+      try {
+        if (S.activePlayerMon) {
+          S.activePlayerMon.vol = {};
+          clearTrapState(S.activePlayerMon);
+        }
+      } catch (_) {}
       const pick = alts[Math.floor(Math.random() * alts.length)];
       S.activePlayerMon = pick;
       S.playerChargedMove = null;
@@ -6864,12 +6936,17 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
     // Одна строка на удар: урон и модификаторы вместе
     appendToLog(`−${hitDmg} HP${hitMods ? ` — ${hitMods}` : ''}`, false, 'dmg');
 
-    // Drain / Recoil per hit
+    // Drain / Recoil per hit. Жалоба 4 (зеркало игрока): раньше ветка
+    // лечения дикого не звала updateWildHpUI и не писала лог — HP росло
+    // в S, а бар стоял, и казалось «не пополняет». Теперь как у игрока.
     if (chosenMove.meta?.drain) {
       if (chosenMove.meta.drain > 0) {
-        const heal = calcDrainHeal(hitDmg, chosenMove.meta.drain, S.activeWild.heldItem === 'bigRoot');
-        if (heal > 0) {
-          S.wildCurHP = Math.min(S.wildMaxHP, S.wildCurHP + heal);
+        const before = S.wildCurHP;
+        const after = applyDrainHeal(before, S.wildMaxHP, hitDmg, chosenMove.meta.drain, S.activeWild.heldItem === 'bigRoot');
+        if (after > before) {
+          S.wildCurHP = after;
+          updateWildHpUI();
+          appendToLog(`Дикий ${S.activeWild.name} высасывает здоровье! (+${after - before} HP)`, false, 'heal');
         }
       } else {
         const rd = calcRecoilDamage(hitDmg, chosenMove.meta.drain);
@@ -7212,8 +7289,9 @@ function initEncounterEvents() {
       appendToLog('Нельзя сбежать от лидера!');
       return;
     }
-    // Проход-741: ловушка (mean-look/octolock/...) не даёт сбежать
-    if (S.activePlayerMon.trapped) {
+    // Проход-741: ловушка (mean-look/octolock/...) не даёт сбежать.
+    // Жалоба 6: bind-семья ставит vol.trapped — проверяем оба флага.
+    if (isHeldByTrap(S.activePlayerMon)) {
       appendToLog(`${S.activePlayerMon.apiData.name} не может сбежать — держит ловушка!`, false, 'system');
       return;
     }
@@ -7446,6 +7524,19 @@ function initEncounterEvents() {
           }
           GS.pokedexCaught.add(S.activeWild.name);
           GS.pokedexSeen.add(S.activeWild.name);
+          // Эволюция сразу при поимке: пойманный высокоуровневый мон (Маджикарп 20)
+          // иначе «просрочивал момент» и эволил только при следующей победе —
+          // выглядело багом. Everstone блокирует, как в бою.
+          if (newMon.heldItem !== 'everstone') {
+            try {
+              Promise.resolve(checkEvolution(newMon)).then((evoTarget) => {
+                if (!evoTarget) return;
+                return Promise.resolve(triggerEvolution(newMon, evoTarget.name)).then(() => {
+                  if (evoTarget.shedBonus) return maybeGrantShedinja(newMon);
+                });
+              }).catch(() => {});
+            } catch (_) { /* эволюция не роняет поимку */ }
+          }
           // Достижения поимки: первая, команда 6, шайни, вехи покедекса
           checkAchievement('first_catch');
           if (GS.myTeam.length >= 6) checkAchievement('team_6');
@@ -7456,6 +7547,64 @@ function initEncounterEvents() {
           if (POKEDEX_ALL.length > 0 && dexN >= POKEDEX_ALL.length) checkAchievement('dex_all');
 
           checkQuestProgress('catch_x', 1, undefined, { species: S.activeWild.name });
+
+          // Жалоба 7 (спека 1.5): за поимку тоже капает EXP — как за нокаут
+          // (baseExp × уровень / 7, см. handleWildFaintRewards). Деньги/дроп
+          // за поимку не даём, только EXP активному + EXP Share остальным,
+          // level-up и EV в пул (grantLevelUpEVs). Без фанатизма: эволюцию и
+          // новые атаки здесь не триггерим (пойманный и так в команде).
+          try {
+            const caughtBase = (S.activeWild as any)?.base_experience || 50;
+            let catchExp = calcCatchExp(caughtBase, S.wildLvl);
+            if ((GS as any).serverFeatures?.double_exp) catchExp *= 2;
+            if (S.activePlayerMon?.heldItem === 'luckyEgg') catchExp = Math.floor(catchExp * 1.5);
+            if ((GS.currentLocationId || '').includes('trainingGrounds')) catchExp *= 10;
+            if (catchExp > 0 && S.activePlayerMon) {
+              if (S.activePlayerMon.exp === undefined) {
+                S.activePlayerMon.exp = Math.pow(S.activePlayerMon.baseLevel, 3);
+                S.activePlayerMon.expToNext = Math.pow(S.activePlayerMon.baseLevel + 1, 3);
+              }
+              const lvlNow = S.activePlayerMon.baseLevel + (S.activePlayerMon.candiesEaten || 0);
+              if (lvlNow < 100) {
+                S.activePlayerMon.exp += catchExp;
+                appendToLog(`${S.activePlayerMon.apiData.name} получил ${catchExp} EXP за поимку!`);
+              }
+              if ((GS as any).expShareActive) {
+                const shareExp = Math.floor(catchExp / 2);
+                (GS.myTeam || []).forEach((mon: any) => {
+                  if (mon !== S.activePlayerMon && mon.currentHp > 0 && (mon.baseLevel + (mon.candiesEaten || 0)) < 100) {
+                    if (mon.exp === undefined) {
+                      mon.exp = Math.pow(mon.baseLevel, 3);
+                      mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
+                    }
+                    mon.exp += shareExp;
+                    while (mon.exp >= mon.expToNext && (mon.baseLevel + (mon.candiesEaten || 0)) < 100) {
+                      mon.baseLevel++;
+                      mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
+                      const oldMax = mon.maxHp;
+                      const newMax = calculateStat(mon, 'hp', false);
+                      mon.maxHp = newMax;
+                      mon.currentHp += (newMax - oldMax);
+                      const ev = grantLevelUpEVs(mon);
+                      if (ev) appendToLog(`${mon.apiData.name}: +${ev.gain} EV в пул${ev.brace ? ' (скоба)' : ''} (всего ${ev.total})`, false, 'system');
+                    }
+                  }
+                });
+                if (shareExp > 0) appendToLog(`Остальная команда получила по ${shareExp} EXP!`);
+              }
+              while (S.activePlayerMon.exp >= S.activePlayerMon.expToNext && S.activePlayerMon.baseLevel < 100) {
+                S.activePlayerMon.baseLevel++;
+                S.activePlayerMon.expToNext = Math.pow(S.activePlayerMon.baseLevel + 1, 3);
+                const oldMax = S.activePlayerMon.maxHp;
+                const newMax = calculateStat(S.activePlayerMon, 'hp', false);
+                S.activePlayerMon.maxHp = newMax;
+                S.activePlayerMon.currentHp += (newMax - oldMax);
+                appendToLog(`${S.activePlayerMon.apiData.name} достиг ${S.activePlayerMon.baseLevel} уровня!`);
+                const evGain = grantLevelUpEVs(S.activePlayerMon);
+                if (evGain) appendToLog(`Растёт: +${evGain.gain} EV в пул${evGain.brace ? ' (скоба)' : ''} (всего ${evGain.total})`, false, 'system');
+              }
+            }
+          } catch (_) {}
 
           document.getElementById('battle-main-menu').style.display = 'none';
           document.getElementById('battle-end-menu').style.display = 'flex';

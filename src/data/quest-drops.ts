@@ -11,12 +11,23 @@
 // ─────────────────────────────────────────────────────────────
 import { state } from '../game/state.js';
 import { NPC_DATA } from './npc.js';
+import { ITEMS } from './items.js';
 
 /** Шанс квестового дропа с одного дикого (пока квест активен). */
 export const QUEST_DROP_CHANCE = 0.08;
 
 /** itemId → questId[] (из collect_items квестов). */
 let cache: Record<string, string[]> | null = null;
+
+/** Категории, которым запрещено падать с диких (квестовые грузы, не добыча). */
+const QUEST_ONLY_CATEGORIES = new Set(['quest']);
+
+function isQuestOnlyItem(itemId: string): boolean {
+  try {
+    const def: any = (ITEMS as any[]).find((i) => i.id === itemId);
+    return !!def && QUEST_ONLY_CATEGORIES.has(def.category);
+  } catch { return false; }
+}
 
 export function questItemSources(): Record<string, string[]> {
   if (cache) return cache;
@@ -25,6 +36,9 @@ export function questItemSources(): Record<string, string[]> {
   for (const npc of Object.values(npcs) as any[]) {
     for (const q of (npc?.quests || []) as any[]) {
       if (q?.type === 'collect_items' && q?.targetItem && q?.id) {
+        // Квестовые посылки (courierParcel, parcel*, *Leg*, secretPotion — category 'quest')
+        // выдаются NPC/обменом, а не дропом: с диких по 8% падать не должны.
+        if (isQuestOnlyItem(q.targetItem)) continue;
         const list = (map[q.targetItem] = map[q.targetItem] || []);
         if (!list.includes(q.id)) list.push(q.id);
       }
@@ -32,6 +46,11 @@ export function questItemSources(): Record<string, string[]> {
   }
   cache = map;
   return map;
+}
+
+/** Сброс кеша источников (для тестов после смены категорий). */
+export function clearQuestItemSourcesCache(): void {
+  cache = null;
 }
 
 /** Квест активен = взят и не сдан (NPC- и обычные ветки). */
@@ -74,6 +93,8 @@ export function rollQuestDrops(
   const out: Array<{ item: string; qty: number }> = [];
   const table = sources ?? questItemSources();
   for (const [item, questIds] of Object.entries(table)) {
+    // Страховка второго рубежа: даже явно переданная посылка не падает с диких.
+    if (isQuestOnlyItem(item)) continue;
     if (!questIds.some((id) => activeIds.has(id))) continue;
     if (rand() < QUEST_DROP_CHANCE) out.push({ item, qty: 1 });
   }

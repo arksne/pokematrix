@@ -731,7 +731,8 @@ export async function doCloudSave(attempt = 0) {
         const body = await res.clone().json().catch(() => null);
         const details = (body as any)?.details || (body as any)?.error || 'без деталей';
         console.warn('[save] 422 validation failed:', JSON.stringify(details).slice(0, 500));
-        showToast('☁️ Сервер отклонил сейв (422) — смотри консоль (F12).', true);
+        const first = Array.isArray(details) ? details[0] : String(details);
+        showToast(`☁️ Сейв отклонён: ${String(first).slice(0, 90)}`, true);
         return null; // ретраить бессмысленно: тот же сейв снова не примут
       }
       throw new Error(`HTTP ${res.status}`);

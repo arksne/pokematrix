@@ -709,3 +709,68 @@ export function getMoveCategory(move) {
   if (!move.damage_class?.name) return 'status';
   return move.damage_class.name; // 'physical' | 'special' | 'status'
 }
+
+// ═══════════════════════════════════════════════════════════════
+// СБОР СЕТА ДИКОГО СТРОГО ПО УРОВНЮ (H1/H2)
+// ═══════════════════════════════════════════════════════════════
+// Канон сборки (спека H1/H2, фикс «строго по уровню, фолбэк Tackle»):
+//   - только level-up атаки с min level_learned_at <= level;
+//   - порядок — по возрастанию min (самые ранние первыми);
+//   - фолбэк 1: самая ранняя level-up атака (дикий не беспомощен);
+//   - фолбэк 2: синтетический Tackle.
+//
+// ОТЛИЧИЯ от filterMovesByLevel() в battle/core.ts (чужой файл, не трогаем):
+//   1. Записи БЕЗ level-up метода (machine/egg/tutor, min = Infinity в core)
+//      здесь исключены из пула И из фолбэка. В core они выдаются как
+//      «известные» через фолбэк (см. core.ts:672-686 и moves-by-level.test.ts
+//      «не-level-up методы», который это поведение фиксирует). По спеке H1/H2
+//      дикий знает только level-up — поэтому здесь строго.
+//   2. Без усечения входа: сюда передают ВЕСЬ пул деталей. В core места сбора
+//      режут пул ДО фильтра: `moves.slice(0, 20)` в порядке PokeAPI
+//      (core.ts:393-394, 452-453, 3660, 8333, 8445) и top-30 по УБЫВАНИЮ
+//      level_learned_at (core.ts:8088-8090, остаток старого бага сортировки
+//      наоборот). У монстров с пулом >20/30 это выкидывает низкоуровневые
+//      атаки до фильтра — дикий получает чужой уровень или фолбэк.
+//      Переключение 6 мест сбора на этот хелпер — одна строка на место,
+//      за владельцем core.ts (патч в отчёте).
+// ─────────────────────────────────────────────────────────────
+
+/** Минимальный level-up уровень изучения атаки (min по всем версиям). */
+export function wildMoveMinLevel(m: any): number | null {
+  const lvls = ((m && m.version_group_details) || [])
+    .filter((v) => v && v.move_learn_method && v.move_learn_method.name === 'level-up'
+      && typeof v.level_learned_at === 'number')
+    .map((v) => v.level_learned_at);
+  return lvls.length ? Math.min(...lvls) : null;
+}
+
+/** Синтетический Tackle — фолбэк, когда у вида нет level-up атак вообще. */
+export function syntheticTackle(): any {
+  return {
+    name: 'tackle', power: 40, accuracy: 100, pp: 35,
+    type: { name: 'normal' }, damage_class: { name: 'physical' },
+    meta: {}, effect_entries: [],
+  };
+}
+
+/**
+ * Собрать пул атак дикого строго по уровню.
+ * @param moveDetails детали атак (PokeAPI move detail), ВЕСЬ пул без нарезки
+ * @param level уровень дикого
+ * @returns level-up атаки с min <= level по возрастанию min (весь пул),
+ *          либо [самая ранняя level-up], либо [синтетический Tackle].
+ */
+export function buildWildMoveset(moveDetails: any[], level: number): any[] {
+  const lvl = Math.max(1, Math.floor(level || 1));
+  const levelups = (moveDetails || [])
+    .filter(Boolean)
+    .map((m) => ({ m, min: wildMoveMinLevel(m) }))
+    .filter((e) => e.min !== null)
+    .sort((a, b) => (a.min as number) - (b.min as number));
+  const known = levelups
+    .filter((e) => (e.min as number) <= lvl)
+    .map((e) => e.m);
+  if (known.length) return known;
+  if (levelups.length) return [levelups[0].m];
+  return [syntheticTackle()];
+}

@@ -357,3 +357,270 @@ describe('findQuestHolder: где сдавать', () => {
     expect(findQuestHolder('nope_nope')).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// МАТРИЦА расширения (владелец: +40–60 тестов по всем механикам).
+// Типы × фильтры/verify/границы/дабл-тейк/ретраи. Без DOM, на реальных
+// pw_* и синтетическом __test_npc (как выше).
+// ─────────────────────────────────────────────────────────────
+
+describe('matrix: defeat/catch фильтры', () => {
+  afterEach(() => { delete (NPC_DATA as any)['__test_npc']; });
+
+  it('defeat: species точное, регистр не важен', () => {
+    putTestQuests([{ id: '__m_sp', type: 'defeat_x', targetQty: 3, filter: { species: 'Geodude' } }]);
+    take('__m_sp');
+    trackNPCQuests('defeat_x', { species: 'geodude' });
+    trackNPCQuests('defeat_x', { species: 'GEODUDE' });
+    expect(state.npcQuestProgress['__m_sp']).toBe(2);
+    trackNPCQuests('defeat_x', { species: 'onix' });
+    expect(state.npcQuestProgress['__m_sp']).toBe(2);
+  });
+
+  it('defeat: speciesList any-of, чужой вид мимо', () => {
+    putTestQuests([{ id: '__m_sl', type: 'defeat_x', targetQty: 5, filter: { speciesList: ['machop', 'machoke'] } }]);
+    take('__m_sl');
+    trackNPCQuests('defeat_x', { species: 'machoke' });
+    trackNPCQuests('defeat_x', { species: 'abra' });
+    expect(state.npcQuestProgress['__m_sl']).toBe(1);
+  });
+
+  it('defeat: types any-of (регистр типов не важен)', () => {
+    putTestQuests([{ id: '__m_ty', type: 'defeat_x', targetQty: 5, filter: { types: ['Fire'] } }]);
+    take('__m_ty');
+    trackNPCQuests('defeat_x', { species: 'x', types: ['FIRE'] });
+    trackNPCQuests('defeat_x', { species: 'x', types: ['water'] });
+    expect(state.npcQuestProgress['__m_ty']).toBe(1);
+  });
+
+  it('defeat: без species в событии — species-фильтр не проходит', () => {
+    putTestQuests([{ id: '__m_nosp', type: 'defeat_x', targetQty: 5, filter: { species: 'pikachu' } }]);
+    take('__m_nosp');
+    trackNPCQuests('defeat_x', {});
+    expect(state.npcQuestProgress['__m_nosp']).toBe(0);
+  });
+
+  it('catch: speciesList + ночь комбо', () => {
+    putTestQuests([{ id: '__m_cn', type: 'catch_x', targetQty: 4, filter: { speciesList: ['hoothoot', 'gastly'], time: 'night' } }]);
+    take('__m_cn');
+    state.isDaytime = true;
+    trackNPCQuests('catch_x', { species: 'gastly' });
+    expect(state.npcQuestProgress['__m_cn']).toBe(0);
+    state.isDaytime = false;
+    trackNPCQuests('catch_x', { species: 'GASTLY' });
+    trackNPCQuests('catch_x', { species: 'pikachu' });
+    expect(state.npcQuestProgress['__m_cn']).toBe(1);
+  });
+
+  it('catch: amount >1 суммируется и режется целью', () => {
+    putTestQuests([{ id: '__m_amt', type: 'catch_x', targetQty: 3, filter: { species: 'eevee' } }]);
+    take('__m_amt');
+    trackNPCQuests('catch_x', { species: 'eevee', amount: 5 });
+    expect(state.npcQuestProgress['__m_amt']).toBe(3);
+  });
+});
+
+describe('matrix: earn/explore/use/hatch границы', () => {
+  afterEach(() => { delete (NPC_DATA as any)['__test_npc']; });
+
+  it('earn: ноль и крупная сумма, кап целью', () => {
+    take('pw_money');
+    trackNPCQuests('earn_money', { amount: 0 });
+    expect(state.npcQuestProgress['pw_money']).toBe(0);
+    trackNPCQuests('earn_money', { amount: 200000 });
+    expect(state.npcQuestProgress['pw_money']).toBe(100000);
+  });
+
+  it('earn: без amount считается +1', () => {
+    putTestQuests([{ id: '__m_earn1', type: 'earn_money', targetQty: 5 }]);
+    take('__m_earn1');
+    trackNPCQuests('earn_money', {});
+    expect(state.npcQuestProgress['__m_earn1']).toBe(1);
+  });
+
+  it('explore: locId-фильтр точный', () => {
+    putTestQuests([{ id: '__m_exloc', type: 'explore', targetQty: 3, filter: { locId: 'safariZone' } }]);
+    take('__m_exloc');
+    trackNPCQuests('explore', { locId: 'safariZone' });
+    trackNPCQuests('explore', { locId: 'pewterCity' });
+    expect(state.npcQuestProgress['__m_exloc']).toBe(1);
+  });
+
+  it('explore: регион чужой не считается, свой дважды считается', () => {
+    take('pw_wanderer');
+    trackNPCQuests('explore', { locId: 'goldenrodCity' });
+    expect(state.npcQuestProgress['pw_wanderer']).toBe(0);
+    trackNPCQuests('explore', { locId: 'pewterCity' });
+    trackNPCQuests('explore', { locId: 'pewterCity' });
+    expect(state.npcQuestProgress['pw_wanderer']).toBe(2);
+  });
+
+  it('use_item: свой предмет да, чужой нет, кап', () => {
+    putTestQuests([{ id: '__m_use', type: 'use_item', targetQty: 2, filter: { itemId: 'superRepel' } }]);
+    take('__m_use');
+    trackNPCQuests('use_item', { itemId: 'repel' });
+    expect(state.npcQuestProgress['__m_use']).toBe(0);
+    trackNPCQuests('use_item', { itemId: 'superRepel' });
+    trackNPCQuests('use_item', { itemId: 'superRepel', amount: 5 });
+    expect(state.npcQuestProgress['__m_use']).toBe(2);
+  });
+
+  it('use_item: без фильтра любой предмет считается', () => {
+    putTestQuests([{ id: '__m_useany', type: 'use_item', targetQty: 2 }]);
+    take('__m_useany');
+    trackNPCQuests('use_item', { itemId: 'whatever' });
+    expect(state.npcQuestProgress['__m_useany']).toBe(1);
+  });
+
+  it('hatch: суммируется и режется целью', () => {
+    putTestQuests([{ id: '__m_hatch', type: 'hatch_x', targetQty: 2 }]);
+    take('__m_hatch');
+    trackNPCQuests('hatch_x', { amount: 5 });
+    expect(state.npcQuestProgress['__m_hatch']).toBe(2);
+  });
+});
+
+describe('matrix: boss/streak/trade границы', () => {
+  afterEach(() => { delete (NPC_DATA as any)['__test_npc']; });
+
+  it('boss: чужой id мимо, свой сразу в цель даже при targetQty>1', () => {
+    putTestQuests([{ id: '__m_boss5', type: 'boss_win', targetQty: 5, filter: { bossId: 'pewterBully' } }]);
+    take('__m_boss5');
+    trackNPCQuests('boss_win', { bossId: 'nope' });
+    expect(state.npcQuestProgress['__m_boss5']).toBe(0);
+    trackNPCQuests('boss_win', { bossId: 'pewterBully' });
+    expect(state.npcQuestProgress['__m_boss5']).toBe(5);
+  });
+
+  it('boss: без фильтра любая победа считается', () => {
+    putTestQuests([{ id: '__m_bossany', type: 'boss_win', targetQty: 1 }]);
+    take('__m_bossany');
+    trackNPCQuests('boss_win', {});
+    expect(state.npcQuestProgress['__m_bossany']).toBe(1);
+  });
+
+  it('streak: растёт и падает вместе с серией, кап целью', () => {
+    putTestQuests([{ id: '__m_streak', type: 'streak_x', targetQty: 10 }]);
+    take('__m_streak');
+    trackNPCQuests('streak_x', { streak: 4 });
+    expect(state.npcQuestProgress['__m_streak']).toBe(4);
+    trackNPCQuests('streak_x', { streak: 99 });
+    expect(state.npcQuestProgress['__m_streak']).toBe(10);
+    trackNPCQuests('streak_x', { streak: 0 });
+    expect(state.npcQuestProgress['__m_streak']).toBe(0);
+  });
+
+  it('streak: без streak в событии сбрасывается в 0', () => {
+    putTestQuests([{ id: '__m_streak0', type: 'streak_x', targetQty: 10 }]);
+    take('__m_streak0');
+    trackNPCQuests('streak_x', { streak: 5 });
+    trackNPCQuests('streak_x', {});
+    expect(state.npcQuestProgress['__m_streak0']).toBe(0);
+  });
+
+  it('trade: суммируется и режется целью', () => {
+    putTestQuests([{ id: '__m_trade', type: 'trade_x', targetQty: 2 }]);
+    take('__m_trade');
+    trackNPCQuests('trade_x', {});
+    trackNPCQuests('trade_x', { amount: 5 });
+    expect(state.npcQuestProgress['__m_trade']).toBe(2);
+  });
+
+  it('неизвестный тип события ничего не двигает', () => {
+    take('pw_trail');
+    take('pw_money');
+    trackNPCQuests('wat_type', { amount: 100 });
+    expect(state.npcQuestProgress['pw_trail']).toBe(0);
+    expect(state.npcQuestProgress['pw_money']).toBe(0);
+  });
+});
+
+describe('matrix: verify границы и ретраи', () => {
+  it('avgLevel: ровно порог проходит, чуть ниже нет', () => {
+    state.myTeam = [{ baseLevel: 10, candiesEaten: 0 }, { baseLevel: 20, candiesEaten: 0 }];
+    expect(verifyQuest({ verify: { avgLevel: 15 } }).ok).toBe(true);
+    expect(verifyQuest({ verify: { avgLevel: 15.1 } }).ok).toBe(false);
+  });
+
+  it('maxLevel: candiesEaten входят в эффективный уровень', () => {
+    state.myTeam = [{ baseLevel: 20, candiesEaten: 5 }];
+    expect(verifyQuest({ verify: { maxLevel: 25 } }).ok).toBe(true);
+    expect(verifyQuest({ verify: { maxLevel: 26 } }).ok).toBe(false);
+  });
+
+  it('maxLevel: пустая команда не проходит', () => {
+    state.myTeam = [];
+    const r = verifyQuest({ verify: { maxLevel: 1 } });
+    expect(r.ok).toBe(false);
+  });
+
+  it('locs: одна непосещённая роняет, визит чинит (ретрай)', () => {
+    state.visitedLocations = new Set(['a']);
+    expect(verifyQuest({ verify: { locs: ['a', 'b'] } }).ok).toBe(false);
+    state.visitedLocations = new Set(['a', 'b']);
+    expect(verifyQuest({ verify: { locs: ['a', 'b'] } }).ok).toBe(true);
+  });
+
+  it('locs: visited массивом тоже считается', () => {
+    state.visitedLocations = ['a', 'b'] as any;
+    expect(verifyQuest({ verify: { locs: ['a', 'b'] } }).ok).toBe(true);
+    expect(verifyQuest({ verify: { locs: ['a', 'c'] } }).ok).toBe(false);
+  });
+
+  it('evPool: ровно порог проходит', () => {
+    state.myTeam = [{ evPool: 50 }, { evPool: 50 }];
+    expect(verifyQuest({ verify: { evPool: 100 } }).ok).toBe(true);
+    expect(verifyQuest({ verify: { evPool: 101 } }).ok).toBe(false);
+  });
+
+  it('dexCount: пустой декс не проходит малый порог', () => {
+    state.pokedexCaught = new Set<string>();
+    expect(verifyQuest({ verify: { dexCount: 1 } }).ok).toBe(false);
+    expect(verifyQuest({ verify: { dexCount: 1 } }).missing).toContain('0/1');
+  });
+
+  it('verify без условий всегда ok (пустой объект)', () => {
+    expect(verifyQuest({ verify: {} }).ok).toBe(true);
+    expect(verifyQuest({}).ok).toBe(true);
+  });
+});
+
+describe('matrix: questRewards/questHowTo/findQuestHolder краевые', () => {
+  it('questRewards: нулевые количества отбрасываются', () => {
+    expect(questRewards({ rewardItem: 'x', rewardQty: 0 })).toEqual([]);
+    expect(questRewards({ rewardItems: [{ id: 'y', qty: 0 }] })).toEqual([]);
+  });
+
+  it('questHowTo: explore с регионом и без', () => {
+    expect(questHowTo({ type: 'explore', filter: { region: 'kanto' } })).toContain('Канто');
+    expect(questHowTo({ type: 'explore' })).toContain('Посещай');
+  });
+
+  it('questHowTo: special и trade не пустые', () => {
+    expect(questHowTo({ type: 'special' }).length).toBeGreaterThan(0);
+    expect(questHowTo({ type: 'trade_x' }).length).toBeGreaterThan(0);
+  });
+
+  it('questHowTo: verify-условия перечисляются', () => {
+    const s = questHowTo({ type: 'special', verify: { maxLevel: 25, dexCount: 10, evPool: 50 } });
+    expect(s).toContain('25');
+    expect(s).toContain('10');
+    expect(s).toContain('50');
+  });
+
+  it('noteLocationVisit: массив visited пополняется', () => {
+    state.currentLocationId = 'a';
+    state.visitedLocations = ['a'] as any;
+    expect(noteLocationVisit('b')).toBe(true);
+    expect((state.visitedLocations as any).includes('b')).toBe(true);
+    // Переход засчитан — игрок теперь в 'b', повторная отрисовка той же локи не счёт
+    state.currentLocationId = 'b';
+    expect(noteLocationVisit('b')).toBe(false);
+  });
+
+  it('findQuestHolder: курьер держится у курьера Пьютера', () => {
+    const h = findQuestHolder('pw_courier');
+    expect(h).not.toBeNull();
+    expect(h!.npcId).toBe('pewter_courier');
+  });
+});

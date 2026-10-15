@@ -30,6 +30,9 @@
 //   collectDaycareMons           — забрать покемонов
 //   checkBreeding                — проверка разведения в PC
 //   startBreedingCheck           — запуск периодической проверки
+//   layEggFromPair               — чистое построение яйца из пары (тесты)
+//   buildHatchling               — чистый покемон 1 ур. из яйца+данных (тесты)
+//   releaseEggToBackpack         — чистое снятие привязки яйца к боксу (тесты)
 //   hatchEgg                     — вылупление яйца
 //   collectEgg                   — перемещение яйца из бокса в инвентарь
 // ─────────────────────────────────────────────────────────────
@@ -207,12 +210,13 @@ export function openBreedBoxes() {
   renderBreedBoxes(overlay);
 }
 
-function breedCandidateList() {
+export function breedCandidateList() {
   const team = (state.myTeam || []).map((m: any) => ({ m, from: 'team' }));
   const pc: any[] = [];
   (state.pcBoxes || []).forEach((box: any, bi: number) =>
     (box || []).forEach((m: any) => pc.push({ m, from: `pc${bi}` })));
-  return [...team, ...pc].filter(({ m }: any) => m && m.apiData && !m.hasBred);
+  // Яйца (isEgg) — не кандидаты: невылупившееся не может быть родителем.
+  return [...team, ...pc].filter(({ m }: any) => m && m.apiData && !m.isEgg && !m.hasBred);
 }
 
 function breedMonLabel(m: any): string {
@@ -418,6 +422,120 @@ export function areBreedingCompatible(mon1: any, mon2: any): boolean {
   return true;
 }
 
+// ── Чистые конструкторы пути «пара → яйцо → вылупление» (без DOM) ──
+// Выделены из checkBreeding/hatchEgg, чтобы сквозной путь разведения
+// покрывался тестами без браузера: поведение то же, сайты вызова те же.
+
+/**
+ * layEggFromPair — построить объект яйца из совместимой пары.
+ * Чистая (состояние не трогает): донор вида — Дитто никогда не даёт вид
+ * (всегда второй родитель), иначе 50/50; IV — ЛУЧШИЙ ген родителей ±1-2
+ * (кламп 0..50, канон лиги); вылупление — случайно 5-9 дней от nowMs;
+ * shinyBoost — двойной перфект пары (A6).
+ */
+export function layEggFromPair(
+  m1: any, m2: any,
+  nowMs: number = Date.now(),
+  rand: () => number = Math.random,
+  uid: string | null = null,
+): any {
+  // Я9: вид потомства — СЛУЧАЙНЫЙ из родителей. С Дитто — всегда второй
+  // родитель (Дитто потомства не даёт), иначе 50/50.
+  const dittoA = (m1.apiData?.species?.name || m1.apiData?.name) === 'ditto';
+  const dittoB = (m2.apiData?.species?.name || m2.apiData?.name) === 'ditto';
+  const donor = dittoA ? m2 : dittoB ? m1 : (rand() < 0.5 ? m1 : m2);
+  const species = donor.apiData?.species?.name || donor.apiData?.name;
+  const eggTypes = donor.apiData?.types || [{ type: { name: 'normal' } }];
+
+  // Наследование IV (канон лиги): ЛУЧШИЙ ген родителей ±1-2.
+  const bestIV = (stat: string) => {
+    const best = Math.max(m1.ivs?.[stat] ?? 0, m2.ivs?.[stat] ?? 0);
+    const delta = (rand() < 0.5 ? -1 : 1) * (rand() < 0.5 ? 1 : 2);
+    return Math.min(50, Math.max(0, best + delta));
+  };
+
+  // Вылупление 5-9 дней (канон лиги), случайно.
+  const hatchMs = (5 + rand() * 4) * 24 * 3600 * 1000;
+  return {
+    uid: uid || generateUID(),
+    species,
+    types: eggTypes,
+    ivs: {
+      hp: bestIV('hp'),
+      atk: bestIV('atk'),
+      def: bestIV('def'),
+      spa: bestIV('spa'),
+      spd: bestIV('spd'),
+      spe: bestIV('spe'),
+    },
+    readyTime: nowMs + hatchMs,
+    parent1Uid: m1.uid,
+    parent2Uid: m2.uid,
+    // A6: двойной перфект (все 50 у обоих) — шайни 1/128 вместо 1/1024
+    shinyBoost: isDoublePerfect(m1, m2),
+    notified: false, // Я3: уведомление о готовности — один раз, автовылупа нет
+  };
+}
+
+/**
+ * buildHatchling — построить покемона 1 уровня из яйца и данных вида.
+ * Чистая: IV берутся из яйца (наследованные при кладке), характер/пол/
+ * буква симпатии — случайно через rand, шайни — 1/128 при shinyBoost
+ * (A6), иначе 1/1024; способность — видимая случайная. moves/sprite уже
+ * должны лежать в pokeData.moves (разрешает вызыватель: сайт → fallback).
+ */
+export function buildHatchling(
+  pokeData: any,
+  egg: any,
+  rand: () => number = Math.random,
+  ids: { uid?: string; trainerId?: string } = {},
+): any {
+  return {
+    uid: ids.uid || generateUID(),                    // Уникальный ID
+    originalTrainer: ids.trainerId || getTrainerId(), // ID тренера
+    createdAt: Date.now(),
+    caughtLocation: 'breeding',              // Получен разведением
+    apiData: pokeData,                       // Данные вида (moves уже разрешены)
+    maxHp: 50, currentHp: 50,                // Начальное HP
+    // Шайни: 1/128 при двойном перфекте родителей (A6), иначе 1/1024 как в природе
+    isShiny: egg.shinyBoost ? rand() < 1 / 128 : rand() < 1 / 1024,
+    // IV: наследованные от родителей (или случайные 0–50)
+    ivs: egg?.ivs || {
+      hp: Math.floor(rand() * 51), atk: Math.floor(rand() * 51),
+      def: Math.floor(rand() * 51), spa: Math.floor(rand() * 51),
+      spd: Math.floor(rand() * 51), spe: Math.floor(rand() * 51)
+    },
+    evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },  // EV = 0
+    baseLevel: 1, exp: 0, expToNext: 8,                        // Уровень 1
+    candiesEaten: 0, vitaminsEaten: 0,
+    training: null, trainingStage: 0, trainingStat: null,
+    happiness: 120,                            // Высокое счастье (только вылупился)
+    natureIdx: Math.floor(rand() * natures.length),  // Случайный характер
+    breedLetter: SYMPATHY_LETTERS[Math.floor(rand() * SYMPATHY_LETTERS.length)],
+    gender: rand() < 0.5 ? 'male' : 'female',  // 50/50
+    status: null, sleepTurns: 0,
+    movesPP: [],
+    statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+    abilityName: pickRandomAbility(pokeData),
+    heldItem: null,
+    berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
+    learnableMoves: [],
+    isEgg: false,          // Уже не яйцо
+    hasBred: false         // Ещё не разводился
+  };
+}
+
+/**
+ * releaseEggToBackpack — снять привязку яйца к боксу (перемещение в рюкзак).
+ * Чистая часть collectEgg: возвращает true если яйцо найдено.
+ */
+export function releaseEggToBackpack(eggs: any[], eggUid: string): boolean {
+  const egg = (eggs || []).find((e: any) => e?.uid === eggUid);
+  if (!egg) return false;
+  delete egg.boxIdx;  // Убираем привязку к боксу (теперь в рюкзаке)
+  return true;
+}
+
 // ── Основной цикл разведения (PC Boxes) ──
 // Проходит по всем боксам, проверяет совместимость пар,
 // создаёт яйца при совместимости, проверяет готовность яиц
@@ -452,44 +570,8 @@ export async function checkBreeding() {
         box.readyAt = now + (EGG_LAY_MS[key] ?? EGG_LAY_MS.common);
       }
       if (now < box.readyAt) continue;
-      // Время вышло — создаём яйцо
-      const dittoA = (m1.apiData?.species?.name || m1.apiData?.name) === 'ditto';
-      const dittoB = (m2.apiData?.species?.name || m2.apiData?.name) === 'ditto';
-      // Я9: вид потомства — СЛУЧАЙНЫЙ из родителей. С Дитто — всегда второй
-      // родитель (Дитто потомства не даёт), иначе 50/50.
-      const donor = dittoA ? m2 : dittoB ? m1 : (Math.random() < 0.5 ? m1 : m2);
-      const species = donor.apiData?.species?.name || donor.apiData?.name;
-      const eggTypes = donor.apiData?.types || [{ type: { name: 'normal' } }];
-
-      // Наследование IV (канон лиги): ЛУЧШИЙ ген родителей ±1-2.
-      const bestIV = (stat: string) => {
-        const best = Math.max(m1.ivs?.[stat] ?? 0, m2.ivs?.[stat] ?? 0);
-        const delta = (Math.random() < 0.5 ? -1 : 1) * (Math.random() < 0.5 ? 1 : 2);
-        return Math.min(50, Math.max(0, best + delta));
-      };
-      const eggIvs = {
-        hp: bestIV('hp'),
-        atk: bestIV('atk'),
-        def: bestIV('def'),
-        spa: bestIV('spa'),
-        spd: bestIV('spd'),
-        spe: bestIV('spe')
-      };
-
-      // Вылупление 5-9 дней (канон лиги), случайно.
-      const hatchMs = (5 + Math.random() * 4) * 24 * 3600 * 1000;
-      const egg = {
-        uid: generateUID(),
-        species,
-        types: eggTypes,
-        ivs: eggIvs,
-        readyTime: now + hatchMs,
-        parent1Uid: m1.uid,
-        parent2Uid: m2.uid,
-        // A6: двойной перфект (все 50 у обоих) — шайни 1/128 вместо 1/1024
-        shinyBoost: isDoublePerfect(m1, m2),
-        notified: false, // Я3: уведомление о готовности — один раз, автовылупа нет
-      };
+      // Время вышло — создаём яйцо (чистый конструктор выше)
+      const egg = layEggFromPair(m1, m2, now);
       state.eggs.push(egg);
       // Один раз и всё: родители помечены, бокс освобождается, оба возвращаются
       m1.hasBred = true;
@@ -499,8 +581,8 @@ export async function checkBreeding() {
       state.breedBoxes[bi] = { a: null, b: null, readyAt: 0 };
 
       store.emit('notification:add', 'Яйцо!',
-        `Пара в боксе ${bi + 1} дала яйцо ${species}! Родители вернулись.`);
-      appendToLog(`В боксе ${bi + 1} появилось яйцо! (${species})`, false, 'quest');
+        `Пара в боксе ${bi + 1} дала яйцо ${egg.species}! Родители вернулись.`);
+      appendToLog(`В боксе ${bi + 1} появилось яйцо! (${egg.species})`, false, 'quest');
     }
 
     // ── Готовые яйца (Я3: автовылупления НЕТ — только кнопка в рюкзаке) ──
@@ -607,40 +689,9 @@ export async function hatchEgg(egg: any) {
     if (eggIdx !== -1) state.myTeam.splice(eggIdx, 1);
     state.eggs = state.eggs.filter((e: any) => e.uid !== egg.uid);
 
-    // Создаём нового покемона (уровень 1)
-    const newMon = {
-      uid: generateUID(),                    // Уникальный ID
-      originalTrainer: getTrainerId(),        // ID тренера
-      createdAt: Date.now(),
-      caughtLocation: 'breeding',              // Получен разведением
-      apiData: pokeData,                       // Данные из PokeAPI
-      maxHp: 50, currentHp: 50,                // Начальное HP
-      // Шайни: 1/128 при двойном перфекте родителей (A6), иначе 1/1024 как в природе
-      isShiny: egg.shinyBoost ? Math.random() < 1 / 128 : Math.random() < 1 / 1024,
-      // IV: наследованные от родителей (или случайные 0–50)
-      ivs: eggData.ivs || {
-        hp: Math.floor(Math.random()*51), atk: Math.floor(Math.random()*51),
-        def: Math.floor(Math.random()*51), spa: Math.floor(Math.random()*51),
-        spd: Math.floor(Math.random()*51), spe: Math.floor(Math.random()*51)
-      },
-      evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },  // EV = 0
-      baseLevel: 1, exp: 0, expToNext: 8,                        // Уровень 1
-      candiesEaten: 0, vitaminsEaten: 0,
-      training: null, trainingStage: 0, trainingStat: null,
-      happiness: 120,                            // Высокое счастье (только вылупился)
-      natureIdx: Math.floor(Math.random() * natures.length),  // Случайный характер
-      breedLetter: randomSympathy(),  // буква симпатии A/T/G (канон лиги)
-      gender: Math.random() < 0.5 ? 'male' : 'female',  // 50/50
-      status: null, sleepTurns: 0,
-      movesPP: [],
-      statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-      abilityName: pickRandomAbility(pokeData),
-      heldItem: null,
-      berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
-      learnableMoves: [],
-      isEgg: false,          // Уже не яйцо
-      hasBred: false          // Ещё не разводился
-    };
+    // Создаём нового покемона 1 уровня (чистый конструктор выше;
+    // moves в pokeData уже разрешены блоком выше: сайт → стартовые PokeAPI)
+    const newMon = buildHatchling(pokeData, eggData);
 
     // IV уже финализированы при кладке (лучший ген родителей ±1-2,
     // канон лиги) — здесь не трогаем, превью на карточке яйца честное.
@@ -674,9 +725,7 @@ export async function hatchEgg(egg: any) {
 // ── collectEgg: переместить яйцо из бокса в рюкзак ───────
 // Убирает boxIdx — яйцо перестаёт быть привязано к боксу
 export function collectEgg(eggUid: string) {
-  const egg = state.eggs.find((e: any) => e.uid === eggUid);
-  if (!egg) return;
-  delete egg.boxIdx;  // Убираем привязку к боксу (теперь в рюкзаке)
+  if (!releaseEggToBackpack(state.eggs, eggUid)) return;
   store.emit('save');
   showToast('🥚 Яйцо перемещено в рюкзак!', false);
 }

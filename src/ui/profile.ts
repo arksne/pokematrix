@@ -775,6 +775,44 @@ export function updateStats() {
   });
 }
 
+// ── applyQuickEV: чистая быстрая выдача EV (+10 / MAX, без DOM) ──
+// Корень обхода лока (D4): кнопки «+10»/«MAX» раньше писали напрямую
+// в mon.evs/mon.evPool и НИКОГДА не ставили evsLocked — всё розданное
+// кнопками оставалось «неприменённым»: позже инпуты в 0 + «Применить»
+// возвращали EV в пул (settleEVSpend шёл веткой locked=false).
+// Теперь: рост идёт через settleEVSpend (пул, кламп 126), а успешная
+// запись ЛОЧИТ evs (дальше статы только растут — снять можно лишь
+// ягодой сброса, которой в игре нет, т.е. только вперёд).
+// Возвращает { ok, added }: ok=false — пула не хватило или нечего дать
+// (состояние не тронуто, лок не ставится).
+export function applyQuickEV(mon: any, stat: string, valStr: string): { ok: boolean; added: number } {
+  const EV_STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+  if (!mon || !EV_STATS.includes(stat)) return { ok: false, added: 0 };
+  if (typeof mon.evPool !== 'number') mon.evPool = 0;
+  if (!mon.evs) mon.evs = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+
+  const currentEV = mon.evs[stat] || 0;
+  // Цель: 'max' — добить до 126 (или насколько хватит пула — как раньше),
+  // иначе +N в пределах 126 и пула (частично, как раньше). Через currentEV,
+  // а не `mon.evs[stat] += toAdd`: отсутствующий ключ давал NaN и портил EV
+  // молча, без ошибки в консоли. settleEVSpend ниже — страховка (кламп/пул).
+  const want: Record<string, number> = { ...mon.evs };
+  if (valStr === 'max') want[stat] = Math.min(126, currentEV + mon.evPool);
+  else {
+    const n = parseInt(valStr);
+    if (!Number.isFinite(n) || n <= 0) return { ok: false, added: 0 };
+    want[stat] = Math.min(126, currentEV + Math.min(n, mon.evPool));
+  }
+
+  const r = settleEVSpend(mon.evs, want, mon.evPool, !!mon.evsLocked);
+  const added = (r.evs[stat] || 0) - currentEV;
+  if (!r.ok || added <= 0) return { ok: false, added: 0 };
+  mon.evPool = r.pool;
+  EV_STATS.forEach((s) => { mon.evs[s] = r.evs[s]; });
+  mon.evsLocked = true;  // ЛОК: применённые EV снять нельзя, только добавлять
+  return { ok: true, added };
+}
+
 // ── initProfileUXEvents: навигация и быстрый ввод EV ────
 // Кнопки "Предыдущий/Следующий" покемон + кнопки быстрого EV
 export function initProfileUXEvents() {
@@ -803,8 +841,8 @@ export function initProfileUXEvents() {
   }
 
   // ── Кнопки быстрого добавления EV (+10, max) ──
-  // Рост финансируется из evPool; лок evsLocked кнопкам не мешает
-  // (они только добавляют). Без пула — тост.
+  // Рост финансируется из evPool через applyQuickEV (settleEVSpend +
+  // лок evsLocked: розданное снять нельзя). Без пула/прироста — тост.
   document.querySelectorAll('.reborn-ev-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       if (state.currentPokemonIndex === null) return;
@@ -813,36 +851,15 @@ export function initProfileUXEvents() {
       const stat = target.getAttribute('data-stat') || 'hp';     // Какой стат (atk, def, ...)
       const valStr = target.getAttribute('data-val') || '0';     // Сколько добавить ('10', 'max')
 
-      if (typeof mon.evPool !== 'number') mon.evPool = 0;
-      const evs = mon.evs as Record<string, number>;
-
-      let currentEV = evs[stat] || 0;
-      let toAdd = 0;
-
-      if (valStr === 'max') {
-        // "Заполнить до 126" (максимум на стат)
-        toAdd = Math.min(126 - currentEV, mon.evPool);
-      } else {
-        toAdd = parseInt(valStr);
-        // Не превышаем 126 на стат
-        if (currentEV + toAdd > 126) toAdd = 126 - currentEV;
-        // Не превышаем пул
-        if (toAdd > mon.evPool) toAdd = mon.evPool;
-      }
-
-      if (toAdd > 0) {
-        // Через currentEV, а не `mon.evs[stat] += toAdd`: если ключа стата в
-        // объекте нет, сложение с undefined давало NaN, и EV покемона портились
-        // навсегда — молча, без ошибки в консоли.
-        evs[stat] = currentEV + toAdd;
-        mon.evPool -= toAdd;
+      const r = applyQuickEV(mon, stat, valStr);
+      if (r.ok) {
         refreshProfileUI();       // Обновляем UI
         // Раньше сохранения здесь не было вовсе: EV начислялись, но терялись при
         // следующей же перезагрузке, и выглядело это так, будто они не падают.
         autoSave();
       } else {
         showToast(
-          `Нет свободных EV в пуле (осталось ${mon.evPool})! Качай уровни, корми конфетами/витаминами.`,
+          `Нет свободных EV в пуле (осталось ${typeof mon.evPool === 'number' ? mon.evPool : 0})! Качай уровни, корми конфетами/витаминами.`,
           true
         );
       }

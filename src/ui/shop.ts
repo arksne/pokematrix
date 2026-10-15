@@ -97,7 +97,7 @@ export const SHOP_FLOORS = [
   { id: 'growth', label: '🌱 Рост', cats: ['vitamins', 'training', 'evolutionStones'] },
   { id: 'moves', label: '💿 Атаки', cats: ['tm'] },
   { id: 'carry', label: '🎒 С собой', cats: ['battle', 'berries'] },
-  { id: 'misc', label: '📦 Разное', cats: ['tickets', 'other', 'valuable', 'crafting', 'mulch'] },
+  { id: 'misc', label: '📦 Разное', cats: ['tickets', 'other', 'valuable', 'crafting', 'mulch', 'quest'] },
 ] as const;
 
 /** Этаж категории товара. Неизвестная категория — на этаж «Разное». */

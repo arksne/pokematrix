@@ -40,7 +40,7 @@ import { gymLeaders } from '../data/gyms.js';
 import { NPC_DATA } from '../data/npc.js';
 import { activeQuestIds, rollQuestDrops } from '../data/quest-drops.js';  // I3: дроп и гейты по квестам
 import { locationGateReason } from './location-gate.js';
-import { specialMechanic, nextFloor } from '../battle/special-loc.js';  // M-4: этажи башен
+import { specialMechanic, nextFloor, climbFloor } from '../battle/special-loc.js';  // M-4: этажи башен
 // Иконки и «сервисность» подлокаций живут в map.ts — единый источник, чтобы
 // кнопка в локации и узел на карте не разъезжались. Цикла импортов нет:
 // map.ts не тянет location.ts.
@@ -664,18 +664,40 @@ export let renderLocation = function(locId: any) {
   if (loc.dayEncounters && state.isDaytime) huntEncounters = loc.dayEncounters;
   else if (loc.nightEncounters && !state.isDaytime) huntEncounters = loc.nightEncounters;
 
-  // M-4: башня/руины — показываем этаж, иначе рост силы врагов выглядит багом
+  // M-4: башня/руины — показываем этаж, иначе рост силы врагов выглядит багом.
+  // Заметка перерисовывается при КАЖДОМ рендере (до этого dataset-флаг
+  // 'towerNote' создавал её один раз за жизнь элемента: innerText выше сносит
+  // детей, а флаг оставался — со второго захода в башню подписи не было).
+  // Подъём — только явной кнопкой (climbFloor, cap = floors): перерисовка,
+  // меню и победы сами этаж не двигают.
   const mech = specialMechanic(loc);
   if (mech?.kind === 'tower') {
     const floor = Math.max(1, state.towerFloor || 1);
+    const cap = mech.floors ?? 10;
     const descEl = document.getElementById('loc-desc');
-    if (descEl && !descEl.dataset.towerNote) {
-      descEl.dataset.towerNote = '1';
-      const note = document.createElement('div');
-      note.style.cssText = 'margin-top:6px;color:var(--tma-accent);font-weight:600';
-      note.textContent = `🗝 Этаж ${floor} из ${mech.floors ?? 10} — чем выше, тем сильнее звери. Выйдешь наружу — начнёшь с первого.`;
-      descEl.appendChild(note);
+    if (descEl) {
+      let note = document.getElementById('tower-floor-note');
+      if (!note) {
+        note = document.createElement('div');
+        note.id = 'tower-floor-note';
+        note.style.cssText = 'margin-top:6px;color:var(--tma-accent);font-weight:600';
+        descEl.appendChild(note);
+      }
+      note.textContent = `🗝 Этаж ${floor} из ${cap} — чем выше, тем сильнее звери. Выйдешь наружу — начнёшь с первого.`;
     }
+    if (floor < cap) {
+      const btnClimb = document.createElement('button');
+      btnClimb.id = 'btn-climb';
+      btnClimb.className = 'btn-use';
+      btnClimb.innerText = `⬆ Подняться (этаж ${floor + 1})`;
+      btnClimb.onclick = () => {
+        state.towerFloor = climbFloor(state.towerFloor, mech);
+        renderLocation(locId);
+      };
+      actionsContainer.appendChild(btnClimb);
+    }
+  } else {
+    document.getElementById('tower-floor-note')?.remove();
   }
 
   // ── Панель NPC ──
@@ -830,23 +852,11 @@ export let renderLocation = function(locId: any) {
     }
   }
 
-  // ── Кнопка "Назад" (F3): возврат к предыдущей локации ──
-  // Раньше была только для сервисных локаций и "съедала" lastLocation
-  // (обнуляла после возврата). Теперь — универсальная для любой локации:
-  // renderLocation сам обновляет lastLocation при переходе, поэтому кнопка
-  // работает как переключатель туда/обратно. Кнопки «➔ Название» ниже — без изменений.
-  if (state.lastLocation && state.lastLocation !== locId) {
-    const backLoc = getLocation(state.lastLocation);
-    if (backLoc) {
-      const btnBack = document.createElement('button');
-      btnBack.id = 'btn-back';
-      btnBack.className = 'btn-nav';
-      btnBack.style.cssText = 'flex:0 0 auto;min-width:fit-content;padding:6px 10px;font-size:13px;border-color:var(--tma-accent)';
-      btnBack.textContent = `↩ Назад: ${backLoc.name}`;
-      btnBack.onclick = () => { renderLocation(state.lastLocation); };
-      navContainer.prepend(btnBack);
-    }
-  }
+  // ── Кнопка "Назад" УБРАНА (решение владельца: мешала) ──
+  // state.lastLocation продолжает обновляться выше для совместимости
+  // (сейвы, хлебные крошки, квесты), но кнопка ↩ больше не создаётся.
+  // Навигация — только прямыми кнопками «➔ Название» / «🏠 Подлокация»:
+  // все переходы вызывают renderLocation(linkId) напрямую.
 
   autoSave();  // Сохраняем игру (новая локация)
 };

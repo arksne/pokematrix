@@ -72,7 +72,6 @@ const ITEMS: ItemDef[] = [
   { id: 'cleverWing', price: 300 },
   { id: 'cloverSweet', price: 500 },
   { id: 'commonCandy', price: 35000 },
-  { id: 'courierParcel', price: 100 },
   { id: 'typeCandyBox', price: 300000 },
   { id: 'crackedPot', price: 1600 },
   { id: 'craftersKit', price: 3000 },
@@ -105,7 +104,7 @@ const ITEMS: ItemDef[] = [
   { id: 'expCandyM', price: 1000 },
   { id: 'expCandyS', price: 240 },
   { id: 'expCandyXl', price: 10000 },
-  { id: 'expCandyXs', price: 20 },
+
   { id: 'expShare', price: 25000 },
   { id: 'expertBelt', price: 4000 },
   { id: 'ferryTicket', price: 300000 },

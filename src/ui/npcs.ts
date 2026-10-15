@@ -44,8 +44,22 @@ import { NATURE_CHANGE_PRICE, applyNatureChange, canAffordNatureChange, rollRand
  * questRewards — полный список предметных наград квеста.
  * Живёт в game/quest-track.ts (листовой, тестируется); здесь импорт + реэкспорт.
  */
-import { questRewards, questHowTo } from '../game/quest-track.js';
+import { questRewards, questHowTo, verifyQuest } from '../game/quest-track.js';
 export { questRewards };
+
+/**
+ * In-flight сдач (анти-даблклик): id квестов, чья выдача уже идёт.
+ * completeNPCQuest — синхронная, но verify-ветка асинхронна (dynamic import):
+ * два быстрых клика «Сдать» оба проходят verify и оба зовут completeNPCQuest.
+ * Первый пушит completed, второй должен стать no-op — по completed и по флагу.
+ * Флаг нужен на случай исключений/реентрантности внутри выдачи.
+ */
+const completeInFlight = new Set<string>();
+
+/** Тестовый хук: идёт ли сейчас выдача по квесту. */
+export function isCompletingQuest(questId: string): boolean {
+  return completeInFlight.has(questId);
+}
 
 /** Строка наград для карточки ("2x Предмет, 1x Второй"). */
 export function questRewardText(q: any): string {
@@ -67,35 +81,44 @@ export function questRewardText(q: any): string {
  * перерисовка, сейв) — здесь же, чтобы verify-ветка не дублировала.
  */
 export function completeNPCQuest(npc: any, q: any): void {
-  // Убираем target-предметы из инвентаря (по одному)
-  if (q.targetItem) {
-    for (let i = 0; i < q.targetQty; i++) removeItem(q.targetItem, 1);
+  // Идемпотентность (дабл-клик «Сдать»): повтор по уже сданному/выдающемуся — no-op.
+  if (!q || !q.id) return;
+  if ((state.completedNPCQuests || []).includes(q.id)) return;
+  if (completeInFlight.has(q.id)) return;
+  completeInFlight.add(q.id);
+  try {
+    // Убираем target-предметы из инвентаря (по одному)
+    if (q.targetItem) {
+      for (let i = 0; i < q.targetQty; i++) removeItem(q.targetItem, 1);
+    }
+    state.completedNPCQuests.push(q.id);   // Отмечаем выполненным
+    delete state.npcQuestProgress[q.id];   // Очищаем прогресс
+    // Награда: деньги + ВСЕ предметы (основной + дополнительные)
+    state.inventory['credit'] = (state.inventory['credit'] || 0) + q.rewardMoney;
+    let rewardAdded = true;
+    for (const r of questRewards(q)) {
+      if (!addItem(r.id, r.qty)) rewardAdded = false;
+    }
+    if (!rewardAdded) showToast('Рюкзак полон! Часть награды потеряна.', true);
+    // Награда-титул (гринд-пачка): витрина тренеркарты
+    if (q.rewardTitle) {
+      import('./trainer-card.js').then((m) => {
+        if (m.grantTitle(q.rewardTitle)) {
+          showToast(`🏷️ Новый титул: ${q.rewardTitle}!`, false);
+        }
+      }).catch(() => {});
+    }
+    appendToLog(`Квест "${q.desc}" выполнен!`, false, 'quest');
+    // Общий UI
+    document.getElementById('npc-dialog')!.innerText = npc.dialog.quest_complete;
+    store.emit('money:changed');
+    renderNPCQuests(npc);
+    store.emit('save');
+  } finally {
+    completeInFlight.delete(q.id);
   }
-  state.completedNPCQuests.push(q.id);   // Отмечаем выполненным
-  delete state.npcQuestProgress[q.id];   // Очищаем прогресс
-  // Награда: деньги + ВСЕ предметы (основной + дополнительные)
-  state.inventory['credit'] = (state.inventory['credit'] || 0) + q.rewardMoney;
-  let rewardAdded = true;
-  for (const r of questRewards(q)) {
-    if (!addItem(r.id, r.qty)) rewardAdded = false;
-  }
-  if (!rewardAdded) showToast('Рюкзак полон! Часть награды потеряна.', true);
-  // Награда-титул (гринд-пачка): витрина тренеркарты
-  if (q.rewardTitle) {
-    import('./trainer-card.js').then((m) => {
-      if (m.grantTitle(q.rewardTitle)) {
-        showToast(`🏷️ Новый титул: ${q.rewardTitle}!`, false);
-      }
-    }).catch(() => {});
-  }
-  appendToLog(`Квест "${q.desc}" выполнен!`, false, 'quest');
-  // Общий UI
-  document.getElementById('npc-dialog')!.innerText = npc.dialog.quest_complete;
-  store.emit('money:changed');
-  renderNPCQuests(npc);
-  store.emit('save');
 }
-function renderNPCQuests(npc: any) {
+export function renderNPCQuests(npc: any) {
   const container = document.getElementById('npc-quests')!;
   container.innerHTML = '';  // Очищаем контейнер
 
@@ -120,6 +143,20 @@ function renderNPCQuests(npc: any) {
     const isReady = progress >= q.targetQty;                     // Выполнен?
     const pct = Math.min(100, Math.round((progress / q.targetQty) * 100));  // Процент
 
+    // ── Живое состояние special-проверки (verify-only, прогресс всегда 0/1) ──
+    // Мастер тренировок и подобные: счётчика нет, готовность — только verifyQuest.
+    // Без этого карточка показывала мёртвые «0/1» + «...», хотя условия уже выполнены.
+    // Считаем синхронно здесь (verifyQuest — чистая, без DOM), карточку не роняем.
+    let specialVerify: { ok: boolean; missing: string } | null = null;
+    const isSpecialVerify = q.type === 'special' && q.verify && isActive;
+    if (isSpecialVerify) {
+      try {
+        specialVerify = verifyQuest(q);
+      } catch { specialVerify = null; }
+    }
+    // verify-ok при нулевом счётчике — тоже готов к сдаче (иначе «...» навсегда).
+    const effectiveReady = isReady || (isSpecialVerify && specialVerify?.ok === true);
+
     // ── HTML карточки квеста ──
     const el = document.createElement('div');
     el.className = 'npc-quest-item';
@@ -130,12 +167,19 @@ function renderNPCQuests(npc: any) {
       const how = questHowTo(q);
       if (how) howHtml = `<div class="npc-quest-how">ℹ️ ${how}</div>`;
     } catch { /* подсказка не роняет карточку */ }
+    let verifyHtml = '';
+    if (isSpecialVerify && specialVerify) {
+      verifyHtml = specialVerify.ok
+        ? `<div class="npc-quest-verify">✅ Готов к сдаче — жми «Сдать»!</div>`
+        : `<div class="npc-quest-verify">⏳ Нужно: ${specialVerify.missing}</div>`;
+    }
     el.innerHTML = `
       <div class="npc-quest-info">
         <div class="npc-quest-name">${q.desc}</div>                    <!-- Описание квеста -->
         ${howHtml}
         <div class="npc-quest-reward">Награда: ${q.rewardMoney}💰 + ${questRewardText(q)}</div>
         ${isActive ? `<div class="npc-quest-progress">${progress}/${q.targetQty}</div><div class="npc-quest-bar"><div class="npc-quest-bar-fill" style="width:${pct}%"></div></div>` : ''}
+        ${verifyHtml}
       </div>`;
 
     // ── Кнопка действия ──
@@ -170,10 +214,15 @@ function renderNPCQuests(npc: any) {
         store.emit('save');
         store.emit('tutorial:progress', 'take', 0);
       };
-    } else if (isReady) {
+    } else if (effectiveReady) {
       // ── Квест выполнен — кнопка "Сдать" ──
+      // (effectiveReady: счётчик готов ИЛИ special-verify уже ok при 0/1)
       btn.innerText = 'Сдать';
       btn.onclick = () => {
+        // Анти-даблклик: повтор по сданному/выдающемуся — no-op, кнопку гасим сразу.
+        if ((state.completedNPCQuests || []).includes(q.id)) return;
+        if (completeInFlight.has(q.id)) return;
+        btn.disabled = true;
         if (q.id.startsWith('tutorial_')) {
           // ── Обучающий квест (tutorial_1, tutorial_2, ...) ──
           const step = parseInt(q.id.split('_')[1]);
@@ -191,6 +240,9 @@ function renderNPCQuests(npc: any) {
             );
             appendToLog(`Обучающий квест (шаг ${step}) выполнен!`, false, 'quest');
             store.emit('tutorial:progress', 'complete', step);
+          } else {
+            btn.disabled = false;
+            return;
           }
         } else {
           // ── Обычный квест ──
@@ -200,6 +252,7 @@ function renderNPCQuests(npc: any) {
               const v = m.verifyQuest(q);
               if (!v.ok) {
                 showToast(`Ещё рано: ${v.missing}!`, true);
+                try { btn.disabled = false; } catch { /* стаб без кнопки */ }
                 return;
               }
               completeNPCQuest(npc, q);
@@ -216,8 +269,21 @@ function renderNPCQuests(npc: any) {
       };
     } else {
       // ── Квест активен, но ещё не выполнен ──
-      btn.innerText = '...';
-      btn.disabled = true;
+      // Special-verify: вместо мёртвых «...» — живое состояние проверки.
+      if (isSpecialVerify && specialVerify) {
+        if (specialVerify.ok) {
+          // Не должно случаться (ok → effectiveReady), страховка.
+          btn.innerText = 'Сдать';
+          btn.disabled = false;
+        } else {
+          btn.innerText = '⏳';
+          btn.disabled = true;
+          try { btn.title = `Нужно: ${specialVerify.missing}`; } catch { /* стаб */ }
+        }
+      } else {
+        btn.innerText = '...';
+        btn.disabled = true;
+      }
     }
 
     el.appendChild(btn);

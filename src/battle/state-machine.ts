@@ -183,3 +183,39 @@ export function leaveBattleToIdle(sm: BattleStateMachine): boolean {
   const landed = sm.phase as BattlePhase;
   return landed === BattlePhase.IDLE;
 }
+
+/**
+ * ensurePlayerTurnAfterFaint — вернуть ход игроку после авто-замены.
+ *
+ * КОРЕНЬ ЖАЛОБЫ 1: handlePlayerFaint (core.ts) при авто-замене показывал
+ * меню через setTimeout, но фазу оставлял в ENEMY_TURN. Атаки при этом
+ * работали (useMove допускает re-entry ENEMY_TURN→ENEMY_TURN), а предмет/
+ * смена/побег требуют строго PLAYER_TURN и отвечали «Подождите... идёт
+ * ход противника». Вызывать после установки нового activePlayerMon.
+ *
+ * Возвращает true, если итоговая фаза — PLAYER_TURN.
+ */
+export function ensurePlayerTurnAfterFaint(sm: BattleStateMachine): boolean {
+  const phase = sm.phase as BattlePhase;
+  if (phase === BattlePhase.PLAYER_TURN) return true;
+  if (phase === BattlePhase.ENEMY_TURN) return sm.transition(BattlePhase.PLAYER_TURN);
+  return false;
+}
+
+/**
+ * isPhaseStuckForMenu — залипла ли фаза для кнопок меню.
+ *
+ * Кнопки предмета/смены/побега требуют строго PLAYER_TURN. Если фаза
+ * ENEMY_TURN, а оба бойца живы и конца боя нет — это залипание из жалобы 1:
+ * меню видно, атаки бьют, а предмет/смена/побег отвечают «Подождите...».
+ * Чистая проверка для тестов (DOM/S не нужны).
+ */
+export function isPhaseStuckForMenu(
+  phase: BattlePhase,
+  wildHp: unknown,
+  playerHp: unknown,
+): boolean {
+  const w = Math.floor(Number(wildHp) || 0);
+  const p = Math.floor(Number(playerHp) || 0);
+  return phase === BattlePhase.ENEMY_TURN && w > 0 && p > 0;
+}

@@ -1,17 +1,16 @@
 // ─────────────────────────────────────────────────────────────
 // gym-reward.ts — НАГРАДА ЗА ПОБЕДУ НАД ЛИДЕРОМ СТАДИОНА
 // ─────────────────────────────────────────────────────────────
-// Решение хозяина: приз — ОДИН из двух, рандом 50/50:
-//   1) супердаркболы ×1–10;
-//   2) случайный покемон из команды лидера (шини Lv.1, повышенные IV).
-// Выбора нет — что выпало, то выпало. Значок/деньги/предмет лидера выдаёт
-// сервер через POST /economy/badge-reward (единый источник, без дублей).
+// Спека 2.3: награда за зал = бейдж + деньги + TM + ПОКЕМОН из коллекции
+// лидера (1 уровень, повышенные IV 20–30 — не идеальные, случайный
+// характер, гарантированный шайни). Значок/деньги/предмет лидера выдаёт
+// сервер через POST /economy/badge-reward (единый источник, без дублей),
+// клиент добавляет только покемона: вид случайно из команды лидера.
 //
 // ЗАВИСИМОСТИ:
 //   gyms     — gymLeaders (данные лидеров)
 //   state    — state, getTrainerId
 //   dom      — showToast
-//   actions  — addItem
 //   save     — autoSave
 //   profile  — renderTeamGrid
 //
@@ -21,17 +20,19 @@
 //
 // ЭКСПОРТЫ:
 //   createAndGivePokemon(name, level, opts) — создание покемона через PokeAPI
-//   rollGymPrize(team, rand) — чистый розыгрыш приза (тесты)
-//   showGymRewardSelection(locId) — розыгрыш и выдача приза
+//   pickGymMonName(team, rand) — чистый выбор вида из команды лидера (тесты)
+//   rollGymMonIVs(rand) — чистые IV приза 20–30 (тесты)
+//   buildGymPrizeMon(pokeData, level, opts, rand, ids) — чистый мон (тесты)
+//   placePrizeMon(mon) — в команду или в PC при полной (тесты)
+//   showGymRewardSelection(locId) — выдача приза
 // ─────────────────────────────────────────────────────────────
 
 // ── ИМПОРТЫ ───────────────────────────────────────────────
 
 import { gymLeaders } from '../data/gyms.js';      // Данные лидеров залов
 import { natures } from '../data/natures.js';          // Характеры (для случайного)
-import { state, getTrainerId } from '../game/state.js';  // Глобальное состояние
+import { state, getTrainerId, generateUID } from '../game/state.js';  // Глобальное состояние
 import { showToast } from '../utils/dom.js';  // UI тосты
-import { addItem } from '../game/actions.js';          // Добавление предметов
 import { autoSave } from '../game/save.js';              // Автосохранение
 import { renderTeamGrid } from './profile.js';          // Обновление сетки команды
 
@@ -48,9 +49,9 @@ export function isFirstGymWin(badges: unknown, badgeName: string): boolean {
 //   pokemonName — имя вида (например, 'charizard')
 //   level — уровень (по умолчанию 1)
 //   opts — { isShiny, natureIdx }
-// Загружает данные из PokeAPI, создаёт объект покемона с ПОВЫШЕННЫМИ IV
-// (43-50, но никогда не все 50 — спека 2.3) и СЛУЧАЙНЫМ характером,
-// добавляет в команду (или в PC при полной команде), возвращает созданный
+// Загружает данные из PokeAPI, строит мон чистым buildGymPrizeMon
+// (спека 2.3: IV 20–30, случайный характер, шайни) и кладёт через
+// placePrizeMon (команда или PC при полной). Возвращает созданный
 // объект или null при ошибке
 export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {}) {
   try {
@@ -59,52 +60,8 @@ export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {
     if (!res.ok) throw new Error(`PokeAPI returned ${res.status}`);
     const pokeData = await res.json();
 
-    const baseHp = pokeData.stats[0].base_stat;
-    // Повышенные IV (спека 2.3): 43-50 каждый, но никогда не все 50 —
-    // идеальные гены гриндятся в природе, а не выдаются за зал.
-    const rollBoosted = () => 43 + Math.floor(Math.random() * 8);
-    const ivs = { hp: rollBoosted(), atk: rollBoosted(), def: rollBoosted(), spa: rollBoosted(), spd: rollBoosted(), spe: rollBoosted() };
-    if (Object.values(ivs).every(v => v === 50)) {
-      const keys = Object.keys(ivs);
-      ivs[keys[Math.floor(Math.random() * keys.length)]] = 49;
-    }
-    const maxHp = Math.floor(0.01 * (2 * baseHp + ivs.hp) * level) + level + 10;
-
-    // Характер: случайный (спека 2.3), из opts — только явный оверрайд
-    const natureIdx = opts.natureIdx !== undefined ? opts.natureIdx : Math.floor(Math.random() * natures.length);
-
-    const pokemon = {
-      uid: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),  // Уникальный ID
-      originalTrainer: getTrainerId(),        // ID тренера
-      createdAt: Date.now(),
-      caughtLocation: state.currentLocationId || 'stadium',
-      apiData: pokeData,                       // Данные из PokeAPI
-      maxHp, currentHp: maxHp, ivs,            // HP и IV
-      evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },  // EV = 0
-      baseLevel: level, exp: 0, expToNext: 8,
-      candiesEaten: 0, vitaminsEaten: 0,
-      training: null, trainingStage: 0, trainingStat: null,
-      happiness: 120,                          // Высокое счастье
-      natureIdx,                                // Лучший характер
-      breedLetter: ['A', 'T', 'G'][Math.floor(Math.random() * 3)],  // симпатия (канон лиги)
-      gender: Math.random() < 0.5 ? 'male' : 'female',
-      status: null, sleepTurns: 0, movesPP: [],
-      statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-      abilityName: pokeData.abilities[0]?.ability?.name || null,
-      heldItem: null,
-      berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
-      learnableMoves: [], isEgg: false, hasBred: false,
-      isShiny: !!opts.isShiny  // Шини-флаг (true для награды лидера)
-    };
-
-    state.myTeam.push(pokemon);  // Добавляем в команду
-    if (state.myTeam.length > 6) {
-      // Команда была полна: лишний уходит в PC, иначе сервер отклонит сейв
-      // (myTeam max 6) и награда потеряется при следующей синхронизации
-      const extra = state.myTeam.splice(6);
-      if (state.pcBoxes.length === 0) state.pcBoxes.push([]);
-      state.pcBoxes[0].push(...extra);
-    }
+    const pokemon = buildGymPrizeMon(pokeData, level, opts);
+    placePrizeMon(pokemon);
     renderTeamGrid();             // Обновляем отображение
     return pokemon;
   } catch (e) {
@@ -114,50 +71,104 @@ export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {
   }
 }
 
-export type GymPrize =
-  | { type: 'balls'; qty: number }
-  | { type: 'mon'; name: string };
-
 /**
- * rollGymPrize — чистый розыгрыш приза гима (тестируемо, без DOM).
- * 50/50: супердаркболы ×1–10 или случайный покемон из команды лидера.
- * Пустая команда — null (приза нет, только значок с сервера).
+ * pickGymMonName — чистый выбор вида-приза из команды лидера.
+ * Равномерно случайный член команды; пустая команда — null
+ * (приза нет, остаются значок/деньги/TM с сервера).
  */
-export function rollGymPrize(
+export function pickGymMonName(
   team: Array<{ name: string }>,
   rand: () => number = Math.random,
-): GymPrize | null {
+): string | null {
   if (!team || team.length === 0) return null;
-  if (rand() < 0.5) {
-    return { type: 'balls', qty: 1 + Math.floor(rand() * 10) };
-  }
-  return { type: 'mon', name: team[Math.floor(rand() * team.length)].name };
+  return team[Math.floor(rand() * team.length)].name;
 }
 
-// ── showGymRewardSelection: розыгрыш и выдача приза ──────
-// Выбора больше нет: что выпало в rollGymPrize, то и выдаём.
+/**
+ * rollGymMonIVs — чистые IV приза гима (спека 2.3: повышенные 20–30,
+ * никогда не идеальные — на шкале 0..50 идеал 50 недостижим здесь).
+ */
+export function rollGymMonIVs(
+  rand: () => number = Math.random,
+): Record<string, number> {
+  const roll = () => 20 + Math.floor(rand() * 11); // 20..30
+  return { hp: roll(), atk: roll(), def: roll(), spa: roll(), spd: roll(), spe: roll() };
+}
+
+/**
+ * buildGymPrizeMon — чистый мон-приз за зал (спека 2.3).
+ * Уровень level (обычно 1), IV 20–30, характер случайный (opts.natureIdx —
+ * только явный оверрайд), шайни флагом opts.isShiny (приз лидера — true).
+ */
+export function buildGymPrizeMon(
+  pokeData: any,
+  level = 1,
+  opts: any = {},
+  rand: () => number = Math.random,
+  ids: { uid?: string; trainerId?: string } = {},
+): any {
+  const baseHp = pokeData.stats[0].base_stat;
+  const ivs = rollGymMonIVs(rand);
+  const maxHp = Math.floor(0.01 * (2 * baseHp + ivs.hp) * level) + level + 10;
+
+  // Характер: случайный (спека 2.3), из opts — только явный оверрайд
+  const natureIdx = opts.natureIdx !== undefined ? opts.natureIdx : Math.floor(rand() * natures.length);
+
+  return {
+    uid: ids.uid || (generateUID ? generateUID() : Date.now().toString(36) + rand().toString(36).substr(2, 6)),
+    originalTrainer: ids.trainerId || getTrainerId(),        // ID тренера
+    createdAt: Date.now(),
+    caughtLocation: state.currentLocationId || 'stadium',
+    apiData: pokeData,                       // Данные из PokeAPI
+    maxHp, currentHp: maxHp, ivs,            // HP и IV
+    evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },  // EV = 0
+    baseLevel: level, exp: 0, expToNext: 8,
+    candiesEaten: 0, vitaminsEaten: 0,
+    training: null, trainingStage: 0, trainingStat: null,
+    happiness: 120,                          // Высокое счастье
+    natureIdx,                                // Случайный характер
+    breedLetter: ['A', 'T', 'G'][Math.floor(rand() * 3)],  // симпатия (канон лиги)
+    gender: rand() < 0.5 ? 'male' : 'female',
+    status: null, sleepTurns: 0, movesPP: [],
+    statStages: { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+    abilityName: pokeData.abilities[0]?.ability?.name || null,
+    heldItem: null,
+    berries: { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
+    learnableMoves: [], isEgg: false, hasBred: false,
+    isShiny: !!opts.isShiny  // Шини-флаг (true для награды лидера)
+  };
+}
+
+/**
+ * placePrizeMon — положить призового мона: в команду, при полной (6) —
+ * в первый бокс PC (иначе сервер отклонит сейв myTeam max 6 и награда
+ * потеряется при синхронизации). Чистое состояние, без DOM.
+ * Возвращает 'team' | 'pc'.
+ */
+export function placePrizeMon(mon: any): 'team' | 'pc' {
+  if (state.myTeam.length < 6) {
+    state.myTeam.push(mon);
+    return 'team';
+  }
+  if (state.pcBoxes.length === 0) state.pcBoxes.push([]);
+  state.pcBoxes[0].push(mon);
+  return 'pc';
+}
+
+// ── showGymRewardSelection: выдача приза ──────
+// Спека 2.3: покемон из коллекции лидера — всегда (вид случаен).
 // Предмет лидера НЕ выдаём здесь — его уже выдал сервер через
 // POST /economy/badge-reward (иначе задвоение).
-export function showGymRewardSelection(locId: string, rand?: () => number) {
+export function showGymRewardSelection(locId: string, rand: () => number = Math.random) {
   const leader = gymLeaders[locId];
   if (!leader || !leader.team) return;
 
-  const prize = rollGymPrize(leader.team, rand);
-  if (!prize) return;
+  const name = pickGymMonName(leader.team, rand);
+  if (!name) return;
 
-  if (prize.type === 'balls') {
-    const got = addItem('superDarkBall', prize.qty);
-    showToast(
-      got ? `🎰 Приз гима: Супердаркбол×${prize.qty}!` : 'Рюкзак полон! Награда потеряна.',
-      !got,
-    );
-    autoSave();
-    return;
-  }
-
-  createAndGivePokemon(prize.name, 1, { isShiny: true }).then((mon) => {
+  createAndGivePokemon(name, 1, { isShiny: true }).then((mon) => {
     if (mon) {
-      showToast(`🎰 Приз гима: Lv.1 ${prize.name} (шини, случайно из команды лидера)!`, false);
+      showToast(`🏆 Приз гима: Lv.1 ${name} (шайни, из коллекции лидера)!`, false);
     }
     autoSave();
     if (typeof renderTeamGrid === 'function') renderTeamGrid();

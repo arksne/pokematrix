@@ -847,3 +847,170 @@ export function decideMoveOrder(
   if (pSpe === eSpe) return coin() < 0.5 ? 'player' : 'enemy';
   return pSpe > eSpe ? 'player' : 'enemy';
 }
+
+// ── Жалобы владельца (бой): чистые ядра для тестов ────────────
+// Ниже — только чистые функции без DOM/S, чтобы каждый фикс в core.ts
+// покрывался тестами. Русские комменты — как в файле.
+
+// ── 2. Лич сид: флаги seedPlayer/seedWild живут в S (types.ts:132) ──
+// Раньше их не чистили ни в resetBattleField, ни в clearBattleState,
+// поэтому тик applyLeechSeedTick бил и в следующем бою.
+/** Сбросить флаги Семени Ужаса в состоянии боя. Возвращает то же состояние. */
+export function clearLeechSeedFlags<S extends { seedPlayer?: unknown; seedWild?: unknown }>(s: S): S {
+  (s as any).seedPlayer = false;
+  (s as any).seedWild = false;
+  return s;
+}
+
+// ── 3. Утечки между боями: vol/ловушки/соль/выбор врага ───────
+// resetBattleField чистил m.vol целиком, но пропускал прямые поля мона
+// (saltCure) и кеш хода врага (enemyChosenMove). Способности, сменённые
+// в бою (skill-swap/worry-seed/mummy/trace), оставались в abilityName.
+// Статусы/сон/стадии не трогаем (существующее поведение).
+/** Прямые боевые поля мона, которые не должны жить между боями. */
+const MON_BATTLE_FLAGS = [
+  'saltCure',
+  'lockedOn', 'recharging', 'hiddenIn', 'bide', 'stock', 'rageHits',
+  'turnsOut', 'consumeHeldAfterHit', 'payDayHits', 'shieldPunish',
+  'laserFocus', 'focusEnergy', 'trapped', 'flinch', 'truantSkip',
+  'slowStartTurns', 'choiceLockedMove', 'typeOverride',
+] as const;
+
+/** Очистить боевые флаги одного мона (vol сбрасывается целиком). */
+export function clearMonBattleFlags(mon: any): any {
+  if (!mon) return mon;
+  mon.vol = {};
+  for (const k of MON_BATTLE_FLAGS) {
+    if (k === 'stock' || k === 'rageHits' || k === 'turnsOut' || k === 'payDayHits' || k === 'slowStartTurns') {
+      (mon as any)[k] = 0;
+    } else if (k === 'choiceLockedMove') {
+      (mon as any)[k] = undefined;
+    } else {
+      (mon as any)[k] = k === 'typeOverride' ? null : (k === 'trapped' || k === 'flinch' || k === 'laserFocus' || k === 'focusEnergy' || k === 'lockedOn' || k === 'recharging' ? false : null);
+      // trapped/flinch и прочие булевы — в false, остальное — в null.
+      // saltCure: null = нет соли (tickFieldEndOfRound проверяет truthy).
+    }
+  }
+  // Нормализуем булевы, которые выше могли уйти в null по общей ветке:
+  mon.lockedOn = false;
+  mon.recharging = false;
+  mon.trapped = false;
+  mon.flinch = false;
+  mon.laserFocus = false;
+  mon.focusEnergy = false;
+  mon.truantSkip = false;
+  return mon;
+}
+
+/** Восстановить abilityName из apiData (чинит skill-swap/worry-seed/mummy). */
+export function restoreMonAbility(mon: any): any {
+  if (!mon) return mon;
+  const orig = (mon as any)?.apiData?.abilities?.[0]?.ability?.name || null;
+  if (orig) (mon as any).abilityName = orig;
+  return mon;
+}
+
+/** Проверка: мон «чист» для нового боя (нет vol/ловушек/соли). */
+export function isMonBattleClean(mon: any): boolean {
+  if (!mon) return true;
+  const v = (mon as any).vol || {};
+  if (Object.keys(v).length > 0) return false;
+  if ((mon as any).trapped) return false;
+  if ((mon as any).saltCure) return false;
+  if ((mon as any).typeOverride) return false;
+  return true;
+}
+
+// ── 4. Дрэйн: % лечения по имени атаки ─────────────────────────
+// Конвейер урона/лечения в core.ts читает move.meta.drain напрямую.
+// Здесь — таблица канона для тестов «на каждую drain-атаку» (22 шт.,
+// см. moves-db-smoke.test.ts: drain != 0). Отрицательные — отдача,
+// в таблицу не входят (их считает calcRecoilDamage).
+/** Процент лечения дрэйна по слагу (50/75/100), 0 — не дрэйн. */
+export function drainPctOf(moveName: unknown): number {
+  switch (normMoveName(moveName)) {
+    case 'bouncy-bubble':
+      return 100;
+    case 'draining-kiss':
+    case 'oblivion-wing':
+      return 75;
+    case 'absorb': case 'mega-drain': case 'giga-drain': case 'leech-life':
+    case 'dream-eater': case 'drain-punch': case 'horn-leech':
+    case 'parabolic-charge':
+      return 50;
+    default:
+      return 0;
+  }
+}
+
+/** Чистое применение дрэйна: новое HP лекаря после удара. */
+export function applyDrainHeal(curHp: unknown, maxHp: unknown, hitDmg: unknown, drainPct: unknown, bigRoot = false): number {
+  const cur = Math.floor(Number(curHp) || 0);
+  const max = Math.floor(Number(maxHp) || 0);
+  const dmg = Math.floor(Number(hitDmg) || 0);
+  const pct = Math.floor(Number(drainPct) || 0);
+  if (max <= 0 || dmg <= 0 || pct <= 0) return cur;
+  const heal = calcDrainHeal(dmg, pct, bigRoot);
+  return Math.min(max, cur + heal);
+}
+
+// ── 5. Принудительный побег: roar/whirlwind/teleport ──────────
+/** Атака заставляет сбежать (у диких и у игрока). */
+export function isForcedFleeMove(moveName: unknown): boolean {
+  const s = normMoveName(moveName);
+  return s === 'roar' || s === 'whirlwind' || s === 'teleport';
+}
+
+/** Можно ли сбежать/телепортироваться из ловушки. */
+export function canEscapeFromTrap(trappedDirect: unknown, volTrapped: unknown): boolean {
+  return !trappedDirect && !volTrapped;
+}
+
+// ── 6. Ловушки: bind/fire-spin/whirlpool + hazards ────────────
+// В движке ловушка — это vol.bindChip (урон 1/8) + vol.trapped.
+// Прямой m.trapped — от mean-look/jaw-lock. Проверки побега/смены
+// должны смотреть ОБА, иначе bind-семья не держит. Тик bindTurns
+// раньше не чистил vol.trapped — флаг залипал.
+/** Слаг — ловушка с уроном (bind-семья). */
+export function isTrapChipMove(moveName: unknown): boolean {
+  const s = normMoveName(moveName);
+  return ['bind', 'wrap', 'fire-spin', 'whirlpool', 'clamp', 'sand-tomb', 'magma-storm', 'infestation', 'snap-trap'].includes(s);
+}
+
+/** Мон держится ловушкой (любой из двух флагов). */
+export function isHeldByTrap(mon: any): boolean {
+  if (!mon) return false;
+  return !!(mon.trapped || mon.vol?.trapped);
+}
+
+/** Чистый тик ловушки: осталось ходов, держать ли дальше. */
+export function tickTrapBind(vol: any): { bindChip: boolean; bindTurns: number; trapped: boolean } {
+  const chip = !!vol?.bindChip;
+  let turns = vol?.bindTurns;
+  if (turns === undefined || turns === null) turns = 5;
+  turns = Math.floor(Number(turns) || 0) - 1;
+  if (!chip) return { bindChip: false, bindTurns: Math.max(0, turns), trapped: !!vol?.trapped };
+  if (turns <= 0) return { bindChip: false, bindTurns: 0, trapped: false };
+  return { bindChip: true, bindTurns: turns, trapped: true };
+}
+
+/** Очистить состояние ловушки на моне (оба флага + чип). */
+export function clearTrapState(mon: any): any {
+  if (!mon) return mon;
+  (mon as any).trapped = false;
+  if ((mon as any).vol) {
+    (mon as any).vol.trapped = false;
+    (mon as any).vol.bindChip = false;
+    (mon as any).vol.bindTurns = 0;
+  }
+  return mon;
+}
+
+// ── 7. EXP за поимку (спека 1.5): baseExp × уровень / 7 ───────
+/** Базовый EXP за поимку/нокаут: floor(baseExp * lvl / 7). */
+export function calcCatchExp(baseExp: unknown, lvl: unknown): number {
+  const b = Math.floor(Number(baseExp) || 0);
+  const l = Math.floor(Number(lvl) || 0);
+  if (b <= 0 || l <= 0) return 0;
+  return Math.floor((b * l) / 7);
+}
