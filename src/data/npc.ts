@@ -623,7 +623,7 @@ export const NPC_DATA = {
       quest_incomplete: 'Сбор данных не окончен. Скалы ждут...',
     },
     quests: [
-      { id: 'pw_trail', type: 'defeat_x', targetItem: null, targetQty: 25, desc: 'Победи 25 диких каменных/земляных + исходи 5 локаций (средний уровень 15)', rewardMoney: 5000, rewardItem: 'hardStone', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], rewardTitle: 'pathfinder', prereqQuest: null, filter: { types: ['rock', 'ground'] }, verify: { avgLevel: 15, locs: ['pewterCity', 'viridianForest', 'route3', 'mtMoon', 'rockTunnel'] } },
+      { id: 'pw_trail', type: 'defeat_x', targetItem: null, targetQty: 25, desc: 'Победи 25 диких каменных/земляных + посети 5 локаций (средний уровень 15)', rewardMoney: 5000, rewardItem: 'hardStone', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], rewardTitle: 'pathfinder', prereqQuest: null, filter: { types: ['rock', 'ground'] }, verify: { avgLevel: 15, locs: ['pewterCity', 'viridianForest', 'route3', 'mtMoon', 'rockTunnel'] } },
       { id: 'pw_rockbane', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 25 и поймай 8 видов каменных', rewardMoney: 50000, rewardItem: 'greatBall', rewardQty: 6, rewardTitle: 'rockBane', prereqQuest: 'pw_trail', verify: { maxLevel: 25, rockSpecies: ['geodude', 'onix', 'rhyhorn', 'omanyte', 'kabuto', 'aerodactyl', 'nosepass', 'larvitar', 'cranidos', 'shieldon', 'roggenrola', 'boldore'], rockCount: 8 } },
     ],
   },
@@ -682,7 +682,7 @@ export const NPC_DATA = {
   'pewter_scout': {
     id: 'pewter_scout', name: 'Следопыт Рут', sprite: '🎒', location: 'pewterCity',
     dialog: {
-      greet: 'Карта Канто велика. Исходи её ногами — расскажешь, что видел.',
+      greet: 'Карта Канто велика. Посети её ногами — расскажешь, что видел.',
       default: 'Дороги зовут. Не сиди в городе.',
       quest_offer: '12 визитов по локациям Канто. Считаю.',
       quest_complete: 'Настоящий странник! Дорожный набор твой.',

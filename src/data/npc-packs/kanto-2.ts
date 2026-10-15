@@ -50,7 +50,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Сбор не окончен. Болота ждут...',
     },
     quests: [
-      { id: 'fuc_trail', type: 'defeat_x', targetItem: null, targetQty: 150, desc: 'Победи 150 диких ядовитых + исходи 10 локаций (средний уровень 40)', rewardMoney: 30000, rewardItem: 'poisonBarb', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 4 }], prereqQuest: null, filter: { types: ['poison'] }, verify: { avgLevel: 40, locs: ['fuchsiaCity', 'route15', 'seaRoute19', 'seaRoute20', 'safariZone', 'route12', 'route13', 'route14', 'route18', 'lavenderTown'] } },
+      { id: 'fuc_trail', type: 'defeat_x', targetItem: null, targetQty: 150, desc: 'Победи 150 диких ядовитых + посети 10 локаций (средний уровень 40)', rewardMoney: 30000, rewardItem: 'poisonBarb', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 4 }], prereqQuest: null, filter: { types: ['poison'] }, verify: { avgLevel: 40, locs: ['fuchsiaCity', 'route15', 'seaRoute19', 'seaRoute20', 'safariZone', 'route12', 'route13', 'route14', 'route18', 'lavenderTown'] } },
       { id: 'fuc_hoard', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 50 и поймай 13 видов яда', rewardMoney: 300000, rewardItem: 'timerBall', rewardQty: 8, prereqQuest: null, verify: { maxLevel: 50, typeSpecies: ['ekans', 'arbok', 'zubat', 'golbat', 'grimer', 'muk', 'gastly', 'haunter', 'koffing', 'weezing', 'tentacool', 'tentacruel', 'spinarak'], typeCount: 13 } },
     ],
   },
@@ -126,12 +126,12 @@ export const KANTO2_NPCS = {
     dialog: {
       greet: 'Сафари-зона! Правила просты: только ловля, только трава и жуки. Трофей из 18 штук — и болы твои!',
       default: 'Билет прокомпостирован? Тогда в зону — тихо!',
-      quest_offer: 'Поймай 18 травяных и жуков в Сафари-зоне. Исходи зону всю!',
+      quest_offer: 'Поймай 18 травяных и жуков в Сафари-зоне. Посети зону всю!',
       quest_complete: 'Сафари-трофей! Смотритель ставит печать. Держи болы.',
       quest_incomplete: 'Трофей ещё не полон. Зона велика...',
     },
     quests: [
-      { id: 'fuc_safari', type: 'catch_x', targetItem: null, targetQty: 18, desc: 'Поймай 18 травяных/жуков + исходи Сафари-зону (правила сафари: только ловля!)', rewardMoney: 30000, rewardItem: 'nestBall', rewardQty: 6, prereqQuest: null, filter: { types: ['grass', 'bug'] }, verify: { locs: ['safariZone'] } },
+      { id: 'fuc_safari', type: 'catch_x', targetItem: null, targetQty: 18, desc: 'Поймай 18 травяных/жуков + посети Сафари-зону (правила сафари: только ловля!)', rewardMoney: 30000, rewardItem: 'nestBall', rewardQty: 6, prereqQuest: null, filter: { types: ['grass', 'bug'] }, verify: { locs: ['safariZone'] } },
     ],
   },
   'fuc_tropa': {
@@ -182,7 +182,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Искры ещё не все посчитаны...',
     },
     quests: [
-      { id: 'cin_trail', type: 'defeat_x', targetItem: null, targetQty: 195, desc: 'Победи 195 диких огненных + исходи 11 локаций (средний уровень 45)', rewardMoney: 35000, rewardItem: 'charcoal', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 5 }], prereqQuest: null, filter: { types: ['fire'] }, verify: { avgLevel: 45, locs: ['cinnabarIsland', 'seaRoute20', 'seaRoute21', 'seafoamIslands', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'route22', 'palletTown', 'route1', 'route2'] } },
+      { id: 'cin_trail', type: 'defeat_x', targetItem: null, targetQty: 195, desc: 'Победи 195 диких огненных + посети 11 локаций (средний уровень 45)', rewardMoney: 35000, rewardItem: 'charcoal', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 5 }], prereqQuest: null, filter: { types: ['fire'] }, verify: { avgLevel: 45, locs: ['cinnabarIsland', 'seaRoute20', 'seaRoute21', 'seafoamIslands', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'route22', 'palletTown', 'route1', 'route2'] } },
     ],
   },
   'cin_bleiz': {
@@ -258,12 +258,12 @@ export const KANTO2_NPCS = {
     dialog: {
       greet: 'Дневники особняка: шесть точек, мутанты из труб! Коффинги и гримеры лезут из вентиляции. Зачистишь?',
       default: 'Читай дневники. Особняк пишет сам.',
-      quest_offer: 'Победи 30 Koffing/Grimer особняка + исходи 6 точек!',
+      quest_offer: 'Победи 30 Koffing/Grimer особняка + посети 6 точек!',
       quest_complete: 'Дневники закрыты! Мутанты зачищены. Держи дорожный набор.',
       quest_incomplete: 'Трубы ещё шипят... Не все точки исхожены.',
     },
     quests: [
-      { id: 'cin_journals', type: 'defeat_x', targetItem: null, targetQty: 30, desc: 'Победи 30 Koffing/Grimer особняка + исходи 6 точек (мутанты из труб!)', rewardMoney: 35000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'revive', qty: 2 }], prereqQuest: null, filter: { speciesList: ['koffing', 'grimer'] }, verify: { locs: ['cinnabarIsland', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'seafoamIslands', 'seaRoute21'] } },
+      { id: 'cin_journals', type: 'defeat_x', targetItem: null, targetQty: 30, desc: 'Победи 30 Koffing/Grimer особняка + посети 6 точек (мутанты из труб!)', rewardMoney: 35000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'revive', qty: 2 }], prereqQuest: null, filter: { speciesList: ['koffing', 'grimer'] }, verify: { locs: ['cinnabarIsland', 'pokemonMansion', 'mtEmber', 'kindleRoad', 'seafoamIslands', 'seaRoute21'] } },
     ],
   },
   'cin_parom': {
@@ -314,7 +314,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Тропы ещё не все исхожены...',
     },
     quests: [
-      { id: 'vir_trail', type: 'defeat_x', targetItem: null, targetQty: 245, desc: 'Победи 245 диких земляных + исходи 12 локаций (средний уровень 50)', rewardMoney: 40000, rewardItem: 'earthPlate', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 2 }], prereqQuest: null, filter: { types: ['ground'] }, verify: { avgLevel: 50, locs: ['viridianCity', 'palletTown', 'route1', 'route2', 'route22', 'route23', 'viridianForest', 'diglettsCave', 'route3', 'route4', 'mtMoon', 'ceruleanCity'] } },
+      { id: 'vir_trail', type: 'defeat_x', targetItem: null, targetQty: 245, desc: 'Победи 245 диких земляных + посети 12 локаций (средний уровень 50)', rewardMoney: 40000, rewardItem: 'earthPlate', rewardQty: 1, rewardItems: [{ id: 'maxPotion', qty: 2 }], prereqQuest: null, filter: { types: ['ground'] }, verify: { avgLevel: 50, locs: ['viridianCity', 'palletTown', 'route1', 'route2', 'route22', 'route23', 'viridianForest', 'diglettsCave', 'route3', 'route4', 'mtMoon', 'ceruleanCity'] } },
     ],
   },
   'vir_agent': {
@@ -388,7 +388,7 @@ export const KANTO2_NPCS = {
   'vir_pallet': {
     id: 'vir_pallet', name: 'Паллет', sprite: '🎒', location: 'palletTown',
     dialog: {
-      greet: 'Спелеолог из Паллета: пещеры, норы, верёвки! Исходил всё — верёвок не осталось. Раздобудешь?',
+      greet: 'Спелеолог из Паллета: пещеры, норы, верёвки! Посетил всё — верёвок не осталось. Раздобудешь?',
       default: 'Дороги зовут. Пещеры ждут.',
       quest_offer: 'Используй 22 Escape Rope. Спелеолог считает каждый узел!',
       quest_complete: 'Все узлы развязаны! Держи болы.',

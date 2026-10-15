@@ -27,7 +27,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Сбор данных не окончен. Бойцы ждут...',
     },
     quests: [
-      { id: 'cia_trail', type: 'defeat_x', targetItem: null, targetQty: 645, desc: 'Победи 645 диких бойцовых + исходи 18 локаций (средний уровень 75)', rewardMoney: 65000, rewardItem: 'fistPlate', rewardQty: 1, rewardItems: [{ id: 'fullRestore', qty: 3 }], prereqQuest: null, filter: { types: ['fighting'] }, verify: { avgLevel: 75, locs: ['cianwoodCity', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'olivineCity', 'route37', 'route38', 'route39', 'mtMortar', 'route42', 'route43', 'lakeOfRage', 'mahoganyTown', 'route44', 'icePath', 'ecruteakCity', 'bellTower', 'blackthornCity'] } },
+      { id: 'cia_trail', type: 'defeat_x', targetItem: null, targetQty: 645, desc: 'Победи 645 диких бойцовых + посети 18 локаций (средний уровень 75)', rewardMoney: 65000, rewardItem: 'fistPlate', rewardQty: 1, rewardItems: [{ id: 'fullRestore', qty: 3 }], prereqQuest: null, filter: { types: ['fighting'] }, verify: { avgLevel: 75, locs: ['cianwoodCity', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'olivineCity', 'route37', 'route38', 'route39', 'mtMortar', 'route42', 'route43', 'lakeOfRage', 'mahoganyTown', 'route44', 'icePath', 'ecruteakCity', 'bellTower', 'blackthornCity'] } },
       { id: 'cia_roids', type: 'use_item', targetItem: null, targetQty: 45, desc: 'Используй 45 X Attack (раздай спарринг-партнёрам додзё)', rewardMoney: 59000, rewardItem: 'protein', rewardQty: 1, prereqQuest: null, filter: { itemId: 'xAttack' } },
     ],
   },
@@ -159,7 +159,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Сбор данных не окончен. Рельсы ждут...',
     },
     quests: [
-      { id: 'oli_trail', type: 'defeat_x', targetItem: null, targetQty: 755, desc: 'Победи 755 диких стальных + исходи 20 локаций (средний уровень 75)', rewardMoney: 70000, rewardItem: 'metalCoat', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 1 }], prereqQuest: null, filter: { types: ['steel'] }, verify: { avgLevel: 75, locs: ['olivineCity', 'olivinePier', 'route34', 'route35', 'route36', 'route37', 'route38', 'route39', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'cianwoodCity', 'mtMortar', 'route42', 'ecruteakCity', 'bellTower', 'burnedTower', 'nationalPark', 'goldenrodCity', 'unionCave'] } },
+      { id: 'oli_trail', type: 'defeat_x', targetItem: null, targetQty: 755, desc: 'Победи 755 диких стальных + посети 20 локаций (средний уровень 75)', rewardMoney: 70000, rewardItem: 'metalCoat', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 1 }], prereqQuest: null, filter: { types: ['steel'] }, verify: { avgLevel: 75, locs: ['olivineCity', 'olivinePier', 'route34', 'route35', 'route36', 'route37', 'route38', 'route39', 'seaRoute40', 'seaRoute41', 'whirlIslands', 'cianwoodCity', 'mtMortar', 'route42', 'ecruteakCity', 'bellTower', 'burnedTower', 'nationalPark', 'goldenrodCity', 'unionCave'] } },
     ],
   },
   'oli_storm': {
@@ -279,7 +279,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Сбор данных не окончен. Снега ждут...',
     },
     quests: [
-      { id: 'mah_trail', type: 'defeat_x', targetItem: null, targetQty: 875, desc: 'Победи 875 диких ледяных + исходи 22 локации (средний уровень 75)', rewardMoney: 75000, rewardItem: 'tm52', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 2 }], prereqQuest: null, filter: { types: ['ice'] }, verify: { avgLevel: 75, locs: ['mahoganyTown', 'route42', 'route43', 'lakeOfRage', 'route44', 'icePath', 'blackthornCity', 'mtMortar', 'ecruteakCity', 'burnedTower', 'bellTower', 'route35', 'route36', 'route37', 'route38', 'route39', 'olivineCity', 'seaRoute40', 'whirlIslands', 'cianwoodCity', 'nationalPark', 'goldenrodCity'] } },
+      { id: 'mah_trail', type: 'defeat_x', targetItem: null, targetQty: 875, desc: 'Победи 875 диких ледяных + посети 22 локации (средний уровень 75)', rewardMoney: 75000, rewardItem: 'tm52', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 2 }], prereqQuest: null, filter: { types: ['ice'] }, verify: { avgLevel: 75, locs: ['mahoganyTown', 'route42', 'route43', 'lakeOfRage', 'route44', 'icePath', 'blackthornCity', 'mtMortar', 'ecruteakCity', 'burnedTower', 'bellTower', 'route35', 'route36', 'route37', 'route38', 'route39', 'olivineCity', 'seaRoute40', 'whirlIslands', 'cianwoodCity', 'nationalPark', 'goldenrodCity'] } },
       { id: 'mah_dex', type: 'special', targetItem: null, targetQty: 1, desc: 'Перепись севера: собери 400 видов в дексе', rewardMoney: 450000, rewardItem: 'ppMax', rewardQty: 2, prereqQuest: null, verify: { dexCount: 400 } },
     ],
   },
@@ -411,7 +411,7 @@ export const JOHTO2_NPCS = {
       quest_incomplete: 'Испытание не окончено. Драконы смотрят...',
     },
     quests: [
-      { id: 'bla_trail', type: 'defeat_x', targetItem: null, targetQty: 1000, desc: 'Победи 1000 диких драконьих/ледяных + исходи 24 локации (средний уровень 75)', rewardMoney: 80000, rewardItem: 'tm14', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 3 }], prereqQuest: null, filter: { types: ['dragon', 'ice'] }, verify: { avgLevel: 75, locs: ['blackthornCity', 'dragonsDen', 'icePath', 'route44', 'route45', 'route46', 'mtSilver', 'mtMortar', 'lakeOfRage', 'route43', 'mahoganyTown', 'tohjoFalls', 'route26', 'route27', 'route28', 'victoryRoad1', 'victoryRoad2', 'indigoPlateau', 'route22', 'route23', 'viridianCity', 'palletTown', 'route1', 'cinnabarIsland'] } },
+      { id: 'bla_trail', type: 'defeat_x', targetItem: null, targetQty: 1000, desc: 'Победи 1000 диких драконьих/ледяных + посети 24 локации (средний уровень 75)', rewardMoney: 80000, rewardItem: 'tm14', rewardQty: 1, rewardItems: [{ id: 'maxElixir', qty: 3 }], prereqQuest: null, filter: { types: ['dragon', 'ice'] }, verify: { avgLevel: 75, locs: ['blackthornCity', 'dragonsDen', 'icePath', 'route44', 'route45', 'route46', 'mtSilver', 'mtMortar', 'lakeOfRage', 'route43', 'mahoganyTown', 'tohjoFalls', 'route26', 'route27', 'route28', 'victoryRoad1', 'victoryRoad2', 'indigoPlateau', 'route22', 'route23', 'viridianCity', 'palletTown', 'route1', 'cinnabarIsland'] } },
       { id: 'bla_hoard', type: 'special', targetItem: null, targetQty: 1, desc: 'Драконья сокровищница: подними любого до 85 и собери 24 вида драконов', rewardMoney: 800000, rewardItem: 'masterBall', rewardQty: 1, prereqQuest: null, verify: { maxLevel: 85, typeSpecies: ['dratini', 'dragonair', 'dragonite', 'kingdra', 'altaria', 'bagon', 'shelgon', 'salamence', 'latias', 'latios', 'rayquaza', 'gible', 'gabite', 'garchomp', 'dialga', 'palkia', 'giratina', 'axew', 'fraxure', 'haxorus', 'deino', 'zweilous', 'hydreigon', 'noivern'], typeCount: 24 } },
     ],
   },

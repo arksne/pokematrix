@@ -28,7 +28,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Ещё не всё. Река ждёт, маршруты ждут...',
     },
     quests: [
-      { id: 'cer_trail', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 диких водных + исходи 6 локаций (средний уровень 20)', rewardMoney: 10000, rewardItem: 'mysticWater', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], prereqQuest: null, filter: { types: ['water'] }, verify: { avgLevel: 20, locs: ['ceruleanCity', 'route24', 'route25', 'route4', 'mtMoon', 'ceruleanCave'] } },
+      { id: 'cer_trail', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 диких водных + посети 6 локаций (средний уровень 20)', rewardMoney: 10000, rewardItem: 'mysticWater', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], prereqQuest: null, filter: { types: ['water'] }, verify: { avgLevel: 20, locs: ['ceruleanCity', 'route24', 'route25', 'route4', 'mtMoon', 'ceruleanCave'] } },
       { id: 'cer_fossil', type: 'use_item', targetItem: null, targetQty: 2, desc: 'Используй 2 Moon Stone (камни с горы Мун)', rewardMoney: 9000, rewardItem: 'expCandyM', rewardQty: 3, prereqQuest: null, filter: { itemId: 'moonStone' } },
     ],
   },
@@ -148,7 +148,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Разряды ещё не все посчитаны...',
     },
     quests: [
-      { id: 'ver_trail', type: 'defeat_x', targetItem: null, targetQty: 60, desc: 'Победи 60 диких электрических + исходи 7 локаций (средний уровень 25)', rewardMoney: 15000, rewardItem: 'zapPlate', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 4 }], prereqQuest: null, filter: { types: ['electric'] }, verify: { avgLevel: 25, locs: ['vermilionCity', 'route6', 'route11', 'diglettsCave', 'route2', 'viridianForest', 'ssAnne'] } },
+      { id: 'ver_trail', type: 'defeat_x', targetItem: null, targetQty: 60, desc: 'Победи 60 диких электрических + посети 7 локаций (средний уровень 25)', rewardMoney: 15000, rewardItem: 'zapPlate', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 4 }], prereqQuest: null, filter: { types: ['electric'] }, verify: { avgLevel: 25, locs: ['vermilionCity', 'route6', 'route11', 'diglettsCave', 'route2', 'viridianForest', 'ssAnne'] } },
     ],
   },
   'ver_volt': {
@@ -222,14 +222,14 @@ export const KANTO1_NPCS = {
   'ver_port': {
     id: 'ver_port', name: 'Порт', sprite: '🚢', location: 'ssAnne',
     dialog: {
-      greet: 'S.S. Anne уплывает скоро! Исходи лайнер, пирс и город — успей, пока трап не подняли!',
+      greet: 'S.S. Anne уплывает скоро! Посети лайнер, пирс и город — успей, пока трап не подняли!',
       default: 'Корабль ждёт только пунктуальных. Бегом по палубам!',
-      quest_offer: 'Исходи S.S. Anne, причал и Вермилион. Корабль уплывает — успей!',
+      quest_offer: 'Посети S.S. Anne, причал и Вермилион. Корабль уплывает — успей!',
       quest_complete: 'Все палубы исхожены! Зайцев нет. Держи дорожный набор.',
       quest_incomplete: 'Ещё не все точки исхожены. Трап уже скрипит...',
     },
     quests: [
-      { id: 'ver_anne', type: 'special', targetItem: null, targetQty: 1, desc: 'Исходи S.S. Anne, причал и Вермилион (корабль уплывает — успей!)', rewardMoney: 15000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'fullHeal', qty: 3 }], prereqQuest: null, verify: { locs: ['ssAnne', 'vermilionPier', 'vermilionCity'] } },
+      { id: 'ver_anne', type: 'special', targetItem: null, targetQty: 1, desc: 'Посети S.S. Anne, причал и Вермилион (корабль уплывает — успей!)', rewardMoney: 15000, rewardItem: 'escapeRope', rewardQty: 1, rewardItems: [{ id: 'fullHeal', qty: 3 }], prereqQuest: null, verify: { locs: ['ssAnne', 'vermilionPier', 'vermilionCity'] } },
     ],
   },
   'ver_provod': {
@@ -268,7 +268,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сбор не окончен. Клумбы ждут...',
     },
     quests: [
-      { id: 'cel_trail', type: 'defeat_x', targetItem: null, targetQty: 85, desc: 'Победи 85 диких травяных + исходи 8 локаций (средний уровень 30)', rewardMoney: 20000, rewardItem: 'miracleSeed', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 5 }], prereqQuest: null, filter: { types: ['grass'] }, verify: { avgLevel: 30, locs: ['celadonCity', 'route7', 'route16', 'route17', 'route8', 'lavenderTown', 'pokemonTower', 'saffronCity'] } },
+      { id: 'cel_trail', type: 'defeat_x', targetItem: null, targetQty: 85, desc: 'Победи 85 диких травяных + посети 8 локаций (средний уровень 30)', rewardMoney: 20000, rewardItem: 'miracleSeed', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 5 }], prereqQuest: null, filter: { types: ['grass'] }, verify: { avgLevel: 30, locs: ['celadonCity', 'route7', 'route16', 'route17', 'route8', 'lavenderTown', 'pokemonTower', 'saffronCity'] } },
       { id: 'cel_hoard', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 40 и поймай 11 видов травы', rewardMoney: 200000, rewardItem: 'ultraBall', rewardQty: 10, prereqQuest: null, verify: { maxLevel: 40, typeSpecies: ['bulbasaur', 'oddish', 'gloom', 'bellsprout', 'weepinbell', 'exeggcute', 'tangela', 'chikorita', 'sunkern', 'hoppip', 'paras'], typeCount: 11 } },
       { id: 'cel_stone', type: 'use_item', targetItem: null, targetQty: 3, desc: 'Используй 3 Leaf Stone (камни дорогие — считай каждый!)', rewardMoney: 18000, rewardItem: 'absorbBulb', rewardQty: 1, prereqQuest: null, filter: { itemId: 'leafStone' } },
     ],
@@ -387,7 +387,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Разумы ещё не все пересчитаны...',
     },
     quests: [
-      { id: 'saf_trail', type: 'defeat_x', targetItem: null, targetQty: 115, desc: 'Победи 115 диких психов + исходи 9 локаций (средний уровень 35)', rewardMoney: 25000, rewardItem: 'twistedSpoon', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 3 }], prereqQuest: null, filter: { types: ['psychic'] }, verify: { avgLevel: 35, locs: ['saffronCity', 'route5', 'route6', 'route7', 'route8', 'saffronStation', 'route9', 'route10', 'powerPlant'] } },
+      { id: 'saf_trail', type: 'defeat_x', targetItem: null, targetQty: 115, desc: 'Победи 115 диких психов + посети 9 локаций (средний уровень 35)', rewardMoney: 25000, rewardItem: 'twistedSpoon', rewardQty: 1, rewardItems: [{ id: 'hyperPotion', qty: 3 }], prereqQuest: null, filter: { types: ['psychic'] }, verify: { avgLevel: 35, locs: ['saffronCity', 'route5', 'route6', 'route7', 'route8', 'saffronStation', 'route9', 'route10', 'powerPlant'] } },
       { id: 'saf_files', type: 'special', targetItem: null, targetQty: 1, desc: 'Подними любого до 45 и поймай 12 видов психов', rewardMoney: 250000, rewardItem: 'timerBall', rewardQty: 6, prereqQuest: null, verify: { maxLevel: 45, typeSpecies: ['abra', 'kadabra', 'drowzee', 'hypno', 'mr-mime', 'espeon', 'unown', 'girafarig', 'slowpoke', 'slowbro', 'natu', 'xatu'], typeCount: 12 } },
     ],
   },
