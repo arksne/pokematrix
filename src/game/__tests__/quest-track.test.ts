@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { state } from '../../game/state.js';
-import { trackNPCQuests, verifyQuest, questRewards, questHowTo, noteLocationVisit, findQuestHolder } from '../quest-track.js';
+import { trackNPCQuests, verifyQuest, questRewards, questHowTo, noteLocationVisit, findQuestHolder, allNPCQuests } from '../quest-track.js';
 import { NPC_DATA } from '../../data/npc.js';
 import { QUEST_TYPES } from '../../data/quests.js';
 
@@ -622,5 +622,28 @@ describe('matrix: questRewards/questHowTo/findQuestHolder краевые', () =>
     const h = findQuestHolder('pw_courier');
     expect(h).not.toBeNull();
     expect(h!.npcId).toBe('pewter_courier');
+  });
+});
+
+describe('quest descriptions sanity (anti-garble)', () => {
+  it('all 160 NPC quests: non-empty desc + non-empty howTo without ???', () => {
+    const all = allNPCQuests();
+    expect(all.length).toBe(160);
+    for (const q of all) {
+      expect(typeof q.desc === 'string' && q.desc.trim().length > 0, `${q.id}: desc`).toBe(true);
+      const how = questHowTo(q);
+      expect(how.length > 0, `${q.id}: empty howTo`).toBe(true);
+      expect(how.includes('???'), `${q.id}: howTo has ???: ${how}`).toBe(false);
+      expect(how.includes('undefined'), `${q.id}: howTo has undefined`).toBe(false);
+    }
+  });
+
+  it('counter numbers in desc match targetQty (qty>1)', () => {
+    for (const q of allNPCQuests()) {
+      if (!['defeat_x', 'catch_x', 'earn_money', 'explore', 'use_item', 'hatch_x', 'streak_x'].includes(q.type)) continue;
+      if (q.targetQty === 1) continue;
+      const nums = (q.desc.match(/\d[\d ]*/g) || []).map((x: string) => parseInt(x.replace(/ /g, ''), 10));
+      expect(nums.includes(q.targetQty), `${q.id}: target ${q.targetQty} missing in desc`).toBe(true);
+    }
   });
 });

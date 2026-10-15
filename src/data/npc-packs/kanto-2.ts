@@ -300,7 +300,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Без ящика не приму!',
     },
     quests: [
-      { id: 'cin_courier', type: 'collect_items', targetItem: 'cinLeg2', targetQty: 1, desc: 'Довези ящик с Виридиана на Киноварь через Паллет (второй ящик)', rewardMoney: 32000, rewardItem: 'expCandyM', rewardQty: 10, prereqQuest: null },
+      { id: 'cin_courier', type: 'collect_items', targetItem: 'cinLeg2', targetQty: 1, desc: 'Довези ящик с Виридиана на Киноварь через Паллет', rewardMoney: 32000, rewardItem: 'expCandyM', rewardQty: 10, prereqQuest: null },
     ],
   },
   // ══════════ ВИРИДИАН (n=7, земля) ══════════
