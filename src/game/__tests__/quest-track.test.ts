@@ -646,4 +646,11 @@ describe('quest descriptions sanity (anti-garble)', () => {
       expect(nums.includes(q.targetQty), `${q.id}: target ${q.targetQty} missing in desc`).toBe(true);
     }
   });
+
+  it('route lists are shown in full, never cut as "+ N more"', () => {
+    for (const q of allNPCQuests()) {
+      const how = questHowTo(q);
+      expect(how.includes('+ ещё'), `${q.id}: route cut`).toBe(false);
+    }
+  });
 });

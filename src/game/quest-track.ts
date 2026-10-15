@@ -267,8 +267,10 @@ function cap(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-/** «a, b, c + ещё N» — длинные списки режем, счёт показываем. */
-function shortList(names: string[], max = 5): string {
+/** Список через запятую целиком: это перечисление требований квеста
+ * (маршрут, пул видов) — игроку нужен ПОЛНЫЙ список, а не «+ ещё N».
+ * Обрезка только страховка от патологий (cap 100). */
+function shortList(names: string[], max = 100): string {
   if (names.length <= max) return names.join(', ');
   return names.slice(0, max).join(', ') + ` + ещё ${names.length - max}`;
 }
@@ -276,7 +278,7 @@ function shortList(names: string[], max = 5): string {
 function whoText(f: any): string {
   if (!f) return '';
   if (Array.isArray(f.speciesList) && f.speciesList.length > 0) {
-    return `Виды: ${shortList(f.speciesList.map((s: string) => cap(String(s))), 4)}`;
+    return `Виды: ${shortList(f.speciesList.map((s: string) => cap(String(s))))}`;
   }
   if (f.species) return `Вид: ${cap(String(f.species))}`;
   if (Array.isArray(f.types) && f.types.length > 0) {
@@ -292,7 +294,7 @@ function verifyText(v: any): string {
   if (v.maxLevel) parts.push(`один покемон ${v.maxLevel}+`);
   const sp = v.typeSpecies ?? v.rockSpecies;
   if (sp) parts.push(`поймано видов: ${v.typeCount ?? v.rockCount} (см. декс)`);
-  if (v.locs) parts.push(`маршрут: ${shortList((v.locs as string[]).map(locName), 6)}`);
+  if (v.locs) parts.push(`маршрут: ${shortList((v.locs as string[]).map(locName))}`);
   if (v.region || v.kantoLocs) {
     const r = v.region ? (REGION_RU[v.region] || v.region) : 'Канто';
     parts.push(`локаций ${r}: ${v.regionLocs ?? v.kantoLocs} (повторы считаются)`);
@@ -323,7 +325,7 @@ export function questHowTo(q: any): string {
       const who = f.species
         ? `Нужен: ${cap(String(f.species))}`
         : (Array.isArray(f.speciesList) && f.speciesList.length > 0
-          ? `Подойдёт любой: ${shortList(f.speciesList.map((x: string) => cap(String(x))), 4)}`
+          ? `Подойдёт любой: ${shortList(f.speciesList.map((x: string) => cap(String(x))))}`
           : whoText(f));
       if (who) s += `. ${who}`;
       if (f.time === 'night') s += '. Только ночью (18:00–6:00)';
