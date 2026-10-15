@@ -191,7 +191,7 @@ export function getFullSaveData() {
     currentPokemonIndex: state.currentPokemonIndex,
     pokedexSeen: Array.from(state.pokedexSeen),
     pokedexCaught: Array.from(state.pokedexCaught),
-    quests: state.quests, questProgress: state.questProgress, completedQuests: state.completedQuests, npcQuestProgress: state.npcQuestProgress, completedNPCQuests: state.completedNPCQuests, tutorialStep: state.tutorialStep, questStreak: state.questStreak || 0,
+    quests: state.quests, questProgress: state.questProgress, completedQuests: (state.completedQuests || []).map((c: any) => (typeof c === 'string' ? c : c?.id)).filter((x: any) => typeof x === 'string' && x), npcQuestProgress: state.npcQuestProgress, completedNPCQuests: state.completedNPCQuests, tutorialStep: state.tutorialStep, questStreak: state.questStreak || 0,
     achievements: state.achievements || [], battleWins: state.battleWins || 0,
     // Блок G: поверхностные метрики тренеркарты + выбранная аватарка.
     titles: Array.isArray(state.titles) ? state.titles.filter((t: unknown) => typeof t === 'string') : [],

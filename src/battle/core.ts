@@ -1699,7 +1699,9 @@ function claimQuestReward(questId) {
   q.claimed = true;
   const rItems = q.rewardItem ? [{ id: q.rewardItem, qty: q.rewardQty || 1 }] : [];
   store.giveReward(q.rewardMoney, rItems);  // Выдача награды через store
-  GS.completedQuests.push({ id: questId, date: new Date().toISOString() }); // История
+  // История — СТРОКОЙ: серверный Zod требует z.array(z.string()), объект
+  // {id, date} ронял КАЖДЫЙ следующий сейв с 422 («422 в ежедневках»).
+  GS.completedQuests.push(questId); // История
   store.updateMoneyDisplay();
   store.updateInventoryDisplay();
   store.autoSave();

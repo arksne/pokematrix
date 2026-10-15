@@ -83,3 +83,18 @@ describe('getFullSaveData: без NaN', () => {
     expect(m.movesPP).toEqual([{ current: 0, max: 1 }]);
   });
 });
+
+describe('completedQuests: только строки (анти-422)', () => {
+  beforeEach(resetState);
+
+  it('объекты-наследие превращаются в id', () => {
+    (state as any).completedQuests = [
+      'catch_5',
+      { id: 'earn_1000', date: '2026-10-01' },
+      null,
+      42,
+    ];
+    const data = getFullSaveData();
+    expect(data.completedQuests).toEqual(['catch_5', 'earn_1000']);
+  });
+});

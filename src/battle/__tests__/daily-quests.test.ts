@@ -190,6 +190,8 @@ describe('claimQuestReward', () => {
     expect(state.inventory.credit).toBe(creditBefore + 300);
     expect(state.inventory.potion).toBe(qtyBefore + 2);
     expect(state.completedQuests.length).toBe(1);
+    // Сервер требует z.array(z.string()): объект ронял каждый сейв с 422.
+    expect(state.completedQuests[0]).toBe('earn_1000');
   });
 
   it('повторный claim не выдаёт награду дважды', () => {
