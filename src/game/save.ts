@@ -238,6 +238,7 @@ export function getFullSaveData() {
 }
 
 const IV_STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'] as const;
+const IV_MAX = 50;   // шкала генов проекта: идеал 50 (battle/logic.ts IV_MAX)
 
 export function validateGameState() {
   // Ensure critical structures exist
@@ -269,15 +270,13 @@ export function validateGameState() {
     if (!m.maxHp || m.maxHp <= 0) m.maxHp = 50;
     if (m.currentHp === undefined || m.currentHp < 0) m.currentHp = m.maxHp;
     if (!m.ivs) m.ivs = { hp: 15, atk: 15, def: 15, spa: 15, spd: 15, spe: 15 };
-    // Кламп шкалы IV в 0–31. calculateStat(stats.ts:116) считает по канонической
-    // шкале 0–31, а генераторы диких/яиц historically выдавали 0–50 — из-за
-    // этого пойманные монсы имели завышенные статы. Старые сейвы с такими
-    // значениями чиним здесь, иначе игрок сохранит их навсегда.
+    // Кламп шкалы IV в 0–50 — шкала проекта (идеал 50, см. battle/logic.ts IV_MAX).
+    // Нужен как защита от мусора/NaN в сейве, а не как нормализация геймплея.
     for (const st of IV_STATS) {
       const v = m.ivs[st];
       if (typeof v !== 'number' || !Number.isFinite(v)) m.ivs[st] = 15;
       else if (v < 0) m.ivs[st] = 0;
-      else if (v > 31) m.ivs[st] = 31;
+      else if (v > IV_MAX) m.ivs[st] = IV_MAX;
     }
     if (!m.evs) m.evs = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
@@ -296,7 +295,7 @@ export function validateGameState() {
       const v = m.ivs[st];
       if (typeof v !== 'number' || !Number.isFinite(v)) continue;
       if (v < 0) m.ivs[st] = 0;
-      else if (v > 31) m.ivs[st] = 31;
+      else if (v > IV_MAX) m.ivs[st] = IV_MAX;
     }
   };
   for (const box of (state.pcBoxes || []) as any[]) {

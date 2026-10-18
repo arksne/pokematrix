@@ -774,3 +774,48 @@ export function buildWildMoveset(moveDetails: any[], level: number): any[] {
   if (levelups.length) return [levelups[0].m];
   return [syntheticTackle()];
 }
+
+// ─────────────────────────────────────────────────────────────
+// Гены (IV): шкала проекта 0–50, максимум 50 = идеал
+// ─────────────────────────────────────────────────────────────
+// Шкала НЕ каноническая «0–31»: игра считает maxHP как
+// 0.01 * (2*base + 50) * level (game/init.ts makeMon), стартер выдаётся с
+// 49–50, лидеры гимов/элиты/чемпиона с 50. То есть 50 — это «идеал», и менять
+// шкалу нельзя, иначе едет вся формула и весь баланс.
+//
+// РЕАЛЬНЫЙ БАГ, который жаловали: дикие генерились равномерно на всём
+// диапазоне 0–50. Разброс от «почти 0» до «почти 50» в одном виде — игрок
+// ловил то мусор, то идеал, и угадать было невозможно. Просили УСРЕДНЕНИЯ.
+//
+// Здесь мягкий колокол вокруг среднего: сумма трёх равномерных (остаток
+// Бруксса–Кларка) даёт распределение с центром в `mean` и разбросом ±spread,
+// вместо равномерного «от края до края». Крайние 0 и 50 становятся редкостью.
+
+export const IV_MAX = 50;
+export const WILD_IV_MEAN = 25;
+export const WILD_IV_SPREAD = 5;
+
+/** Одно значение IV: сумма 3 uniform → колокол, клампится в 0..IV_MAX. */
+export function rollIV(
+  mean = WILD_IV_MEAN, spread = WILD_IV_SPREAD, rand: () => number = Math.random,
+): number {
+  const u = rand() + rand() + rand() - 1.5;      // ≈ N(0, ~0.5), диапазон ±1.5
+  const v = Math.round(mean + u * (spread * 2 / 3));
+  return Math.max(0, Math.min(IV_MAX, v));
+}
+
+/** Гены дикого: 6 стат вокруг WILD_IV_MEAN, без выбросов к краям шкалы. */
+export function rollWildIVs(
+  mean = WILD_IV_MEAN, spread = WILD_IV_SPREAD, rand: () => number = Math.random,
+): { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } {
+  return {
+    hp: rollIV(mean, spread, rand), atk: rollIV(mean, spread, rand),
+    def: rollIV(mean, spread, rand), spa: rollIV(mean, spread, rand),
+    spd: rollIV(mean, spread, rand), spe: rollIV(mean, spread, rand),
+  };
+}
+
+/** Идеальные гены (50) — лидеры гимов, элита, чемпион, стартер. */
+export function perfectIVs(): { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } {
+  return { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
+}

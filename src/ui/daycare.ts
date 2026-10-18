@@ -501,9 +501,9 @@ export function buildHatchling(
     isShiny: egg.shinyBoost ? rand() < 1 / 128 : rand() < 1 / 1024,
     // IV: наследованные от родителей (или случайные 0–50)
     ivs: egg?.ivs || {
-      hp: Math.floor(rand() * 32), atk: Math.floor(rand() * 32),
-      def: Math.floor(rand() * 32), spa: Math.floor(rand() * 32),
-      spd: Math.floor(rand() * 32), spe: Math.floor(rand() * 32)
+      hp: Math.floor(rand() * 51), atk: Math.floor(rand() * 51),
+      def: Math.floor(rand() * 51), spa: Math.floor(rand() * 51),
+      spd: Math.floor(rand() * 51), spe: Math.floor(rand() * 51)
     },
     evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },  // EV = 0
     baseLevel: 1, exp: 0, expToNext: 8,                        // Уровень 1

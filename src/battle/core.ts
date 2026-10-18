@@ -46,6 +46,7 @@ import {
   fetchSiteLearnset, wildMovesFromLearnset, moveNameToSlug,
 } from '../data/learnset.js';                                           // мувсеты по уровню: таблица «Развитие»
 import { syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
+import { rollWildIVs, perfectIVs } from './logic.js';                   // гены: усреднённые дикие / идеальные лидеры
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
 import { checkEvolution, triggerEvolution, maybeGrantShedinja } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
 import { natures } from '../data/natures.js';                            // Массив характеров (nature) с buff/nerf модификаторами
@@ -414,11 +415,7 @@ async function restoreBattleState() {
 
       // ── IVs дикого (если нет — генерируем случайные 0–31) ──
       if (!S.activeWild.wildIVs) {
-        S.activeWild.wildIVs = {
-          hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
-          def: Math.floor(Math.random() * 32), spa: Math.floor(Math.random() * 32),
-          spd: Math.floor(Math.random() * 32), spe: Math.floor(Math.random() * 32)
-        };
+        S.activeWild.wildIVs = rollWildIVs();
       }
 
       renderBattleUI();                                       // Отрисовываем интерфейс боя
@@ -3709,14 +3706,7 @@ async function startHunt(encountersArray) {
       else S.activeWild.wildGender = Math.random() * 8 < speciesData.gender_rate ? 'female' : 'male';
     } catch (e) { /* keep defaults */ }
 
-    S.activeWild.wildIVs = {
-      hp: Math.floor(Math.random() * 32),
-      atk: Math.floor(Math.random() * 32),
-      def: Math.floor(Math.random() * 32),
-      spa: Math.floor(Math.random() * 32),
-      spd: Math.floor(Math.random() * 32),
-      spe: Math.floor(Math.random() * 32)
-    };
+    S.activeWild.wildIVs = rollWildIVs();
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;
@@ -8223,7 +8213,7 @@ async function startGymNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона гима
 
     // Perfect IVs for gym leader pokemon
-    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
+    S.activeWild.wildIVs = perfectIVs();
 
     // Apply gym leader training boost
     const leaderData = GS.gymLeaders[S.gymLeaderKey];
@@ -8486,7 +8476,7 @@ async function startEliteNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона элиты
 
     // Perfect IVs для Elite Four (как у gym лидеров)
-    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
+    S.activeWild.wildIVs = perfectIVs();
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;
@@ -8591,7 +8581,7 @@ async function startChampionNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона чемпиона
 
     // Perfect IVs для Чемпиона (как у gym лидеров)
-    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
+    S.activeWild.wildIVs = perfectIVs();
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;

@@ -100,12 +100,11 @@ describe('completedQuests: только строки (анти-422)', () => {
 });
 
 /**
- * Шкала IV каноническая 0–31 (её ждёт calculateStat в battle/stats.ts).
- * Генераторы диких/яиц/стартера исторически выдавали 0–50, из-за чего у
- * игроков разброс по генам был «где-то под 50, где-то 0», а монсы имели
- * завышенные статы. Старые сейвы чиним клампом на загрузке.
+ * Шкала генов проекта — 0–50, идеал 50 (battle/logic.ts IV_MAX; формула
+ * maxHP в game/init.ts считается с 50). Кламп защищает от мусора/NaN в сейве
+ * и не должен срезать честные значения выше 31 — их в игре полно.
  */
-describe('IV: шкала 0–31 (анти-разброс по генам)', () => {
+describe('IV: шкала 0–50 (анти-мусор в сейве)', () => {
   const IVS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
 
   beforeEach(() => {
@@ -130,14 +129,14 @@ describe('IV: шкала 0–31 (анти-разброс по генам)', () =
     ];
     validateGameState();
     const a = state.myTeam[0].ivs, b = state.myTeam[1].ivs;
-    expect(a.hp).toBe(31); expect(a.atk).toBe(31); expect(a.def).toBe(0);
+    expect(a.hp).toBe(50); expect(a.atk).toBe(44); expect(a.def).toBe(0);
     expect(a.spa).toBe(31); expect(a.spd).toBe(18); expect(a.spe).toBe(7);
     expect(b.hp).toBe(15); expect(b.atk).toBe(15); expect(b.def).toBe(0);
-    expect(b.spa).toBe(31); expect(b.spd).toBe(20); expect(b.spe).toBe(12);
+    expect(b.spa).toBe(50); expect(b.spd).toBe(20); expect(b.spe).toBe(12);
     for (const mon of state.myTeam) {
       for (const st of IVS) {
         expect(mon.ivs[st]).toBeGreaterThanOrEqual(0);
-        expect(mon.ivs[st]).toBeLessThanOrEqual(31);
+        expect(mon.ivs[st]).toBeLessThanOrEqual(50);
       }
     }
   });
@@ -148,17 +147,17 @@ describe('IV: шкала 0–31 (анти-разброс по генам)', () =
     (state as any).eggs = [{ id: 'e1', ivs: { hp: 50, atk: 33, def: 8, spa: 31, spd: 21, spe: 14 } }];
     validateGameState();
     const box = (state.pcBoxes[0] as any[])[0].ivs;
-    for (const st of IVS) expect(box[st]).toBe(31);
+    for (const st of IVS) expect(box[st]).toBe(50);
     const bb = (state as any).breedBoxes[0].mons[0].ivs;
-    expect(bb.hp).toBe(31); expect(bb.atk).toBe(12); expect(bb.def).toBe(31);
-    expect(bb.spa).toBe(0); expect(bb.spd).toBe(31); expect(bb.spe).toBe(20);
+    expect(bb.hp).toBe(44); expect(bb.atk).toBe(12); expect(bb.def).toBe(31);
+    expect(bb.spa).toBe(0); expect(bb.spd).toBe(50); expect(bb.spe).toBe(20);
     const egg = (state as any).eggs[0].ivs;
-    expect(egg.hp).toBe(31); expect(egg.atk).toBe(31); expect(egg.def).toBe(8);
+    expect(egg.hp).toBe(50); expect(egg.atk).toBe(33); expect(egg.def).toBe(8);
     expect(egg.spa).toBe(31); expect(egg.spd).toBe(21); expect(egg.spe).toBe(14);
   });
 
-  it('валидные IV 0–31 не трогаются', () => {
-    const ivs = { hp: 31, atk: 0, def: 15, spa: 22, spd: 7, spe: 31 };
+  it('валидные IV 0–50 не трогаются', () => {
+    const ivs = { hp: 31, atk: 0, def: 15, spa: 50, spd: 7, spe: 44 };
     state.myTeam = [{ apiData: { name: 'mew' }, uid: 'u3', maxHp: 90, currentHp: 90,
       baseLevel: 40, ivs: { ...ivs } } as any];
     validateGameState();

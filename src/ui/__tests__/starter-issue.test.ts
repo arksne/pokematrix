@@ -134,7 +134,7 @@ describe('giveStarterMon (выдача)', () => {
     expect(state.myTeam.length).toBe(1);
     const mon = state.myTeam[0];
     expect(mon.baseLevel).toBe(5);
-    expect(mon.ivs).toEqual({ hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 });
+    expect(mon.ivs).toEqual({ hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 });
     expect(mon.exp).toBe(125);
     expect(mon.currentHp).toBe(mon.maxHp);
     expect(mon.happiness).toBe(70);
