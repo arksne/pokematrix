@@ -17,8 +17,9 @@ const tutorialSrc = readFileSync('src/ui/tutorial.ts', 'utf8');
 const help = html + '\n' + tutorialSrc;
 
 describe('справка по разведению соответствует коду', () => {
-  it('называет настоящие места входа (оба бокса, а не «ячейка питомника»)', () => {
-    expect(help).toMatch(/Боксы разведения/);
+  it('называет настоящие места входа: вкладка разведения в ПК + оба NPC', () => {
+    expect(help).toMatch(/Разведение/);
+    expect(help).toMatch(/ПК\s*(→|->)/);
     expect(help).toMatch(/Пьютер/i);
     expect(help).toMatch(/Голденрод/i);
     // Удалённая механика не должна упоминаться как инструкция

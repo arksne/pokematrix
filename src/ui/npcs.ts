@@ -566,9 +566,10 @@ export function openNPCDialog(npcId: string) {
   }
 
   // Заводчица в стартовом городе выдаёт квест «вылупи яйцо», но кнопки разведения
-  // у неё не было — игрок получал задание, которое негде выполнить. Вход в
-  // боксы теперь есть и в Канто (у неё), и в Джото (у питомника).
-  if (npcId === 'pw_breeder') {
+  // у неё не было — игрок получал задание, которое негде выполнить. Основной
+  // вход теперь в ПК (вкладка «💕 Разведение»), NPC — запасной.
+  // ВАЖНО: id именно pewter_breeder; с pw_breeder условие никогда не срабатывало.
+  if (npcId === 'pewter_breeder') {
     const btnBreed = document.createElement('button');
     btnBreed.className = 'tma-btn npc-action-extra';
     btnBreed.style.backgroundColor = '#e040fb';

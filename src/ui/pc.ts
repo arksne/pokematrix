@@ -34,7 +34,7 @@ import { getTypeColor, getSpriteUrl } from '../utils/sprite.js';
 // trainingStages — массив этапов тренировки (имена, цвета, проценты)
 import { trainingStages } from '../data/training.js';
 // hatchEgg — вылупить яйцо; checkBreeding — проверка пар; collectEgg — забрать готовое яйцо
-import { hatchEgg, checkBreeding, collectEgg } from './daycare.js';
+import { hatchEgg, checkBreeding, collectEgg, openBreedBoxes } from './daycare.js';
 // battle — инстанс BattleStateMachine (нужен для проверки battle.state.activePlayerMon при перемещении)
 import { battle } from '../battle/core.js';
 
@@ -155,20 +155,33 @@ export function openPC() {
   teamCount.innerText = `(В команде: ${state.myTeam.length}/6)`; // "В команде: 3/6"
 
   // ═══ Сбор данных о парах и яйцах ═══
-  // breedingBoxes — Set индексов боксов, где есть пары для разведения
-  const breedingBoxes = new Set(state.breedingPairs.map((p: any) => p.boxIdx));
+  // ❤️ ставится не по legacy breedingPairs (он мёртвый и всегда пуст), а по
+  // реальным боксам разведения: пара/яйцо лежат в state.breedBoxes/eggs.
+  const breedingBoxes = new Set<number>(
+    ((state as any).breedBoxes || [])
+      .map((bb: any, i: number) => (bb && (bb.a || bb.b) ? i : -1))
+      .filter((i: number) => i >= 0),
+  );
   // eggBoxes — Set индексов боксов, где есть яйца
   const eggBoxes = new Set(state.eggs.filter((e: any) => e.boxIdx !== undefined).map((e: any) => e.boxIdx));
 
   // ═══ Построение вкладок ═══
   tabsContainer.innerHTML = '<span class="pc-tab active" data-box="team">Команда</span>';
+  // Разведение живёт в ПК (так задумано): вкладка ведёт в боксы разведения.
+  // Раньше вход был только у NPC питомника в Джото, из-за чего разведения
+  // «не было нигде» — в Канто кнопки не было вовсе.
+  tabsContainer.innerHTML += '<span class="pc-tab" id="btn-pc-breed">💕 Разведение</span>';
   state.pcBoxes.forEach((box: any, i: number) => {
-    // Иконки: ❤️ = есть пара, 🥚 = есть яйцо в этом боксе
+    // Иконки: ❤️ = в боксе есть пара, 🥚 = есть яйцо в этом боксе
     const breedIcon = breedingBoxes.has(i) ? ' ❤️' : '';
     const eggIcon = eggBoxes.has(i) ? ' 🥚' : '';
     tabsContainer.innerHTML += `<span class="pc-tab" data-box="${i}">Бокс ${i + 1}${breedIcon}${eggIcon}</span>`;
   });
   tabsContainer.innerHTML += '<span class="pc-tab" id="btn-pc-new-box">+ Новый бокс</span>';
+
+  // Вкладка разведения → боксы. Обработчик назначаем ПОСЛЕ обхода ниже:
+  // тот общий цикл навешивает onclick всем .pc-tab и перезаписал бы его своим
+  // renderPCSlots (у вкладки нет data-box, слоты бы не отрисовались).
 
   // ═══ Обработчики вкладок ═══
   // Клик по вкладке → снимает active со всех → ставит на выбранную → рендерит слоты
@@ -185,6 +198,11 @@ export function openPC() {
     state.pcBoxes.push([]);
     openPC(); // Перерисовка (рекурсия, но только 1 уровень)
   };
+
+  // Вкладка «💕 Разведение» — после общего цикла, иначе он перезапишет
+  // обработчик на renderPCSlots (у вкладки нет data-box).
+  const breedTab = document.getElementById('btn-pc-breed') as HTMLElement | null;
+  if (breedTab) breedTab.onclick = () => { openBreedBoxes(); };
 
   // ═══ Первичный рендер ═══
   renderPCSlots('team');  // Показываем команду по умолчанию
@@ -282,9 +300,9 @@ function renderPCSlots(view: string) {
     if (!box) return;
 
     // ── Информация о разведении (legacy-пара, если вдруг есть) ──
-    // C1: подсказка «пара ещё не образовалась» удалена — разведение теперь
-    // только в «Боксах разведения» (питомник), а PC-боксы — просто хранилище.
-    const pair = state.breedingPairs.find((p: any) => p.boxIdx === boxIdx);
+    // Разведение живёт в ПК (вкладка «💕 Разведение»). Этот блок — только
+    // для сейвов старой версии, где пара ещё лежала прямо в боксе ПК.
+    const pair = (state as any).breedingPairs?.find?.((p: any) => p.boxIdx === boxIdx);
     if (pair) {
       // Пара найдена — показываем таймер до появления яйца (в минутах)
       const remaining = Math.max(0, Math.ceil((pair.readyTime - Date.now()) / 60000));
