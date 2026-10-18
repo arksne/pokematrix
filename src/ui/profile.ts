@@ -421,7 +421,7 @@ export function refreshProfileUI() {
       mon.learnableMoves.forEach((lm, i) => {
         learnableHTML += `<div class="learnable-move flex-between m-4-0 br-6 fs-085" style="padding:6px 8px;background:var(--tma-bg);">
           <span>${lm.name} (⚡${lm.power || '?'} | ${lm.type || '?'})</span>
-          <button class="btn-use learn-btn" data-lm="${i}" class="btn-use-learn">Выучить</button>
+          <button class="btn-use learn-btn btn-use-learn" data-lm="${i}">Выучить</button>
         </div>`;
       });
       learnableHTML += '</div>';

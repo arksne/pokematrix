@@ -628,7 +628,7 @@ function getEffectivePriority(move, mon, isWild) {
   }
   const name = String(getAbilityName(mon, isWild) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   if (name === 'prankster' && !move.power) prio += 1;
-  if (name === 'gale-wings' && move.type?.name === 'flying') {
+  if (name === 'galewings' && move.type?.name === 'flying') {
     const cur = isWild ? S.wildCurHP : mon.currentHp;
     const max = isWild ? S.wildMaxHP : mon.maxHp;
     if (max > 0 && cur >= max) prio += 1;
@@ -7560,7 +7560,14 @@ function initEncounterEvents() {
           if (dexN >= 100) checkAchievement('dex_100');
           if (POKEDEX_ALL.length > 0 && dexN >= POKEDEX_ALL.length) checkAchievement('dex_all');
 
-          checkQuestProgress('catch_x', 1, undefined, { species: S.activeWild.name });
+          // Типы передаём обязательно: фильтр квеста по типу (filter.types) читает
+      // именно info.types. Раньше шёл только {species} — и любой квест
+      // «поймай N покемонов типа X» (fuc_safari, «catch 18 grass/bug»)
+      // НИКОГДА не засчитывался: foe был пустым массивом.
+      checkQuestProgress('catch_x', 1, undefined, {
+        species: S.activeWild.name,
+        types: (S.activeWild.types || []).map((t: any) => String(t?.type?.name || '').toLowerCase()),
+      });
 
           // Жалоба 7 (спека 1.5): за поимку тоже капает EXP — как за нокаут
           // (baseExp × уровень / 7, см. handleWildFaintRewards). Деньги/дроп

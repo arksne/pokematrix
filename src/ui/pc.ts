@@ -249,7 +249,7 @@ function renderPCSlots(view: string) {
           <b>Lv.${mon.baseLevel + mon.candiesEaten} ${escapeHtml(mon.name || mon.apiData?.name)}</b>
           <span>HP: ${mon.currentHp}/${mon.maxHp}</span>
         </div>
-        <button class="btn-use" class="btn-use-pc">В PC</button>
+        <button class="btn-use btn-use-pc">В PC</button>
       `;
       // Кнопка "В PC" — переместить из команды в выбранный бокс (C2)
       div.querySelector('button')!.onclick = () => {
@@ -367,10 +367,10 @@ function renderPCSlots(view: string) {
           <span class="text-muted" class="fs-07">${escapeHtml(mon.apiData?.types?.map((t: any) => t.type.name).join('/') || '')}</span>
         </div>
         <div class="pc-slot-actions">
-          <button class="btn-use" class="btn-use-info" title="Инфо">ℹ</button>
-          <button class="btn-use" class="btn-use-team">В команду</button>
-          <button class="btn-use" class="btn-use-box" title="В другой бокс">📦</button>
-          <button class="btn-use" class="btn-use-release">Отп.</button>
+          <button class="btn-use btn-use-info" title="Инфо">ℹ</button>
+          <button class="btn-use btn-use-team">В команду</button>
+          <button class="btn-use btn-use-box" title="В другой бокс">📦</button>
+          <button class="btn-use btn-use-release">Отп.</button>
         </div>
       `;
       // ℹ — информация о покемоне
