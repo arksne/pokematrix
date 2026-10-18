@@ -1726,9 +1726,10 @@ input[type="number"] {
   background: var(--tma-card-bg);
   border-radius: 16px;
   padding: 20px;
-  max-width: 420px;
-  width: 90%;
-  max-height: 85vh;
+  /* Было 420px — вкладкам с таблицами атак и списком локаций не хватало. */
+  max-width: 640px;
+  width: 96%;
+  max-height: 88vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1851,6 +1852,39 @@ input[type="number"] {
   gap: 12px;
   animation: fadeIn 0.2s ease;
 }
+/* --- ВКЛАДКИ КАРТОЧКИ ПОКЕДЕКСА --- */
+.dex-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--tma-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.dex-tab {
+  background: var(--tma-bg);
+  border: 1px solid var(--tma-border);
+  border-bottom: none;
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: var(--tma-text-muted);
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  white-space: nowrap;
+}
+.dex-tab:hover { background: var(--tma-card-bg); color: var(--tma-text); }
+.dex-tab.active {
+  background: var(--tma-card-bg);
+  color: var(--tma-text);
+  border-bottom: 2px solid var(--tma-primary);
+  margin-bottom: -2px;
+}
+.dex-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dex-panel[hidden] { display: none; }
 .pokedex-detail-loading {
   text-align: center;
   padding: 40px 0;

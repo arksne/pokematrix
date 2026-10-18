@@ -35,6 +35,11 @@ import { getPokedexState } from '../game/getters.js';
 // getTypeColor — возвращает HEX-цвет для типа покемона (например, 'fire' → '#FF4422')
 // getTypeGradient — возвращает CSS gradient для фона карточки по типам покемона
 import { getTypeColor, getTypeGradient } from '../utils/sprite.js';
+// ── Данные, которых в покедексе раньше не было, хотя они лежали в проекте ──
+import { getAbilityNameRu, isAbilityImplemented } from '../data/abilities.js';  // RU-имя и «работает ли» способности
+import { MONSTER_DROP_TABLE } from '../data/drops.js';                            // что падает с покемона
+import { getBST, encounterWeightFor, rarityStarsFor, levelEvolutionsFor } from '../data/power.js'; // сила/редкость/канон эвы
+import { typeNameRu } from '../data/type-icons.js';
 // getEvolutions — асинхронно получает массив эволюций для вида покемона
 //   Возвращает [{name, minLevel, trigger, item}, ...]
 import { getEvolutions } from './evolution.js';
@@ -522,12 +527,116 @@ export async function showPokedexInfo(speciesName) {
     const prevName = curIdx > 0 ? POKEDEX_ALL[curIdx - 1] : null;
     const nextName = curIdx < POKEDEX_ALL.length - 1 ? POKEDEX_ALL[curIdx + 1] : null;
 
-    // ── Сборка всего HTML детальной карточки ──
+    // ── Сборка карточки: шапка + вкладки ──
+    // Данные, которые раньше лежали в проекте, но в покедексе не показывались:
+    // RU-имена и работоспособность способностей, дроп, вес появления (редкость),
+    // канонные уровни эволюции, день/ночь и уровни ловли на каждой локации.
+    const bst = getBST(data.name) || (data.stats || []).reduce((s, x) => s + (x?.base_stat || 0), 0);
+    const rarityStars = rarityStarsFor(data.name, bst);
+    const encWeight = encounterWeightFor(data.name, bst);
+    const canonEvos = levelEvolutionsFor(data.name);
+    const drops = MONSTER_DROP_TABLE[data.name] || MONSTER_DROP_TABLE[(data.name || '').toLowerCase()] || [];
+
+    // Способности: RU-имя + пометка «в игре работает / не реализована»
+    const abilityRows = (data.abilities || []).map((a: any) => {
+      const id = a.ability?.name;
+      const ru = getAbilityNameRu(id) || id;
+      const ok = isAbilityImplemented(id);
+      return `<div class="method-row">${a.is_hidden ? '🔒 ' : ''}${ru}`
+        + `<span style="opacity:.6"> · <code>${id}</code></span>`
+        + (ok ? '' : ' <span style="opacity:.5">(не реализована)</span>') + '</div>';
+    }).join('') || '<div class="method-row">—</div>';
+
+    // Локации ловли: день/ночь, уровни, «нельзя поймать»
+    const locRows = catchLocs.length ? catchLocs.map((l: any) => {
+      const def: any = (l as any).def || {};
+      const lv = (def.wildMinLvl || def.wildMaxLvl)
+        ? `ур. ${def.wildMinLvl ?? '?'}–${def.wildMaxLvl ?? '?'}` : '';
+      const noCatch = def.noCatch ? ' · <b style="color:#ff6b6b">не ловится</b>' : '';
+      const mech = def.bossLvl ? ` · босс ур. ${def.bossLvl}` : '';
+      return `<div class="method-row">📍 <b>${l.locName}</b> (${l.region})${lv ? ' · ' + lv : ''}${mech}${noCatch}</div>`;
+    }).join('') : '<div class="method-row">В дикой природе не встречается (эволюция / ивент)</div>';
+
+    // Редкость словами — веса из power.ts не очень читаемы
+    const rarityWord = rarityStars >= 5 ? 'легендарный' : rarityStars === 4 ? 'очень редкий'
+      : rarityStars === 3 ? 'редкий' : rarityStars === 2 ? 'необычный' : 'обычный';
+
+    const statsPanel = `
+      <div class="pokedex-detail-stats">
+        <h4>Базовые статы</h4>
+        ${statsHtml}
+        <div class="method-row" style="margin-top:6px">
+          <b>Сумма (BST):</b> ${bst} · ${getPowerStars({apiData:data})}★ мощи · ${rarityStars}✦ редкости
+        </div>
+      </div>`;
+
+    const overviewPanel = `
+      <div class="pokedex-detail-method">
+        <div class="method-row"><b>🎒 У тебя:</b> ${owned.total} шт (команда: ${owned.team}, PC: ${owned.pc})</div>
+        <div class="method-row"><b>📏 Рост / вес:</b> ${hw}</div>
+        <div class="method-row"><b>🧬 Сила вида:</b> ${bst} BST — ${rarityWord}</div>
+        ${pokedexData[speciesName] ? `
+          <div class="method-row"><b>Способ получения:</b> ${pokedexData[speciesName].method}</div>
+          <div class="method-row"><b>Где:</b> ${pokedexData[speciesName].location}</div>` : ''}
+      </div>
+      <div class="pokedex-detail-method">
+        <div class="method-row"><b>✨ Способности:</b></div>
+        ${abilityRows}
+      </div>
+      ${gymUsers.length > 0 ? `
+      <div class="pokedex-detail-method" style="background:rgba(175,82,222,0.15);border-color:#af52de;">
+        <div class="method-row"><b>⚔ Используется лидерами:</b> ${gymUsers.join(', ')}</div>
+      </div>` : ''}`;
+
+    const wherePanel = `
+      <div class="pokedex-detail-method">
+        <div class="method-row"><b>🗺️ Где ловить:</b></div>
+        ${locRows}
+      </div>
+      <div class="pokedex-detail-method">
+        <div class="method-row"><b>✦ Редкость в природе:</b> ${rarityWord} (вес ${encWeight})</div>
+        ${drops.length ? `<div class="method-row"><b>🎁 Падает:</b></div>`
+          + drops.slice(0, 20).map((d: any) =>
+              `<div class="method-row">— ${d.item} ${d.chance ? Math.round(d.chance * 100) + '%' : ''}${d.qty ? ` ×${d.qty}` : ''}</div>`).join('')
+          : '<div class="method-row">Дропов нет</div>'}
+      </div>`;
+
+    const evoPanel = `
+      ${prevoHtml}
+      ${evoHtml}
+      ${canonEvos.length ? `
+      <div class="pokedex-detail-method">
+        <div class="method-row"><b>📐 Канон лиги (уровни):</b></div>
+        ${canonEvos.map((e: any) => `<div class="method-row">→ ${e.to} с ${e.level} ур.</div>`).join('')}
+      </div>` : ''}`;
+
+    const movesPanel = `
+      ${siteLearn?.levelup?.length ? `
+      <div class="pokedex-detail-method" style="background:rgba(255,149,0,0.08);border-color:#ff9500;">
+        <div class="method-row"><b>📚 Атаки по уровню (${siteLearn.levelup.length}):</b></div>
+        ${formatLearnsetRows(siteLearn.levelup)}
+      </div>` : ''}
+      ${siteLearn?.tm?.length ? `
+      <div class="pokedex-detail-method" style="background:rgba(0,122,255,0.08);border-color:#007aff;">
+        <div class="method-row"><b>💿 ТМ принимает (${siteLearn.tm.length}):</b></div>
+        ${siteLearn.tm.map(([no, name]) => `<div class="method-row">TM${String(no).padStart(2, '0')} — ${name}</div>`).join('')}
+      </div>` : ''}
+      ${((siteLearn?.egg?.length || 0) > 0 || (siteLearn?.tutor?.length || 0) > 0) ? `
+      <div class="pokedex-detail-method">
+        ${(siteLearn?.egg?.length || 0) > 0 ? `<div class="method-row"><b>🥚 Яйцевые:</b> ${siteLearn.egg.join(', ')}</div>` : ''}
+        ${(siteLearn?.tutor?.length || 0) > 0 ? `<div class="method-row"><b>🎓 Тьютор:</b> ${siteLearn.tutor.join(', ')}</div>` : ''}
+      </div>` : ''}
+      ${(!siteLearn || (!siteLearn.levelup?.length && !siteLearn.tm?.length && !siteLearn.egg?.length && !siteLearn.tutor?.length))
+        ? '<div class="method-row">Таблица обучения не найдена.</div>' : ''}`;
+
+    const tabs: Array<[string, string]> = [
+      ['overview', 'Обзор'], ['stats', 'Статы'], ['where', 'Где ловить'],
+      ['evo', 'Эволюция'], ['moves', 'Атаки'],
+    ];
+
     detailEl.innerHTML = `
-      <!-- Кнопка "Назад" — возвращает к сетке -->
       <button class="pokedex-detail-back" id="pokedex-detail-back">← Назад</button>
 
-      <!-- Навигация по соседям: предыдущий | следующий -->
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         ${prevName
           ? `<button class="pokedex-detail-back" style="flex:1;text-align:center;margin:0;padding:6px;" onclick="showPokedexInfo('${prevName}')">◀ ${prevName}</button>`
@@ -537,7 +646,6 @@ export async function showPokedexInfo(speciesName) {
           : '<span style="flex:1;"></span>'}
       </div>
 
-      <!-- Заголовок: спрайт + имя + номер + типы -->
       <div class="pokedex-detail-header">
         <div class="pokedex-detail-sprite-box" style="background:${detailTypeBg};" id="dex-sprite-box">
           <img class="pokedex-detail-sprite" id="dex-sprite" src="${spriteUrl}" alt="${data.name}">
@@ -550,71 +658,31 @@ export async function showPokedexInfo(speciesName) {
         </div>
       </div>
 
-      <!-- Статус: пойман/замечен/неизвестен (с цветовой подсветкой) -->
       <div class="pokedex-detail-status ${statusClass}">${statusText}</div>
 
-      <!-- Звёзды мощи и редкости -->
-      <div style="display:flex;justify-content:space-around;font-size:0.7rem;margin:4px 0;">
-        <span>${getPowerStars({apiData:data})}★ мощи</span>
-        <span>${getRarityStars({apiData:data})}✦ редкость</span>
+      <div class="dex-tabs" role="tablist">
+        ${tabs.map(([key, label], i) => `<button class="dex-tab${i === 0 ? ' active' : ''}" data-tab="${key}" role="tab">${label}</button>`).join('')}
       </div>
-
-      <!-- Сколько таких у игрока + рост/вес/способности -->
-      <div class="pokedex-detail-method">
-        <div class="method-row"><b>🎒 У тебя:</b> ${owned.total} шт (команда: ${owned.team}, PC: ${owned.pc})</div>
-        <div class="method-row"><b>📏 Рост / вес:</b> ${hw}</div>
-        <div class="method-row"><b>✨ Способности:</b> ${abilities}</div>
-      </div>
-
-      <!-- Серверные данные: способ и место (если есть) + локации с дикими -->
-      <div class="pokedex-detail-method">
-        ${pokedexData[speciesName] ? `
-        <div class="method-row"><b>Способ:</b> ${pokedexData[speciesName].method}</div>
-        <div class="method-row"><b>Где:</b> ${pokedexData[speciesName].location}</div>` : ''}
-        ${catchLocs.length > 0
-          ? `<div class="method-row"><b>🗺️ Ловится:</b> ${catchLocs.map(l => `${l.locName} (${l.region})`).join(', ')}</div>`
-          : `<div class="method-row"><b>🗺️ Ловится:</b> в дикой природе не встречается (эволюция / ивент)</div>`}
-      </div>
-
-      <!-- Лидеры залов, использующие этого покемона -->
-      ${gymUsers.length > 0 ? `
-      <div class="pokedex-detail-method" style="background:rgba(175,82,222,0.15);border-color:#af52de;">
-        <div class="method-row"><b>⚔ Используется лидерами:</b> ${gymUsers.join(', ')}</div>
-      </div>` : ''}
-
-      <!-- Пре-эволюции (из кого произошёл) -->
-      ${prevoHtml}
-
-      <!-- Эволюции (в кого может превратиться) -->
-      ${evoHtml}
-
-      <!-- Атакдекс: изучение по уровню (порядок сайта лиги) -->
-      ${siteLearn?.levelup?.length ? `
-      <div class="pokedex-detail-method" style="background:rgba(255,149,0,0.08);border-color:#ff9500;">
-        <div class="method-row"><b>📚 Атаки по уровню (${siteLearn.levelup.length}):</b></div>
-        ${formatLearnsetRows(siteLearn.levelup)}
-      </div>` : ''}
-
-      <!-- Яйцевые и тьюторские атаки -->
-      ${((siteLearn?.egg?.length || 0) > 0 || (siteLearn?.tutor?.length || 0) > 0) ? `
-      <div class="pokedex-detail-method">
-        ${(siteLearn?.egg?.length || 0) > 0 ? `<div class="method-row"><b>🥚 Яйцевые:</b> ${siteLearn.egg.join(', ')}</div>` : ''}
-        ${(siteLearn?.tutor?.length || 0) > 0 ? `<div class="method-row"><b>🎓 Тьютор:</b> ${siteLearn.tutor.join(', ')}</div>` : ''}
-      </div>` : ''}
-
-      <!-- ТМ-совместимость: какие диски принимает -->
-      ${siteLearn?.tm?.length ? `
-      <div class="pokedex-detail-method" style="background:rgba(0,122,255,0.08);border-color:#007aff;">
-        <div class="method-row"><b>💿 ТМ принимает (${siteLearn.tm.length}):</b></div>
-        ${siteLearn.tm.map(([no, name]) => `<div class="method-row">TM${String(no).padStart(2, '0')} — ${name}</div>`).join('')}
-      </div>` : ''}
-
-      <!-- Базовые статы (шкалы) -->
-      <div class="pokedex-detail-stats">
-        <h4>Базовые статы</h4>
-        ${statsHtml}
+      <div class="dex-panels">
+        ${tabs.map(([key], i) => `<div class="dex-panel" data-panel="${key}"${i === 0 ? '' : ' hidden'}>${
+          key === 'overview' ? overviewPanel
+          : key === 'stats' ? statsPanel
+          : key === 'where' ? wherePanel
+          : key === 'evo' ? evoPanel
+          : movesPanel
+        }</div>`).join('')}
       </div>
     `;
+
+    // ── Переключение вкладок ──
+    detailEl.querySelectorAll('.dex-tab').forEach((btn: any) => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.tab;
+        detailEl.querySelectorAll('.dex-tab').forEach((b: any) => b.classList.toggle('active', b === btn));
+        detailEl.querySelectorAll('.dex-panel').forEach((p: any) => { p.hidden = p.dataset.panel !== key; });
+        detailEl.scrollTop = 0;
+      });
+    });
 
     // ── Тоггл шайни в детальной карточке ──
     let showingShiny = false;  // Локальное состояние: показан шайни или нет
