@@ -70,6 +70,11 @@ import { QUEST_CONFIGS } from '../data/quests.js';
 // тот же reduce был продублирован прямо в getPowerStars(), и две копии рано или
 // поздно разошлись бы. battle/stats.ts не импортирует utils, поэтому цикла нет.
 import { baseStatTotal } from '../battle/stats.js';
+// Сила вида — общий источник истины для звёзд силы/редкости и для веса
+// появления диких. См. data/power.ts.
+import {
+  bstFromApiData, powerStarsFromBST, rarityStarsFor,
+} from '../data/power.js';
 
 // === DATA CONSTANTS ===
 export const LEGENDARY_SET = new Set([
@@ -161,27 +166,19 @@ export function lsKey(name, tgUser?) { return `league17_${name}_${getTrainerId(t
 
 // === STAR RATINGS — pure functions, no mutable state dependency ===
 export function getPowerStars(mon) {
-  if (!mon.apiData?.stats) return 1;
-  const bst = baseStatTotal(mon);
-  if (bst >= 650) return 10;
-  if (bst >= 600) return 9;
-  if (bst >= 550) return 8;
-  if (bst >= 500) return 7;
-  if (bst >= 450) return 6;
-  if (bst >= 400) return 5;
-  if (bst >= 350) return 4;
-  if (bst >= 300) return 3;
-  if (bst >= 250) return 2;
-  return 1;
+  // Считаем по СИЛЕ вида (src/data/power.ts). Раньше брали только base_stat
+  // из apiData, а для покедекса/неизвестных видов отдавали 1 — и звёзды
+  // выглядели одинаково у всех.
+  const bst = bstFromApiData(mon?.apiData) || baseStatTotal(mon);
+  if (!bst) return 1;
+  return powerStarsFromBST(bst);
 }
 export function getRarityStars(mon) {
-  const name = mon.apiData?.species?.name || mon.apiData?.name;
-  if (name && LEGENDARY_NAMES.has(name)) return 5;
-  const cr = mon.apiData?.captureRate || mon.apiData?.speciesData?.capture_rate || 255;
-  if (cr < 30) return 4;
-  if (cr < 80) return 3;
-  if (cr < 150) return 2;
-  return 1;
+  const species = mon?.apiData?.species?.name || mon?.apiData?.name || '';
+  const bst = bstFromApiData(mon?.apiData) || baseStatTotal(mon);
+  // captureRate в покедексе/у диких отсутствует — из-за него у всех была
+  // одна звезда. Теперь редкость выводится из силы вида.
+  return rarityStarsFor(species, bst);
 }
 
 // === POKEDEX STATE ACCESSORS — read-only wrappers around imported data ===

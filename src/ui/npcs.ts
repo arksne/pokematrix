@@ -15,7 +15,6 @@
 //   notifications — addNotification (колокольчик)
 //   core        — appendToLog (боевой лог)
 //   pc          — openPC
-//   daycare     — openBreedBoxes
 //   NPC_DATA    — статические данные NPC
 //
 // ИСПОЛЬЗУЕТСЯ В: location.ts (клик по NPC на карте)
@@ -31,7 +30,6 @@ import { showToast } from '../utils/dom.js';              // Всплывающ�
 import { addNotification } from './notifications.js';      // Системные уведомления (колокольчик)
 import { appendToLog, startMiniBossBattle } from '../battle/core.js';           // Запись в боевой лог + дружеские бои
 import { openPC } from './pc.js';                          // Открытие PC
-import { openBreedBoxes } from './daycare.js';
 import { NPC_DATA } from '../data/npc.js';                  // Статические данные NPC
 import '../data/pokecenter-npcs.js';   // guarantee: every pokecenter has an NPC
 // Платное лечение (M-24): та же цена, что кнопка центра
@@ -541,11 +539,11 @@ export function openNPCDialog(npcId: string) {
 
   // ── NPC: Питомник (PC + боксы разведения) ──
   // C3: кнопки смотрителя-депозита больше нет (openDaycareDeposit удалён из
-  // диалога) — разведение только через боксы (openBreedBoxes).
-  // Разведение доступно в ЛЮБОМ покецентре, поэтому условие — по локации
-  // NPC, а не по его id. Раньше кнопка висела на двух конкретных NPC
-  // (daycare_pokecenter и pewter_breeder), и в остальных 23 покецентрах
-  // разведения не было вообще.
+  // диалога) — разведение только через боксы.
+  // Кнопка ПК — в любом покецентре. Раньше висела только на питомнике в
+  // Голденроде, в остальных покецентрах не было даже терминала.
+  // Разведения здесь НЕТ намеренно: оно живёт в ПК (вкладка «💕 Разведение»),
+  // и две кнопки «развести» были дублирующими друг друга.
   const npcLoc = String((NPC_DATA as any)?.[npcId]?.location || '');
   const inPokeCenter = /_pokecenter$/.test(npcLoc);
 
@@ -560,17 +558,6 @@ export function openNPCDialog(npcId: string) {
       openPC();  // Открываем PC-терминал
     };
     actionsContainer.insertBefore(btnDeposit, document.getElementById('btn-close-npc'));
-
-    // Кнопка "Боксы разведения" (A1): 3 бокса, пару кладёт игрок вручную
-    const btnBreed = document.createElement('button');
-    btnBreed.className = 'tma-btn npc-action-extra';
-    btnBreed.style.backgroundColor = '#e040fb';  // Фиолетовая
-    btnBreed.innerText = '💕 Боксы разведения';
-    btnBreed.onclick = () => {
-      modal.style.display = 'none';
-      openBreedBoxes();
-    };
-    actionsContainer.insertBefore(btnBreed, document.getElementById('btn-close-npc'));
   }
 }
 

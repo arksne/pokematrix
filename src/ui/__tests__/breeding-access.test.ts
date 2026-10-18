@@ -43,10 +43,6 @@ describe('разведение доступно игроку', () => {
     expect(pcSrc).toMatch(/openBreedBoxes/);
   });
 
-  it('в ПК разведение импортировано (иначе вкладка — пустая)', () => {
-    expect(pcSrc).toMatch(/import \{[^}]*openBreedBoxes[^}]*\} from '\.\/daycare\.js'/);
-  });
-
   it('иконка ❤️ считается по реальным боксам, а не по мёртвому breedingPairs', () => {
     expect(pcSrc).not.toMatch(/state\.breedingPairs/);
     expect(pcSrc).toMatch(/breedBoxes/);

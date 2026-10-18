@@ -45,6 +45,7 @@ import { fetchSiteMoveDetail } from '../data/sitemove.js';              // де�
 import {
   fetchSiteLearnset, wildMovesFromLearnset, moveNameToSlug,
 } from '../data/learnset.js';                                           // мувсеты по уровню: таблица «Развитие»
+import { loadPowerTable, encounterWeightFor } from '../data/power.js';   // сила вида → редкость появления
 import { syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
 import { rollWildIVs, perfectIVs } from './logic.js';                   // гены: усреднённые дикие / идеальные лидеры
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
@@ -1880,6 +1881,9 @@ export let pokedexTotal = 0;
  * POKEDEX_ALL — массив имён всех видов.
  */
 async function loadPokedexData() {
+  // Таблица силы вида нужна СИНХРОННО в pickWeightedEncounter (горячий путь),
+  // поэтому грузим её здесь, на старте, а не по первому требованию.
+  try { await loadPowerTable(); } catch (_) {}
   try {
     const res = await fetch(import.meta.env.BASE_URL + 'pokedex_data.json');
     pokedexData = await res.json();
@@ -3244,81 +3248,11 @@ function switchPokemon() {
 //   store.getLocation() — получение данных локации по ID
 // ─────────────────────────────────────────────────────────────
 
-// Encounter weight multiplier (higher = more common). Default 1.0
-const ENCOUNTER_WEIGHTS = {
-  'pidgey': 2.0, 'rattata': 2.0, 'spearow': 1.8, 'zubat': 2.5,
-  'caterpie': 2.2, 'weedle': 2.2, 'geodude': 1.5, 'machop': 1.3,
-  'oddish': 1.8, 'bellsprout': 1.8, 'venonat': 1.5, 'paras': 1.4,
-  'mankey': 1.2, 'diglett': 1.2, 'meowth': 1.5, 'psyduck': 1.3,
-  'growlithe': 1.0, 'vulpix': 1.0, 'poliwag': 1.5, 'tentacool': 1.8,
-  'slowpoke': 1.2, 'magnemite': 1.2, 'farfetchd': 0.5, 'doduo': 1.2,
-  'seel': 1.0, 'shellder': 1.3, 'gastly': 0.8, 'onix': 0.6,
-  'drowzee': 1.3, 'krabby': 1.5, 'voltorb': 1.2, 'exeggcute': 1.0,
-  'cubone': 1.0, 'hitmonlee': 0.3, 'hitmonchan': 0.3, 'lickitung': 0.5,
-  'koffing': 1.3, 'rhyhorn': 1.0, 'chansey': 0.1, 'tangela': 1.0,
-  'kangaskhan': 0.15, 'horsea': 1.3, 'goldeen': 1.5, 'staryu': 1.3,
-  'scyther': 0.4, 'jynx': 0.4, 'electabuzz': 0.4, 'magmar': 0.4,
-  'pinsir': 0.4, 'tauros': 0.3, 'magikarp': 2.5,
-  'lapras': 0.2, 'ditto': 0.3, 'eevee': 0.25,
-  'porygon': 0.3, 'omanyte': 0.8, 'kabuto': 0.8,
-  'aerodactyl': 0.1, 'snorlax': 0.1,
-  'dratini': 0.1, 'dragonair': 0.05,
-  'grimer': 1.2, 'muk': 0.4, 'weezing': 0.4,
-  'haunter': 0.5, 'gengar': 0.05,
-  'sentret': 2.0, 'hoothoot': 2.0, 'murkrow': 1.0,
-  'spinarak': 1.5, 'chinchou': 1.3, 'mareep': 1.5,
-  'sudowoodo': 0.5, 'aipom': 1.0, 'sunkern': 1.5,
-  'yanma': 1.0, 'wooper': 1.5, 'misdreavus': 0.6,
-  'wobbuffet': 0.5, 'girafarig': 0.8, 'pineco': 1.3,
-  'dunsparce': 0.6, 'gligar': 0.8, 'snubbull': 1.5,
-  'qwilfish': 1.0, 'shuckle': 0.3, 'heracross': 0.5,
-  'sneasel': 0.6, 'teddiursa': 1.2, 'slugma': 1.3,
-  'swinub': 1.3, 'corsola': 1.0, 'remoraid': 1.3,
-  'delibird': 0.7, 'mantine': 0.7, 'skarmory': 0.4,
-  'houndour': 1.0, 'phanpy': 1.2, 'stantler': 0.8,
-  'smeargle': 0.4, 'tyrogue': 0.8, 'miltank': 0.5,
-  'larvitar': 0.1, 'pupitar': 0.05,
-  'poochyena': 2.0, 'zigzagoon': 2.0, 'wurmple': 2.2,
-  'lotad': 1.5, 'seedot': 1.5, 'taillow': 2.0,
-  'wingull': 2.0, 'ralts': 0.5, 'surskit': 1.3,
-  'shroomish': 1.3, 'slakoth': 1.0, 'nincada': 1.2,
-  'whismur': 1.8, 'makuhita': 1.3, 'azurill': 1.0,
-  'nosepass': 0.8, 'skitty': 1.5, 'sableye': 0.4,
-  'mawile': 0.4, 'aron': 1.2, 'meditite': 1.2,
-  'electrike': 1.3, 'plusle': 1.0, 'minun': 1.0,
-  'volbeat': 1.0, 'illumise': 1.0, 'roselia': 1.0,
-  'gulpin': 1.3, 'carvanha': 1.2, 'wailmer': 1.0,
-  'numel': 1.3, 'torkoal': 0.5, 'spoink': 1.3,
-  'spinda': 1.0, 'trapinch': 0.8, 'cacnea': 1.3,
-  'swablu': 1.3, 'zangoose': 0.8, 'seviper': 0.8,
-  'lunatone': 0.5, 'solrock': 0.5, 'barboach': 1.3,
-  'corphish': 1.3, 'baltoy': 1.0, 'lileep': 0.5,
-  'anorith': 0.5, 'feebas': 0.3, 'castform': 0.6,
-  'kecleon': 0.5, 'shuppet': 1.0, 'duskull': 1.0,
-  'tropius': 0.8, 'chimecho': 0.4, 'absol': 0.3,
-  'wynaut': 0.6, 'snorunt': 1.0, 'spheal': 1.3,
-  'clamperl': 1.0, 'relicanth': 0.3, 'luvdisc': 1.3,
-  'bagon': 0.15, 'shelgon': 0.05, 'combee': 1.2,
-  'shellos': 1.5, 'buneary': 1.5, 'cottonee': 1.3,
-  'petilil': 1.3, 'sandile': 1.2, 'trubbish': 1.5,
-  'minccino': 1.5, 'swirlix': 1.0, 'pancham': 0.8,
-  'pangoro': 0.3, 'tynamo': 0.8, 'golett': 0.5,
-  // Legendaries — extremely rare (0.01-0.05)
-  'articuno': 0.02, 'zapdos': 0.02, 'moltres': 0.02,
-  'mewtwo': 0.01, 'mew': 0.01,
-  'raikou': 0.02, 'entei': 0.02, 'suicune': 0.02,
-  'lugia': 0.01, 'ho-oh': 0.01, 'celebi': 0.01,
-  'latias': 0.02, 'latios': 0.02,
-  'kyogre': 0.01, 'groudon': 0.01, 'rayquaza': 0.01,
-  'jirachi': 0.01, 'deoxys-normal': 0.01,
-  'azelf': 0.02, 'dialga': 0.01, 'palkia': 0.01, 'giratina-altered': 0.01,
-  'manaphy': 0.01, 'darkrai': 0.01, 'shaymin-land': 0.01,
-  // Fully evolved pseudo-legendaries & starters — very rare (0.03-0.05)
-  'charizard': 0.05, 'blastoise': 0.05, 'venusaur': 0.05,
-  'dragonite': 0.04, 'tyranitar': 0.03,
-  'salamence': 0.03, 'metagross': 0.03,
-  'garchomp': 0.03, 'hydreigon': 0.03,
-};
+// Редкость появления выведена из СИЛЫ вида (src/data/power.ts):
+// encounterWeightFor() — обратно пропорциональна BST, легендарки 0.02.
+// Рукописная таблица ENCOUNTER_WEIGHTS на ~70 видов удалена: для всех
+// остальных ~1200 она давала дефолт 1.0, из-за чего «редкие» формы
+// (Ancient Kabuto) выпадали чаще обычных.
 
 /**
  * pickWeightedEncounter — выбрать покемона из списка с учётом весов.
@@ -3337,7 +3271,11 @@ const ENCOUNTER_WEIGHTS = {
 function pickWeightedEncounter(encountersArray) {
   const hasBell = (GS.inventory || {})['graphiteBell'] > 0; // Колокол = больше редких
   const weights = encountersArray.map(name => {
-    const base = ENCOUNTER_WEIGHTS[name] || 1.0;
+    // Вес по СИЛЕ вида, а не по рукописной таблице: сильные виды (и их
+    // эволюции, они всегда сильнее базы) автоматически становятся реже.
+    // Раньше для ~1200 видов не было записи в ENCOUNTER_WEIGHTS, все они
+    // получали 1.0, и Ancient Kabuto ловился чаще обычного Kabuto.
+    const base = encounterWeightFor(name);
     // Graphite Bell: x3 weight for rare pokemon (weight <= 0.3)
     return (hasBell && base <= 0.3) ? base * 3 : base;
   });
