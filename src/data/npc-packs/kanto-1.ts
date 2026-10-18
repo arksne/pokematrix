@@ -28,7 +28,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Ещё не всё. Река ждёт, маршруты ждут...',
     },
     quests: [
-      { id: 'cer_trail', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 диких водных + посети 6 локаций (средний уровень 20)', rewardMoney: 10000, rewardItem: 'mysticWater', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], prereqQuest: null, filter: { types: ['water'] }, verify: { avgLevel: 20, locs: ['ceruleanCity', 'route24', 'route25', 'route4', 'mtMoon', 'ceruleanCave'] } },
+      { id: 'cer_trail', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 диких водных + посети 6 локаций (средний уровень 20)', rewardMoney: 10000, rewardItem: 'mysticWater', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], prereqQuest: null, filter: { types: ['water'] }, verify: { avgLevel: 20, locs: ['ceruleanCity', 'route24', 'route25', 'route4', 'mtMoon'] } },
       { id: 'cer_fossil', type: 'use_item', targetItem: null, targetQty: 2, desc: 'Используй 2 Moon Stone (камни с горы Мун)', rewardMoney: 9000, rewardItem: 'expCandyM', rewardQty: 3, prereqQuest: null, filter: { itemId: 'moonStone' } },
     ],
   },

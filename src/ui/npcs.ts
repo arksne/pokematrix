@@ -26,7 +26,8 @@ import { state } from '../game/state.js';            // Глобальное с�
 import { store } from '../game/store.js';              // Event-система
 import { itemDef } from '../game/state.js';            // Название предмета по ID
 import { addItem, removeItem } from '../game/actions.js';  // Манипуляции с инвентарём
-import { showToast } from '../utils/dom.js';              // Всплывающие уведомления
+import { showToast } from '../utils/dom.js';
+import { isQuestUnlocked, questLockHint } from '../data/badges.js';   // гейт: квесты по значкам              // Всплывающие уведомления
 import { addNotification } from './notifications.js';      // Системные уведомления (колокольчик)
 import { appendToLog, startMiniBossBattle } from '../battle/core.js';           // Запись в боевой лог + дружеские бои
 import { openPC } from './pc.js';                          // Открытие PC
@@ -128,6 +129,22 @@ export function renderNPCQuests(npc: any) {
       const el = document.createElement('div');
       el.className = 'npc-quest-item';
       el.innerHTML = `<div class="npc-quest-info"><div class="npc-quest-name">✅ ${q.desc}</div></div>`;
+      container.appendChild(el);
+      return;
+    }
+
+    // ── ГЕЙТ ПО ПРОГРЕССИИ: квест города открыт после предыдущего значка ──
+    // Квест показываем всегда (и открытым, и закрытым), но закрытый — серым
+    // и без кнопки, с подсказкой «нужно N значков». Раньше гейта не было
+    // вовсе: все 160 квестов были доступны с первого шага.
+    const unlocked = isQuestUnlocked(q.id, state.badges);
+    if (!unlocked) {
+      const el = document.createElement('div');
+      el.className = 'npc-quest-item locked';
+      el.innerHTML = `<div class="npc-quest-info">`
+        + `<div class="npc-quest-name">${q.desc}</div>`
+        + `<div class="npc-quest-lock">${questLockHint(q.id, state.badges)}</div>`
+        + `</div>`;
       container.appendChild(el);
       return;
     }

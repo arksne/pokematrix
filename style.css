@@ -2266,6 +2266,19 @@ input[type="number"] {
   overflow-wrap: anywhere;
 }
 .npc-quest-reward { font-size: 0.8rem; color: var(--tma-accent); }
+/* Квест закрыт гейтом по значкам: видно серым, кнопки «Взять» нет. */
+.npc-quest-item.locked {
+  opacity: 0.6;
+  background: var(--tma-bg);
+  border: 1px dashed var(--tma-border);
+}
+.npc-quest-item.locked .npc-quest-name { filter: grayscale(1); }
+.npc-quest-lock {
+  font-size: 0.73rem;
+  color: #ffb648;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
 .npc-quest-progress { font-size: 0.75rem; color: var(--tma-text-muted); }
 .npc-quest-bar {
   height: 6px;
