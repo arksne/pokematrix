@@ -3781,7 +3781,17 @@ async function startHunt(encountersArray) {
       }));
     } catch (_) {}
     battleLog.innerText = `Ошибка боя: ${e?.message || e}`;
-    setTimeout(() => { modal.style.display = 'none'; }, 1000);
+    // Раньше тут стояло только `setTimeout(() => modal.style.display='none', 1000)`
+    // — игрок видел пустой экран и «выкидывание из боя» без единого слова.
+    // Теперь причина остаётся на экране и в тосте, а охота останавливается,
+    // чтобы не бить в ту же ошибку каждые 2 секунды.
+    try { stopAutoHunt?.(); } catch (_) {}
+    showToast(`Бой не начался: ${e?.message || 'ошибка'}. Подробности в логе боя.`, true);
+    try {
+      const actions = document.getElementById('battle-main-menu');
+      if (actions) actions.style.display = 'flex';
+    } catch (_) {}
+    setTimeout(() => { modal.style.display = 'none'; }, 4000);
   } finally {
     huntPending = false;
   }
@@ -7491,6 +7501,19 @@ function initEncounterEvents() {
             berries: S.activeWild.berries || { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 },
             learnableMoves: []
           };
+
+          // Монстр должен помнить ТЕ ЖЕ атаки, что использовал в бою.
+          // Раньше сюда попадал apiData.moves — произвольный порядок PokeAPI
+          // (для Рапидаша там первым шёл Megahorn), из-за чего пойманный покемон
+          // получал атаки, которых никогда не знал: «поймал с совсем другими».
+          const battleMoves = (S.wildMovesDetailed || []).filter(Boolean).map((m: any) => {
+            const slug = moveNameToSlug(m.name);
+            return { move: { name: slug, url: `https://pokeapi.co/api/v2/move/${slug}/` } };
+          });
+          if (battleMoves.length) {
+            S.activeWild.moves = battleMoves;
+            newMon.apiData.moves = battleMoves;
+          }
 
           // Friend Ball: set happiness to 200
           if (item === 'friendBall') {
