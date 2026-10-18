@@ -45,6 +45,7 @@
 
 import { ITEMS } from '../data/items.js';
 import { trainingStages } from '../data/training.js';
+import { typeIconSvg } from '../data/type-icons.js';       // канонические иконки типов (SVG)
 
 const TYPE_COLORS = {
   normal: '#A8A77A', fire: '#EE8130', water: '#6390F0', electric: '#F7D02C',
@@ -73,10 +74,8 @@ export function getTypeEmoji(type) {
 
 /** Маленький бейдж-иконка типа: цветной кружок с эмодзи (title = имя типа). */
 export function typeBadgeHtml(typeName, size = 22) {
-  const color = getTypeColor(typeName);
-  const emoji = getTypeEmoji(typeName);
-  const fs = Math.round(size * 0.6);
-  return `<span class="type-badge type-badge-icon" title="${typeName}" style="background-color:${color};width:${size}px;height:${size}px;min-width:${size}px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:${fs}px;line-height:1;">${emoji}</span>`;
+  // Каноническая векторная иконка типа вместо эмодзи (data/type-icons.ts).
+  return typeIconSvg(typeName, size);
 }
 
 /** Ряд бейджей-иконок для списка типов PokeAPI [{type:{name}}]. */
