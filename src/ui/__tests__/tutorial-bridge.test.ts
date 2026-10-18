@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { state } from '../../game/state.js';
 import { store } from '../../game/store.js';
 import { NPC_DATA } from '../../data/npc.js';
@@ -8,7 +8,10 @@ import {
   ensureTutorialQuests,
   applyTutorialCompletion,
   completeTutorialGate,
+  startOnboarding,
+  markTutorialComplete,
 } from '../tutorial.js';
+import { isTutorialGateOpen } from '../location.js';
 
 /**
  * Мост UI-тур → NPC-гейт.
@@ -99,5 +102,83 @@ describe('applyTutorialCompletion / completeTutorialGate', () => {
     state.completedNPCQuests = [...TUTORIAL_IDS];
     completeTutorialGate();
     expect(state.completedNPCQuests.filter((q: string) => q === 'tutorial_6')).toHaveLength(1);
+  });
+
+  /**
+   * Регрессия: игрок закрыл вкладку ВО ВРЕМЯ обучения и вернулся.
+   * init.ts:381 при каждом входе зовёт startOnboarding() для непустой команды,
+   * и раньше цепочка тура дёргала completeTutorialGate() → applyTutorialCompletion,
+   * который сдавал сразу все 6 квестов Оука и открывал карту без единого
+   * реального действия. Тур и квесты — разные системы, связаны быть не должны.
+   */
+  describe('перезаход во время обучения не сдаёт квесты', () => {
+    let runTourToEnd: () => void;
+    beforeEach(() => {
+      // localStorage в node-окружении нет — минимальный мок, как в tutorial-flags.
+      vi.stubGlobal('localStorage', {
+        _d: {} as Record<string, string>,
+        getItem(k: string) { return this._d[k] ?? null; },
+        setItem(k: string, v: string) { this._d[k] = String(v); },
+        removeItem(k: string) { delete this._d[k]; },
+      });
+      // Минимальный DOM: jsdom в проекте нет, а тур рисует оверлей и вешает
+      // обработчики на кнопки. getElementById отдаёт «кнопку», которая
+      // запоминает клик, — этим мы прокликиваем тур до конца.
+      const clicks: Record<string, () => void> = {};
+      const mkBtn = (id: string) => ({
+        style: {}, id, className: '', innerHTML: '', textContent: '',
+        classList: { add() {}, remove() {} },
+        appendChild() {}, remove() {},
+        addEventListener: (_e: string, h: () => void) => { clicks[id] = h; },
+        setAttribute() {}, click() {}, getBoundingClientRect: () => ({}),
+        querySelector: () => null,
+      });
+      vi.stubGlobal('document', {
+        createElement: () => mkBtn('el'),
+        getElementById: (id: string) =>
+          (id === 'tutorial-next' || id === 'tutorial-skip') ? mkBtn(id) : null,
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        body: { appendChild() {} },
+      });
+      // Прокликать «Пропустить» столько раз, сколько уроков в цепочке тура:
+      // basics → battles → items. Каждый сброс доводит цепочку до markTutorialComplete.
+      runTourToEnd = () => {
+        for (let i = 0; i < 3; i++) clicks['tutorial-skip']?.();
+      };
+      localStorage.removeItem('tutorial');
+      state.tutorialStep = 1;
+      state.completedNPCQuests = [];
+      state.npcQuestProgress = {};
+      state.myTeam = [{ species: 'bulbasaur', baseLevel: 5 }] as any;
+    });
+
+    it('повторный вход не открывает гейт и не сдаёт tutorial_1..6', () => {
+      // Свежий вход: команда есть, метки тура нет → init зовёт startOnboarding.
+      startOnboarding();
+      // Игрок прокликивает тур до конца («Пропустить» × 3).
+      runTourToEnd();
+      // Квесты Оука не должны сдаться сами.
+      expect(state.completedNPCQuests).not.toContain('tutorial_6');
+      expect(state.tutorialStep).toBeLessThanOrEqual(6);
+      expect(isTutorialGateOpen()).toBe(false);
+    });
+
+    it('даже после метки "тур пройден" гейт остаётся закрытым', () => {
+      // Второй вход: тур уже пройден, startOnboarding идёт в ранний return.
+      markTutorialComplete();
+      startOnboarding();
+      runTourToEnd();
+      expect(state.completedNPCQuests).not.toContain('tutorial_6');
+      expect(state.tutorialStep).toBeLessThanOrEqual(6);
+      expect(isTutorialGateOpen()).toBe(false);
+    });
+
+    it('гейт открывается только реальной сдачей tutorial_6', () => {
+      // Сдача квеста у профессора (npcs.ts:229-231) — единственный честный путь.
+      state.completedNPCQuests.push('tutorial_6');
+      state.tutorialStep = 7;
+      expect(isTutorialGateOpen()).toBe(true);
+    });
   });
 });

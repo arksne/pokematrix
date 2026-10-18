@@ -201,6 +201,16 @@ export function applyTutorialCompletion(s: {
 // Живое состояние берём из store.getState(): init.ts делает
 // store.setState(state), так что это та же ссылка. Прямой импорт
 // game/state.js здесь не нужен (и ломал бы лёгкие моки utils/state).
+// СЕЙЧАС мост вызывается ТОЛЬКО из ветеранской миграции в init.ts, где
+// решение защищено доказательством прогресса (бейджи / 6+ локаций / ур.10+).
+//
+// ВАЖНО: его больше нельзя дёргать из UI-тура startOnboarding. Тур — это
+// 4 косметических шага, а applyTutorialCompletion сдаёт сразу все 6 квестов
+// Оука. Связав их, мы дали читерский путь: игрок во время обучения закрывает
+// вкладку, возвращается, а init.ts:381 заново зовёт startOnboarding() — и
+// проклик «Готово!»/«Пропустить» закрывал ВСЕ 6 квестов и открывал карту без
+// единого реального действия. Легитимный путь открывает гейт сдача
+// tutorial_6 у профессора (npcs.ts:229-231 сам двигает tutorialStep).
 export function completeTutorialGate(): void {
   try {
     const s: any = (store as any)?.getState?.() ?? {};
@@ -241,14 +251,16 @@ export function startLesson(lessonId: string, callback?: () => void) {
 
 // ── startOnboarding: запуск вводного обучения ────────────
 // Показывает первые 2 шага из урока "Основы", затем цепочку:
-// → "Бои" → "Предметы" → markTutorialComplete() + completeTutorialGate()
+// → "Бои" → "Предметы" → markTutorialComplete()
+// Цепочка НЕ трогает tutorial_1..6: гейт открывает реальная сдача квестов.
 export function startOnboarding(callback?: () => void) {
   ensureTutorialQuests();
   if (isTutorialComplete()) {
-    // Метка уже стоит (этот акк на этом устройстве тур проходил),
-    // а гейт мог остаться закрытым (сейв с другого устройства / старый
-    // сейв до моста). Дотягиваем гейт — идемпотентно.
-    completeTutorialGate();
+    // Тур на этом устройстве уже проходили. Раньше здесь стоял
+    // completeTutorialGate() — он сдавал все 6 квестов Оука, и игрок,
+    // закрывший вкладку во время обучения, по возвращении получал
+    // «обучение пройдено» без единого действия (см. completeTutorialGate).
+    // Метка означает лишь «я видел вводный тур»; квесты сдаются у профессора.
     if (callback) callback();
     return;
   }
@@ -257,11 +269,11 @@ export function startOnboarding(callback?: () => void) {
   currentSteps = TUTORIAL_LESSONS[0].steps.slice(0, 2);
   currentStepIndex = 0;
   onComplete = () => {
-    // После основ → урок битв → урок предметов → готово
+    // После основ → урок битв → урок предметов → готово.
+    // Только localStorage-метка: гейт открывает сдача tutorial_6.
     startLesson('battles', () => {
       startLesson('items', () => {
         markTutorialComplete();
-        completeTutorialGate();
         if (callback) callback();
       });
     });
