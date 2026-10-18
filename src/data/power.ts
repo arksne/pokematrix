@@ -53,9 +53,13 @@ export function powerTable(): Record<string, number> {
 export function baseSpecies(species: string): string {
   return String(species || '')
     .toLowerCase()
-    .replace(/\s+(alolan|galarian|hisuian|paldean|\w+ian)$/i, '')
-    .replace(/-(legacy|alola|galar|hisui|paldea|blade|starter|partner|eternamax|gmax|total|primal|mega|origin|hero|juce|judge|koko|tapus|10|00|therian|sky|ground|therem|irene|raging|complete|blade|build|dawn|dusk|female|male)$/i, '')
-    .replace(/\s+(mega|primal|gmax|eternamax)$/i, '');
+    // «raticate alolan» → «raticate»
+    .replace(/\s+(alolan|galarian|hisuian|paldean)$/, '')
+    // «kabuto-legacy», «giratina-altered», «deoxys-normal» → база
+    .replace(/-(legacy|alola|galar|hisui|paldea|altered|origin|hero|gmax|total|primal|mega|blade|starter|partner|eternamax|therian|sky|ground|therem|irene|raging|complete|build|dawn|dusk|female|male|normal|attack|defense|speed)$/, '')
+    // «nidoran-f» / «deoxys-form-1» → хвост-индекс
+    .replace(/-\d+$/, '')
+    .replace(/\s+(mega|primal|gmax|eternamax)$/, '');
 }
 
 /** BST вида. 0 = вида нет в таблице. */
@@ -177,12 +181,13 @@ export function encounterWeightFor(species: string, bst?: number): number {
   const power = typeof bst === 'number' && bst > 0 ? bst : getBST(species);
   const name = String(species || '').toLowerCase();
   if (isLegendaryName(name)) return 0.02;
-  if (power <= 0) return 1.0;              // вида нет в таблице — как раньше
-  if (power >= 640) return 0.12;
-  if (power >= 580) return 0.28;
-  if (power >= 520) return 0.55;
-  if (power >= 450) return 1.0;
-  if (power >= 380) return 1.5;
-  if (power >= 300) return 2.0;
-  return 2.5;
+  if (power <= 0) return 0.5;               // вида нет в таблице — НЕ «обычный»
+  if (power >= 640) return 0.08;
+  if (power >= 580) return 0.20;
+  if (power >= 520) return 0.40;
+  if (power >= 470) return 0.75;
+  if (power >= 400) return 1.3;
+  if (power >= 330) return 1.9;
+  if (power >= 260) return 2.4;
+  return 2.8;
 }

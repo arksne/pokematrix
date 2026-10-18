@@ -3310,12 +3310,15 @@ function switchPokemon() {
  */
 function pickWeightedEncounter(encountersArray) {
   const hasBell = (GS.inventory || {})['graphiteBell'] > 0; // Колокол = больше редких
-  const weights = encountersArray.map(name => {
+  // В списке встречаются и строки ('pidgey'), и объекты ({name, level}) —
+  // берём имя из любой формы, а возвращаем исходный элемент.
+  const speciesOf = (e: any) => (typeof e === 'string' ? e : e?.name) || '';
+  const weights = encountersArray.map((e: any) => {
     // Вес по СИЛЕ вида, а не по рукописной таблице: сильные виды (и их
     // эволюции, они всегда сильнее базы) автоматически становятся реже.
     // Раньше для ~1200 видов не было записи в ENCOUNTER_WEIGHTS, все они
     // получали 1.0, и Ancient Kabuto ловился чаще обычного Kabuto.
-    const base = encounterWeightFor(name);
+    const base = encounterWeightFor(speciesOf(e));
     // Graphite Bell: x3 weight for rare pokemon (weight <= 0.3)
     return (hasBell && base <= 0.3) ? base * 3 : base;
   });
@@ -3646,7 +3649,12 @@ async function startHunt(encountersArray) {
   modal.style.display = 'flex';
 
   if (!encountersArray || encountersArray.length === 0) { huntPending = false; return showToast('Нет покемонов для поиска на этой локации!', true); }
-  const picked = encountersArray[Math.floor(Math.random() * encountersArray.length)];
+  // Взвешенный выбор по СИЛЕ вида. Равномерный random здесь означал, что
+  // Снорлакс нападал так же часто, как Пиджи: система редкости по силе
+  // работала только в одной из точек входа, а бои шли через startHunt.
+  const picked = encountersArray.length === 1
+    ? encountersArray[0]
+    : pickWeightedEncounter(encountersArray);
   const pkmName = typeof picked === 'string' ? picked : picked.name;
   const presetLvl = typeof picked === 'object' ? picked.level : null;
 

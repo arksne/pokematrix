@@ -19,6 +19,26 @@ DST = os.path.join(ROOT, 'public', 'pokemon_power.json')
 
 STAT_KEYS = ('HP', 'Atk', 'Def', 'Spe', 'SpA', 'SpD')
 
+# Виды, которых нет в species.json, но они реально встречаются в игре.
+# Без них они падали бы в дефолтный вес 1.0 и вели себя как «обычные» —
+# то есть легендарные формы становились частыми.
+# Значения — канонические BST.
+OVERRIDES = {
+    'nidoran-f': 55 + 47 + 52 + 40 + 40 + 41,   # 275
+    'nidoran-m': 46 + 57 + 40 + 40 + 40 + 50,   # 273
+    'farfetchd': 52 + 65 + 55 + 58 + 50 + 60,   # 340
+    'mr-mime': 40 + 45 + 65 + 100 + 120 + 90,    # 460
+    'burmy': 40 + 19 + 20 + 19 + 20 + 20,        # 138
+    'deoxys-normal': 50 + 150 + 50 + 150 + 50 + 90,   # 540
+    'deoxys-attack': 50 + 150 + 90 + 180 + 90 + 150,
+    'deoxys-defense': 50 + 90 + 180 + 90 + 180 + 90,
+    'deoxys-speed': 50 + 180 + 20 + 180 + 20 + 150,
+    'giratina-altered': 150 + 100 + 120 + 100 + 120 + 90,
+    'shaymin-sky': 100 + 100 + 100 + 100 + 100 + 100,
+    'giratina-origin': 150 + 120 + 100 + 120 + 100 + 90,
+    'necrozma-mega': 97 + 167 + 97 + 167 + 97 + 129,
+}
+
 
 def main():
     with io.open(SRC, encoding='utf-8') as f:
@@ -34,6 +54,10 @@ def main():
         if len(vals) != len(STAT_KEYS):
             continue
         out[name.lower()] = sum(vals)
+
+    # Добираем виды, которых нет в species.json
+    for key, bst_value in OVERRIDES.items():
+        out.setdefault(key, bst_value)
 
     if not os.path.isdir(os.path.dirname(DST)):
         os.makedirs(os.path.dirname(DST))

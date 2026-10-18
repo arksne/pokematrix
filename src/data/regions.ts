@@ -86,7 +86,8 @@ export const REGIONS: Record<string, RegionDef> = {
         hasHeal: false,
         hasWater: false,
         region: 'kanto',
-      },
+      },
+
       cinnabarIsland_pokecenter: {
         name: 'Поке-центр (Киноварный остров)',
         desc: 'Небольшой поке-центр на острове: сестра Джой, терминал PC, обмен с игроками, боксы разведения.',
@@ -770,7 +771,7 @@ export const REGIONS: Record<string, RegionDef> = {
         desc: 'Величественное горное плато с мощным зданием Лиги в центре. Арка из каменных колонн и знамёна создают ощущение торжественности.',
         image: '/assets/map/kanto/indigoPlateau.png',
         links: ['victoryRoad2'],
-        encounters: ["exeggutor-alola"],
+        encounters: ["abra","chansey","clefairy","exeggutor-alola","jumpluff","pidgeotto","wigglytuff"],
         hasHeal: false,
         hasWater: false,
         region: 'kanto',
@@ -997,7 +998,8 @@ export const REGIONS: Record<string, RegionDef> = {
         hasHeal: false,
         hasWater: false,
         region: 'kanto',
-      },
+      },
+
       threeIslePort_pokecenter: {
         name: 'Поке-центр (Порт трёх островов)',
         desc: 'Небольшой поке-центр на острове: сестра Джой, терминал PC, обмен с игроками, боксы разведения.',
@@ -1057,7 +1059,8 @@ export const REGIONS: Record<string, RegionDef> = {
         hasHeal: false,
         hasWater: false,
         region: 'kanto',
-      },
+      },
+
       outcastIsland_pokecenter: {
         name: 'Поке-центр (Остров изгнанников)',
         desc: 'Небольшой поке-центр на острове: сестра Джой, терминал PC, обмен с игроками, боксы разведения.',
@@ -1149,7 +1152,8 @@ export const REGIONS: Record<string, RegionDef> = {
         hasHeal: false,
         hasWater: false,
         region: 'kanto',
-      },
+      },
+
       oneIsland_pokecenter: {
         name: 'Поке-центр (Один остров)',
         desc: 'Небольшой поке-центр на острове: сестра Джой, терминал PC, обмен с игроками, боксы разведения.',
@@ -1169,7 +1173,8 @@ export const REGIONS: Record<string, RegionDef> = {
         hasHeal: false,
         hasWater: false,
         region: 'kanto',
-      },
+      },
+
       fourIsland_pokecenter: {
         name: 'Поке-центр (Четвёртый остров)',
         desc: 'Небольшой поке-центр на острове: сестра Джой, терминал PC, обмен с игроками, боксы разведения.',
@@ -1189,7 +1194,8 @@ export const REGIONS: Record<string, RegionDef> = {
         hasHeal: false,
         hasWater: false,
         region: 'kanto',
-      },
+      },
+
       fiveIsland_pokecenter: {
         name: 'Поке-центр (Пятый остров)',
         desc: 'Небольшой поке-центр на острове: сестра Джой, терминал PC, обмен с игроками, боксы разведения.',
