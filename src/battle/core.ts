@@ -45,7 +45,7 @@ import { fetchSiteMoveDetail } from '../data/sitemove.js';              // де�
 import {
   fetchSiteLearnset, wildMovesFromLearnset, moveNameToSlug,
 } from '../data/learnset.js';                                           // мувсеты по уровню: таблица «Развитие»
-import { loadPowerTable, encounterWeightFor } from '../data/power.js';   // сила вида → редкость появления
+import { loadPowerTable, encounterWeightFor, loadEvoTable } from '../data/power.js';   // сила вида → редкость появления
 import { syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
 import { rollWildIVs, perfectIVs } from './logic.js';                   // гены: усреднённые дикие / идеальные лидеры
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
@@ -1883,7 +1883,9 @@ export let pokedexTotal = 0;
 async function loadPokedexData() {
   // Таблица силы вида нужна СИНХРОННО в pickWeightedEncounter (горячий путь),
   // поэтому грузим её здесь, на старте, а не по первому требованию.
+  // Таблица эволюций — тоже: канонный уровень нужен при проверке конфет.
   try { await loadPowerTable(); } catch (_) {}
+  try { await loadEvoTable(); } catch (_) {}
   try {
     const res = await fetch(import.meta.env.BASE_URL + 'pokedex_data.json');
     pokedexData = await res.json();

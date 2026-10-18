@@ -115,8 +115,62 @@ function isLegendaryName(species: string): boolean {
 }
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════
+ * ЭВОЛЮЦИИ ПО УРОВНЮ — канон лиги (public/pokemon_evo.json)
+ * ═══════════════════════════════════════════════════════════════════════
+ * Зачем: уровень эволюции брался из PokeAPI `evolution_details`, где
+ * `min_level` зависит от версии игры и иногда приходит null. null означает
+ * «эвлюция на ЛЮБОМ уровне» (levelDetailMet пропускает проверку), из-за чего
+ * дикий покемон эволюционировал сразу при поимке на чужом уровне, а уровень,
+ * показанный в покедексе, не совпадал с тем, который проверял бой.
+ *
+ * Таблица собрана из канона лиги (tools/data-league17/build_evo.py):
+ * 319 переходов, уровни 7..64.
+ */
+
+let evoTable: Record<string, Array<{ to: string; level: number }>> | null = null;
+
+export async function loadEvoTable(): Promise<void> {
+  if (evoTable) return;
+  try {
+    const base = (import.meta as any).env?.BASE_URL || '/';
+    const res = await fetch(`${base}pokemon_evo.json`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    evoTable = await res.json();
+  } catch (e) {
+    console.warn('[power] не удалось загрузить pokemon_evo.json:', e);
+    evoTable = {};
+  }
+}
+
+export function setEvoTable(t: Record<string, Array<{ to: string; level: number }>>): void {
+  evoTable = t;
+}
+
+export function evoTableData(): Record<string, Array<{ to: string; level: number }>> {
+  return evoTable || {};
+}
+
+/**
+ * Канонный уровень эволюции вида → конкретного потомка.
+ * null = в каноне не задан (камень/трейд/другое условие) — тогда решает
+ * PokeAPI-деталь, как и раньше.
+ */
+export function evolutionLevelFor(species: string, target: string): number | null {
+  const edges = evoTableData()[String(species || '').toLowerCase()];
+  if (!edges) return null;
+  const hit = edges.find((e) => e.to === String(target || '').toLowerCase());
+  return hit ? hit.level : null;
+}
+
+/** Все уровневые эволюции вида: [{to, level}]. */
+export function levelEvolutionsFor(species: string): Array<{ to: string; level: number }> {
+  return evoTableData()[String(species || '').toLowerCase()] || [];
+}
+
+/**
  * Вес появления в дикой природе: ОБРАТНО ПРОПОРЦИОНАЛЕН силе.
- * Слабые виды —common, сильные — редкие. Evolution-стадия автоматически
+ * Слабые виды — common, сильные — редкие. Evolution-стадия автоматически
  * учтена: эволюция всегда сильнее базы, а значит и реже.
  */
 export function encounterWeightFor(species: string, bst?: number): number {

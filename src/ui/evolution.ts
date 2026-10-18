@@ -34,6 +34,7 @@ import { fetchPokeAPI } from '../utils/api.js';          // HTTP-клиент д
 // Например: 'fireStone' → 'fire-stone'
 import { showToast } from '../utils/dom.js';
 import { STONE_ITEM_MAP } from '../data/stones.js';
+import { evolutionLevelFor } from '../data/power.js';   // канонные уровни эволюции лиги
 import { state } from '../game/state.js';
 import { calculateStat } from '../battle/stats.js';
 
@@ -287,9 +288,13 @@ export function buildEvoCtx(mon: any): EvoCheckCtx {
  *   dusk/full-moon → ночь.
  * Жёсткие нет: красота, сопартийцы вне команды, переворот.
  */
-export function levelDetailMet(d: any, mon: any, ctx: EvoCheckCtx, effLevel: number): boolean {
+export function levelDetailMet(
+  d: any, mon: any, ctx: EvoCheckCtx, effLevel: number, canonLevel?: number | null,
+): boolean {
   if (!d || d.trigger !== 'level-up') return false;
-  if (d.minLevel != null && effLevel < d.minLevel) return false;
+  // Канонный уровень лиги — приоритетнее min_level из PokeAPI (в т.ч. null).
+  const required = canonLevel != null ? canonLevel : d.minLevel;
+  if (required != null && effLevel < required) return false;
   // Пол (галлейд — только самец, фросласс — только самка)
   if (d.gender === 1 && mon?.gender !== 'female') return false;
   if (d.gender === 2 && mon?.gender !== 'male') return false;
@@ -382,12 +387,20 @@ export async function checkEvolution(pokemon, useStone = false, stoneItem = null
   const matches: any[] = [];
   let shedBonus = false;
   for (const evo of evos) {
+    // КАНОН ЛИГИ важнее PokeAPI: у эволюции может прийти min_level = null
+    // (зависит от версии игры в evolution_details), а null в levelDetailMet
+    // трактуется как «эволюция на любом уровне». Именно из-за этого дикие
+    // эволюционировали при поимке на чужом уровне. Канонный уровень — из
+    // public/pokemon_evo.json (319 переходов, 7..64).
+    const canonLevel = evolutionLevelFor(pokemon.apiData?.species?.name || pokemon.apiData?.name, evo.name);
+    if (canonLevel != null && effectiveLevel < canonLevel) continue;
+
     for (const d of evo.details || []) {
       if (d.trigger === 'shed') {
         if (d.minLevel == null || effectiveLevel >= d.minLevel) shedBonus = true;
         continue;
       }
-      if (levelDetailMet(d, pokemon, ctx, effectiveLevel)) {
+      if (levelDetailMet(d, pokemon, ctx, effectiveLevel, canonLevel)) {
         matches.push(evo);
         break;
       }
