@@ -132,6 +132,47 @@ function dispatchAuthExpired(reason: string) {
 
 // ── Main fetch wrapper ──────────────────────────────────────────────────
 
+/** Сколько ждём подъёма Render-инстанса, прежде чем сдаться (мс). */
+export const WARMUP_TIMEOUT_MS = 45_000;
+
+/** Backoff между попытками: 0.5с → 1с → 2с → 4с (кап 4с). */
+export function warmupDelayMs(attempt: number): number {
+  return Math.min(4000, 500 * Math.pow(2, Math.max(0, attempt)));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Ответ ли это «сервер прогревается», а не настоящая ошибка? */
+async function isWarmingResponse(res: Response): Promise<boolean> {
+  if (res.status !== 503) return false;
+  try {
+    const body = await res.clone().json();
+    return body?.status === 'warming';
+  } catch {
+    return false;
+  }
+}
+
+let warmingNotified = false;
+
+/** Показываем «Разогреваем сервер…» один раз, а не на каждый запрос. */
+function notifyWarming(): void {
+  warmingNotified = true;
+  try {
+    (globalThis as any).__pokematrixWarming?.(true);
+  } catch { /* UI может быть ещё не готов — не критично */ }
+}
+
+function notifyWarmupDone(): void {
+  if (!warmingNotified) return;
+  warmingNotified = false;
+  try {
+    (globalThis as any).__pokematrixWarming?.(false);
+  } catch { /* как выше */ }
+}
+
 export interface ApiFetchOptions extends RequestInit {
   /** If true, skip auto-refresh on 401 (default: false) */
   skipAuth?: boolean;
@@ -172,10 +213,59 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  let res = await fetch(resolvedUrl, {
-    ...fetchOptions,
-    headers,
-  });
+  // ── Холодный старт Render ───────────────────────────────────────────
+  // Free-инстанс спит после 15 минут простоя. Пока он поднимается, сервер
+  // отдаёт 503 { status: 'warming' } (server/src/index.ts), а до его подъёма
+  // соединение вообще refused. Раньше это выглядело как «игра сломалась».
+  // Теперь мы терпеливо ждём с backoff и один раз показываем «Разогреваем…».
+  const firstAttempt = Date.now();
+  let warming = false;
+  let attemptIndex = 0;
+
+  for (;;) {
+    let res: Response;
+    try {
+      res = await fetch(resolvedUrl, { ...fetchOptions, headers });
+    } catch (err) {
+      // Сеть/соединение: сервер ещё не поднялся (или мигрирует).
+      if (Date.now() - firstAttempt < WARMUP_TIMEOUT_MS) {
+        if (!warming) { warming = true; notifyWarming(); }
+        await sleep(warmupDelayMs(attemptIndex++));
+        continue;
+      }
+      throw err;
+    }
+
+    if (res.status === 503 && await isWarmingResponse(res)) {
+      if (Date.now() - firstAttempt < WARMUP_TIMEOUT_MS) {
+        if (!warming) { warming = true; notifyWarming(); }
+        await sleep(warmupDelayMs(attemptIndex++));
+        continue;
+      }
+      // Не дождались — отдаём как есть, вызывающий разберётся по 503.
+      return res;
+    }
+
+    if (warming) notifyWarmupDone();
+    return handleUnauthorized(res, { resolvedUrl, fetchOptions, headers, url, skipAuth });
+  }
+}
+
+/**
+ * Обработка 401: refresh токена и повтор запроса. Вынесена из apiFetch,
+ * чтобы цикл холодного старта оставался плоским.
+ */
+async function handleUnauthorized(
+  res: Response,
+  ctx: {
+    resolvedUrl: string;
+    fetchOptions: RequestInit;
+    headers: Record<string, string>;
+    url: string;
+    skipAuth?: boolean;
+  },
+): Promise<Response> {
+  const { resolvedUrl, fetchOptions, headers, url, skipAuth } = ctx;
 
   // Auto-refresh on 401 (Unauthorized) — skip for auth endpoints to avoid loops
   if (res.status === 401 && !skipAuth && !url.includes('/auth/refresh')) {
@@ -189,14 +279,13 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
       if (newToken) {
         headers['Authorization'] = `Bearer ${newToken}`;
       }
-      res = await fetch(resolvedUrl, {
+      return fetch(resolvedUrl, {
         ...fetchOptions,
         headers,
       });
-    } else {
-      // Refresh failed — dispatch auth_expired event
-      dispatchAuthExpired('refresh_failed');
     }
+    // Refresh failed — dispatch auth_expired event
+    dispatchAuthExpired('refresh_failed');
   }
 
   return res;

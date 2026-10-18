@@ -82,24 +82,11 @@ function envInt(name: string, fallback: number): number {
 }
 
 async function main() {
-  // ── Подключение к БД ─────────────────────────────────────
-  logger.info('[server] Connecting to database...');
-  const { db } = connectDb();
-  try {
-    await runMigrations();
-  } catch (e: any) {
-    // Раньше ошибка миграций только логировалась, сервер продолжал подниматься,
-    // /api/health отвечал ok, и каждый запрос к данным падал с 500. В production
-    // это означало тихий полный отказ, поэтому теперь останавливаемся.
-    logger.error({ err: e, message: e.message }, '[server] Migration FAILED');
-    if (config.isProduction) {
-      logger.fatal('[server] Не запускаюсь: миграции не применились, схема может отсутствовать');
-      await closeDb().catch(() => {});
-      process.exit(1);
-    }
-    logger.warn('[server] Продолжаю работу без миграций (development)');
-  }
-  logger.info('[server] Database connected');
+  // Флаг готовности: порт открывается СРАЗУ, до БД и миграций (см. конец
+  // main). Пока false — /api отвечает 503 { status: 'warming' }, и клиент
+  // показывает «Разогреваем сервер…» вместо молчаливого фриза на
+  // connection refused. На Render free это и есть весь холодный старт.
+  let serverReady = false;
 
   // ── Express ───────────────────────────────────────────────
   const app = express();
@@ -185,6 +172,33 @@ async function main() {
   app.use('/api/pokeapi', proxyLimiter);
   app.use('/api/log-client-error', errorReportLimiter);
 
+  // ── Health check ─────────────────────────────────────────
+  // Объявлен ДО гейта прогрева: Render healthCheckPath должен получать ответ
+  // и на «тёплом» сервере, иначе деплой уйдёт в рестарт по таймауту.
+  // Проверяет и БД: раньше возвращал ok всегда, а ошибка миграций
+  // проглатывалась, поэтому Render считал сервис здоровым при полностью
+  // сломанной базе, и все API отдавали 500.
+  app.get('/api/health', async (_req, res) => {
+    if (!serverReady) {
+      return res.status(503).json({ status: 'warming', db: false, uptime: process.uptime() });
+    }
+    try {
+      await getDb().execute(sql`SELECT 1`);
+      res.json({ status: 'ok', db: true, uptime: process.uptime() });
+    } catch {
+      res.status(503).json({ status: 'degraded', db: false, uptime: process.uptime() });
+    }
+  });
+
+  // ── Гейт прогрева ─────────────────────────────────────────
+  // Стоит ПЕРЕД всеми /api-маршрутами: пока поднимаются БД и миграции,
+  // отвечаем 503 с понятным телом, а не connection refused и не падением.
+  app.use('/api', (req, res, next) => {
+    if (serverReady) return next();
+    res.setHeader('Retry-After', '3');
+    res.status(503).json({ status: 'warming', error: 'Server is warming up' });
+  });
+
   app.use('/api/auth', authRoutes);
   app.use('/api/save', saveRoutes);
   app.use('/api/economy', economyRoutes);
@@ -206,14 +220,6 @@ async function main() {
   // Проверяет и БД: раньше возвращал ok всегда, а ошибка миграций
   // проглатывалась, поэтому Render считал сервис здоровым при полностью
   // сломанной базе, и все API отдавали 500.
-  app.get('/api/health', async (_req, res) => {
-    try {
-      await getDb().execute(sql`SELECT 1`);
-      res.json({ status: 'ok', db: true, uptime: process.uptime() });
-    } catch {
-      res.status(503).json({ status: 'degraded', db: false, uptime: process.uptime() });
-    }
-  });
 
   // ── 404 для неизвестных API-маршрутов ─────────────────────
   // Должен идти ДО SPA-fallback: тот перехватывал любой GET /api/* и отдавал
@@ -300,6 +306,11 @@ async function main() {
   process.on('SIGINT', () => { void shutdown('SIGINT'); });
 
   // ── Запуск ───────────────────────────────────────────────
+  // Слушаем порт ДО подключения к БД и миграций. Раньше listen() стоял в
+  // самом конце main(), и на холодном старте (Render free после 15 мин
+  // простоя) порт не был открыт минуту-две: клиент получал connection
+  // refused и выглядел как «игра сломалась». Теперь порт открыт сразу,
+  // /api/health отвечает, а /api честно отдаёт 503 warming до готовности.
   httpServer.listen(config.port, () => {
     logger.info(`[server] PokeMatrix server running on port ${config.port}`);
     logger.info(`[server] Environment: ${config.isProduction ? 'production' : 'development'}`);
@@ -315,6 +326,26 @@ async function main() {
       logger.warn('[security] BOT_TOKEN не задан — вход через Telegram отклоняется.');
     }
   });
+
+  // ── Подключение к БД (после listen — холодный старт не блокирует порт) ──
+  logger.info('[server] Connecting to database...');
+  connectDb();
+  try {
+    await runMigrations();
+  } catch (e: any) {
+    // Раньше ошибка миграций только логировалась, сервер продолжал подниматься,
+    // /api/health отвечал ok, и каждый запрос к данным падал с 500. В production
+    // это означало тихий полный отказ, поэтому теперь останавливаемся.
+    logger.error({ err: e, message: e.message }, '[server] Migration FAILED');
+    if (config.isProduction) {
+      logger.fatal('[server] Не запускаюсь: миграции не применились, схема может отсутствовать');
+      await closeDb().catch(() => {});
+      process.exit(1);
+    }
+    logger.warn('[server] Продолжаю работу без миграций (development)');
+  }
+  serverReady = true;
+  logger.info('[server] Database connected — API готов');
 }
 
 // ── Глобальные обработчики ошибок ───────────────────────────
