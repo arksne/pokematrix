@@ -564,6 +564,21 @@ export function openNPCDialog(npcId: string) {
     };
     actionsContainer.insertBefore(btnBreed, document.getElementById('btn-close-npc'));
   }
+
+  // Заводчица в стартовом городе выдаёт квест «вылупи яйцо», но кнопки разведения
+  // у неё не было — игрок получал задание, которое негде выполнить. Вход в
+  // боксы теперь есть и в Канто (у неё), и в Джото (у питомника).
+  if (npcId === 'pw_breeder') {
+    const btnBreed = document.createElement('button');
+    btnBreed.className = 'tma-btn npc-action-extra';
+    btnBreed.style.backgroundColor = '#e040fb';
+    btnBreed.innerText = '💕 Боксы разведения';
+    btnBreed.onclick = () => {
+      modal.style.display = 'none';
+      openBreedBoxes();
+    };
+    actionsContainer.insertBefore(btnBreed, document.getElementById('btn-close-npc'));
+  }
 }
 
 // ── checkTutorialProgress: обновление прогресса обучения ─
