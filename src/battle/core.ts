@@ -221,6 +221,9 @@ function saveBattleState() {
  */
 function resetBattleField() {
   S.terrain = null;
+  // Боевые подмены способностей живут только до конца боя (Trace/Mummy/…).
+  S.tempAbilityP = null;
+  S.tempAbilityW = null;
   S.tailwindP = 0; S.tailwindW = 0;
   S.trickRoomTurns = 0;
   S.weatherTurns = 0;
@@ -1348,9 +1351,42 @@ function handleEnemyStatusEffects(move) {
  *   updateAbilityDisplay() — отображение способности в UI
  *   useMove() — проверка способностей (Sturdy, Static и т.д.)
  */
+/**
+ * Способность участника В ЭТОМ БОЮ.
+ *
+ * Раньше Trace / Mummy / Skill Swap / Entrainment / Worry Seed / Gastro Acid /
+ * Simple Beam писали способность ПРЯМО в монстра (`mon.abilityName = ...`).
+ * Монстр сохраняется в облако, поэтому способность из боя уезжала в сейв и
+ * «прыгала» в следующие бои — игрок терял свою способность навсегда.
+ *
+ * Теперь боевая подмена живёт только в состоянии боя (S.tempAbilityP / W)
+ * и обнуляется в resetBattleField(). У монстра своя способность не меняется.
+ */
+function battleAbilitySlot(mon, isWild): 'tempAbilityW' | 'tempAbilityP' | null {
+  if (mon === S.activeWild) return 'tempAbilityW';
+  if (mon === S.activePlayerMon) return 'tempAbilityP';
+  return null;
+}
+
+/** Записать боевую (временную) способность участника. */
+function setBattleAbility(mon, isWild, name) {
+  const slot = battleAbilitySlot(mon, isWild);
+  if (slot) S[slot] = name;
+}
+
+/** Текущая боевая способность: временная, иначе родная. */
+function currentBattleAbility(mon, isWild) {
+  const slot = battleAbilitySlot(mon, isWild);
+  if (slot && S[slot] !== undefined && S[slot] !== null) return S[slot];
+  return getAbilityName(mon, isWild);
+}
+
 function getAbilityName(pokemon, isWild) {
-  if (isWild) return pokemon.abilities?.[0]?.ability?.name || null; // Первая способность дикого
-  return pokemon.abilityName || null;                                 // Сохранённая способность игрока
+  // Сначала боевая подмена (Trace/Mummy/...), и только потом родная.
+  const slot = battleAbilitySlot(pokemon, isWild);
+  if (slot && S[slot]) return S[slot];
+  if (isWild) return pokemon.abilities?.[0]?.ability?.name || null; // дикий: первая способность
+  return pokemon.abilityName || null;                                 // свой мон: заданная
 }
 
 /**
@@ -2541,32 +2577,34 @@ function handleFieldAndTrickMoves(move: any, isPlayer: boolean): boolean {
       foe.statStages = b;
       return done(`${uname} и ${fname} делят силу поровну!`);
     }
-    // ── Способности ──
+    // ── Способности (только на этот бой, монстры не меняются) ──
     case 'skill-swap': {
-      const a = user.abilityName;
-      user.abilityName = foe.abilityName;
-      foe.abilityName = a;
+      const a = currentBattleAbility(user, user === S.activeWild);
+      const b = currentBattleAbility(foe, foe === S.activeWild);
+      setBattleAbility(user, user === S.activeWild, b);
+      setBattleAbility(foe, foe === S.activeWild, a);
       updateAbilityDisplay();
       return done(`${uname} и ${fname} меняются способностями!`);
     }
     case 'entrainment': {
-      if (!user.abilityName) return done('Передавать нечего!');
-      foe.abilityName = user.abilityName;
+      const cur = currentBattleAbility(user, user === S.activeWild);
+      if (!cur) return done('Передавать нечего!');
+      setBattleAbility(foe, foe === S.activeWild, cur);
       updateAbilityDisplay();
-      return done(`${fname} получает способность ${user.abilityName}!`);
+      return done(`${fname} получает способность ${cur}!`);
     }
     case 'worry-seed': {
-      foe.abilityName = 'insomnia';
+      setBattleAbility(foe, foe === S.activeWild, 'insomnia');
       updateAbilityDisplay();
       return done(`${fname} теперь не спит: Бессонница!`);
     }
     case 'gastro-acid': {
-      foe.abilityName = null;
+      setBattleAbility(foe, foe === S.activeWild, null);
       updateAbilityDisplay();
       return done(`Способность ${fname} подавлена!`);
     }
     case 'simple-beam': {
-      foe.abilityName = 'simple';
+      setBattleAbility(foe, foe === S.activeWild, 'simple');
       updateAbilityDisplay();
       return done(`${fname} теперь Простой!`);
     }
@@ -3997,7 +4035,7 @@ function applySwitchInAbilities(mon, isWild, opponent) {
   if (name === 'trace') {
     const oppAbilityId = getAbilityName(opponent, !isWild);
     if (oppAbilityId && oppAbilityId !== abilityId) {
-      mon.abilityName = oppAbilityId;
+      setBattleAbility(mon, isWild, oppAbilityId);
       updateAbilityDisplay();
       appendToLog(`${label}: Слежение копирует способность — ${getAbilityNameRu(oppAbilityId)}!`, false, 'system');
     }
@@ -5231,7 +5269,7 @@ async function useMove(moveIndex) {
     if (move.name === 'role-play') {
       const targetAbility = S.activeWild.abilities?.[0]?.ability?.name;
       if (targetAbility) {
-        S.activePlayerMon.abilityName = targetAbility;
+        setBattleAbility(S.activePlayerMon, false, targetAbility);
         appendToLog(`${S.activePlayerMon.apiData.name} скопировал способность ${S.activeWild.name}: ${targetAbility}!`);
         updateAbilityDisplay();
       } else {
@@ -5494,7 +5532,7 @@ async function useMove(moveIndex) {
       if (power && isPhysical && wcAbil === 'mummy') {
         const atkAbilNow = abilityOf(S.activePlayerMon, false);
         if (atkAbilNow && atkAbilNow !== 'mummy') {
-          S.activePlayerMon.abilityName = 'mummy';
+          setBattleAbility(S.activePlayerMon, false, 'mummy');
           updateAbilityDisplay();
           appendToLog(`${S.activePlayerMon.apiData.name} теряет способность ${getAbilityNameRu(atkAbilNow)} — теперь Мумия!`, false, 'system');
         }

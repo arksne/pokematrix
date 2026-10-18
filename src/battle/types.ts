@@ -139,6 +139,12 @@ playerReflectTurns: 0,
   enemyChargedMove: null,
   // Проход-741: поле боя и последние ходы.
   terrain: null,
+  // Боевые подмены способностей (Trace/Mummy/Skill Swap/Worry Seed/Gastro
+  // Acid/Simple Beam/Receiver). Держатся только до конца боя: раньше они
+  // писались прямо в монстра, способность уезжала в сейв и «прыгала» между
+  // боями. null = способность участника родная.
+  tempAbilityP: null,
+  tempAbilityW: null,
   tailwindP: 0,
   tailwindW: 0,
   trickRoomTurns: 0,
@@ -263,6 +269,9 @@ export interface BattleStateData {
   escapeAttempts: number;
   wildMovesDetailed: MoveData[];
   wildMovesPP: PPData[] | null;
+  /** Боевые подмены способностей (Trace/Mummy/Skill Swap/…): только до конца боя. */
+  tempAbilityP: string | null;
+  tempAbilityW: string | null;
 
   battleRound: number;
   battleSeq: number;
