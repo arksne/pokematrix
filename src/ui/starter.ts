@@ -103,7 +103,7 @@ export async function giveStarterMon(pokemonName: string) {
       maxHp,                                         // Максимум HP
       currentHp: maxHp,                              // Текущий HP = полный
       // IV (индивидуальные значения): почти максимальные (49-50)
-      ivs: { hp: 49, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 },
+      ivs: { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 },
       // EV (очки усилий): все 0
       evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
       baseLevel: baseLevel,                          // Базовый уровень

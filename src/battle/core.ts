@@ -419,9 +419,9 @@ async function restoreBattleState() {
       // ── IVs дикого (если нет — генерируем случайные 0–50) ──
       if (!S.activeWild.wildIVs) {
         S.activeWild.wildIVs = {
-          hp: Math.floor(Math.random() * 51), atk: Math.floor(Math.random() * 51),
-          def: Math.floor(Math.random() * 51), spa: Math.floor(Math.random() * 51),
-          spd: Math.floor(Math.random() * 51), spe: Math.floor(Math.random() * 51)
+          hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
+          def: Math.floor(Math.random() * 32), spa: Math.floor(Math.random() * 32),
+          spd: Math.floor(Math.random() * 32), spe: Math.floor(Math.random() * 32)
         };
       }
 
@@ -3689,12 +3689,12 @@ async function startHunt(encountersArray) {
     } catch (e) { /* keep defaults */ }
 
     S.activeWild.wildIVs = {
-      hp: Math.floor(Math.random() * 51),
-      atk: Math.floor(Math.random() * 51),
-      def: Math.floor(Math.random() * 51),
-      spa: Math.floor(Math.random() * 51),
-      spd: Math.floor(Math.random() * 51),
-      spe: Math.floor(Math.random() * 51)
+      hp: Math.floor(Math.random() * 32),
+      atk: Math.floor(Math.random() * 32),
+      def: Math.floor(Math.random() * 32),
+      spa: Math.floor(Math.random() * 32),
+      spd: Math.floor(Math.random() * 32),
+      spe: Math.floor(Math.random() * 32)
     };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
@@ -8210,7 +8210,7 @@ async function startGymNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона гима
 
     // Perfect IVs for gym leader pokemon
-    S.activeWild.wildIVs = { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
+    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 
     // Apply gym leader training boost
     const leaderData = GS.gymLeaders[S.gymLeaderKey];
@@ -8473,7 +8473,7 @@ async function startEliteNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона элиты
 
     // Perfect IVs для Elite Four (как у gym лидеров)
-    S.activeWild.wildIVs = { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
+    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;
@@ -8586,7 +8586,7 @@ async function startChampionNextPokemon() {
     S.enemyChargedMove = null; // Сброс заряда при смене покемона чемпиона
 
     // Perfect IVs для Чемпиона (как у gym лидеров)
-    S.activeWild.wildIVs = { hp: 50, atk: 50, def: 50, spa: 50, spd: 50, spe: 50 };
+    S.activeWild.wildIVs = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;

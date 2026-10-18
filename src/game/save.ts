@@ -237,6 +237,8 @@ export function getFullSaveData() {
   };
 }
 
+const IV_STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'] as const;
+
 export function validateGameState() {
   // Ensure critical structures exist
   if (!state.myTeam) state.myTeam = [];
@@ -267,6 +269,16 @@ export function validateGameState() {
     if (!m.maxHp || m.maxHp <= 0) m.maxHp = 50;
     if (m.currentHp === undefined || m.currentHp < 0) m.currentHp = m.maxHp;
     if (!m.ivs) m.ivs = { hp: 15, atk: 15, def: 15, spa: 15, spd: 15, spe: 15 };
+    // Кламп шкалы IV в 0–31. calculateStat(stats.ts:116) считает по канонической
+    // шкале 0–31, а генераторы диких/яиц historically выдавали 0–50 — из-за
+    // этого пойманные монсы имели завышенные статы. Старые сейвы с такими
+    // значениями чиним здесь, иначе игрок сохранит их навсегда.
+    for (const st of IV_STATS) {
+      const v = m.ivs[st];
+      if (typeof v !== 'number' || !Number.isFinite(v)) m.ivs[st] = 15;
+      else if (v < 0) m.ivs[st] = 0;
+      else if (v > 31) m.ivs[st] = 31;
+    }
     if (!m.evs) m.evs = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     if (!m.learnableMoves) m.learnableMoves = [];
@@ -275,6 +287,26 @@ export function validateGameState() {
     if (m.baseLevel > 100) m.baseLevel = 100;
     if (m.baseLevel < 1) m.baseLevel = 1;
     if (m.candiesEaten > 0 && m.baseLevel + m.candiesEaten > 100) m.candiesEaten = 100 - m.baseLevel;
+  }
+  // ПК и бокса разведения: там лежат пойманные/вылупленные монсы с той же
+  // исторически завышенной шкалой — чиним их тем же клампом.
+  const clampIvs = (m: any) => {
+    if (!m || typeof m !== 'object' || !m.ivs) return;
+    for (const st of IV_STATS) {
+      const v = m.ivs[st];
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      if (v < 0) m.ivs[st] = 0;
+      else if (v > 31) m.ivs[st] = 31;
+    }
+  };
+  for (const box of (state.pcBoxes || []) as any[]) {
+    if (Array.isArray(box)) box.forEach(clampIvs);
+  }
+  for (const bb of (state.breedBoxes || []) as any[]) {
+    if (Array.isArray(bb?.mons)) bb.mons.forEach(clampIvs);
+  }
+  for (const egg of (state.eggs || []) as any[]) {
+    if (egg?.ivs) clampIvs(egg);
   }
 }
 
