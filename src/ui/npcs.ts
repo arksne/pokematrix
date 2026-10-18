@@ -33,6 +33,7 @@ import { appendToLog, startMiniBossBattle } from '../battle/core.js';           
 import { openPC } from './pc.js';                          // Открытие PC
 import { openBreedBoxes } from './daycare.js';
 import { NPC_DATA } from '../data/npc.js';                  // Статические данные NPC
+import '../data/pokecenter-npcs.js';   // guarantee: every pokecenter has an NPC
 // Платное лечение (M-24): та же цена, что кнопка центра
 import { healCostForTeam, teamNeedsHeal, applyTeamHeal, tryChargeHeal } from './heal.js';
 import { natures } from '../data/natures.js';
@@ -541,7 +542,14 @@ export function openNPCDialog(npcId: string) {
   // ── NPC: Питомник (PC + боксы разведения) ──
   // C3: кнопки смотрителя-депозита больше нет (openDaycareDeposit удалён из
   // диалога) — разведение только через боксы (openBreedBoxes).
-  if (npcId === 'daycare_pokecenter') {
+  // Разведение доступно в ЛЮБОМ покецентре, поэтому условие — по локации
+  // NPC, а не по его id. Раньше кнопка висела на двух конкретных NPC
+  // (daycare_pokecenter и pewter_breeder), и в остальных 23 покецентрах
+  // разведения не было вообще.
+  const npcLoc = String((NPC_DATA as any)?.[npcId]?.location || '');
+  const inPokeCenter = /_pokecenter$/.test(npcLoc);
+
+  if (npcId === 'daycare_pokecenter' || inPokeCenter) {
     // Кнопка "Открыть PC"
     const btnDeposit = document.createElement('button');
     btnDeposit.className = 'tma-btn npc-action-extra';
@@ -557,22 +565,6 @@ export function openNPCDialog(npcId: string) {
     const btnBreed = document.createElement('button');
     btnBreed.className = 'tma-btn npc-action-extra';
     btnBreed.style.backgroundColor = '#e040fb';  // Фиолетовая
-    btnBreed.innerText = '💕 Боксы разведения';
-    btnBreed.onclick = () => {
-      modal.style.display = 'none';
-      openBreedBoxes();
-    };
-    actionsContainer.insertBefore(btnBreed, document.getElementById('btn-close-npc'));
-  }
-
-  // Заводчица в стартовом городе выдаёт квест «вылупи яйцо», но кнопки разведения
-  // у неё не было — игрок получал задание, которое негде выполнить. Основной
-  // вход теперь в ПК (вкладка «💕 Разведение»), NPC — запасной.
-  // ВАЖНО: id именно pewter_breeder; с pw_breeder условие никогда не срабатывало.
-  if (npcId === 'pewter_breeder') {
-    const btnBreed = document.createElement('button');
-    btnBreed.className = 'tma-btn npc-action-extra';
-    btnBreed.style.backgroundColor = '#e040fb';
     btnBreed.innerText = '💕 Боксы разведения';
     btnBreed.onclick = () => {
       modal.style.display = 'none';
