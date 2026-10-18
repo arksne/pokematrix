@@ -78,6 +78,29 @@ export function siteStarterMoves(ls: SiteLearnset | null, maxLevel: number, coun
 }
 
 /**
+ * Атаки дикого СТРОГО по уровню: все level-up записи с level <= lvl,
+ * из них — последние `count` (самые поздние = самые развитые), по возрастанию
+ * уровня. Это то, что ждёт игрок от «дикий ур. 5 не знает удар ур. 50».
+ *
+ * Отличие от siteStarterMoves: там берутся ПЕРВЫЕ count (стартер и так
+ * 1-5 уровня, первые записи — единственные известные). Дикому на 60+
+ * нужны последние известные, а не самые ранние.
+ */
+export function wildMovesFromLearnset(
+  ls: SiteLearnset | null,
+  level: number,
+  count = 4,
+): string[] {
+  const lvl = Math.max(1, Math.floor(level || 1));
+  const known = (ls?.levelup || [])
+    .filter((e) => Array.isArray(e) && e[0] <= lvl)
+    .slice()
+    .sort((a, b) => a[0] - b[0]);
+  if (!known.length) return [];
+  return known.slice(Math.max(0, known.length - count)).map((e) => e[1]);
+}
+
+/**
  * Канон лиги (FAQ): 30% шанс при вылуплении получить случайную
  * яйцевую атаку вида. Возвращает запись атаки или null.
  * `rand` инжектится для тестов.

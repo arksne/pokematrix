@@ -42,6 +42,10 @@ import { recordDrop } from '../ui/drop-log.js';                              // 
 import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
 import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
 import { fetchSiteMoveDetail } from '../data/sitemove.js';              // детали атак — с сайта лиги
+import {
+  fetchSiteLearnset, wildMovesFromLearnset, moveNameToSlug,
+} from '../data/learnset.js';                                           // мувсеты по уровню: таблица «Развитие»
+import { syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
 import { checkEvolution, triggerEvolution, maybeGrantShedinja } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
 import { natures } from '../data/natures.js';                            // Массив характеров (nature) с buff/nerf модификаторами
@@ -405,18 +409,10 @@ async function restoreBattleState() {
       if (state.wildMovesDetailed && state.wildMovesDetailed.length > 0) {
         S.wildMovesDetailed = state.wildMovesDetailed;
       } else {
-        S.wildMovesDetailed = [];
-        const movePromises = [];
-        for (let i = 0; i < S.activeWild.moves.length && i < 20; i++) {
-          movePromises.push(
-            fetchSiteMoveDetail(S.activeWild.moves[i]).catch(() => null)
-          );
-        }
-        const moveResults = await Promise.all(movePromises);
-        S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
+        S.wildMovesDetailed = await resolveWildMoveset(S.activeWild, S.wildLvl);
       }
 
-      // ── IVs дикого (если нет — генерируем случайные 0–50) ──
+      // ── IVs дикого (если нет — генерируем случайные 0–31) ──
       if (!S.activeWild.wildIVs) {
         S.activeWild.wildIVs = {
           hp: Math.floor(Math.random() * 32), atk: Math.floor(Math.random() * 32),
@@ -464,15 +460,7 @@ async function restoreBattleState() {
       if (state.wildMovesDetailed && state.wildMovesDetailed.length > 0) {
         S.wildMovesDetailed = state.wildMovesDetailed;
       } else {
-        S.wildMovesDetailed = [];
-        const movePromises = [];
-        for (let i = 0; i < S.activeWild.moves.length && i < 20; i++) {
-          movePromises.push(
-            fetchSiteMoveDetail(S.activeWild.moves[i]).catch(() => null)
-          );
-        }
-        const moveResults = await Promise.all(movePromises);
-        S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
+        S.wildMovesDetailed = await resolveWildMoveset(S.activeWild, S.wildLvl);
       }
 
       // ── Данные лидера зала ──
@@ -705,6 +693,39 @@ export function filterMovesByLevel(moveDetails, level) {
     type: { name: 'normal' }, damage_class: { name: 'physical' },
     meta: {}, effect_entries: [],
   }];
+}
+
+/**
+ * resolveWildMoveset — ЕДИНЫЙ источник боевого мувсета дикого.
+ *
+ * КОРЕНЬ СТАРОГО БАГА «атаки не по уровню изучения»: filterMovesByLevel()
+ * читал version_group_details у объектов /move/{id}, а этого поля у ресурса
+ * АТАКИ в PokeAPI не бывает — оно живёт в связи покемон↔атака. Все move
+ * получали min = Infinity, known пустым, и функция уходила в fail-open,
+ * возвращая pool[0] — первую атаку в произвольном порядке PokeAPI. Итог:
+ * дикий ур. 5 знал Cut, а Chikorita — Swords Dance.
+ *
+ * Теперь уровень берётся из таблицы «Развитие» сайта (/api/learnset/:name,
+ * локальный learnsets.json, тот же источник, что у стартеров и level-up
+ * атак). Порядок и набор — строго level <= wildLvl.
+ *
+ * Фолбэк (нет learnset / сеть) — Tackle: дикий остаётся не беспомощным,
+ * но НЕ получает заведомо недоступную атаку.
+ */
+export async function resolveWildMoveset(apiData: any, level: number): Promise<any[]> {
+  const species = apiData?.name || '';
+  try {
+    const ls = await fetchSiteLearnset(species);
+    const names = ls ? wildMovesFromLearnset(ls, level, 4) : [];
+    if (!names.length) return [syntheticTackle()];
+    const details = await Promise.all(
+      names.map((n) => fetchSiteMoveDetail(moveNameToSlug(n)).catch(() => null)),
+    );
+    const ok = details.filter(Boolean);
+    return ok.length ? ok : [syntheticTackle()];
+  } catch {
+    return [syntheticTackle()];
+  }
 }
 
 /**
@@ -3709,15 +3730,7 @@ async function startHunt(encountersArray) {
       ? { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0, [S.activeWild.heldItem]: 1 }
       : { sitrusBerry: 0, oranBerry: 0, lumBerry: 0, chestoBerry: 0, rawstBerry: 0 };
 
-    S.wildMovesDetailed = [];
-    const movePromises = [];
-    for (let i = 0; i < S.activeWild.moves.length && i < 20; i++) {
-      movePromises.push(
-        fetchPokeAPI(S.activeWild.moves[i].move.url).catch(() => null)
-      );
-    }
-    const moveResults = await Promise.all(movePromises);
-    S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
+    S.wildMovesDetailed = await resolveWildMoveset(S.activeWild, S.wildLvl);
     S.wildMovesPP = S.wildMovesDetailed.map(m => ({ current: m.pp || 30, max: m.pp || 30 }));
 
     document.getElementById('wild-name').innerText = S.activeWild.name;
@@ -8479,15 +8492,7 @@ async function startEliteNextPokemon() {
     S.wildCurHP = S.wildMaxHP;
     S.escapeAttempts = 0;
 
-    S.wildMovesDetailed = [];
-    const movePromises = [];
-    for (let i = 0; i < S.activeWild.moves.length && i < 20; i++) {
-      movePromises.push(
-        fetchPokeAPI(S.activeWild.moves[i].move.url).catch(() => null)
-      );
-    }
-    const moveResults = await Promise.all(movePromises);
-    S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
+    S.wildMovesDetailed = await resolveWildMoveset(S.activeWild, S.wildLvl);
     S.wildMovesPP = S.wildMovesDetailed.map(m => ({ current: m.pp || 30, max: m.pp || 30 }));
 
     document.getElementById('wild-name').innerText = S.activeWild.name;
@@ -8591,15 +8596,7 @@ async function startChampionNextPokemon() {
     S.wildMaxHP = calculateStat(S.activeWild, 'hp', true);
     S.wildCurHP = S.wildMaxHP;
 
-    S.wildMovesDetailed = [];
-    const movePromises = [];
-    for (let i = 0; i < S.activeWild.moves.length && i < 20; i++) {
-      movePromises.push(
-        fetchPokeAPI(S.activeWild.moves[i].move.url).catch(() => null)
-      );
-    }
-    const moveResults = await Promise.all(movePromises);
-    S.wildMovesDetailed = filterMovesByLevel(moveResults.filter(Boolean), S.wildLvl);
+    S.wildMovesDetailed = await resolveWildMoveset(S.activeWild, S.wildLvl);
     S.wildMovesPP = S.wildMovesDetailed.map(m => ({ current: m.pp || 30, max: m.pp || 30 }));
 
     document.getElementById('wild-name').innerText = S.activeWild.name;
