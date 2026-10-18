@@ -405,6 +405,10 @@ body::before {
   gap: 10px;
 }
 .team-slot {
+  /* Кнопка покедекса внутри карточки позиционируется absolute — без
+     position:relative она улетала к ближайшему позиционированному предку
+     и ложилась поверх стрелки переноса монстра. */
+  position: relative;
   background-color: var(--tma-card-bg);
   border: 2px solid var(--tma-border);
   border-radius: var(--radius);
@@ -564,17 +568,6 @@ body::before {
   border: 1px solid var(--tma-border);
   background: var(--tma-bg);
   color: var(--tma-text-muted);
-  cursor: pointer;
-}
-.team-dex-btn {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  padding: 2px 6px;
-  font-size: 0.75rem;
-  border-radius: 6px;
-  border: 1px solid var(--tma-border);
-  background: var(--tma-bg);
   cursor: pointer;
 }
 
@@ -3767,9 +3760,11 @@ input[type="number"] {
 
 /* === TEAM CARDS: dex + held badges === */
 .team-dex-btn {
+  /* Справа снизу: строка переноса (◀ ▶) занимает верх карточки, иконка
+     покедекса там наезжала прямо на стрелку вперёд. */
   position: absolute;
-  top: 2px;
-  left: 2px;
+  bottom: 6px;
+  right: 6px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -3781,6 +3776,10 @@ input[type="number"] {
   z-index: 2;
   padding: 0;
   line-height: 1;
+}
+/* Кнопка в правом нижнем углу не должна накрывать имя/уровень монстра. */
+.team-row-info {
+  padding-right: 26px;
 }
 .team-slot { position: relative; }
 .team-held-badge img { display: block; }
