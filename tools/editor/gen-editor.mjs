@@ -1,19 +1,16 @@
 #!/usr/bin/env node
 /**
- * gen-editor.mjs — вписывает ТЕКУЩИЕ данные игры прямо в public/editor.html.
+ * gen-editor.mjs — вписывает ТЕКУЩИЕ ДАННЫЕ ИГРЫ в public/editor.html.
  *
- * Страница должна работать с диска (file://), без сервера и без выкачивания
- * JSON — значит всё, что нужно для правки, лежит внутри неё:
+ * Страница самодостаточная: работает с диска (file://), без сервера.
+ * Внутрь вшиваются:
+ *   BASELINE — слепок игры: локации (энкаунтеры день/ночь/общий, уровни,
+ *     механики, гейты), дропы видов, магазины (состав+тиры), предметы с
+ *     ценами, серверные цены.
+ *   WEIGHTS  — вес появления вида (та же таблица шкалы, что в коде).
  *
- *   const BASELINE = { locations, drops, shops, items, serverPrices }
- *
- * BASELINE — снимок того, что сейчас в игре. Редактор показывает его и
- * правит копию. Разница BASELINE vs DATA — твои правки (я потом применю).
- *
- * Генератор ТОЛЬКО ЧИТАЕТ исходники и переписывает один html-файл.
- * Код игры он не трогает.
- *
- * Запуск:  node tools/editor/gen-editor.mjs
+ * Генератор ТОЛЬКО ЧИТАЕТ исходники. Код он не трогает.
+ * Запуск: node tools/editor/gen-editor.mjs
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -24,21 +21,21 @@ const ROOT = join(HERE, '..', '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 const list = (s) => [...(s || '').matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => m[1] ?? m[2]);
 
-// ── Локации: всё, что сейчас в regions.ts ────────────────────────────────
+// ── ЛОКАЦИИ ──────────────────────────────────────────────────────────────
 function parseRegions() {
   const src = read('src/data/regions.ts');
-  const out = [];
+  const lines = src.split('\n');
   const locRe = /^ {6}([a-zA-Z0-9_]+):\s*\{/;
   const regionRe = /^ {2}([a-z]+):\s*\{/;
+  const out = [];
   let region = 'kanto', cur = null;
-
   const flush = () => {
     if (!cur) return;
     const body = cur.body.join('\n');
     const pick = (re) => (body.match(re) || [])[1];
-    const num = (re) => (pick(re) ? +pick(re) : null);
+    const num = (re) => (pick(re) !== undefined ? +pick(re) : null);
     out.push({
-      id: cur.id, region: cur.region,
+      id: cur.id, region,
       name: pick(/name:\s*'([^']*)'/) || cur.id,
       encounters: list(pick(/encounters:\s*\[([^\]]*)\]/)),
       dayEncounters: list(pick(/dayEncounters:\s*\[([^\]]*)\]/)),
@@ -50,11 +47,12 @@ function parseRegions() {
       bossLvl: num(/bossLvl:\s*(\d+)/),
       requiresBadges: num(/requiresBadges:\s*(\d+)/),
       hasWater: /hasWater:\s*true/.test(body),
+      hasHeal: /hasHeal:\s*true/.test(body),
+      links: list(pick(/links:\s*\[([^\]]*)\]/)),
     });
     cur = null;
   };
-
-  for (const line of src.split('\n')) {
+  for (const line of lines) {
     const rm = line.match(regionRe);
     if (rm) { region = rm[1]; continue; }
     const lm = line.match(locRe);
@@ -65,12 +63,12 @@ function parseRegions() {
   return out;
 }
 
-// ── Дропы по видам ───────────────────────────────────────────────────────
+// ── ДРОПЫ ────────────────────────────────────────────────────────────────
 function parseDrops() {
   const src = read('src/data/drops.js');
   const body = src.slice(src.indexOf('MONSTER_DROP_TABLE'));
   const out = {};
-  for (const m of body.matchAll(/\n {2}([a-zA-Z0-9_\-]+):\s*\[(.*?)\]/gs)) {
+  for (const m of body.matchAll(/\n {2}([a-zA-Z0-9_\-]+):\s*\[(.*?)\]\s*,?(?=\n)/gs)) {
     const entries = [];
     for (const d of m[2].matchAll(/item:\s*'([^']+)'[^}]*?chance:\s*([\d.]+)[^}]*?qty:\s*(\d+)/gs)) {
       entries.push({ item: d[1], chance: +d[2], qty: +d[3] });
@@ -80,27 +78,23 @@ function parseDrops() {
   return out;
 }
 
-// ── Магазины ─────────────────────────────────────────────────────────────
+// ── МАГАЗИНЫ + ЦЕНЫ ──────────────────────────────────────────────────────
 function parseShops() {
   const src = read('src/data/shops.ts');
   const tiers = {};
   const tierBlock = src.slice(src.indexOf('SHOP_TIERS'), src.indexOf('SHOP_STOCK_RAW'));
   for (const m of tierBlock.matchAll(/'([^']+)':\s*(\d+)/g)) tiers[m[1]] = +m[2];
-
   const stock = {};
   const rawBlock = src.slice(src.indexOf('SHOP_STOCK_RAW'), src.indexOf('export const TIER_BALLS'));
   for (const m of rawBlock.matchAll(/'([^']+)':\s*\[([^\]]*)\]/g)) stock[m[1]] = list(m[2]);
-
   const balls = {};
   const ballBlock = src.slice(src.indexOf('TIER_BALLS'), src.indexOf('SHOP_STOCK'));
   for (const m of ballBlock.matchAll(/\n {2}(\d+):\s*\[([^\]]*)\]/g)) balls[m[1]] = list(m[2]);
-
   const exclude = {};
   if (src.includes('MART_EXCLUDE')) {
     const exBlock = src.slice(src.indexOf('MART_EXCLUDE'), src.indexOf('/** Итоговый ассортимент'));
     for (const m of exBlock.matchAll(/'([^']+)':\s*\[([^\]]*)\]/g)) exclude[m[1]] = list(m[2]);
   }
-
   const final = {};
   for (const [mart, base] of Object.entries(stock)) {
     const tier = tiers[mart];
@@ -114,17 +108,13 @@ function parseShops() {
   return final;
 }
 
-// ── Предметы и цены ─────────────────────────────────────────────────────
 function parseItems() {
   const src = read('src/data/items.ts');
   const out = {};
   for (const m of src.matchAll(/\{ id:\s*'([\w]+)',\s*nameRu:\s*'([^']*)'/g)) {
     const tail = src.slice(m.index, m.index + 700);
     const price = (tail.match(/price:\s*(\d+)/) || [])[1];
-    const sell = (tail.match(/sellPrice:\s*(\d+)/) || [])[1];
-    if (price !== undefined) {
-      out[m[1]] = { name: m[2], price: +price, sellPrice: sell ? +sell : null };
-    }
+    if (price !== undefined) out[m[1]] = { name: m[2], price: +price };
   }
   return out;
 }
@@ -136,7 +126,32 @@ function parseServerPrices() {
   return out;
 }
 
-// ── Сборка и вставка ────────────────────────────────────────────────────
+// ── ВЕС ПОЯВЛЕНИЯ (та же шкала, что в power.ts) ──────────────────────────
+function weights(powerJson) {
+  const w = (bst) => {
+    if (!(bst > 0)) return 0.5;
+    if (bst >= 640) return 0.08;
+    if (bst >= 580) return 0.2;
+    if (bst >= 520) return 0.4;
+    if (bst >= 470) return 0.75;
+    if (bst >= 400) return 1.3;
+    if (bst >= 330) return 1.9;
+    if (bst >= 260) return 2.4;
+    return 2.8;
+  };
+  const out = {};
+  for (const [s, b] of Object.entries(powerJson)) out[s] = w(b);
+  return out;
+}
+
+// питания для базовой силы — грубо по public/pokemon_power.json
+function powerJson() {
+  try {
+    return JSON.parse(read('public/pokemon_power.json'));
+  } catch { return {}; }
+}
+
+// ── СБОРКА ───────────────────────────────────────────────────────────────
 const baseline = {
   locations: parseRegions(),
   drops: parseDrops(),
@@ -144,23 +159,23 @@ const baseline = {
   items: parseItems(),
   serverPrices: parseServerPrices(),
 };
+const wmap = weights(powerJson());
 
 const htmlPath = join(ROOT, 'public', 'editor.html');
 let html = readFileSync(htmlPath, 'utf8');
-
-const marker = 'const BASELINE = /*__BASELINE__*/null;';
-if (!html.includes(marker)) {
-  console.error('маркер BASELINE не найден в editor.html');
-  process.exit(1);
-}
-html = html.replace(marker, 'const BASELINE = ' + JSON.stringify(baseline) + ';');
-
+const startM = '/*__BASELINE_START__*/';
+const endM = '/*__BASELINE_END__*/';
+const si = html.indexOf(startM);
+const ei = html.indexOf(endM);
+if (si < 0 || ei < 0 || ei <= si) { console.error('маркеры не найдены'); process.exit(1); }
+html = html.slice(0, si + startM.length)
+  + '\nconst BASELINE = ' + JSON.stringify({ ...baseline, weights: wmap }) + ';\n'
+  + html.slice(ei);
 writeFileSync(htmlPath, html, 'utf8');
 
-const size = Math.round(Buffer.byteLength(html) / 1024);
 console.log('public/editor.html обновлён:');
 console.log('  локаций  :', baseline.locations.length);
 console.log('  дропов   :', Object.keys(baseline.drops).length);
 console.log('  маркетов :', Object.keys(baseline.shops).length);
 console.log('  предметов:', Object.keys(baseline.items).length);
-console.log('  размер   :', size, 'KB (страница самодостаточная, работает с диска)');
+console.log('  страницу можно открыть с диска (file://)');
