@@ -289,6 +289,27 @@ export function initTradeSocket() {
     endPvP(!!data?.won, false);
   });
 
+  // Сервер отбил атаку валидацией (pvp_action_rejected): удар никому не
+  // ушёл, а ход уже переключён на оппонента — без этого обработчика бой
+  // виснет навсегда на «Ожидание хода соперника...». Возвращаем ход.
+  state.socket.on('pvp_action_rejected', (data) => {
+    const why = data?.reason ? `: ${data.reason}` : '';
+    showToast(`Удар отклонён сервером${why} — бей ещё раз`, true);
+    state.pvpMyTurn = true;
+    updatePvPUI();
+  });
+
+  // Оппонент пропал (TTL-уборка боя): модалку не на чем держать.
+  // pvp_end НЕ шлём — боя уже нет на сервере, награды за такое нет.
+  state.socket.on('pvp_opponent_left', (msg) => {
+    showToast(typeof msg === 'string' && msg ? msg : 'Оппонент покинул бой', true);
+    const pvpModal = document.getElementById('pvp-modal');
+    if (pvpModal) pvpModal.style.display = 'none';
+    state.pvpBattleId = null;
+    state.pvpMyTurn = false;
+    autoSave();
+  });
+
   state.socket.on('pvp_start', (data) => {
     // M-18: бой с арены — тот же протокол, призы и стрик посчитает сервер.
     if (data?.arena === true) showToast('⚔ Бой на арене! Победа даст приз за стрик.', false);
