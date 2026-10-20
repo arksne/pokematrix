@@ -7538,19 +7538,13 @@ function initEncounterEvents() {
           }
           GS.pokedexCaught.add(S.activeWild.name);
           GS.pokedexSeen.add(S.activeWild.name);
-          // Эволюция сразу при поимке: пойманный высокоуровневый мон (Маджикарп 20)
-          // иначе «просрочивал момент» и эволил только при следующей победе —
-          // выглядело багом. Everstone блокирует, как в бою.
-          if (newMon.heldItem !== 'everstone') {
-            try {
-              Promise.resolve(checkEvolution(newMon)).then((evoTarget) => {
-                if (!evoTarget) return;
-                return Promise.resolve(triggerEvolution(newMon, evoTarget.name)).then(() => {
-                  if (evoTarget.shedBonus) return maybeGrantShedinja(newMon);
-                });
-              }).catch(() => {});
-            } catch (_) { /* эволюция не роняет поимку */ }
-          }
+          // Эволюции при поимке НЕТ. Раньше пойманный дикий эволюционировал
+          // сразу: игрок ловил покемона УЖЕ ВЫШЕ уровня своей эволюции (например
+          // дикого Рапидаша 17 ур. при эволюции с 16) — и он превращался в
+          // Фиреблэйз прямо в сумке, минуя все условия. Правило игрока:
+          // «покемоны не должны эволюционировать, если лв уже выше лв эволюции,
+          // он пропустил свой уровень эволюции». Эволюция — только за конфеты,
+          // камни и честный уровень.
           // Достижения поимки: первая, команда 6, шайни, вехи покедекса
           checkAchievement('first_catch');
           if (GS.myTeam.length >= 6) checkAchievement('team_6');

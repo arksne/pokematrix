@@ -78,13 +78,20 @@ export function siteStarterMoves(ls: SiteLearnset | null, maxLevel: number, coun
 }
 
 /**
- * Атаки дикого СТРОГО по уровню: все level-up записи с level <= lvl,
- * из них — последние `count` (самые поздние = самые развитые), по возрастанию
- * уровня. Это то, что ждёт игрок от «дикий ур. 5 не знает удар ур. 50».
+ * Атаки дикого СТРОГО по уровню обучения.
  *
- * Отличие от siteStarterMoves: там берутся ПЕРВЫЕ count (стартер и так
- * 1-5 уровня, первые записи — единственные известные). Дикому на 60+
- * нужны последние известные, а не самые ранние.
+ * Проблема, которую это чинит: в данных лиги на 1 уровне у 534 видов стоит
+ * ПАЧКА атак (у Рапидаша 8: Ember, Growl, Megahorn, Poison Jab, Quick Attack,
+ * Smart Strike, Tackle, Tail Whip) — это смесь «родных» атак и тех, что в
+ * игре учатся с ТМ-диска. Если брать просто последние 4 из списка, дикий
+ * получает случайный набор вроде «Poison Jab + Smart Strike» — игрок и писал,
+ * что атаки «рандомно».
+ *
+ * Правило:
+ *  1. Убираем атаки, которые вид учит с ТМ-диска (ls.tm) — они не родные.
+ *  2. Идём по уровням от старшего к младшему, набирая 4 атаки; внутри одного
+ *     уровня берём ПО ПОРЯДКУ ТАБЛИЦЫ (как в siteStarterMoves у стартера).
+ *  3. Итог сортируем по уровню — видно прогрессию обучения.
  */
 export function wildMovesFromLearnset(
   ls: SiteLearnset | null,
@@ -93,11 +100,28 @@ export function wildMovesFromLearnset(
 ): string[] {
   const lvl = Math.max(1, Math.floor(level || 1));
   const known = (ls?.levelup || [])
-    .filter((e) => Array.isArray(e) && e[0] <= lvl)
-    .slice()
-    .sort((a, b) => a[0] - b[0]);
+    .filter((e) => Array.isArray(e) && e[0] <= lvl);
   if (!known.length) return [];
-  return known.slice(Math.max(0, known.length - count)).map((e) => e[1]);
+
+  // Атаки с ТМ-диска — не «родные», но они бывают и в списке обучения.
+  // Поэтому НЕ выкидываем их, а просто ставим на последнее место: при равном
+  // уровне сначала идут те, что вид учит сам.
+  const tmNames = new Set((ls?.tm || []).map((e) => String(e[1]).toLowerCase()));
+  const ranked = known
+    .map((e, i) => ({
+      lv: e[0] as number,
+      name: String(e[1]),
+      isTm: tmNames.has(String(e[1]).toLowerCase()) ? 1 : 0,
+      i,
+    }))
+    // Сначала самые «поздние» атаки (уровень по убыванию), при равном
+    // уровне — сначала родные (не с ТМ), затем по порядку таблицы.
+    .sort((a, b) => (b.lv - a.lv) || (a.isTm - b.isTm) || (a.i - b.i));
+
+  const picked = ranked.slice(0, count);
+  // Итог по возрастанию уровня — видно прогрессию обучения.
+  return picked.sort((a, b) => (a.lv - b.lv) || (a.isTm - b.isTm) || (a.i - b.i))
+    .map((e) => e.name);
 }
 
 /**

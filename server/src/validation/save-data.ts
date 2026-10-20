@@ -25,7 +25,7 @@ export const VALID_ITEM_IDS = [
   'revive', 'maxRevive', 'antidote', 'burnHeal', 'iceHeal', 'awakening', 'paralyzeHeal',
   'fullHeal', 'ether', 'maxEther', 'elixir', 'maxElixir',
   'rareCandy', 'ppUp', 'ppMax',
-  'expShare', 'expAll',
+  'expAll',
   'hpUp', 'protein', 'iron', 'calcium', 'zinc', 'carbos',
   'fireStone', 'waterStone', 'thunderStone', 'leafStone', 'moonStone',
   'sunStone', 'shinyStone', 'duskStone', 'dawnStone', 'iceStone',

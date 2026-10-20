@@ -387,25 +387,37 @@ describe('quest-drops: посылки не падают, обычные пада
   });
 });
 
-describe('expCandyXs: убрана как tm-диск', () => {
-  it('implemented false + пометка в desc', async () => {
+describe('конфеты опыта убраны из игры полностью', () => {
+  // Решение игрока: «убери все конфеты опыта» — они читерские (мгновенный
+  // опыт в обход уровней). Убраны не только из продажи, но и из определений:
+  // предмет нельзя получить, использовать или выдать за квест.
+  const EXP_ITEMS = ['expCandyS', 'expCandyM', 'expCandyL', 'expCandyXl', 'expCandyXs', 'expShare'];
+
+  it('в ITEMS их больше нет', async () => {
     const { ITEMS } = await import('../../data/items.js');
-    const xs = (ITEMS as any[]).find((i) => i.id === 'expCandyXs')!;
-    expect(xs).toBeTruthy();
-    expect(xs.implemented).toBe(false);
-    expect(String(xs.desc)).toContain('Убрана');
+    const ids = new Set((ITEMS as any[]).map((i) => i.id));
+    for (const id of EXP_ITEMS) {
+      expect(ids.has(id), `${id} всё ещё определён как предмет`).toBe(false);
+    }
   });
 
-  it('ни один NPC-квест не награждает expCandyXs', async () => {
+  it('ни один NPC-квест их не награждает', async () => {
     const { NPC_DATA } = await import('../../data/npc.js');
     const bad: string[] = [];
     for (const npc of Object.values(NPC_DATA as any) as any[]) {
       for (const q of (npc?.quests || []) as any[]) {
-        if (q?.rewardItem === 'expCandyXs') bad.push(q.id);
-        for (const r of (q?.rewardItems || []) as any[]) if (r?.id === 'expCandyXs') bad.push(q.id);
+        if (EXP_ITEMS.includes(q?.rewardItem)) bad.push(q.id);
+        for (const r of (q?.rewardItems || []) as any[]) if (EXP_ITEMS.includes(r?.id)) bad.push(q.id);
       }
     }
     expect(bad).toEqual([]);
+  });
+
+  it('в магазинах их нет', async () => {
+    const { SHOP_STOCK } = await import('../../data/shops.js');
+    for (const stock of Object.values(SHOP_STOCK) as string[][]) {
+      for (const id of EXP_ITEMS) expect(stock).not.toContain(id);
+    }
   });
 
   it('useItem без кейса даёт внятный отказ (default-ветка inventory.ts)', async () => {

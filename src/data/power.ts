@@ -16,28 +16,28 @@
 // Шкала силы 0–10: <250 → 1★ … ≥650 → 10★ (совпадает с прежними порогами
 // getPowerStars, чтобы у игроков не прыгнули значения).
 
+import { POKEMON_BST } from './pokemon-power-table.js';
+
 let table: Record<string, number> | null = null;
 
 /**
- * Задать таблицу напрямую (тесты, SSR). В проде таблица грузится из
- * public/pokemon_power.json через loadPowerTable().
+ * Задать таблицу напрямую (тесты). В проде данные вшиты в бандл.
  */
 export function setPowerTable(t: Record<string, number>): void {
   table = t;
 }
 
-/** Загрузить таблицу силы. Вызывается на старте (loadPokedexData). */
+/**
+ * Таблица силы.
+ *
+ * Данные ВШИТЫ В БАНДЛ (pokemon-power-table.ts): таблица нужна синхронно в
+ * горячем пути (вес появления дикого), и загрузка по сети создавала гонку —
+ * первые бои шли с пустой таблицей, где все виды весили одинаково, и «редкие»
+ * попадались так же часто, как обычные. Плюс это зависело от того, что
+ * статику в деплое отдают.
+ */
 export async function loadPowerTable(): Promise<Record<string, number>> {
-  if (table) return table;
-  try {
-    const base = (import.meta as any).env?.BASE_URL || '/';
-    const res = await fetch(`${base}pokemon_power.json`);
-    if (!res.ok) throw new Error(`status ${res.status}`);
-    table = await res.json();
-  } catch (e) {
-    console.warn('[power] не удалось загрузить pokemon_power.json:', e);
-    table = {};
-  }
+  if (!table) table = { ...POKEMON_BST };
   return table!;
 }
 

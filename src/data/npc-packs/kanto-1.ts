@@ -29,7 +29,7 @@ export const KANTO1_NPCS = {
     },
     quests: [
       { id: 'cer_trail', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 диких водных + посети 6 локаций (средний уровень 20)', rewardMoney: 10000, rewardItem: 'mysticWater', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 3 }], prereqQuest: null, filter: { types: ['water'] }, verify: { avgLevel: 20, locs: ['ceruleanCity', 'route24', 'route25', 'route4', 'mtMoon'] } },
-      { id: 'cer_fossil', type: 'use_item', targetItem: null, targetQty: 2, desc: 'Используй 2 Moon Stone (камни с горы Мун)', rewardMoney: 9000, rewardItem: 'expCandyM', rewardQty: 3, prereqQuest: null, filter: { itemId: 'moonStone' } },
+      { id: 'cer_fossil', type: 'use_item', targetItem: null, targetQty: 2, desc: 'Используй 2 Moon Stone (камни с горы Мун)', rewardMoney: 9000, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: null, filter: { itemId: 'moonStone' } },
     ],
   },
   'cer_finn': {
@@ -109,7 +109,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Дикие всё ещё мутят воду... Ещё репеллентов!',
     },
     quests: [
-      { id: 'cer_repel', type: 'use_item', targetItem: null, targetQty: 6, desc: 'Используй 6 Super Repel на водных маршрутах', rewardMoney: 9000, rewardItem: 'expCandyL', rewardQty: 2, prereqQuest: null, filter: { itemId: 'superRepel' } },
+      { id: 'cer_repel', type: 'use_item', targetItem: null, targetQty: 6, desc: 'Используй 6 Super Repel на водных маршрутах', rewardMoney: 9000, rewardItem: 'revive', rewardQty: 2, prereqQuest: null, filter: { itemId: 'superRepel' } },
     ],
   },
   'cer_briz': {
@@ -134,7 +134,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Без посылки не приму. Бриз ждёт подтверждения!',
     },
     quests: [
-      { id: 'cer_courier', type: 'collect_items', targetItem: 'parcelCer', targetQty: 1, desc: 'Довези посылку из Вермилиона в Церулин', rewardMoney: 9000, rewardItem: 'expCandyM', rewardQty: 3, prereqQuest: null },
+      { id: 'cer_courier', type: 'collect_items', targetItem: 'parcelCer', targetQty: 1, desc: 'Довези посылку из Вермилиона в Церулин', rewardMoney: 9000, rewardItem: 'superPotion', rewardQty: 3, prereqQuest: null },
     ],
   },
   // ══════════ ВЕРМИЛИОН (n=2, электро) ══════════
@@ -254,7 +254,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Без посылки не приму!',
     },
     quests: [
-      { id: 'ver_courier', type: 'collect_items', targetItem: 'parcelVer', targetQty: 1, desc: 'Довези посылку из Шаффрана в Вермилион', rewardMoney: 14000, rewardItem: 'expCandyM', rewardQty: 5, prereqQuest: null },
+      { id: 'ver_courier', type: 'collect_items', targetItem: 'parcelVer', targetQty: 1, desc: 'Довези посылку из Шаффрана в Вермилион', rewardMoney: 14000, rewardItem: 'superPotion', rewardQty: 5, prereqQuest: null },
     ],
   },
   // ══════════ СЕЛАДОН (n=3, трава) ══════════
@@ -373,7 +373,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Без посылки не приму!',
     },
     quests: [
-      { id: 'cel_courier', type: 'collect_items', targetItem: 'parcelCel', targetQty: 1, desc: 'Довези посылку из Лаванды в Селадон', rewardMoney: 18000, rewardItem: 'expCandyM', rewardQty: 6, prereqQuest: null },
+      { id: 'cel_courier', type: 'collect_items', targetItem: 'parcelCel', targetQty: 1, desc: 'Довези посылку из Лаванды в Селадон', rewardMoney: 18000, rewardItem: 'superPotion', rewardQty: 6, prereqQuest: null },
     ],
   },
   // ══════════ ШАФФРАН (n=4, психика) ══════════
@@ -480,7 +480,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Без посылки не приму!',
     },
     quests: [
-      { id: 'saf_courier', type: 'collect_items', targetItem: 'parcelSaf', targetQty: 1, desc: 'Довези посылку из Фуксии в Шаффран', rewardMoney: 23000, rewardItem: 'expCandyM', rewardQty: 10, prereqQuest: null },
+      { id: 'saf_courier', type: 'collect_items', targetItem: 'parcelSaf', targetQty: 1, desc: 'Довези посылку из Фуксии в Шаффран', rewardMoney: 23000, rewardItem: 'superPotion', rewardQty: 10, prereqQuest: null },
     ],
   },
 };

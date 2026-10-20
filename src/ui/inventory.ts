@@ -1298,7 +1298,7 @@ export async function useItem(itemId) {
     }
 
     // ── EXP-конфеты (аудит итемов): опыт + level-up цикл ──
-    case 'expCandyXs': case 'expCandyS': case 'expCandyM': case 'expCandyL': case 'expCandyXl': {
+    {
       const amount = EXP_CANDY_XP[itemId] || 0;
       if (!amount) return showToast('Странная конфета...', true);
       await feedExp(mon, itemId, item.nameRu, amount);
@@ -1412,7 +1412,7 @@ export async function useItem(itemId) {
 
     // ── Exp. Share (распределитель опыта) ──
     // Переключает режим: вся команда получает 50% опыта
-    case 'expShare': {
+    {
       toggleExpShare();  // Переключаем флаг expShareActive
       showToast(
         getInvState().expShareActive

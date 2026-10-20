@@ -137,7 +137,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Без посылки не приму. Перелёт ждёт подтверждения!',
     },
     quests: [
-      { id: 'vio_courier', type: 'collect_items', targetItem: 'parcelVio', targetQty: 1, desc: 'Довези посылку из Виридиана в Вайолет', rewardMoney: 41000, rewardItem: 'expCandyL', rewardQty: 15, prereqQuest: null },
+      { id: 'vio_courier', type: 'collect_items', targetItem: 'parcelVio', targetQty: 1, desc: 'Довези посылку из Виридиана в Вайолет', rewardMoney: 41000, rewardItem: 'revive', rewardQty: 15, prereqQuest: null },
     ],
   },
   // ══════════ АЗАЛИЯ (n=9, жуки) ══════════

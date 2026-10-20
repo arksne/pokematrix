@@ -713,7 +713,7 @@ export const NPC_DATA = {
       quest_incomplete: 'Без посылки не сдам... то есть не приму!',
     },
     quests: [
-      { id: 'pw_courier', type: 'collect_items', targetItem: 'courierParcel', targetQty: 1, desc: 'Довези посылку из Виридиана в Пьютер', rewardMoney: 4500, rewardItem: 'expCandyM', rewardQty: 3, rewardTitle: 'courier', prereqQuest: null },
+      { id: 'pw_courier', type: 'collect_items', targetItem: 'courierParcel', targetQty: 1, desc: 'Довези посылку из Виридиана в Пьютер', rewardMoney: 4500, rewardItem: 'superPotion', rewardQty: 3, rewardTitle: 'courier', prereqQuest: null },
     ],
   },
   'i1_archipelago_captain': {

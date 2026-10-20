@@ -45,11 +45,6 @@ export const CURE_ALL: string[] = [
 
 /** EXP-конфеты: id → опыт (канон) */
 export const EXP_CANDY_XP: Record<string, number> = {
-  expCandyXs: 100,
-  expCandyS: 800,
-  expCandyM: 3000,
-  expCandyL: 10000,
-  expCandyXl: 30000,
 };
 
 /** Крылья: id → EV-стат (+1, канон) */

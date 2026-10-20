@@ -100,12 +100,7 @@ const ITEMS: ItemDef[] = [
   { id: 'evBrace', price: 25000000 },
   { id: 'everstone', price: 3000 },
   { id: 'eviolite', price: 4000 },
-  { id: 'expCandyL', price: 3000 },
-  { id: 'expCandyM', price: 1000 },
-  { id: 'expCandyS', price: 240 },
-  { id: 'expCandyXl', price: 10000 },
 
-  { id: 'expShare', price: 25000 },
   { id: 'expertBelt', price: 4000 },
   { id: 'ferryTicket', price: 300000 },
   { id: 'fireStone', price: 100000 },

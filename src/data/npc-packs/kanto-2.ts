@@ -156,7 +156,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Без посылки не приму!',
     },
     quests: [
-      { id: 'fuc_courier', type: 'collect_items', targetItem: 'parcelFuc', targetQty: 1, desc: 'Довези посылку с Киновари в Фуксию (от Тропы)', rewardMoney: 27000, rewardItem: 'expCandyM', rewardQty: 16, prereqQuest: null },
+      { id: 'fuc_courier', type: 'collect_items', targetItem: 'parcelFuc', targetQty: 1, desc: 'Довези посылку с Киновари в Фуксию (от Тропы)', rewardMoney: 27000, rewardItem: 'superPotion', rewardQty: 16, prereqQuest: null },
     ],
   },
   'fuchsia_sender': {
@@ -300,7 +300,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Без ящика не приму!',
     },
     quests: [
-      { id: 'cin_courier', type: 'collect_items', targetItem: 'cinLeg2', targetQty: 1, desc: 'Довези ящик с Виридиана на Киноварь через Паллет', rewardMoney: 32000, rewardItem: 'expCandyM', rewardQty: 10, prereqQuest: null },
+      { id: 'cin_courier', type: 'collect_items', targetItem: 'cinLeg2', targetQty: 1, desc: 'Довези ящик с Виридиана на Киноварь через Паллет', rewardMoney: 32000, rewardItem: 'superPotion', rewardQty: 10, prereqQuest: null },
     ],
   },
   // ══════════ ВИРИДИАН (n=7, земля) ══════════
@@ -420,7 +420,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Без посылки не приму!',
     },
     quests: [
-      { id: 'vir_courier', type: 'collect_items', targetItem: 'parcelVir', targetQty: 1, desc: 'Довези посылку с перевала Пьютера в Виридиан', rewardMoney: 36000, rewardItem: 'expCandyM', rewardQty: 20, prereqQuest: null },
+      { id: 'vir_courier', type: 'collect_items', targetItem: 'parcelVir', targetQty: 1, desc: 'Довези посылку с перевала Пьютера в Виридиан', rewardMoney: 36000, rewardItem: 'superPotion', rewardQty: 20, prereqQuest: null },
     ],
   },
 };
