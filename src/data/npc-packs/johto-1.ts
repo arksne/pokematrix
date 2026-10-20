@@ -416,7 +416,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Танец ещё не окончен... Духи бродят...',
     },
     quests: [
-      { id: 'ecr_kimono', type: 'defeat_x', targetItem: null, targetQty: 40, desc: 'Победи 40 покемонов сестёр кимоно (Vaporeon, Jolteon, Flareon, Espeon, Umbreon) сестёр кимоно (танец пяти стихий!)', rewardMoney: 60000, rewardItem: 'premierBall', rewardQty: 6, prereqQuest: null, filter: { speciesList: ['vaporeon', 'jolteon', 'flareon', 'espeon', 'umbreon'] } },
+      { id: 'ecr_kimono', type: 'special', targetItem: null, targetQty: 1, desc: 'Собери 40 сестёр кимоно: Вапореон, Джолтеон, Флареон, Эспеон, Умбреон (танец пяти стихий!)', rewardMoney: 60000, rewardItem: 'premierBall', rewardQty: 6, prereqQuest: null, verify: { typeSpecies: ['vaporeon', 'jolteon', 'flareon', 'espeon', 'umbreon'], typeCount: 40 } },
       { id: 'ecr_night', type: 'catch_x', targetItem: null, targetQty: 4, desc: 'Поймай Gastly ×4 ночью (полуночный обход!)', rewardMoney: 300000, rewardItem: 'duskBall', rewardQty: 12, prereqQuest: null, filter: { species: 'gastly', time: 'night' } },
     ],
   },

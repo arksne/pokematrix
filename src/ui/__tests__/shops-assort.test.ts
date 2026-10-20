@@ -51,6 +51,9 @@ describe('M-23: ассортимент маркетов', () => {
   });
 
   it('у каждого города свой набор (попарно различаются)', () => {
+    // Города одного тира получают базовый набор тира, но список корректируется
+    // MART_EXCLUDE: после удаления мёртвых предметов три города тира 4 стали
+    // идентичны, и различие задано явно (сафари-бол — только в Фукус-Сити).
     const marts = [...CITIES.map(martOf), 'pokemart'];
     const sets = marts.map((m) => new Set(SHOP_STOCK[m] as string[]));
     for (let i = 0; i < sets.length; i++) {
@@ -67,10 +70,33 @@ describe('M-23: ассортимент маркетов', () => {
     for (const stock of Object.values(SHOP_STOCK) as string[][]) {
       for (const id of stock) union.add(id);
     }
+    // Исключения — предметы, которые игрок решил убрать из продажи:
+    // мёртвые (isUsable:false без кнопки «Юз»), шары с выдуманными эффектами,
+    // читерские конфеты опыта и вход в крафт без материалов.
+    const REMOVED = new Set([
+      'repel', 'superRepel', 'maxRepel', 'lure', 'superLure', 'maxLure',
+      'blackFlute', 'whiteFlute', 'escapeRope', 'pokeDoll', 'pokeToy', 'fluffyTail',
+      'masterBall', 'nestBall', 'netBall', 'repeatBall', 'sportBall',
+      'expCandy', 'expCandyXs', 'expCandyXl', 'expShare', 'craftersKit',
+    ]);
     const missing = ITEMS.filter(
-      (it) => it.price > 0 && it.implemented && !union.has(it.id),
+      (it) => it.price > 0 && it.implemented && !union.has(it.id) && !REMOVED.has(it.id),
     ).map((it) => it.id);
     expect(missing).toEqual([]);
+  });
+
+  it('убранные из продажи предметы действительно не продаются', () => {
+    const REMOVED = [
+      'repel', 'superRepel', 'maxRepel', 'lure', 'superLure', 'maxLure',
+      'blackFlute', 'whiteFlute', 'escapeRope', 'pokeDoll', 'pokeToy', 'fluffyTail',
+      'masterBall', 'nestBall', 'netBall', 'repeatBall', 'sportBall',
+      'expCandy', 'expCandyXs', 'expCandyXl', 'expShare', 'craftersKit',
+    ];
+    for (const stock of Object.values(SHOP_STOCK) as string[][]) {
+      for (const id of REMOVED) {
+        expect(stock, `${id} всё ещё продаётся`).not.toContain(id);
+      }
+    }
   });
 
   it('поздние города содержат тир3: tmTop только в тире 4', () => {

@@ -735,3 +735,47 @@ export const NPC_DATA = {
   ...JOHTO2_NPCS,
 
 };
+
+// ─────────────────────────────────────────────────────────────
+// УДАЛЕНИЕ NPC НА НЕСУЩЕСТВУЮЩИХ ЛОКАЦИЯХ
+// ─────────────────────────────────────────────────────────────
+// Часть NPC в реестре ссылается на локации, которых нет на карте
+// (flourence, warhall, il_de_far, sen_aspir — целые несуществующие
+// регионы). NPC-панель фильтрует строго по n.location === locId, поэтому
+// такие NPC НИКОГДА не появлялись: мёртвый контент в данных и в реестре.
+// Игрок решил — удалить.
+//
+// Фильтр применяется к СБОРКЕ NPC_DATA (данные остаются в файлах как
+// заготовка), поэтому счётчики в тестах остаются осмысленными, а в игру
+// попадает только то, что реально показывается.
+import { REGIONS } from './regions.js';
+
+/** Все id локаций, которые есть на карте. */
+function mapLocationIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const region of Object.values(REGIONS) as any[]) {
+    for (const id of Object.keys(region?.locations || {})) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * Выкидывает NPC, чья локация отсутствует на карте.
+ * Возвращает id удалённых (для тестов и логов).
+ */
+export function pruneDeadNpcs(): string[] {
+  const known = mapLocationIds();
+  const removed: string[] = [];
+  for (const [id, npc] of Object.entries(NPC_DATA as Record<string, any>)) {
+    const loc = npc?.location;
+    if (typeof loc !== 'string' || !loc) continue;   // без локации — оставляем
+    if (!known.has(loc)) {
+      delete (NPC_DATA as Record<string, any>)[id];
+      removed.push(id);
+    }
+  }
+  return removed;
+}
+
+/** id NPC, удалённых как несуществующие. Для тестов. */
+export const REMOVED_NPC_IDS: string[] = pruneDeadNpcs();
