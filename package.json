@@ -21,7 +21,7 @@
     "test": "vitest run",
     "verify": "node tools/verify/run.mjs",
     "verify:serve": "node tools/verify/run.mjs --serve",
-    "editor:gen": "node tools/editor/gen-editor-data.mjs"
+    "editor": "node tools/editor/gen-editor.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

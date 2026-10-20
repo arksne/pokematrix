@@ -3,682 +3,369 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PokeMatrix — Ручной редактор</title>
+<title>PokeMatrix — внесу данные</title>
 <style>
   :root {
-    --bg: #0b1020; --card: #141d33; --card2: #1b2742; --border: #2a3a5c;
-    --text: #e8eefc; --muted: #93a3c4; --accent: #4a9eff; --green: #34c759;
-    --red: #ff6b6b; --orange: #ff9500; --yellow: #ffd60a;
+    --bg: #0d1220; --card: #161f33; --card2: #1e2a44; --border: #2c3c60;
+    --text: #e9eefc; --muted: #8fa0c2; --accent: #4a9eff; --green: #2fb457;
+    --red: #ff6b6b;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    padding: 12px; padding-bottom: 90px;
+    margin: 0; background: var(--bg); color: var(--text); padding: 14px;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
-  header {
-    position: sticky; top: 0; z-index: 20; background: var(--bg);
-    border-bottom: 1px solid var(--border); padding: 10px 0; margin-bottom: 12px;
-  }
-  h1 { font-size: 18px; margin: 0 0 4px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
   h2 { font-size: 15px; margin: 0 0 8px; color: var(--accent); }
-  .sub { color: var(--muted); font-size: 12px; }
-  .tabs { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
   .tab {
-    padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px;
     background: var(--card); color: var(--muted); cursor: pointer; font-weight: 600;
   }
   .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .card {
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px; margin-bottom: 10px;
+    border-radius: 10px; padding: 12px; margin-bottom: 12px;
   }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .row + .row { margin-top: 6px; }
-  input, select, textarea, button {
-    font: inherit; color: var(--text); background: var(--card2);
-    border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px;
+  label { display: block; font-size: 12px; color: var(--muted); margin: 9px 0 3px; }
+  input, select, textarea {
+    width: 100%; font: inherit; color: var(--text); background: var(--card2);
+    border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px;
   }
-  input[type=text], input[type=number] { min-width: 70px; }
-  input.grow { flex: 1; min-width: 160px; }
-  button { cursor: pointer; }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  button.ok { background: var(--green); color: #04220f; border-color: var(--green); }
-  button.danger { background: transparent; color: var(--red); border-color: var(--red); }
-  button.sm { padding: 2px 7px; font-size: 12px; }
-  .muted { color: var(--muted); }
-  .tag {
-    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 11px;
-    background: var(--card2); border: 1px solid var(--border); color: var(--muted);
+  textarea { resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button {
+    font: inherit; cursor: pointer; padding: 8px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--card2); color: var(--text);
   }
-  .tag.day { color: var(--yellow); border-color: var(--yellow); }
-  .tag.night { color: #8e7dff; border-color: #8e7dff; }
-  .tag.warn { color: var(--orange); border-color: var(--orange); }
-  .list { max-height: 62vh; overflow: auto; }
-  .item {
-    display: flex; gap: 8px; align-items: center; padding: 5px 6px;
-    border-radius: 7px; background: var(--card2); border: 1px solid transparent;
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.ok { background: var(--green); border-color: var(--green); color: #05230f; font-weight: 700; }
+  button.danger { color: var(--red); border-color: var(--red); background: transparent; }
+  #out {
+    min-height: 200px; white-space: pre; font-size: 13px;
+    font-family: ui-monospace, Consolas, monospace;
   }
-  .item + .item { margin-top: 4px; }
-  .item:hover { border-color: var(--border); }
-  .item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .split { display: grid; grid-template-columns: 300px 1fr; gap: 12px; align-items: start; }
-  @media (max-width: 820px) { .split { grid-template-columns: 1fr; } }
-  .loc-item { padding: 7px 9px; border-radius: 8px; cursor: pointer; }
-  .loc-item:hover { background: var(--card2); }
-  .loc-item.sel { background: var(--accent); color: #fff; }
-  .loc-item .meta { font-size: 11px; opacity: .75; }
-  #toast {
-    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
-    background: var(--green); color: #04220f; padding: 9px 16px; border-radius: 9px;
-    font-weight: 700; opacity: 0; transition: opacity .2s; z-index: 50; pointer-events: none;
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .hide { display: none !important; }
+  .entry {
+    display: flex; gap: 8px; align-items: flex-start; padding: 8px;
+    background: var(--card2); border-radius: 8px; margin-bottom: 6px;
   }
-  #toast.show { opacity: 1; }
-  .bar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-    background: var(--card); border-top: 1px solid var(--border);
-    padding: 9px 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  }
-  .hint { font-size: 12px; color: var(--muted); }
-  code { background: var(--card2); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .entry .txt { flex: 1; white-space: pre-wrap; font-size: 12.5px; font-family: ui-monospace, monospace; }
+  .badge { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; }
+  .saved { color: var(--green); font-weight: 700; }
+  code { background: var(--card2); padding: 1px 5px; border-radius: 5px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>🛠 PokeMatrix — редактор (справочник для правок)</h1>
-  <div class="sub">
-    Здесь ты размечаешь, что хочешь изменить: локации, дропы, энкаунтеры (день/ночь),
-    цены и состав магазинов. Внизу нажми «Экспорт» и пришли файл (или скопируй в чат) —
-    <b>правки в код вношу я вручную</b>, автоматического применения нет.
-    В поле «Заметка» пиши, что именно нужно — так я пойму замысел и сделаю точно.
-  </div>
-  <div class="tabs">
-    <button class="tab active" data-tab="loc">🗺 Локации</button>
-    <button class="tab" data-tab="drops">🎁 Дропы</button>
-    <button class="tab" data-tab="shops">🏪 Магазины</button>
-    <button class="tab" data-tab="prices">💰 Цены</button>
-  </div>
-</header>
 
-<div id="view-loc" class="tabview">
-  <div class="split">
-    <div class="card">
-      <div class="row">
-        <input type="text" id="loc-search" class="grow" placeholder="Поиск локации…">
-      </div>
-      <div class="row" style="margin-top:6px">
-        <select id="loc-region">
-          <option value="">Все регионы</option>
-        </select>
-      </div>
-      <div class="list" id="loc-list" style="margin-top:8px"></div>
-    </div>
-    <div class="card" id="loc-edit">
-      <div class="muted">Выбери локацию слева.</div>
-    </div>
-  </div>
+<h1>📝 PokeMatrix — внесу данные</h1>
+<div class="sub">
+  Вноси правки <b>по одному</b> (одна локация / один магазин за раз).
+  Всё сохраняется <b>в этом же файле</b> — нажми «💾 Сохранить в файл» и пришли
+  мне обновлённый html, я возьму данные прямо из него.
 </div>
 
-<div id="view-drops" class="tabview" style="display:none">
+<div class="tabs">
+  <button class="tab active" data-tab="loc">🗺 Локация</button>
+  <button class="tab" data-tab="shop">🏪 Магазин</button>
+  <button class="tab" data-tab="price">💰 Цена предмета</button>
+</div>
+
+<!-- ══════════════ ЛОКАЦИЯ ══════════════ -->
+<div id="tab-loc">
   <div class="card">
-    <h2>Дропы по видам</h2>
-    <div class="hint" style="margin-bottom:8px">
-      Слева — вид, справа — что с него падает (предмет, шанс, количество).
-      Шанс: 0.05 = 5%. Пустой список означает «с этого вида ничего не падает».
-    </div>
+    <h2>Локация</h2>
+
+    <label>Какая локация (выбери или впиши id)</label>
+    <input type="text" id="locId" list="locList" placeholder="например: celadonCity">
+    <datalist id="locList"></datalist>
+
+    <label>Энкаунтеры — общий список (по одному виду на строку)</label>
+    <textarea id="locEnc" rows="5" placeholder="abra&#10;clefable&#10;clefairy"></textarea>
+    <div class="hint">Покемоны, которые тут водятся ВСЕГДА. По одному в строке, без запятых.</div>
+
+    <label>Днём нападают (если список другой — впиши его, иначе пусто)</label>
+    <textarea id="locDay" rows="3" placeholder="sandshrew"></textarea>
+
+    <label>Ночью нападают (аналогично)</label>
+    <textarea id="locNight" rows="3" placeholder="gastly"></textarea>
+
     <div class="row">
-      <input type="text" id="drop-search" class="grow" placeholder="Поиск вида…">
-      <button class="primary" id="drop-add">+ Добавить вид</button>
+      <div>
+        <label>Уровень: мин</label>
+        <input type="number" id="locMin" placeholder="20">
+      </div>
+      <div>
+        <label>Уровень: макс</label>
+        <input type="number" id="locMax" placeholder="30">
+      </div>
     </div>
-    <div class="split" style="margin-top:8px">
-      <div class="list" id="drop-list"></div>
-      <div id="drop-edit"><div class="muted">Выбери вид слева.</div></div>
+
+    <label>Дропы — вид:предмет:шанс:количество (по строке)</label>
+    <textarea id="locDrops" rows="4" placeholder="pidgey:sharpBeak:0.05:1&#10;rattata:antidote:0.1:2"></textarea>
+    <div class="hint">Шанс — доля: 0.05 = 5%. Нет своего дропа у вида — просто не пиши его.</div>
+
+    <label>Заметка словами — что именно нужно сделать</label>
+    <textarea id="locNote" rows="2" placeholder="Сделать слота побольше, убрать слишком частых"></textarea>
+
+    <div class="bar">
+      <button class="primary" id="addLoc">➕ Добавить в список</button>
     </div>
   </div>
 </div>
 
-<div id="view-shops" class="tabview" style="display:none">
-  <div class="split">
-    <div class="card">
-      <h2>Маркеты</h2>
-      <div class="list" id="mart-list"></div>
-    </div>
-    <div class="card" id="mart-edit">
-      <div class="muted">Выбери маркет слева.</div>
-    </div>
-  </div>
-</div>
-
-<div id="view-prices" class="tabview" style="display:none">
+<!-- ══════════════ МАГАЗИН ══════════════ -->
+<div id="tab-shop" class="hide">
   <div class="card">
-    <h2>Цены предметов</h2>
-    <div class="hint" style="margin-bottom:8px">
-      Покупка — цена в маркете, продажа — половина. Серверные цены главные:
-      меняешь поле «сервер» — правка уедет в server/src/routes/economy.ts.
+    <h2>Магазин</h2>
+
+    <label>Какой магазин</label>
+    <input type="text" id="shopId" list="shopList" placeholder="например: pewterCity_pokemart">
+    <datalist id="shopList"></datalist>
+
+    <label>Убрать из продажи (id предмета, можно несколько через запятую)</label>
+    <input type="text" id="shopRemove" placeholder="masterBall, luxuryBall">
+
+    <label>Добавить в продажу (id предмета, можно несколько через запятую)</label>
+    <input type="text" id="shopAdd" placeholder="potion, superPotion">
+
+    <label>Новая цена: id предмета = цена (несколько — с новой строки)</label>
+    <textarea id="shopPrices" rows="3" placeholder="potion = 250&#10;superPotion = 800"></textarea>
+    <div class="hint">Цена поменяется и на сервере, и в клиенте — чтобы игрок видел и платил одну цифру.</div>
+
+    <label>Заметка словами</label>
+    <textarea id="shopNote" rows="2" placeholder="Убрать всё лишнее, оставить расходники"></textarea>
+
+    <div class="bar">
+      <button class="primary" id="addShop">➕ Добавить в список</button>
     </div>
-    <div class="row">
-      <input type="text" id="price-search" class="grow" placeholder="Поиск предмета…">
-    </div>
-    <div class="list" id="price-list" style="margin-top:8px"></div>
-    <div id="price-note" style="margin-top:10px"></div>
   </div>
 </div>
 
-<div class="bar">
-  <button class="ok" id="btn-export">⬇ Экспорт правок (JSON)</button>
-  <button id="btn-copy">📋 Скопировать в чат</button>
-  <button id="btn-reset">↺ Сбросить</button>
-  <span class="hint" id="stat"></span>
+<!-- ══════════════ ЦЕНА ══════════════ -->
+<div id="tab-price" class="hide">
+  <div class="card">
+    <h2>Цена предмета</h2>
+
+    <label>Предмет (выбери или впиши id)</label>
+    <input type="text" id="priceId" list="itemList" placeholder="например: potion">
+    <datalist id="itemList"></datalist>
+
+    <label>Новая цена покупки</label>
+    <input type="number" id="priceNew" placeholder="300">
+
+    <label>Заметка словами</label>
+    <textarea id="priceNote" rows="2" placeholder="Сделать как у супер-зелья"></textarea>
+
+    <div class="bar">
+      <button class="primary" id="addPrice">➕ Добавить в список</button>
+    </div>
+  </div>
 </div>
 
-<div id="toast"></div>
+<!-- ══════════════ СПИСОК ПРАВОК ══════════════ -->
+<div class="card">
+  <h2>Внесённые правки <span class="badge" id="count">0</span></h2>
+  <div id="entries"></div>
+  <div class="bar">
+    <button class="danger" id="clearAll">🗑 Очистить всё</button>
+  </div>
+</div>
 
-<script type="module">
+<!-- ══════════════ ВЫВОД ══════════════ -->
+<div class="card">
+  <h2>Готовый текст — скопируй и пришли мне</h2>
+  <textarea id="out" readonly></textarea>
+  <div class="bar">
+    <button class="ok" id="copy">📋 Скопировать текст</button>
+    <button class="ok" id="saveFile">💾 Сохранить в файл (html)</button>
+  </div>
+  <div class="hint" style="margin-top:8px">
+    «Сохранить в файл» скачает копию этой страницы, в которой твои правки уже
+    внутри. Пришли мне этот html — я прочитаю данные из него.
+  </div>
+</div>
+
+<!-- ══════════════ ДАННЫЕ (пишутся сюда, живут в этом файле) ══════════════ -->
+<script id="pokematrix-data" type="application/json">
+{"version":1,"updatedAt":null,"entries":[]}
+</script>
+
+<script>
+/* ── Данные для подсказок (вписаны генератором, страница работает офлайн) ── */
+const LOCATIONS = /*__LOCATIONS__*/["celadonCity","celadonCity_pokemart","celadonCity_pokecenter","ceruleanCity","ceruleanCity_pokemart","ceruleanCity_pokecenter","cinnabarIsland","cinnabarIsland_pokecenter","diglettsCave","fuchsiaCity","fuchsiaCity_pokemart","fuchsiaCity_pokecenter","mtMoon","palletTown","palletTown_pokemart","palletTown_pokecenter","rockTunnel","route1","route10","route11","route12","route13","route14","route15","route16","route17","route18","seaRoute19","route2","seaRoute20","seaRoute21","route22","route24","route25","route26","route27","route28","route3","route4","route5","route6","route7","route8","route9","seafoamIslands","ceruleanCave","vermilionCity","vermilionCity_pokemart","vermilionPier","vermilionCity_pokecenter","victoryRoad1","viridianCity","viridianCity_pokemart","viridianCity_pokecenter","viridianForest","route23","powerPlant","victoryRoad2","pokemonTower","pokemonMansion","safariZone","pewterCity","pewterCity_pokemart","pewterCity_pokecenter","pewterCity_trainingGrounds","lavenderTown","lavenderTown_pokemart","lavenderTown_pokecenter","indigoPlateau","saffronCity","saffronCity_pokemart","saffronStation","saffronCity_pokecenter","moneanChamber","liptooChamber","weepthChamber","dilfordChamber","scufibChamber","rixyChamber","viaposChamber","ssAnne","mtEmber","berryForest","icefallCave","patternBush","lostCave","kindleRoad","treasureBeach","capeBrink","bondBridge","threeIslePort","threeIslePort_pokecenter","resortGorgeous","waterLabyrinth","fiveIsleMeadow","memorialPillar","outcastIsland","outcastIsland_pokecenter","greenPath","waterPath","ruinValley","trainerTower","canyonEntrance","sevaultCanyon","tanobyRuins","oneIsland","oneIsland_pokecenter","fourIsland","fourIsland_pokecenter","fiveIsland","fiveIsland_pokecenter","alteringCave","birthIsland","navelRock","undergroundPath","pewterStadium","ceruleanStadium","vermilionStadium","celadonStadium","saffronPsychicStadium","fuchsiaPoisonStadium","cinnabarStadium","viridianStadium","blackthornCity","blackthornCity_pokemart","blackthornCity_pokecenter","burnedTower","cherrygroveCity","cherrygroveCity_pokemart","cherrygroveCity_pokecenter","cianwoodCity","cianwoodCity_pokemart","cianwoodCity_pokecenter","darkCave","dragonsDen","ecruteakCity","ecruteakCity_pokemart","ecruteakCity_pokecenter","icePath","ilexForest","lakeOfRage","mtMortar","mtSilver","nationalPark","newBarkTown","newBarkTown_pokemart","newBarkTown_pokecenter","olivineCity","olivineCity_pokemart","olivineCity_pokecenter","route29","route30","route31","route32","route33","route34","route35","route36","route37","route38","route39","seaRoute40","seaRoute41","route42","route43","route44","route45","route46","route47","route48","ruinsOfAlph","slowpokeWell","sproutTower","bellTower","tohjoFalls","unionCave","unknownAllPoliwag","unknownAllRattata","unknownAllBugs","violetCity","violetCity_pokemart","violetCity_pokecenter","whirlIslands","azaleaTown","azaleaTown_pokemart","azaleaTown_pokecenter","goldenrodCity","goldenrodCity_pokemart","goldenrodCity_pokecenter","teamRocketHq","safariZoneGate","sinjohRuins","embeddedTower","roamingJohto","johtoSafariZone","mahoganyTown","mahoganyTown_pokemart","mahoganyTown_pokecenter","violetStadium","azaleaStadium","goldenrodStadium","ecruteakStadium","cianwoodStadium","olivineStadium","mahoganyStadium","blackthornStadium","goldenrodStation","olivinePier","trainRide","seaFerryRide"];
+const SHOPS = /*__SHOPS__*/["goldenrodCity_pokemart","palletTown_pokemart","viridianCity_pokemart","newBarkTown_pokemart","cherrygroveCity_pokemart","pewterCity_pokemart","violetCity_pokemart","azaleaTown_pokemart","ceruleanCity_pokemart","vermilionCity_pokemart","lavenderTown_pokemart","ecruteakCity_pokemart","pokemart","celadonCity_pokemart","saffronCity_pokemart","olivineCity_pokemart","cianwoodCity_pokemart","fuchsiaCity_pokemart","mahoganyTown_pokemart","blackthornCity_pokemart"];
+const ITEMS = /*__ITEMS__*/["darkBall","duskBall","friendBall","greatBall","loveBall","masterBall","nestBall","netBall","pokeBall","premierBall","quickBall","repeatBall","safariBall","sportBall","superDarkBall","timerBall","ultraBall","berryJuice","energyPowder","energyRoot","freshWater","fullRestore","hyperPotion","lemonade","maxPotion","moomooMilk","potion","sodaPop","superPotion","sweetHeart","antidote","antiSputin","awakening","bigMalasada","burnHeal","casteliacone","fullHeal","healingHerb","healPowder","iceHeal","lavaCookie","lumioseGalette","oldGateau","paralyzeHeal","pewterCrunchies","shalourSable","elixir","ether","maxElixir","maxEther","maxHoney","maxRevive","revivalHerb","revive","sacredAsh","abilityCapsule","abilityPatch","calcium","carbos","cleverWing","geniusWing","healthWing","hpUp","iron","ferryTicket","trainTicket","arenaToken","vanillaCandy","commonCandy","courierParcel","parcelCer","parcelVer","parcelCel","parcelSaf","parcelFuc","parcelVir","parcelVio","cinLeg1","cinLeg2","azaLeg1","azaLeg2","golLeg1","golLeg2","ecrLeg1","ecrLeg2","ciaLeg1","ciaLeg2","mahLeg1","mahLeg2","mahLeg3","blaLeg1","blaLeg2","blaLeg3","secretPotion","typeCandyBox","normalCandy","fireCandy","waterCandy","electricCandy","grassCandy","iceCandy","fightingCandy","poisonCandy","groundCandy","flyingCandy","psychicCandy","bugCandy","rockCandy","ghostCandy","dragonCandy","darkCandy","steelCandy","fairyCandy","evBrace","muscleWing","ppMax","ppUp","protein","rareCandy","resistWing","swiftWing","zinc","berrySweet","blackAugurite","chippedPot","cloverSweet","crackedPot","dawnStone","dragonScale","dubiousDisc","duskStone","electirizer","fireStone","flowerSweet","iceStone","leafStone","linkingCord","loveSweet","magmarizer","maliciousArmor","masterpieceTeacup","metalAlloy","moonStone","ovalStone","peatBlock","prismScale","protector","reaperCloth","ribbonSweet","sachet","shinyStone","starSweet","strawberrySweet","sunStone","sweetApple","syrupyApple","tartApple","thunderStone","evolutionStone","tm","tmWeak","tmMid","tmTop","unremarkableTeacup","upGrade","waterStone","whippedDream","amuletCoin","everstone","luckIncense","luckyEgg","train","weaken","absorbBulb","adrenalineOrb","airBalloon","assaultVest","bigRoot","blackBelt","blackGlasses","blackSludge","blunderPolicy","brightPowder","cellBattery","charcoal","choiceBand","choiceScarf","choiceSpecs","deepSeaScale","deepSeaTooth","destinyKnot","dracoPlate","dragonFang","dreadPlate","earthPlate","electricSeed","eviolite","expertBelt","fistPlate","flameOrb","flamePlate","focusBand","focusSash","grassySeed","gripClaw","hardStone","iciclePlate","insectPlate","ironPlate","kingsRock","leftovers","lifeOrb","lightBall","luminousMoss","magnet","meadowPlate","mentalHerb","metalCoat","metalPowder","metronome","mindPlate","miracleSeed","mistySeed","muscleBand","mysticWater","neverMeltIce","oddIncense","pixiePlate","poisonBarb","powerHerb","psychicSeed","punchingGlove","quickClaw","quickPowder","razorClaw","razorFang","rockIncense","rockyHelmet","roseIncense","scopeLens","seaIncense","sharpBeak","shellBell","silkScarf","silverPowder","skyPlate","snowball","softSand","spellTag","splashPlate","spookyPlate","stick","stickyBarb","stonePlate","thickClub","throatSpray","toxicOrb","toxicPlate","twistedSpoon","waveIncense","weaknessPolicy","whiteHerb","wiseGlasses","xAttack","xDefense","xSpAtk","xSpDef","xSpeed","zapPlate","tm01","tm02","tm03","tm04","tm05","tm06","tm07","tm08","tm09","tm10","tm100","tm101","tm102","tm103","tm104","tm105","tm106","tm107","tm108","tm109","tm11","tm110","tm111","tm112","tm113","tm114","tm115","tm116","tm117","tm118","tm119","tm12","tm120","tm121","tm122","tm123","tm124","tm125","tm126","tm127","tm128","tm129","tm13","tm130","tm131","tm132","tm133","tm134","tm135","tm136","tm137","tm138","tm139","tm14","tm140","tm141","tm142","tm143","tm144","tm145","tm146","tm147","tm148","tm149","tm15","tm150","tm151","tm152","tm153","tm154","tm155","tm156","tm157","tm158","tm159","tm16","tm160","tm161","tm162","tm163","tm164","tm165","tm166","tm167","tm168","tm169","tm17","tm170","tm171","tm172","tm173","tm174","tm175","tm176","tm177","tm178","tm179","tm18","tm180","tm181","tm182","tm183","tm184","tm185","tm186","tm187","tm188","tm189","tm19","tm190","tm191","tm192","tm193","tm194","tm195","tm196","tm197","tm198","tm199","tm20","tm200","tm201","tm202","tm203","tm204","tm205","tm206","tm207","tm208","tm209","tm21","tm210","tm211","tm212","tm213","tm214","tm215","tm216","tm217","tm218","tm219","tm22","tm220","tm221","tm222","tm223","tm224","tm227","tm228","tm23","tm24","tm25","tm26","tm27","tm28","tm29","tm30","tm31","tm32","tm33","tm34","tm35","tm36","tm37","tm38","tm39","tm40","tm41","tm42","tm43","tm44","tm45","tm46","tm47","tm48","tm49","tm50","tm51","tm52","tm53","tm54","tm55","tm56","tm57","tm58","tm59","tm60","tm61","tm62","tm63","tm64","tm65","tm66","tm67","tm68","tm69","tm70","tm71","tm72","tm73","tm74","tm75","tm76","tm77","tm78","tm79","tm80","tm81","tm82","tm83","tm84","tm85","tm86","tm87","tm88","tm89","tm90","tm91","tm92","tm93","tm94","tm95","tm96","tm97","tm98","tm99","blackFlute","escapeRope","fluffyTail","lure","maxLure","maxRepel","oldRod","goodRod","superRod","pokeDoll","pokeToy","repel","superLure","superRepel","whiteFlute","credit","craftersKit"];
+
 const $ = (s) => document.querySelector(s);
-const el = (tag, cls, txt) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (txt !== undefined) n.textContent = txt;
-  return n;
+const val = (id) => $(id).value.trim();
+const lines = (id) => $(id).value.split('\n').map(s => s.trim()).filter(Boolean);
+const csv = (id) => $(id).value.split(',').map(s => s.trim()).filter(Boolean);
+
+for (const [id, arr] of [['#locList', LOCATIONS], ['#shopList', SHOPS], ['#itemList', ITEMS]]) {
+  const dl = $(id);
+  for (const v of arr) {
+    const o = document.createElement('option');
+    o.value = v;
+    dl.appendChild(o);
+  }
+}
+
+/* ── Хранилище: данные живут В ЭТОМ ФАЙЛЕ (в блоке выше) ── */
+const DATA_EL = $('#pokematrix-data');
+let store = { version: 1, updatedAt: null, entries: [] };
+
+function loadStore() {
+  try {
+    const parsed = JSON.parse(DATA_EL.textContent);
+    if (parsed && Array.isArray(parsed.entries)) store = parsed;
+  } catch (e) { /* пусто — начинаем с нуля */ }
+}
+
+function saveStore() {
+  store.updatedAt = new Date().toISOString();
+  DATA_EL.textContent = JSON.stringify(store, null, 1);
+  render();
+}
+
+/* ── Записи ── */
+function addEntry(e) {
+  store.entries.push(e);
+  saveStore();
+}
+
+/* ── Текст записи для вывода ── */
+function entryText(e) {
+  if (e.type === 'loc') {
+    const b = ['ЛОКАЦИЯ ' + e.id];
+    if (e.enc?.length) b.push('  энкаунтеры: ' + e.enc.join(', '));
+    if (e.day?.length) b.push('  днём: ' + e.day.join(', '));
+    if (e.night?.length) b.push('  ночью: ' + e.night.join(', '));
+    if (e.min || e.max) b.push('  уровень: ' + (e.min || '?') + '–' + (e.max || '?'));
+    if (e.drops?.length) b.push('  дропы:\n' + e.drops.map(d => '    ' + d).join('\n'));
+    if (e.note) b.push('  заметка: ' + e.note);
+    return b.join('\n');
+  }
+  if (e.type === 'shop') {
+    const b = ['МАГАЗИН ' + e.id];
+    if (e.remove?.length) b.push('  убрать: ' + e.remove.join(', '));
+    if (e.add?.length) b.push('  добавить: ' + e.add.join(', '));
+    for (const p of e.prices || []) b.push('  цена: ' + p);
+    if (e.note) b.push('  заметка: ' + e.note);
+    return b.join('\n');
+  }
+  const b = ['ЦЕНА ' + e.id];
+  if (e.price) b.push('  новая цена: ' + e.price);
+  if (e.note) b.push('  заметка: ' + e.note);
+  return b.join('\n');
+}
+
+/* ── Отрисовка ── */
+function render() {
+  const box = $('#entries');
+  box.innerHTML = '';
+  if (!store.entries.length) {
+    box.innerHTML = '<div class="hint">Пока пусто. Заполни форму сверху и нажми «Добавить в список».</div>';
+  }
+  store.entries.forEach((e, i) => {
+    const row = document.createElement('div');
+    row.className = 'entry';
+    const txt = document.createElement('div');
+    txt.className = 'txt';
+    txt.textContent = entryText(e);
+    const del = document.createElement('button');
+    del.className = 'danger';
+    del.textContent = '✕';
+    del.onclick = () => { store.entries.splice(i, 1); saveStore(); };
+    row.appendChild(txt);
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+  $('#count').textContent = store.entries.length;
+  $('#out').value = store.entries.map(entryText).join('\n\n');
+}
+
+/* ── Кнопки «добавить» ── */
+$('#addLoc').onclick = () => {
+  const id = val('#locId');
+  if (!id) { alert('Укажи локацию'); return; }
+  addEntry({
+    type: 'loc', id,
+    enc: lines('#locEnc'), day: lines('#locDay'), night: lines('#locNight'),
+    min: val('#locMin'), max: val('#locMax'),
+    drops: lines('#locDrops'), note: val('#locNote'),
+  });
+  for (const i of ['#locEnc', '#locDay', '#locNight', '#locMin', '#locMax', '#locDrops', '#locNote']) $(i).value = '';
 };
 
-let DATA = null;      // исходные данные (read-only)
-let EDITS = null;     // накопленные правки
-let curLoc = null, curSpecies = null, curMart = null;
+$('#addShop').onclick = () => {
+  const id = val('#shopId');
+  if (!id) { alert('Укажи магазин'); return; }
+  addEntry({
+    type: 'shop', id,
+    remove: csv('#shopRemove'), add: csv('#shopAdd'),
+    prices: lines('#shopPrices'), note: val('#shopNote'),
+  });
+  for (const i of ['#shopRemove', '#shopAdd', '#shopPrices', '#shopNote']) $(i).value = '';
+};
 
-async function load() {
-  const res = await fetch('./editor-data.json');
-  DATA = await res.json();
-  EDITS = {
-    locations: {},   // id -> { encounters, dayEncounters, nightEncounters, wildMinLvl, wildMaxLvl, deleted? }
-    drops: {},       // species -> [ {item, chance, qty} ] | null (null = удалить вид)
-    shops: {},       // mart -> { removed: [ids], added: [ids], prices: {id: price} }
-    prices: {},      // itemId -> { server?: number, client?: number }
-    notes: [],       // [scope, key, text] — свободный текст: что нужно сделать
-  };
-  buildRegionFilter();
-  renderLocList();
-  renderDropList();
-  renderMartList();
-  renderPriceList();
-  updateStat();
-}
+$('#addPrice').onclick = () => {
+  const id = val('#priceId');
+  if (!id) { alert('Укажи предмет'); return; }
+  addEntry({ type: 'price', id, price: val('#priceNew'), note: val('#priceNote') });
+  for (const i of ['#priceNew', '#priceNote']) $(i).value = '';
+};
 
-function buildRegionFilter() {
-  const sel = $('#loc-region');
-  const regions = [...new Set(DATA.locations.map(l => l.region))];
-  for (const r of regions) {
-    const o = el('option', null, r);
-    o.value = r;
-    sel.appendChild(o);
-  }
-}
-
-/** Правки локации (или базовые данные, если правок нет). */
-function locData(id) {
-  const base = DATA.locations.find(l => l.id === id);
-  const e = EDITS.locations[id];
-  if (!e) return base;
-  return { ...base, ...e };
-}
-
-// ─────────────────────────────── ЗАМЕТКИ
-/** Поле «заметка» — свободный текст: что именно нужно сделать. */
-function noteBox(scope, key, placeholder) {
-  const wrap = el('div', 'card');
-  wrap.style.background = 'var(--card2)';
-  wrap.appendChild(el('b', null, '📝 Заметка для меня'));
-  const ta = el('textarea');
-  ta.rows = 2;
-  ta.style.width = '100%';
-  ta.style.marginTop = '6px';
-  ta.placeholder = placeholder;
-  const found = EDITS.notes.find(n => n[0] === scope && n[1] === key);
-  ta.value = found ? found[2] : '';
-  ta.oninput = () => {
-    const i = EDITS.notes.findIndex(n => n[0] === scope && n[1] === key);
-    if (i >= 0) EDITS.notes[i][2] = ta.value;
-    else EDITS.notes.push([scope, key, ta.value]);
-    updateStat();
-  };
-  wrap.appendChild(ta);
-  return wrap;
-}
-
-// ─────────────────────────────── ЛОКАЦИИ
-function renderLocList() {
-  const q = $('#loc-search').value.trim().toLowerCase();
-  const reg = $('#loc-region').value;
-  const box = $('#loc-list');
-  box.innerHTML = '';
-  let n = 0;
-  for (const l of DATA.locations) {
-    if (reg && l.region !== reg) continue;
-    if (q && !(l.id.toLowerCase().includes(q) || l.name.toLowerCase().includes(q))) continue;
-    const d = locData(l.id);
-    const item = el('div', 'loc-item' + (curLoc === l.id ? ' sel' : ''));
-    item.appendChild(el('div', null, l.name || l.id));
-    const meta = el('div', 'meta', `${l.id} · ${l.region} · энк: ${d.encounters.length}`);
-    item.appendChild(meta);
-    item.onclick = () => { curLoc = l.id; renderLocList(); renderLocEdit(); };
-    box.appendChild(item);
-    n++;
-  }
-  if (!n) box.appendChild(el('div', 'muted', 'Ничего не найдено'));
-}
-
-function encRow(loc, kind, species) {
-  const row = el('div', 'item');
-  row.appendChild(el('span', 'nm', species));
-  // шанс = вес в общем списке (для дня/ночи — отдельно)
-  const pool = kind === 'all' ? loc.encounters
-    : kind === 'day' ? loc.dayEncounters : loc.nightEncounters;
-  const idx = pool.indexOf(species);
-  const chance = pool.length ? (1 / pool.length) : 0;
-  row.appendChild(el('span', 'tag', (chance * 100).toFixed(1) + '%'));
-  const del = el('button', 'sm danger', '✕');
-  del.title = 'Убрать из списка';
-  del.onclick = () => {
-    const key = kind === 'all' ? 'encounters' : kind === 'day' ? 'dayEncounters' : 'nightEncounters';
-    const e = EDITS.locations[curLoc] = EDITS.locations[curLoc] || {};
-    const list = (e[key] = [...(e[key] ?? locData(curLoc)[key])]);
-    const i = list.indexOf(species);
-    if (i >= 0) list.splice(i, 1);
-    renderLocList(); renderLocEdit();
-  };
-  row.appendChild(del);
-  return row;
-}
-
-function renderLocEdit() {
-  const box = $('#loc-edit');
-  box.innerHTML = '';
-  if (!curLoc) { box.appendChild(el('div', 'muted', 'Выбери локацию слева.')); return; }
-  const l = locData(curLoc);
-  const base = DATA.locations.find(x => x.id === curLoc);
-
-  box.appendChild(el('h2', null, `${l.name} (${l.id})`));
-  const meta = el('div', 'row');
-  meta.appendChild(el('span', 'tag', l.region));
-  if (l.wildMinLvl != null) meta.appendChild(el('span', 'tag', `lv ${l.wildMinLvl}–${l.wildMaxLvl}`));
-  if (l.mechanic) meta.appendChild(el('span', 'tag warn', l.mechanic));
-  if (l.noCatch) meta.appendChild(el('span', 'tag warn', 'не ловится'));
-  if (l.hasWater) meta.appendChild(el('span', 'tag', 'вода'));
-  if (l.requiresBadges != null) meta.appendChild(el('span', 'tag', `значков: ${l.requiresBadges}`));
-  box.appendChild(meta);
-
-  // уровни
-  const lv = el('div', 'row');
-  lv.appendChild(el('span', 'muted', 'Уровень диких:'));
-  const minI = el('input'); minI.type = 'number'; minI.value = l.wildMinLvl ?? ''; minI.placeholder = 'мин';
-  const maxI = el('input'); maxI.type = 'number'; maxI.value = l.wildMaxLvl ?? ''; maxI.placeholder = 'макс';
-  const applyLv = () => {
-    const e = EDITS.locations[curLoc] = EDITS.locations[curLoc] || {};
-    e.wildMinLvl = minI.value === '' ? null : +minI.value;
-    e.wildMaxLvl = maxI.value === '' ? null : +maxI.value;
-    renderLocList(); updateStat();
-  };
-  minI.onchange = applyLv; maxI.onchange = applyLv;
-  lv.appendChild(minI); lv.appendChild(maxI);
-  box.appendChild(lv);
-
-  // энкаунтеры
-  const groups = [
-    ['all', 'Все (общий список)', l.encounters],
-    ['day', 'Днём', l.dayEncounters],
-    ['night', 'Ночью', l.nightEncounters],
-  ];
-  for (const [kind, title, list] of groups) {
-    const g = el('div', 'card');
-    g.style.background = 'var(--card2)';
-    const h = el('div', 'row');
-    h.appendChild(el('b', null, title + ` (${list.length})`));
-    const addIn = el('input', 'grow'); addIn.placeholder = 'добавить вид…';
-    const addBtn = el('button', 'sm primary', '+');
-    const doAdd = () => {
-      const v = addIn.value.trim().toLowerCase();
-      if (!v) return;
-      const key = kind === 'all' ? 'encounters' : kind === 'day' ? 'dayEncounters' : 'nightEncounters';
-      const e = EDITS.locations[curLoc] = EDITS.locations[curLoc] || {};
-      const arr = (e[key] = [...(e[key] ?? locData(curLoc)[key])]);
-      if (!arr.includes(v)) arr.push(v);
-      addIn.value = '';
-      renderLocList(); renderLocEdit();
-    };
-    addBtn.onclick = doAdd;
-    addIn.onkeydown = (e) => { if (e.key === 'Enter') doAdd(); };
-    h.appendChild(addIn); h.appendChild(addBtn);
-    g.appendChild(h);
-
-    const listEl = el('div', 'list');
-    listEl.style.maxHeight = '30vh';
-    for (const s of list) listEl.appendChild(encRow(l, kind, s));
-    if (!list.length) listEl.appendChild(el('div', 'muted', 'пусто'));
-    g.appendChild(listEl);
-    box.appendChild(g);
-  }
-
-  // связи
-  const links = el('div', 'card');
-  links.style.background = 'var(--card2)';
-  links.appendChild(el('b', null, `Связи (${l.links.length})`));
-  const lrow = el('div', 'row');
-  for (const lk of l.links) lrow.appendChild(el('span', 'tag', lk));
-  links.appendChild(lrow);
-  box.appendChild(links);
-
-  // дропы видов этой локации
-  const dp = el('div', 'card');
-  dp.style.background = 'var(--card2)';
-  dp.appendChild(el('b', null, 'Дропы видов этой локации'));
-  const dl = el('div', 'list');
-  dl.style.maxHeight = '26vh';
-  const seen = new Set();
-  for (const s of [...l.encounters, ...l.dayEncounters, ...l.nightEncounters]) {
-    if (seen.has(s)) continue;
-    seen.add(s);
-    const d = (EDITS.drops[s] ?? DATA.drops[s]) || [];
-    const row = el('div', 'item');
-    row.appendChild(el('span', 'nm', s));
-    row.appendChild(el('span', 'tag', d.length ? d.map(x => x.item).join(', ') : 'без дропа'));
-    const go = el('button', 'sm', '✎');
-    go.onclick = () => { switchTab('drops'); curSpecies = s; renderDropList(); renderDropEdit(); };
-    row.appendChild(go);
-    dl.appendChild(row);
-  }
-  dp.appendChild(dl);
-  box.appendChild(dp);
-
-  if (base && JSON.stringify(base) !== JSON.stringify(l)) {
-    const badge = el('div', 'tag warn', 'есть правки');
-    box.appendChild(badge);
-  }
-
-  // Заметка: что именно нужно сделать с этой локацией.
-  box.appendChild(noteBox('loc', curLoc, 'Что нужно сделать с этой локацией?'));
-}
-
-// ─────────────────────────────── ДРОПЫ
-function renderDropList() {
-  const q = $('#drop-search').value.trim().toLowerCase();
-  const box = $('#drop-list');
-  box.innerHTML = '';
-  const names = [...new Set([...Object.keys(DATA.drops), ...Object.keys(EDITS.drops)])].sort();
-  let n = 0;
-  for (const s of names) {
-    if (q && !s.includes(q)) continue;
-    const item = el('div', 'loc-item' + (curSpecies === s ? ' sel' : ''));
-    const d = EDITS.drops[s] ?? DATA.drops[s] ?? [];
-    item.appendChild(el('div', null, s));
-    item.appendChild(el('div', 'meta', d.length ? d.map(x => `${x.item} ${(x.chance * 100).toFixed(0)}%`).join(', ') : 'нет дропа'));
-    item.onclick = () => { curSpecies = s; renderDropList(); renderDropEdit(); };
-    box.appendChild(item);
-    n++;
-  }
-  if (!n) box.appendChild(el('div', 'muted', 'Ничего не найдено'));
-}
-
-function renderDropEdit() {
-  const box = $('#drop-edit');
-  box.innerHTML = '';
-  if (!curSpecies) { box.appendChild(el('div', 'muted', 'Выбери вид слева.')); return; }
-  const list = [...(EDITS.drops[curSpecies] ?? DATA.drops[curSpecies] ?? [])];
-  box.appendChild(el('h2', null, curSpecies));
-
-  for (let i = 0; i < list.length; i++) {
-    const d = list[i];
-    const row = el('div', 'item');
-    const itemI = el('input'); itemI.type = 'text'; itemI.value = d.item; itemI.className = 'grow';
-    const chI = el('input'); chI.type = 'number'; chI.value = d.chance; chI.step = '0.01'; chI.style.width = '80px';
-    chI.title = 'шанс (0.05 = 5%)';
-    const qI = el('input'); qI.type = 'number'; qI.value = d.qty; qI.style.width = '60px';
-    qI.title = 'количество';
-    const commit = () => {
-      list[i] = { item: itemI.value.trim(), chance: +chI.value || 0, qty: +qI.value || 1 };
-      EDITS.drops[curSpecies] = list;
-      renderDropList(); updateStat();
-    };
-    itemI.onchange = commit; chI.onchange = commit; qI.onchange = commit;
-    const del = el('button', 'sm danger', '✕');
-    del.onclick = () => { list.splice(i, 1); EDITS.drops[curSpecies] = list; renderDropList(); renderDropEdit(); updateStat(); };
-    row.appendChild(itemI); row.appendChild(chI); row.appendChild(qI);
-    row.appendChild(el('span', 'muted', 'шт.'));
-    row.appendChild(del);
-    box.appendChild(row);
-  }
-
-  const add = el('div', 'row');
-  const ni = el('input', 'grow'); ni.placeholder = 'id предмета (например potion)';
-  const nc = el('input'); nc.type = 'number'; nc.step = '0.01'; nc.value = '0.05'; nc.style.width = '80px';
-  const nq = el('input'); nq.type = 'number'; nq.value = '1'; nq.style.width = '60px';
-  const addBtn = el('button', 'primary', '+ Добавить дроп');
-  addBtn.onclick = () => {
-    const item = ni.value.trim();
-    if (!item) return;
-    list.push({ item, chance: +nc.value || 0, qty: +nq.value || 1 });
-    EDITS.drops[curSpecies] = list;
-    ni.value = '';
-    renderDropList(); renderDropEdit(); updateStat();
-  };
-  add.appendChild(ni); add.appendChild(nc); add.appendChild(nq); add.appendChild(addBtn);
-  box.appendChild(add);
-
-  const clr = el('button', 'danger', 'Убрать ВСЕ дропы с этого вида');
-  clr.onclick = () => { EDITS.drops[curSpecies] = []; renderDropList(); renderDropEdit(); updateStat(); };
-  box.appendChild(clr);
-
-  box.appendChild(noteBox('drop', curSpecies, 'Что нужно сделать с дропами этого вида?'));
-}
-
-// ─────────────────────────────── МАГАЗИНЫ
-function renderMartList() {
-  const box = $('#mart-list');
-  box.innerHTML = '';
-  for (const mart of Object.keys(DATA.shops.stock)) {
-    const item = el('div', 'loc-item' + (curMart === mart ? ' sel' : ''));
-    const e = EDITS.shops[mart];
-    item.appendChild(el('div', null, mart));
-    item.appendChild(el('div', 'meta',
-      `тир ${DATA.shops.tiers[mart]} · позиций ${martStock(mart).length}`
-      + (e?.removed?.length ? ` · убрано ${e.removed.length}` : '')
-      + (e?.added?.length ? ` · добавлено ${e.added.length}` : '')));
-    item.onclick = () => { curMart = mart; renderMartList(); renderMartEdit(); };
-    box.appendChild(item);
-  }
-}
-
-function martStock(mart) {
-  const base = DATA.shops.stock[mart] || [];
-  const e = EDITS.shops[mart];
-  if (!e) return base;
-  let out = base.filter(id => !e.removed?.includes(id));
-  for (const a of e.added || []) if (!out.includes(a)) out.push(a);
-  return out;
-}
-
-function renderMartEdit() {
-  const box = $('#mart-edit');
-  box.innerHTML = '';
-  if (!curMart) { box.appendChild(el('div', 'muted', 'Выбери маркет слева.')); return; }
-  const e = EDITS.shops[curMart] = EDITS.shops[curMart] || { removed: [], added: [], prices: {} };
-  box.appendChild(el('h2', null, curMart));
-  box.appendChild(el('div', 'hint', `Тир ${DATA.shops.tiers[curMart]} · база ${DATA.shops.stock[curMart].length} позиций`));
-
-  const list = el('div', 'list');
-  for (const id of martStock(curMart)) {
-    const row = el('div', 'item');
-    const def = DATA.items[id];
-    row.appendChild(el('span', 'nm', `${def?.name || id}  `));
-    const price = el('input'); price.type = 'number'; price.style.width = '100px';
-    price.value = e.prices[id] ?? DATA.serverPrices[id] ?? def?.price ?? '';
-    price.title = 'цена покупки (сервер)';
-    price.onchange = () => { e.prices[id] = +price.value || 0; updateStat(); };
-    row.appendChild(price);
-    const del = el('button', 'sm danger', '✕');
-    del.title = 'убрать из магазина';
-    del.onclick = () => {
-      e.removed = [...(e.removed || []), id];
-      e.added = (e.added || []).filter(x => x !== id);
-      renderMartList(); renderMartEdit(); updateStat();
-    };
-    row.appendChild(del);
-    list.appendChild(row);
-  }
-  box.appendChild(list);
-
-  const add = el('div', 'row');
-  const ni = el('input', 'grow'); ni.placeholder = 'id предмета для добавления…';
-  const nb = el('button', 'primary', '+ Добавить в магазин');
-  nb.onclick = () => {
-    const v = ni.value.trim();
-    if (!v) return;
-    e.added = [...(e.added || []).filter(x => x !== v), v];
-    e.removed = (e.removed || []).filter(x => x !== v);
-    ni.value = '';
-    renderMartList(); renderMartEdit(); updateStat();
-  };
-  add.appendChild(ni); add.appendChild(nb);
-  box.appendChild(add);
-
-  box.appendChild(noteBox('shop', curMart, 'Что нужно сделать с этим магазином?'));
-}
-
-// ─────────────────────────────── ЦЕНЫ
-function renderPriceList() {
-  const q = $('#price-search').value.trim().toLowerCase();
-  const box = $('#price-list');
-  box.innerHTML = '';
-  const ids = Object.keys(DATA.items).sort();
-  let n = 0;
-  for (const id of ids) {
-    const def = DATA.items[id];
-    if (q && !id.toLowerCase().includes(q) && !(def.name || '').toLowerCase().includes(q)) continue;
-    const row = el('div', 'item');
-    row.appendChild(el('span', 'nm', `${def.name} <span class="muted">(${id})</span>`));
-    const p = el('input'); p.type = 'number'; p.style.width = '110px';
-    p.value = EDITS.prices[id]?.server ?? DATA.serverPrices[id] ?? def.price ?? '';
-    p.title = 'цена покупки на сервере';
-    p.onchange = () => {
-      EDITS.prices[id] = { ...(EDITS.prices[id] || {}), server: +p.value || 0 };
-      updateStat();
-    };
-    row.appendChild(p);
-    const s = el('input'); s.type = 'number'; s.style.width = '110px';
-    s.value = EDITS.prices[id]?.client ?? def.price ?? '';
-    s.title = 'цена в клиентском ITEMS (для отображения)';
-    s.onchange = () => {
-      EDITS.prices[id] = { ...(EDITS.prices[id] || {}), client: +s.value || 0 };
-      updateStat();
-    };
-    row.appendChild(s);
-    box.appendChild(row);
-    n++;
-  }
-  if (!n) box.appendChild(el('div', 'muted', 'Ничего не найдено'));
-
-  const note = noteBox('prices', '_all', 'Общие заметки по ценам (например: поднять все зелья на 20%)');
-  $('#price-note').replaceChildren(note);
-}
-
-// ─────────────────────────────── ЭКСПОРТ
-function collectPatch() {
-  const patch = { locations: {}, drops: {}, shops: {}, prices: {}, notes: [] };
-
-  for (const [id, e] of Object.entries(EDITS.locations)) {
-    const base = DATA.locations.find(l => l.id === id);
-    const out = {};
-    for (const k of ['encounters', 'dayEncounters', 'nightEncounters', 'wildMinLvl', 'wildMaxLvl']) {
-      if (e[k] !== undefined && JSON.stringify(e[k]) !== JSON.stringify(base[k])) out[k] = e[k];
+/* ── Вкладки ── */
+document.querySelectorAll('.tab').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
+    for (const t of ['loc', 'shop', 'price']) {
+      $('#tab-' + t).classList.toggle('hide', t !== b.dataset.tab);
     }
-    if (Object.keys(out).length) patch.locations[id] = out;
-  }
-  for (const [sp, list] of Object.entries(EDITS.drops)) {
-    patch.drops[sp] = list;
-  }
-  for (const [mart, e] of Object.entries(EDITS.shops)) {
-    const out = {};
-    if (e.removed?.length) out.removed = e.removed;
-    if (e.added?.length) out.added = e.added;
-    if (Object.keys(e.prices || {}).length) out.prices = e.prices;
-    if (Object.keys(out).length) patch.shops[mart] = out;
-  }
-  for (const [id, p] of Object.entries(EDITS.prices)) patch.prices[id] = p;
-
-  // Заметки — свободный текст: что именно нужно сделать.
-  for (const [scope, key, text] of EDITS.notes) {
-    if (text && text.trim()) patch.notes.push({ scope, key, text: text.trim() });
-  }
-
-  return {
-    format: 'pokematrix-editor-patch/v1',
-    generatedAt: new Date().toISOString(),
-    baseGeneratedAt: DATA.generatedAt,
-    note: 'Правки вносятся в код вручную по этому файлу.',
-    patch,
   };
-}
+});
 
-function updateStat() {
-  const p = collectPatch();
-  const n = Object.keys(p.patch.locations).length
-    + Object.keys(p.patch.drops).length
-    + Object.keys(p.patch.shops).length
-    + Object.keys(p.patch.prices).length
-    + p.patch.notes.length;
-  $('#stat').textContent = n ? `правок: ${n}` : 'правок нет';
-}
-
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 1800);
-}
-
-function switchTab(name) {
-  for (const b of document.querySelectorAll('.tab')) b.classList.toggle('active', b.dataset.tab === name);
-  for (const v of document.querySelectorAll('.tabview')) v.style.display = v.id === 'view-' + name ? '' : 'none';
-}
-
-// ─────────────────────────────── события
-document.querySelectorAll('.tab').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-$('#loc-search').oninput = renderLocList;
-$('#loc-region').onchange = renderLocList;
-$('#drop-search').oninput = renderDropList;
-$('#price-search').oninput = renderPriceList;
-$('#drop-add').onclick = () => {
-  const v = prompt('id вида (латиницей), например bulbasaur:');
-  if (!v) return;
-  curSpecies = v.trim().toLowerCase();
-  EDITS.drops[curSpecies] = EDITS.drops[curSpecies] ?? [];
-  renderDropList(); renderDropEdit();
+/* ── Копировать текст ── */
+$('#copy').onclick = async () => {
+  const txt = $('#out').value;
+  try {
+    await navigator.clipboard.writeText(txt);
+    alert('Скопировано. Вставь в чат.');
+  } catch {
+    $('#out').focus();
+    $('#out').select();
+    alert('Выделил текст — нажми Ctrl+C');
+  }
 };
-$('#btn-export').onclick = () => {
-  const data = JSON.stringify(collectPatch(), null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
+
+/* ── Сохранить ДАННЫЕ В ЭТОТ ЖЕ ФАЙЛ ──
+   Скачиваем копию текущей страницы, в которой блок с данными уже обновлён.
+   Присылаешь мне этот html — я читаю правки прямо из него. */
+$('#saveFile').onclick = () => {
+  saveStore();
+  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'pokematrix-patch.json';
+  a.download = 'pokematrix-dannye.html';
   a.click();
   URL.revokeObjectURL(a.href);
-  toast('Файл сохранён — отправь его мне');
-};
-$('#btn-copy').onclick = async () => {
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(collectPatch(), null, 2));
-    toast('Скопировано в буфер — вставь в чат');
-  } catch {
-    toast('Не удалось скопировать — используй «Экспорт»');
-  }
-};
-$('#btn-reset').onclick = () => {
-  if (!confirm('Сбросить все правки?')) return;
-  EDITS = { locations: {}, drops: {}, shops: {}, prices: {} };
-  renderLocList(); renderDropList(); renderMartList(); renderPriceList(); updateStat();
-  toast('Правки сброшены');
+  alert('Файл скачан — пришли мне его, я возьму данные из него.');
 };
 
-load();
+$('#clearAll').onclick = () => {
+  if (!confirm('Удалить все внесённые правки?')) return;
+  store.entries = [];
+  saveStore();
+};
+
+loadStore();
+render();
 </script>
 </body>
 </html>
