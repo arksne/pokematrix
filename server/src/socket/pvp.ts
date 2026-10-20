@@ -101,6 +101,20 @@ const MAX_ACTIVE_BATTLES = 300;
 let sweepTimer: NodeJS.Timeout | null = null;
 
 /**
+ * Свежая save_version пользователя: клиент принимает её, чтобы его
+ * следующий автосейв не 409ил после серверной записи (сжигание жетона,
+ * награда PvP). Без этого — ложный конфликт и applyCloudSave посреди боя.
+ */
+async function freshSaveVersion(db: any, userId: number): Promise<number | undefined> {
+  try {
+    const r = await db.select({ v: users.save_version }).from(users).where(eq(users.id, userId)).limit(1);
+    return typeof r[0]?.v === 'number' ? r[0].v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Возвращает бой только если сокет — его участник.
  * Раньше проверки не было: по угаданному battleId посторонний сокет мог внедрять
  * ходы в чужой бой и завершать его, получая +500 кредитов и +10 рейтинга.
@@ -270,21 +284,31 @@ export function initPvP(io: Server, socket: Socket) {
     const tgId = socket.data.user?.tgId;
     if (!tgId) return;
     if (arenaMembers.has(socket.id)) {
-      socket.emit('arena_joined', { ok: true, already: true });
+      // Вдогонку — свежая версия: если клиент когда-то разошёлся с сервером,
+      // повторный вход молча чинит рассинхрон вместо грядущего 409.
+      // Версия — приятное дополнение, не причина ронять вход.
+      let sv: number | undefined;
+      try {
+        const db = getDb();
+        const me = (await db.select({ id: users.id })
+          .from(users).where(eq(users.tg_id, tgId)).limit(1))[0];
+        if (me) sv = await freshSaveVersion(db, me.id);
+      } catch { /* ignore */ }
+      socket.emit('arena_joined', { ok: true, already: true, saveVersion: sv });
       return;
     }
     try {
       const db = getDb();
-      const consumed = await db.transaction(async (tx) => {
+      const joinedUserId = await db.transaction(async (tx) => {
         const row = (await tx.select({ id: users.id, save_data: users.save_data })
           .from(users)
           .where(eq(users.tg_id, tgId))
           .for('update')
           .limit(1))[0];
-        if (!row) return false;
+        if (!row) return 0;
         const sd: any = parseSaveStrict(row.save_data, row.id);
         if (!sd.inventory) sd.inventory = {};
-        if ((sd.inventory[ARENA_TOKEN_ID] || 0) < 1) return false;
+        if ((sd.inventory[ARENA_TOKEN_ID] || 0) < 1) return 0;
         sd.inventory[ARENA_TOKEN_ID] -= 1;
         if (sd.inventory[ARENA_TOKEN_ID] <= 0) delete sd.inventory[ARENA_TOKEN_ID];
         await tx.update(users)
@@ -294,9 +318,9 @@ export function initPvP(io: Server, socket: Socket) {
             save_version: sql`${users.save_version} + 1`,
           })
           .where(eq(users.id, row.id));
-        return true;
+        return row.id;
       });
-      if (!consumed) {
+      if (!joinedUserId) {
         // E7: без жетона на арену нельзя.
         socket.emit('arena_join_rejected', { reason: 'NO_TOKEN' });
         return;
@@ -306,7 +330,7 @@ export function initPvP(io: Server, socket: Socket) {
         username: socket.data.user?.firstName || socket.data.user?.username || 'Тренер',
         joinedAt: Date.now(),
       });
-      socket.emit('arena_joined', { ok: true });
+      socket.emit('arena_joined', { ok: true, saveVersion: await freshSaveVersion(db, joinedUserId) });
       broadcastArenaLobby(io);
     } catch (e) {
       console.error('[pvp] arena_join error:', e);
@@ -511,11 +535,15 @@ export function initPvP(io: Server, socket: Socket) {
           best: settled.best,
           wins: settled.wins,
           arena: true,
+          saveVersion: await freshSaveVersion(db, wId),
         });
         // Проигравший узнаёт о сбросе стрика и утешительных
         // (клиент обновит счётчик и покажет тост).
         const loserSock = winnerIsSender ? opponentSocket : socket;
-        loserSock?.emit('pvp_arena_update', { streak: 0, arena: true, consolation: ARENA_LOSS_CONSOLATION });
+        loserSock?.emit('pvp_arena_update', {
+          streak: 0, arena: true, consolation: ARENA_LOSS_CONSOLATION,
+          saveVersion: await freshSaveVersion(db, lId),
+        });
         broadcastArenaLobby(io);
         return;
       }
@@ -532,14 +560,14 @@ export function initPvP(io: Server, socket: Socket) {
         // теперь блокируется на всё время транзакции, и economy делает то же
         // самое, поэтому клиентский POST /save между чтением и записью тоже
         // не может потеряться.
-        await db.transaction(async (tx) => {
+        const rewarded = await db.transaction(async (tx) => {
           const userRow = (await tx.select({ id: users.id, save_data: users.save_data })
             .from(users)
             .where(eq(users.id, wId))
             .for('update')
             .limit(1))[0];
 
-          if (!userRow) return;
+          if (!userRow) return false;
 
           const sd: any = parseSaveStrict(userRow.save_data, wId);
           if (!sd.inventory) sd.inventory = {};
@@ -552,11 +580,15 @@ export function initPvP(io: Server, socket: Socket) {
               save_version: sql`${users.save_version} + 1`,
             })
             .where(eq(users.id, wId));
-
-          // Уведомляем победителя о награде (если онлайн)
-          const winnerSock = winnerIsSender ? socket : opponentSocket;
-          winnerSock?.emit('pvp_reward', { money: 500 });
+          return true;
         });
+
+        // Уведомляем победителя о награде (если онлайн).
+        // Версию читаем ПОСЛЕ коммита: внутри транзакции её ещё не видно.
+        if (rewarded) {
+          const winnerSock = winnerIsSender ? socket : opponentSocket;
+          winnerSock?.emit('pvp_reward', { money: 500, saveVersion: await freshSaveVersion(db, wId) });
+        }
       }
     } catch (e) {
       console.error('[pvp] rating/reward save error:', e);

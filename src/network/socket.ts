@@ -51,7 +51,7 @@ import { openPvPArena, endPvP, updatePvPUI } from '../battle/pvp-core.js';
 import { renderTeamGrid, refreshProfileUI } from '../ui/profile.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { updateInventoryDisplay } from '../ui/inventory.js';
-import { autoSave } from '../game/save.js';
+import { autoSave, adoptServerSaveVersion } from '../game/save.js';
 import { trackNPCQuests } from '../game/quest-track.js';
 
 export function initTradeSocket() {
@@ -325,9 +325,10 @@ export function initTradeSocket() {
       m.renderArenaStatus();
     }).catch(() => {});
   });
-  state.socket.on('arena_joined', () => {
+  state.socket.on('arena_joined', (data?: { saveVersion?: number }) => {
     showToast('🎟️ Вы на арене! Жетон сгорел.', false);
-    import('../ui/pvp-arena.js').then((m) => m.onArenaJoined()).catch(() => {});
+    adoptServerSaveVersion(data?.saveVersion);
+    import('../ui/pvp-arena.js').then((m) => m.onArenaJoined(data?.saveVersion)).catch(() => {});
   });
   state.socket.on('arena_join_rejected', (data) => {
     const reason = data?.reason === 'NO_TOKEN'
@@ -341,9 +342,14 @@ export function initTradeSocket() {
   // Сброс стрика проигравшего (победа/сдача соперника уже сеттлится сервером).
   state.socket.on('pvp_arena_update', (data) => {
     if (data?.arena === true && typeof data.streak === 'number') {
+      adoptServerSaveVersion(data?.saveVersion);
       state.pvpStreak = data.streak;
       state.pvpLosses = (state.pvpLosses || 0) + 1;
       if (typeof data.consolation === 'number' && data.consolation > 0) {
+        // Утешительные уже лежат в серверном сейве — зеркалим локально,
+        // иначе следующий автосейв затёр бы их (версия-то уже принята выше).
+        state.inventory['credit'] = (state.inventory['credit'] || 0) + data.consolation;
+        updateMoneyDisplay();
         showToast(`Утешительный приз арены: +¥${data.consolation.toLocaleString()}`, false);
       }
       import('../ui/pvp-arena.js').then((m) => m.renderArenaStatus()).catch(() => {});
@@ -450,7 +456,8 @@ export function initTradeSocket() {
   // M-18: бой с арены присылает расширенный пакет
   // { money, items, streak, best, wins, arena: true } — деньги и предметы
   // уже лежат в серверном сейве, клиент зеркалит их в свой.
-  state.socket.on('pvp_reward', (data: { money: number; items?: Array<{ id: string; qty: number }>; streak?: number; best?: number; wins?: number; arena?: boolean }) => {
+  state.socket.on('pvp_reward', (data: { money: number; items?: Array<{ id: string; qty: number }>; streak?: number; best?: number; wins?: number; arena?: boolean; saveVersion?: number }) => {
+    adoptServerSaveVersion(data?.saveVersion);
     if (data.money) {
       state.inventory['credit'] = (state.inventory['credit'] || 0) + data.money;
       updateMoneyDisplay();

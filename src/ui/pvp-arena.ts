@@ -27,7 +27,7 @@ import { state } from '../game/state.js';
 import { SOCKET_COOLDOWN } from '../game/config.js';
 import { showToast, escHtml } from '../utils/dom.js';
 import { apiFetch } from '../game/apiClient.js';
-import { autoSave } from '../game/save.js';
+import { autoSave, adoptServerSaveVersion } from '../game/save.js';
 import { ARENA_TOKEN_ID, hasArenaToken } from '../battle/arena.js';
 
 // Лениво: network/socket.ts тоже (лениво) тянет этот модуль для
@@ -216,8 +216,11 @@ export function renderArenaLeaders() {
 
 // ── onArenaJoined: сервер подтвердил вход (жетон уже списан там) ──
 // Клиент зеркалит списание, иначе следующий автосейв воскресит жетон.
-export function onArenaJoined() {
+// Версию сейва тоже принимаем от сервера: его запись сожгла жетон и
+// подняла save_version, без этого следующий автосейв 409ит.
+export function onArenaJoined(saveVersion?: unknown) {
   state.inArena = true;
+  adoptServerSaveVersion(saveVersion);
   const qty = state.inventory?.[ARENA_TOKEN_ID] || 0;
   if (qty > 1) {
     state.inventory[ARENA_TOKEN_ID] = qty - 1;

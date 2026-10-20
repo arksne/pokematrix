@@ -715,6 +715,21 @@ async function resolveSaveConflict(conflict: any): Promise<void> {
   }
 }
 
+/**
+ * Принять версию сейва, назначенную сервером после ЕГО записи
+ * (сжигание жетона арены, награда PvP, утешительные).
+ *
+ * Без этого следующий автосейв шлёт протухшую версию → 409 → конфликт →
+ * облако «новее» (сервер только что штамповал _ts) → applyCloudSave прямо
+ * посреди боя с тостом про новую версию. Версия из ответа сервера —
+ * источник истины (тот же принцип, что в doCloudSave ниже).
+ */
+export function adoptServerSaveVersion(v: unknown): void {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return;
+  state.saveVersion = v;
+  try { localStorage.setItem(lsKey('save_v'), String(state.saveVersion)); } catch { /* квота не критична */ }
+}
+
 export async function doCloudSave(attempt = 0) {
   if (state.saveInProgress) return; // already saving, coalesced call will pick it up
   state.saveInProgress = true;
@@ -770,7 +785,6 @@ export async function doCloudSave(attempt = 0) {
     }
     result = await res.json();
     // Версию назначает сервер: клиентский счётчик тикал на каждом локальном
-    // сохранении и разъезжался с серверным, из-за чего блокировка версий
     // срабатывала по произвольным числам. Теперь ответ сервера — источник истины.
     if (typeof result?.saveVersion === 'number') {
       state.saveVersion = result.saveVersion;
@@ -889,9 +903,18 @@ export async function applyCloudSave(data) {
   // Намеренный сброс (reset:true с пустой командой): облако применяется целиком,
   // без слияния — иначе сброс не сработает ни на одном устройстве
   const wiped = totalPokemonCountOf(data) === 0 && data.starterGiven === false;
-  state.myTeam = wiped
-    ? (data.myTeam || [])
-    : mergeMonLists(state.myTeam, data.myTeam, (m: any) => m?.uid);
+  // Бой идёт (pvpBattleId выставлен): команда — живое состояние боя, облачный
+  // снимок её TCM не касается. mergeMonLists отдавал бы победу облачной копии
+  // по совпадающему uid — то есть откатывал HP прямо посреди боя, а pvpMyMon
+  // оставался висеть на старом объекте. Бой после такого «обновления»
+  // разваливался (тот самый вылет с тостом про новую версию). Боксы, инвентарь
+  // и остальное сливаются как обычно — они в бою не участвуют.
+  const inBattle = !!(state as any).pvpBattleId;
+  if (!inBattle) {
+    state.myTeam = wiped
+      ? (data.myTeam || [])
+      : mergeMonLists(state.myTeam, data.myTeam, (m: any) => m?.uid);
+  }
   state.myTeam.forEach(m => {
     if (!m.statStages) m.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
     if (!m.learnableMoves) m.learnableMoves = [];

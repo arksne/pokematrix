@@ -127,11 +127,14 @@ const sockB = await connect(tokenB, 'B');
     sB.emit('pvp_end', { battleId: bidB, action: { type: 'lose' } });
     const reward = await rewardRecv;
     rewardOk = !!reward && reward.money === 500;
+    // Награда несёт свежую saveVersion (сервер поднял её сеттлом).
+    const verW = (await api('/api/save', { method: 'GET', token: tA })).json?.saveVersion;
+    const svOk = typeof reward?.saveVersion === 'number' && reward.saveVersion === verW;
+    check('E5b', 'PvP: победитель получает +500 через чужой lose', rewardOk && svOk,
+      !rewardOk ? 'pvp_reward не пришёл' : `saveVersion=${reward?.saveVersion}/${verW}`);
   }
   check('E5', 'PvP: нокаут синхронизируется (hp_update + fainted)', sameBattle && hpSyncOk && faintedOk,
     !sameBattle ? 'бой не создался' : `hp_update: ${hpSyncOk}, fainted: ${faintedOk}`);
-  check('E5b', 'PvP: победитель получает +500 через чужой lose', rewardOk,
-    rewardOk ? '+500 дошло' : 'pvp_reward не пришёл');
 
   sA.close();
   sB.close();
@@ -189,6 +192,14 @@ const sockB = await connect(tokenB, 'B');
   check('E6b', 'Арена: жетон сгорает при входе', sdA2.inventory?.arenaToken === 1,
     `arenaToken=${sdA2.inventory?.arenaToken}`);
 
+  // Вход отдаёт свежую saveVersion: без неё следующий автосейв клиента
+  // 409ил (сервер поднял версию сжиганием жетона), шёл ложный конфликт
+  // и applyCloudSave посреди боя с тостом про «новую версию».
+  const verJoin = (await api('/api/save', { method: 'GET', token: tA2 })).json?.saveVersion;
+  check('E6g', 'Арена: вход отдаёт saveVersion сервера',
+    typeof jA?.saveVersion === 'number' && jA.saveVersion === verJoin,
+    `joined.saveVersion=${jA?.saveVersion} vs GET=${verJoin}`);
+
   // Бой по тому же протоколу, но с флагом арены.
   let protoOk = false;
   let rewardOk = false;
@@ -216,12 +227,22 @@ const sockB = await connect(tokenB, 'B');
         protoOk = hp?.type === 'hp_update' && faint?.type === 'fainted';
       }
       const rewardRecv = onceEvent(sA2, 'pvp_reward', 5000);
+      const updRecv = onceEvent(sB2, 'pvp_arena_update', 5000);
       sB2.emit('pvp_end', { battleId: bidB, action: { type: 'lose' } });
       const reward = await rewardRecv;
+      const upd = await updRecv;
       rewardOk = !!reward && reward.money === 115000 && reward.arena === true
         && (reward.streak || 0) >= 1 && Array.isArray(reward.items) && reward.items.length > 0;
       check('E6d', 'Арена: победитель получает pvp_reward со стриком и предметами',
         rewardOk, reward ? `money=${reward.money} streak=${reward.streak} items=${reward.items?.length}` : 'pvp_reward не пришёл');
+      // Награда и апдейт несут свежую saveVersion (сервер поднял её сеттлом):
+      // клиент принимает её вместо ложного 409 + applyCloudSave посреди боя.
+      const verSettle = (await api('/api/save', { method: 'GET', token: tA2 })).json?.saveVersion;
+      const verLose = (await api('/api/save', { method: 'GET', token: tB2 })).json?.saveVersion;
+      check('E6h', 'Арена: pvp_reward/pvp_arena_update несут saveVersion сервера',
+        typeof reward?.saveVersion === 'number' && reward.saveVersion === verSettle
+        && typeof upd?.saveVersion === 'number' && upd.saveVersion === verLose,
+        `reward.sv=${reward?.saveVersion}/${verSettle} upd.sv=${upd?.saveVersion}/${verLose}`);
     }
   }
   check('E6c', 'Арена: бой идёт по тому же протоколу (attack/hp_update/fainted)',
@@ -248,6 +269,8 @@ const sockB = await connect(tokenB, 'B');
   check('E6a', 'Арена: вход по жетону, лобби видит обоих', false, `исключение: ${err?.message || err}`);
   check('E6c', 'Арена: бой идёт по тому же протоколу', false, 'блок не дошёл');
   check('E6d', 'Арена: победитель получает pvp_reward со стриком', false, 'блок не дошёл');
+  check('E6g', 'Арена: вход отдаёт saveVersion сервера', false, 'блок не дошёл');
+  check('E6h', 'Арена: pvp_reward/pvp_arena_update несут saveVersion', false, 'блок не дошёл');
   check('E6e', 'Арена: таблица лидеров отдаёт победу', false, 'блок не дошёл');
   check('E6f', 'Арена: проигравший получил утешительные 10 000', false, 'блок не дошёл');
  }
