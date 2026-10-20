@@ -358,10 +358,22 @@ const sockB = await connect(tokenB, 'B');
         relayed ? `элементов: ${relayed.length}` : 'оффер не доставлен');
 
       if (relayed) {
+        const execA = onceEvent(s1, 'trade_execute', 5000);
+        const execB = onceEvent(s2, 'trade_execute', 5000);
         s1.emit('trade_confirm', tradeId);
         await sleep(300);
         s2.emit('trade_confirm', tradeId);
         await sleep(1500);
+        const [gotA, gotB] = await Promise.all([execA, execB]);
+        // Клиент ждёт {type, data}: голый {type, uid} ронял его обработчик
+        // (offer.data undefined → модалка висит, зеркалирования нет, следующий
+        // автосейв затирает серверный итог свопа).
+        const shapeOk = [gotA, gotB].every((arr) => Array.isArray(arr)
+          && arr.every((o) => o && typeof o.type === 'string' && o.data && typeof o.data === 'object'));
+        const shapeDetail = !gotA || !gotB ? 'trade_execute не пришёл'
+          : shapeOk ? `офферов с data: ${(gotA.length + gotB.length)}`
+          : 'есть офферы без data';
+        check('T8b', 'Трейд: trade_execute несёт полные данные {type, data}', shapeOk, shapeDetail);
 
         const sd1 = asObject((await api('/api/save', { method: 'GET', token: t1 })).json?.saveData);
         const sd2 = asObject((await api('/api/save', { method: 'GET', token: t2 })).json?.saveData);

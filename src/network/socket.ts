@@ -173,6 +173,13 @@ export function initTradeSocket() {
     showToast('Тренер отклонил предложение обмена', true);
   });
 
+  // Отклонение оффера сервером (нет предмета, чужой uid...): без этого
+  // обработчика отказ тонул молча — игрок жал кнопку и ничего не происходило.
+  state.socket.on('trade_offer_rejected', (data: { reason?: string } | string) => {
+    const reason = typeof data === 'string' ? data : data?.reason;
+    showToast(reason || 'Оффер отклонён', true);
+  });
+
   state.socket.on('trade_started', (data) => {
     state.activeTradeId = data.tradeId;
     state.iAmP1 = data.tradeId.startsWith(state.socket.id);

@@ -499,6 +499,13 @@ async function executeTradeSwap(
 
   try {
     const db = getDb();
+    // Клиент ждёт офферы в форме {type, data} (см. toClientOffers): голый
+    // канонический {type, uid} роняет его обработчик — offer.data undefined,
+    // модалка висит, зеркалирование не происходит, следующий автосейв
+    // затирает серверный итог свопа. Гидрируем ДО мутаций, пока покемоны
+    // ещё лежат в сейвах владельцев.
+    let recvForInit: any[] = [];
+    let recvForPart: any[] = [];
     const uid1 = new Set(session.p1Offers.filter((o): o is Extract<CanonicalOffer, { type: 'pokemon' }> => o.type === 'pokemon').map((o) => o.uid));
     const uid2 = new Set(session.p2Offers.filter((o): o is Extract<CanonicalOffer, { type: 'pokemon' }> => o.type === 'pokemon').map((o) => o.uid));
     const egg1 = new Set(session.p1Offers.filter((o): o is Extract<CanonicalOffer, { type: 'egg' }> => o.type === 'egg').map((o) => o.uid));
@@ -547,6 +554,10 @@ async function executeTradeSwap(
       if (bad1) throw new Error(`Trade failed: ${bad1}`);
       const bad2 = checkOffers(sd2.inventory, session.p2Offers, uid2, monList(sd2), eggList(sd2));
       if (bad2) throw new Error(`Trade failed: ${bad2}`);
+
+      // Гидрация ДО мутаций: дальше takeMons уносит покемонов из сейвов.
+      recvForPart = toClientOffers(session.p1Offers, sd1);
+      recvForInit = toClientOffers(session.p2Offers, sd2);
 
       // ── Забираем своё ──
       const monsFromP1 = takeMons(sd1, uid1);
@@ -611,8 +622,8 @@ async function executeTradeSwap(
     });
 
     // ── Уведомляем клиентов (данные — из БД, уже с новыми uid) ──
-    if (initSocket) initSocket.emit('trade_execute', session.p2Offers);
-    if (partSocket) partSocket.emit('trade_execute', session.p1Offers);
+    if (initSocket) initSocket.emit('trade_execute', recvForInit);
+    if (partSocket) partSocket.emit('trade_execute', recvForPart);
   } catch (err) {
     console.error('[trade] executeTradeSwap failed:', err);
     const msg = err instanceof Error && err.message.startsWith('Trade failed:')
