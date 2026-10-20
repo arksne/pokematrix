@@ -36,7 +36,7 @@
 // Каждый импорт — это внешний модуль, от которого зависит core.ts.
 // Все ui/* импорты — это DOM-манипуляции (кнопки, модалки).
 // Все data/* импорты — статические конфиги (погода, предметы).
-import { showToast, showSelectionModal, showConfirmModal } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
+import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
 import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
@@ -3798,7 +3798,7 @@ async function startHunt(encountersArray) {
     // отчётчик, а в лог боя добавляется текст ошибки.
     console.error('[battle] startHunt failed:', e);
     try {
-      navigator.sendBeacon?.('/api/log-client-error', JSON.stringify({
+      navigator.sendBeacon?.('/api/log-client-error', clientErrorBlob({
         msg: 'startHunt failed: ' + (e?.message || String(e)),
         stack: e?.stack || '',
         time: Date.now(),

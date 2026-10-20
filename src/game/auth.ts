@@ -34,7 +34,7 @@
 
 import { state } from './state.js';
 import { apiFetch, setRefreshToken, getRefreshToken, onAuthExpired } from './apiClient.js';
-import { showToast } from '../utils/dom.js';
+import { showToast, clientErrorBlob } from '../utils/dom.js';
 import { API_BASE } from './config.js';
 
 // ── Valid trainer sprite IDs (pixel-art avatars) ─────────────────────────
@@ -417,7 +417,7 @@ export async function authTelegram() {
     console.warn('[auth] Auth fetch failed:', e?.message || e);
     // Report error to server diagnostics
     try {
-      navigator.sendBeacon('/api/log-client-error', JSON.stringify({
+      navigator.sendBeacon('/api/log-client-error', clientErrorBlob({
         msg: 'Auth fetch failed: ' + (e?.name || e?.message || 'unknown'),
         stack: e?.stack || '',
         url: location.href,

@@ -67,6 +67,19 @@ export function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+/**
+ * Упаковка отчёта о клиентской ошибке для sendBeacon.
+ *
+ * Ловушка: navigator.sendBeacon(url, строка) шлёт Content-Type: text/plain,
+ * а express.json() на сервере такой тип не парсит — в итоге req.body пуст
+ * и все отчёты приходили вида {msg:'',src:'',url:''}, то есть молча терялись.
+ * Blob с явным application/json парсится нормально, семантика sendBeacon
+ * (доставка при закрытии страницы) сохраняется.
+ */
+export function clientErrorBlob(payload: unknown): Blob {
+  return new Blob([JSON.stringify(payload ?? {})], { type: 'application/json' });
+}
+
 export function showToast(msg, isError) {
   let toast = document.getElementById('trade-toast');
   if (!toast) {
