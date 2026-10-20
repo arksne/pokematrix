@@ -22,6 +22,30 @@ const read = (p) => readFileSync(join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
 const list = (s) => [...(s || '').matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => m[1] ?? m[2]);
 
 // ── ЛОКАЦИИ ──────────────────────────────────────────────────────────────
+// Строка может быть обычной ('pidgey') или с явным весом встречи
+// ({ name: 'snorlax', weight: 0.2 }). Вес — множитель к естественному весу
+// вида: 1 = как обычно, 0.2 = в 5 раз реже.
+function parseEntries(listStr) {
+  if (!listStr) return [];
+  const out = [];
+  // сначала вынимаем объекты { name: 'x', ... }, потом одиночные строки
+  const objRe = /\{\s*name:\s*'([^']+)'[^}]*\}/g;
+  const objNames = new Set();
+  let m;
+  while ((m = objRe.exec(listStr))) {
+    const e = { name: m[1] };
+    const w = m[0].match(/weight:\s*([\d.]+)/);
+    if (w) e.weight = +w[1];
+    const lv = m[0].match(/level:\s*(\d+)/);
+    if (lv) e.level = +lv[1];
+    objNames.add(m[1].toLowerCase());
+    out.push(e);
+  }
+  for (const n of list(listStr)) {
+    if (!objNames.has(String(n).toLowerCase())) out.push(n);
+  }
+  return out;
+}
 function parseRegions() {
   const src = read('src/data/regions.ts');
   const lines = src.split('\n');
@@ -37,9 +61,9 @@ function parseRegions() {
     out.push({
       id: cur.id, region,
       name: pick(/name:\s*'([^']*)'/) || cur.id,
-      encounters: list(pick(/encounters:\s*\[([^\]]*)\]/)),
-      dayEncounters: list(pick(/dayEncounters:\s*\[([^\]]*)\]/)),
-      nightEncounters: list(pick(/nightEncounters:\s*\[([^\]]*)\]/)),
+      encounters: parseEntries(pick(/encounters:\s*\[([^\]]*)\]/) || ''),
+      dayEncounters: parseEntries(pick(/dayEncounters:\s*\[([^\]]*)\]/) || ''),
+      nightEncounters: parseEntries(pick(/nightEncounters:\s*\[([^\]]*)\]/) || ''),
       wildMinLvl: num(/wildMinLvl:\s*(\d+)/),
       wildMaxLvl: num(/wildMaxLvl:\s*(\d+)/),
       mechanic: pick(/mechanic:\s*\{([^}]*)\}/)?.replace(/\s+/g, ' ').trim() || null,

@@ -3310,15 +3310,17 @@ function switchPokemon() {
  */
 function pickWeightedEncounter(encountersArray) {
   const hasBell = (GS.inventory || {})['graphiteBell'] > 0; // Колокол = больше редких
-  // В списке встречаются и строки ('pidgey'), и объекты ({name, level}) —
-  // берём имя из любой формы, а возвращаем исходный элемент.
+  // В списке встречаются строки ('pidgey'), уровни ({name, level}, рыба) и
+  // явные веса ({name, weight}, ручная настройка частоты из редактора).
+  // Вес = естественный вес вида × явный множитель (по умолчанию 1).
   const speciesOf = (e: any) => (typeof e === 'string' ? e : e?.name) || '';
+  const explicitOf = (e: any) => (typeof e === 'object' && e !== null && typeof e.weight === 'number') ? e.weight : 1;
   const weights = encountersArray.map((e: any) => {
     // Вес по СИЛЕ вида, а не по рукописной таблице: сильные виды (и их
     // эволюции, они всегда сильнее базы) автоматически становятся реже.
     // Раньше для ~1200 видов не было записи в ENCOUNTER_WEIGHTS, все они
     // получали 1.0, и Ancient Kabuto ловился чаще обычного Kabuto.
-    const base = encounterWeightFor(speciesOf(e));
+    const base = encounterWeightFor(speciesOf(e)) * explicitOf(e);
     // Graphite Bell: x3 weight for rare pokemon (weight <= 0.3)
     return (hasBell && base <= 0.3) ? base * 3 : base;
   });
@@ -3433,14 +3435,23 @@ function getLocationEncounters() {
   if (loc.dayEncounters && GS.isDaytime) enc = loc.dayEncounters;
   else if (loc.nightEncounters && !GS.isDaytime) enc = loc.nightEncounters;
 
-  // Пассивная рыбалка: если локация с водой и есть удочка — добавляем рыб
+  // Пассивная рыбалка: если локация с водой и есть удочка — добавляем рыб.
+  // Копию делаем обязательно: enc может быть прямой ссылкой на массив
+  // локации, и push без копии навсегда загадил бы данные карты.
   if (loc.hasWater) {
     const rod = getBestRod(); // superRod > goodRod > oldRod
     if (rod) {
       const fishTable = FISHING_TABLES[rod];
       if (fishTable) {
-        const fishNames = fishTable.map(f => ({ name: f.name, level: f.minLvl + Math.floor(Math.random() * (f.maxLvl - f.minLvl + 1)) }));
-        enc = [...new Set([...enc, ...fishNames.map(f => f.name)])]; // Merge без дубликатов
+        enc = [...enc];
+        // Дедупликация по имени: в списке могут быть и строки, и объекты
+        // {name, weight} — сравниваем по имени, а не по ссылке.
+        const seen = new Set(enc.map((e: any) => (typeof e === 'string' ? e : e?.name)));
+        for (const f of fishTable) {
+          if (seen.has(f.name)) continue;
+          seen.add(f.name);
+          enc.push({ name: f.name, level: f.minLvl + Math.floor(Math.random() * (f.maxLvl - f.minLvl + 1)) });
+        }
       }
     }
   }

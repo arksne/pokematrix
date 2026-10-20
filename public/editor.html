@@ -212,23 +212,60 @@ function locList() {
   if (!n) box.appendChild(mk('div', 'hint', 'не найдено'));
 }
 
-/** ряд фишек: клик по × убирает, поле+кнопка добавляет */
-function chipBlock(parent, title, hint, list, names, onChange) {
+/** имя вида из записи энкаунтера (строка или {name, weight}) */
+function encName(e) { return typeof e === 'string' ? e : (e && e.name) || ''; }
+/** множитель веса из записи (1 = как обычно) */
+function encMult(e) {
+  return (typeof e === 'object' && e && typeof e.weight === 'number') ? e.weight : 1;
+}
+/** шанс вида с учётом явных весов — как в игре (pickWeightedEncounter) */
+function chances(list) {
+  const ws = list.map((e) => {
+    const base = (DATA.weights && DATA.weights[encName(e).toLowerCase()]) ?? 0.5;
+    return base * encMult(e);
+  });
+  const tot = ws.reduce((a, b) => a + b, 0) || 1;
+  return ws.map((w) => w / tot);
+}
+
+/** ряд энкаунтеров: имя, живой % из игры, слайдер веса, убрать */
+function encRows(parent, title, hint, list, onChange) {
   const w = mk('div'); w.className = 'sec';
   w.appendChild(mk('b', null, title + ' (' + list.length + ')'));
   if (hint) w.appendChild(mk('div', 'hint', hint));
-  const box = mk('div', 'chips');
   const pcts = chances(list);
-  list.forEach((name, i) => {
-    const c = mk('span', 'chip');
-    c.appendChild(mk('span', null, name));
-    c.appendChild(mk('span', 'pct', Math.round(pcts[i] * 1000) / 10 + '%'));
-    const x = mk('button', 'x', '✕'); x.title = 'убрать';
-    x.onclick = (ev) => { ev.stopPropagation(); list.splice(i, 1); onChange(); };
-    c.appendChild(x);
-    box.appendChild(c);
+  list.forEach((entry, i) => {
+    const name = encName(entry);
+    const mult = encMult(entry);
+    const row = mk('div', 'drop-row');
+    const nm = mk('span', null, name);
+    if (mult !== 1) nm.className = 'chg';
+    row.appendChild(nm);
+    const pct = mk('span', 'pct', Math.round(pcts[i] * 1000) / 10 + '%');
+    row.appendChild(pct);
+    const sl = mk('input'); sl.type = 'range'; sl.min = '5'; sl.max = '300'; sl.step = '5';
+    sl.value = Math.round(mult * 100); sl.title = 'вес встречи: 100 = как обычно';
+    const lab = mk('span', 'pct', '×' + (Math.round(mult * 100) / 100));
+    sl.oninput = () => {
+      const v = +sl.value / 100;
+      lab.textContent = '×' + (Math.round(v * 100) / 100);
+      if (Math.abs(v - 1) < 0.001) list[i] = name;
+      else list[i] = Object.assign(Array.isArray(list[i]) ? {} : (typeof list[i] === 'object' && list[i] !== null ? { level: list[i].level } : {}), { name, weight: Math.round(v * 100) / 100 });
+      if (typeof list[i] === 'object' && list[i].level === undefined) delete list[i].level;
+      onChange();
+    };
+    const cell = mk('div');
+    cell.style.display = 'flex'; cell.style.alignItems = 'center'; cell.style.gap = '4px';
+    sl.style.flex = '1'; sl.style.minWidth = '0';
+    cell.appendChild(sl); cell.appendChild(lab);
+    row.appendChild(cell);
+    const x = mk('button', 'danger', '✕'); x.title = 'убрать';
+    x.style.padding = '2px 8px';
+    x.onclick = () => { list.splice(i, 1); onChange(); };
+    const xc = mk('span'); xc.appendChild(x);
+    row.appendChild(xc);
+    w.appendChild(row);
   });
-  w.appendChild(box);
 
   const row = mk('div', 'row');
   const inp = mk('input'); inp.type = 'text'; inp.setAttribute('list', 'dl-species'); inp.placeholder = 'название вида…';
@@ -236,13 +273,19 @@ function chipBlock(parent, title, hint, list, names, onChange) {
   const btn = mk('button', 'primary', '+');
   const add = () => {
     const v = inp.value.trim().toLowerCase();
-    if (!v || list.includes(v)) return;
+    if (!v || list.some((e) => encName(e) === v)) return;
     list.push(v); inp.value = ''; onChange();
   };
   btn.onclick = add;
   inp.onkeydown = (e) => { if (e.key === 'Enter') add(); };
   row.appendChild(inp); row.appendChild(btn);
   w.appendChild(row);
+  const head = mk('div', 'drop-row head');
+  head.appendChild(mk('span', null, 'вид'));
+  head.appendChild(mk('span', null, 'шанс'));
+  head.appendChild(mk('span', null, 'вес'));
+  head.appendChild(mk('span', null, ''));
+  w.insertBefore(head, w.children[1]);
   parent.appendChild(w);
 }
 
@@ -264,10 +307,9 @@ function locPane() {
 
   const sync = () => { saveToFile(); locList(); locPane(); };
 
-  chipBlock(pane, 'Кто тут нападает', 'Порядок = приоритет. % = шанс из этого списка.',
-    l.encounters, null, sync);
-  chipBlock(pane, 'Днём', 'Пусто = днём водятся общие.', l.dayEncounters, null, sync);
-  chipBlock(pane, 'Ночью', 'Пусто = ночью водятся общие.', l.nightEncounters, null, sync);
+  encRows(pane, 'Кто тут нападает', 'Слайдер = во сколько раз чаще/реже вида будет нападать. % = реальный шанс из этого списка.', l.encounters, sync);
+  encRows(pane, 'Днём', 'Пусто = днём водятся общие.', l.dayEncounters, sync);
+  encRows(pane, 'Ночью', 'Пусто = ночью водятся общие.', l.nightEncounters, sync);
 
   // уровень
   const lv = mk('div'); lv.className = 'sec';
@@ -286,7 +328,7 @@ function locPane() {
   const dw = mk('div'); dw.className = 'sec';
   dw.appendChild(mk('b', null, 'Что падает с этих видов'));
   dw.appendChild(mk('div', 'hint', 'Дроп привязан к ВИДУ, а не к локации: изменишь тут — изменится везде. Шанс — ползунок, 5 = 5%.'));
-  const species = [...new Set([...l.encounters, ...l.dayEncounters, ...l.nightEncounters])];
+    const species = [...new Set([...l.encounters, ...l.dayEncounters, ...l.nightEncounters].map(encName))];
   if (!species.length) dw.appendChild(mk('div', 'hint', 'Нет видов — не с кого падать.'));
   const head = mk('div', 'drop-row head');
   head.appendChild(mk('span', null, 'вид'));
@@ -441,16 +483,28 @@ function ruChanges() {
     const b = BASELINE.locations.find(x => x.id === l.id);
     if (!b) continue;
     const parts = [];
-    const encName = { encounters: 'список', dayEncounters: 'днём', nightEncounters: 'ночью' };
+    const encLabel = { encounters: 'список', dayEncounters: 'днём', nightEncounters: 'ночью' };
     for (const k of ['encounters', 'dayEncounters', 'nightEncounters']) {
-      const a = new Set(b[k] || []), c = new Set(l[k] || []);
-      const added = [...c].filter(x => !a.has(x));
-      const removed = [...a].filter(x => !c.has(x));
-      if (added.length || removed.length) {
-        parts.push(encName[k] + ':'
-          + (added.length ? ' +' + added.join(', +') : '')
-          + (removed.length ? ' −' + removed.join(', −') : ''));
+      // сравниваем по имени; вес — отдельно
+      const aMap = new Map((b[k] || []).map((e) => [typeof e === 'string' ? e : e.name, e]));
+      const cMap = new Map((l[k] || []).map((e) => [typeof e === 'string' ? e : e.name, e]));
+      const added = [...cMap.keys()].filter((x) => !aMap.has(x));
+      const removed = [...aMap.keys()].filter((x) => !cMap.has(x));
+      const reweighted = [...cMap.keys()].filter((x) => {
+        if (!aMap.has(x)) return false;
+        const aw = (typeof aMap.get(x) === 'object' && aMap.get(x) !== null && typeof aMap.get(x).weight === 'number') ? aMap.get(x).weight : 1;
+        const cw = (typeof cMap.get(x) === 'object' && cMap.get(x) !== null && typeof cMap.get(x).weight === 'number') ? cMap.get(x).weight : 1;
+        return Math.abs(aw - cw) > 0.001;
+      });
+      const bits = [];
+      if (added.length) bits.push('+' + added.join(', +'));
+      if (removed.length) bits.push('−' + removed.join(', −'));
+      for (const x of reweighted) {
+        const aw = (typeof aMap.get(x) === 'object' && aMap.get(x) !== null && typeof aMap.get(x).weight === 'number') ? aMap.get(x).weight : 1;
+        const cw = (typeof cMap.get(x) === 'object' && cMap.get(x) !== null && typeof cMap.get(x).weight === 'number') ? cMap.get(x).weight : 1;
+        bits.push(x + ' ×' + aw + '→×' + cw);
       }
+      if (bits.length) parts.push(encLabel[k] + ': ' + bits.join(', '));
     }
     if ((l.wildMinLvl ?? null) !== (b.wildMinLvl ?? null)
       || (l.wildMaxLvl ?? null) !== (b.wildMaxLvl ?? null)) {

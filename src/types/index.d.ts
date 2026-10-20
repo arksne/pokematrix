@@ -36,9 +36,12 @@ export interface LocationDef {
   desc?: string;
   image: string;
   links: string[];
-  encounters: string[];
-  dayEncounters?: string[];
-  nightEncounters?: string[];
+  /** Вид в списке энкаунтеров: строка или объект с явным весом.
+   *  weight — множитель к естественному весу вида (1 = как обычно,
+   *  0.2 = в 5 раз реже, 2 = вдвое чаще). Без weight — естественный вес. */
+  encounters: Array<string | { name: string; level?: number; weight?: number }>;
+  dayEncounters?: Array<string | { name: string; level?: number; weight?: number }>;
+  nightEncounters?: Array<string | { name: string; level?: number; weight?: number }>;
   hasHeal?: boolean;
   hasWater?: boolean;
   region: string;
