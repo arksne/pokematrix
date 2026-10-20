@@ -52,6 +52,7 @@ import { setBeforeRenderLocation } from '../ui/location.js';
 import { startOnboarding, markLocationExplored, getExploredLocations, openHelp, isTutorialComplete, ensureTutorialQuests } from '../ui/tutorial.js';
 import { openAchievements } from '../ui/achievements.js';
 import { showToast } from '../utils/dom.js';
+import { checkClientFreshness } from './version.js';
 import { checkTutorialProgress } from '../ui/npcs.js';
 import { renderTutorialBar } from '../ui/npcs.js';
 import { checkNPCQuestProgress } from '../ui/npcs.js';
@@ -413,6 +414,11 @@ initGymEvents();
 
     startBreedingCheck();
     startSaveHeartbeat();  // K1: минутный досыл грязного сейва
+
+    // Сверка свежести сборки с продом: если вебвью держит старый бандл,
+    // показываем баннер с кнопкой перезагрузки, а не молча играем в баги
+    // уже починенного кода. Fire-and-forget: сеть может отсутствовать.
+    checkClientFreshness().catch(() => {});
 
     document.getElementById('btn-notifications').addEventListener('click', openNotifications);
     document.getElementById('btn-close-notif').addEventListener('click', () => { document.getElementById('notif-modal').style.display = 'none'; });
