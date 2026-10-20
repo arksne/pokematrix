@@ -65,7 +65,7 @@ export const KANTO2_NPCS = {
       quest_incomplete: 'Сначала победи меня. Яд не прощает шума!',
     },
     quests: [
-      { id: 'fuc_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Коги (команда 4×Lv53)', rewardMoney: 90000, rewardItem: 'toxicPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'fuchsiaShadow', prereqQuest: null, filter: { bossId: 'fuchsiaApprentice' } },
+      { id: 'fuc_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Ученика Коги (команда 4×Lv53)', rewardMoney: 90000, rewardItem: 'poisonBarb', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'fuchsiaShadow', prereqQuest: null, filter: { bossId: 'fuchsiaApprentice' } },
     ],
   },
   'fuc_sledopyt': {

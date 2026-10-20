@@ -43,7 +43,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня в воде. Прибой не прощает суеты.',
     },
     quests: [
-      { id: 'cer_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пловца Финна (команда 3×Lv33)', rewardMoney: 30000, rewardItem: 'splashPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'tideMaster', prereqQuest: null, filter: { bossId: 'ceruleanFinn' } },
+      { id: 'cer_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Пловца Финна (команда 3×Lv33)', rewardMoney: 30000, rewardItem: 'mysticWater', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'tideMaster', prereqQuest: null, filter: { bossId: 'ceruleanFinn' } },
     ],
   },
   'cer_garpun': {
@@ -148,7 +148,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Разряды ещё не все посчитаны...',
     },
     quests: [
-      { id: 'ver_trail', type: 'defeat_x', targetItem: null, targetQty: 60, desc: 'Победи 60 диких электрических + посети 7 локаций (средний уровень 25)', rewardMoney: 15000, rewardItem: 'zapPlate', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 4 }], prereqQuest: null, filter: { types: ['electric'] }, verify: { avgLevel: 25, locs: ['vermilionCity', 'route6', 'route11', 'diglettsCave', 'route2', 'viridianForest', 'ssAnne'] } },
+      { id: 'ver_trail', type: 'defeat_x', targetItem: null, targetQty: 60, desc: 'Победи 60 диких электрических + посети 7 локаций (средний уровень 25)', rewardMoney: 15000, rewardItem: 'magnet', rewardQty: 1, rewardItems: [{ id: 'superPotion', qty: 4 }], prereqQuest: null, filter: { types: ['electric'] }, verify: { avgLevel: 25, locs: ['vermilionCity', 'route6', 'route11', 'diglettsCave', 'route2', 'viridianForest', 'ssAnne'] } },
     ],
   },
   'ver_volt': {
@@ -284,7 +284,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня. Сорняки не сдаются!',
     },
     quests: [
-      { id: 'cel_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Садовницу Флору (команда 4×Lv43)', rewardMoney: 60000, rewardItem: 'meadowPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'leafFriend', prereqQuest: null, filter: { bossId: 'celadonFlora' } },
+      { id: 'cel_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Садовницу Флору (команда 4×Lv43)', rewardMoney: 60000, rewardItem: 'miracleSeed', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'leafFriend', prereqQuest: null, filter: { bossId: 'celadonFlora' } },
     ],
   },
   'cel_sachok': {
@@ -402,7 +402,7 @@ export const KANTO1_NPCS = {
       quest_incomplete: 'Сначала победи меня. Мысли — в кулак!',
     },
     quests: [
-      { id: 'saf_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Медиума Эспера (команда 4×Lv48)', rewardMoney: 75000, rewardItem: 'mindPlate', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'mindBender', prereqQuest: null, filter: { bossId: 'saffronEsper' } },
+      { id: 'saf_fist', type: 'boss_win', targetItem: null, targetQty: 1, desc: 'Победи Медиума Эспера (команда 4×Lv48)', rewardMoney: 75000, rewardItem: 'twistedSpoon', rewardQty: 1, rewardItems: [{ id: 'ppUp', qty: 2 }], rewardTitle: 'mindBender', prereqQuest: null, filter: { bossId: 'saffronEsper' } },
     ],
   },
   'saf_lovets': {

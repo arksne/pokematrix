@@ -85,7 +85,7 @@ export const JOHTO1_NPCS = {
       quest_incomplete: 'Инкубатор ещё гудит... Птенцы не вылупились.',
     },
     quests: [
-      { id: 'vio_breed', type: 'hatch_x', targetItem: null, targetQty: 5, desc: 'Выведи и вылупи 5 яиц', rewardMoney: 72000, rewardItem: 'ovalStone', rewardQty: 1, prereqQuest: null },
+      { id: 'vio_breed', type: 'hatch_x', targetItem: null, targetQty: 5, desc: 'Выведи и вылупи 5 яиц', rewardMoney: 72000, rewardItem: 'moonStone', rewardQty: 1, prereqQuest: null },
     ],
   },
   'vio_skay': {
