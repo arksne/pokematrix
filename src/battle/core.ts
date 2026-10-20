@@ -88,7 +88,7 @@ import { addNotification } from '../ui/notifications.js';                // Ув
 // Экспортируется для тестов (могут создать свой через BattleStateMachine.create())
 import { BattleStateMachine, BattlePhase, recoverStuckTurn, leaveBattleToIdle, ensurePlayerTurnAfterFaint } from './state-machine.js';
 import { getEncounterRate, effectiveEncounterRate, tickEncounterCounters } from '../data/encounter.js';  // листовой модуль — цикла нет
-import { specialMechanic, towerLevel, encounterRateFor } from './special-loc.js';  // M-4: механики пещер/башен
+import { specialMechanic, towerLevel, towerCap, encounterRateFor } from './special-loc.js';  // M-4: механики пещер/башен
 
 /** Singleton state machine — единый автомат фаз для всего боя */
 export const battle = new BattleStateMachine();
@@ -3347,15 +3347,42 @@ function pickWeightedEncounter(encountersArray) {
  */
 function getWildLevel() {
   const loc = store.getLocation(GS.currentLocationId);
+  const mech = specialMechanic(loc);
+
+  // Базовый уровень локации — как раньше.
+  const base = baseWildLevel(loc);
+
+  // M-4: башня/руины — каждый подъём на этаж добавляет врагу уровень.
+  //
+  // Раньше бонус этажа считался ТОЛЬКО в ветке локаций с явно заданными
+  // wildMinLvl/wildMaxLvl — таких всего 3. Все 12 башен шли по обычным
+  // веткам, где уровень возвращался как есть: кнопка «Подняться» работала,
+  // подпись «этаж 3 из 5» показывалась, а звери были той же силы. Этажи были
+  // чисто косметическими — «тупо блуждаешь по этажам, когда хочешь».
+  //
+  // Теперь бонус применяется ОДИН РАЗ на выходе, любой ветке, и потолок
+  // башни (towerCap) держит уровень в разумных пределах.
+  if (mech?.kind === 'tower') {
+    const per = mech.perFloorLvl ?? 3;
+    const floor = Math.max(0, GS.towerFloor || 0);
+    const cap = towerCap(100, mech);
+    return Math.min(towerLevel(base, floor, per), cap);
+  }
+  return base;
+}
+
+/**
+ * Базовый уровень дикого для локации (без учёта этажа башни).
+ * Вынесено из getWildLevel(), чтобы бонус этажа считался ОДИН раз.
+ */
+function baseWildLevel(loc: any): number {
   const name = (loc?.name || '').toLowerCase();
   const id = GS.currentLocationId || '';
 
   // ── Если локация задаёт min/max уровень — используем его ──
   if (loc && loc.wildMinLvl !== undefined && loc.wildMaxLvl !== undefined) {
     const range = loc.wildMaxLvl - loc.wildMinLvl + 1;
-    const base = Math.floor(Math.random() * range) + loc.wildMinLvl;
-    // M-4: башня/руины — каждый подъём на этаж добавляет уровень врагу.
-    return towerLevel(base, GS.towerFloor || 0, specialMechanic(loc)?.perFloorLvl);
+    return Math.floor(Math.random() * range) + loc.wildMinLvl;
   }
 
   // Johto routes early

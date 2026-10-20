@@ -866,8 +866,18 @@ export let renderLocation = function(locId: any) {
 // Возвращает строку с русскими названиями предметов дропа
 // Используется в wildlifeDetail для отображения "🎒 Дроп: ..."
 export function getLocationDropString(uniqueMons: string[]) {
-  // Приоритет: серверная конфигурация → локальная таблица
-  const monsterTable = state.serverDropConfig?.monsterDrops ?? MONSTER_DROP_TABLE;
+  // Приоритет: серверная конфигурация → локальная таблица.
+  //
+  // ВАЖНО: `??` тут НЕ работал. Сервер при отсутствии строки в БД отдаёт
+  // { monsterDrops: {}, universalDrops: [] } — пустой ОБЪЕКТ, а не null.
+  // Значит `?? MONSTER_DROP_TABLE` не срабатывал никогда, локальная таблица
+  // (1300 видов с дропами) не использовалась вообще, и дропов не было нигде:
+  // квест туториала «выбей предмет» был невыполним, а игроки жаловались,
+  // что в Пьютере пусто.
+  const serverMonster = state.serverDropConfig?.monsterDrops;
+  const monsterTable = (serverMonster && Object.keys(serverMonster).length > 0)
+    ? serverMonster
+    : MONSTER_DROP_TABLE;
   const serverUniv = state.serverDropConfig?.universalDrops;
   const univDrops = (Array.isArray(serverUniv) && serverUniv.length > 0) ? serverUniv : UNIVERSAL_DROPS;
 
@@ -945,8 +955,18 @@ export async function fetchServerFeatures() {
 // Используется в битве (core.ts) при победе над диким покемоном
 export function processMonsterDrop(pokemonName: string) {
   const drops: Array<{item: string, qty: number}> = [];
-  // Приоритет: серверная конфигурация → локальная таблица
-  const monsterTable = state.serverDropConfig?.monsterDrops ?? MONSTER_DROP_TABLE;
+  // Приоритет: серверная конфигурация → локальная таблица.
+  //
+  // ВАЖНО: `??` тут НЕ работал. Сервер при отсутствии строки в БД отдаёт
+  // { monsterDrops: {}, universalDrops: [] } — пустой ОБЪЕКТ, а не null.
+  // Значит `?? MONSTER_DROP_TABLE` не срабатывал никогда, локальная таблица
+  // (1300 видов с дропами) не использовалась вообще, и дропов не было нигде:
+  // квест туториала «выбей предмет» был невыполним, а игроки жаловались,
+  // что в Пьютере пусто.
+  const serverMonster = state.serverDropConfig?.monsterDrops;
+  const monsterTable = (serverMonster && Object.keys(serverMonster).length > 0)
+    ? serverMonster
+    : MONSTER_DROP_TABLE;
   const serverUniv = state.serverDropConfig?.universalDrops;
   const univDrops = (Array.isArray(serverUniv) && serverUniv.length > 0) ? serverUniv : UNIVERSAL_DROPS;
 
@@ -958,18 +978,34 @@ export function processMonsterDrop(pokemonName: string) {
     && typeof localStorage !== 'undefined'
     && localStorage.getItem('pokematrix_drop_100') === '1';
 
+  // Тренировочная зона: дроп ГАРАНТИРОВАН (ровно 1 предмет).
+  //
+  // Квест туториала tutorial_6 — «выбей предмет с дикого», и он был
+  // невыполним: при шансе 5% это ~20 убийств, а из-за пустого серверного
+  // конфига дропов не падало вообще. Тренировочная зона — место, где игрок
+  // учится ловить, поэтому дроп там гарантирован. ВСЕ остальные локации
+  // работают по обычным шансам, ничего глобального не менялось.
+  const trainingZone = state.currentLocationId === 'pewterCity_trainingGrounds';
+  const guaranteed = drop100 || trainingZone;
+
   // Проверяем дропы с покемона
   for (const entry of speciesTable) {
-    if (drop100 || Math.random() < entry.chance) {
+    if (guaranteed || Math.random() < entry.chance) {
       drops.push({ item: entry.item, qty: entry.qty });
     }
   }
 
   // Проверяем универсальные дропы
   for (const entry of univDrops) {
-    if (drop100 || Math.random() < entry.chance) {
+    if (guaranteed || Math.random() < entry.chance) {
       drops.push({ item: entry.item, qty: entry.qty });
     }
+  }
+
+  // На тренировочной зоне даже вид без таблицы дропа роняет 1 предмет —
+  // иначе квест туториала снова оказывается невыполнимым.
+  if (!drops.length && trainingZone) {
+    drops.push({ item: 'potion', qty: 1 });
   }
 
   // I3: квестовые предметы — только пока взят нужный квест
