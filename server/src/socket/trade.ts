@@ -14,6 +14,7 @@
 import type { Server, Socket } from 'socket.io';
 import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
+import { audit } from './audit.js';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -624,6 +625,12 @@ async function executeTradeSwap(
     // ── Уведомляем клиентов (данные — из БД, уже с новыми uid) ──
     if (initSocket) initSocket.emit('trade_execute', recvForInit);
     if (partSocket) partSocket.emit('trade_execute', recvForPart);
+    audit({
+      kind: 'trade_execute',
+      sessionId: session.tradeId,
+      actorTg: session.initiatorUserId,
+      detail: { a: session.initiatorUserId, b: session.partnerUserId, p1: session.p1Offers, p2: session.p2Offers },
+    });
   } catch (err) {
     console.error('[trade] executeTradeSwap failed:', err);
     const msg = err instanceof Error && err.message.startsWith('Trade failed:')

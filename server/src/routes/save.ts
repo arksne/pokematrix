@@ -13,6 +13,7 @@ import { getDb } from '../db/index.js';
 import { users, saveHistory } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { validateSaveData } from '../validation/save-data.js';
+import { audit } from '../socket/audit.js';
 
 import { parseSaveStrict, SaveParseError, countSavePokemon } from '../db/save-json.js';
 
@@ -87,7 +88,9 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     // ── Валидация структуры save_data ──
     const validation = validateSaveData(body.saveData);
     if (!validation.success) {
-      console.warn(`[save] Validation rejected for user ${req.user!.userId}:`, validation.errors);
+      console.warn(`[save] Validation rejected for user ${req.user!.userId}:`,
+        validation.errors);
+      audit({ kind: 'save_reject', actorTg: req.user!.tgId, detail: { code: 422, errors: validation.errors } });
       res.status(422).json({
         error: 'Save data validation failed',
         details: validation.errors,
@@ -126,6 +129,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       clientVersion < 1_000_000_000 &&
       clientVersion < serverVersion
     ) {
+      audit({ kind: 'save_reject', actorTg: req.user!.tgId, detail: { code: 409, clientVersion, serverVersion } });
       res.status(409).json({
         error: 'Save conflict: server has newer data',
         serverVersion,
@@ -147,6 +151,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         `[save] Отклонено затирание прогресса: user ${userId}, в базе ${storedCount} покемонов, ` +
         `в запросе 0. Клиент должен прислать reset: true, если это намеренный сброс.`,
       );
+      audit({ kind: 'save_reject', actorTg: req.user!.tgId, detail: { code: 409, reason: 'wipe', stored: storedCount } });
       res.status(409).json({
         error: 'Refusing to overwrite a non-empty save with an empty one',
         storedPokemon: storedCount,

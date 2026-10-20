@@ -14,6 +14,7 @@
 import type { Server, Socket } from 'socket.io';
 import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
+import { audit } from './audit.js';
 import { getDb } from '../db/index.js';
 import { users, battleRatings, arenaStats } from '../db/schema.js';
 import { eq, sql } from 'drizzle-orm';
@@ -267,6 +268,8 @@ export function initPvP(io: Server, socket: Socket) {
     });
     pendingChallenges.delete(socket.id);
     pendingChallenges.delete(challenger.socketId);
+    console.log(`[pvp] start battleId=${battleId} arena=${arena} A=${challengerUserId} B=${myUserId}`);
+    audit({ kind: 'pvp_start', sessionId: battleId, actorTg: challengerUserId, detail: { arena, a: challengerUserId, b: myUserId } });
 
     // Обоим: кто первый ходит (инициатор = first)
     const challengerName = challengerSocket.data.user?.firstName || challengerSocket.data.user?.username || 'Оппонент';
@@ -331,6 +334,7 @@ export function initPvP(io: Server, socket: Socket) {
         joinedAt: Date.now(),
       });
       socket.emit('arena_joined', { ok: true, saveVersion: await freshSaveVersion(db, joinedUserId) });
+      audit({ kind: 'arena_join', actorTg: tgId });
       broadcastArenaLobby(io);
     } catch (e) {
       console.error('[pvp] arena_join error:', e);
@@ -436,6 +440,8 @@ export function initPvP(io: Server, socket: Socket) {
     // было сдаться и получить +500 кредитов.
     const senderWon = actionType === 'win';
     const winnerIsSender = senderWon;
+    console.log(`[pvp] end battleId=${battleId} action=${actionType} sender=${socket.data.user?.tgId} arena=${battle.arena}`);
+    audit({ kind: 'pvp_end', sessionId: battleId, actorTg: socket.data.user?.tgId, detail: { action: actionType, arena: battle.arena } });
 
     const opponentSocketId = socket.id === battle.playerA ? battle.playerB : battle.playerA;
     const opponentSocket = io.sockets.sockets.get(opponentSocketId);
@@ -544,6 +550,8 @@ export function initPvP(io: Server, socket: Socket) {
           streak: 0, arena: true, consolation: ARENA_LOSS_CONSOLATION,
           saveVersion: await freshSaveVersion(db, lId),
         });
+        console.log(`[pvp] settle battleId=${battleId} arena winner=${winnerTg} streak=${settled.streak} money=${settled.reward.money}`);
+        audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { arena: true, money: settled.reward.money, items: settled.reward.items, streak: settled.streak, best: settled.best } });
         broadcastArenaLobby(io);
         return;
       }
@@ -588,6 +596,7 @@ export function initPvP(io: Server, socket: Socket) {
         if (rewarded) {
           const winnerSock = winnerIsSender ? socket : opponentSocket;
           winnerSock?.emit('pvp_reward', { money: 500, saveVersion: await freshSaveVersion(db, wId) });
+          audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { arena: false, money: 500 } });
         }
       }
     } catch (e) {

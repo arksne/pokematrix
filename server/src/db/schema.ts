@@ -101,3 +101,25 @@ export const saveHistory = pgTable('save_history', {
 }, (t) => ({
   userIdx: index('save_history_user_id_idx').on(t.user_id),
 }));
+
+/**
+ * Постоянный журнал lifecycle боёв/обменов/отклонённых сейвов.
+ * Нужен потому, что логи Render эфемерны и скудны: любое событие, видимое
+ * только в консоли, при разборе инцидента уже не найти. Аудит пишется
+ * fire-and-forget в try/catch и НИКОГДА не ломает геймплей.
+ *   kind: pvp_start | pvp_end | pvp_settle | arena_join |
+ *         trade_execute | save_reject
+ *   session_id: battleId боя или tradeId обмена (для save_reject пуст)
+ *   actor_tg: tg_id инициатора события
+ *   detail: JSON со спецификой (награды, стрики, причины отклонения)
+ */
+export const battleAudit = pgTable('battle_audit', {
+  id: serial('id').primaryKey(),
+  created_at: text('created_at').notNull(),
+  kind: text('kind').notNull(),
+  session_id: text('session_id'),
+  actor_tg: bigint('actor_tg', { mode: 'number' }),
+  detail: text('detail').default('{}'),
+}, (t) => ({
+  createdIdx: index('battle_audit_created_idx').on(t.created_at),
+}));

@@ -43,6 +43,13 @@
       "when": 1791600000000,
       "tag": "0006_drop_valuable_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792528166283,
+      "tag": "0007_gigantic_silver_sable",
+      "breakpoints": true
     }
   ]
 }
