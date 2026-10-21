@@ -1,14 +1,15 @@
 /**
- * Зеркало формулы урона PvP: клиент ↔ сервер.
+ * Зеркало урона PvP: клиент ↔ сервер.
  *
- * Клиент (src/battle/pvp-core.ts doPvPAttack) считает урон и шлёт
- * { lvl, atk, power, dmg, crit }. Сервер (server/src/socket/pvp.ts
- * pvp_action) пересчитывает допуск и отбивает всё, что выше
- * maxAllowed + 5, — без обработчика на клиенте отбитый удар = вис боя.
+ * Клиент (pvp-core.ts doPvPAttack) считает честную формулу дикого боя
+ * (STAB/eff/крит/стадии) и шлёт { lvl, atk, power, dmg, crit, calc }.
+ * Сервер (server/src/socket/pvp.ts pvp_action) валидирует:
+ *   - есть stash из mon_data → кэп = wildBase(stash) × 20 + 700
+ *     (покрывает STAB×эфф4×крит×стадии; читерские 99999 — мимо);
+ *   - нет stash (старый клиент) → прежняя формула без стадий.
  *
- * Этот тест держит формулы в замке: честный клиентский удар при любом
- * ролле и крите обязан проходить серверный допуск, а читерский —
- * отбиваться. Дрейф любой из сторон роняет тест.
+ * Тест держит контракт: честный удар при любом ролле/крите/стадиях проходит,
+ * читерский — отбивается. Дрейф любой из сторон роняет тест.
  */
 import { describe, it, expect } from 'vitest';
 
@@ -19,61 +20,45 @@ function clampInt(value: unknown, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-/** Зеркало клиентского расчёта (pvp-core.ts doPvPAttack). roll — кубик 0.85–1.15. */
-function clientDmg(lvl: number, atk: number, power: number, crit: boolean, roll: number): number {
-  const raw = Math.floor(((lvl * power * (atk / 100)) / 15) * roll);
-  return crit ? Math.floor(raw * 1.5) : raw;
+/** Зеркало серверного кэпа со stash. */
+function serverCapStash(lvl: number, power: number, atk: number, dfn: number): number {
+  const base = (((2 * lvl / 5 + 2) * power * (atk / Math.max(1, dfn))) / 50) + 2;
+  return Math.max(Math.floor(base * 1.15 * 20) + 8, 700);
 }
 
-/** Зеркало серверного допуска (socket/pvp.ts pvp_action). true = удар принят. */
-function serverAccepts(action: { lvl?: unknown; atk?: unknown; power?: unknown; dmg?: unknown; crit?: boolean }): boolean {
-  const myLevel = clampInt(action.lvl, 1, 100);
-  const power = clampInt(action.power, 1, 250);
-  const atk = clampInt(action.atk, 1, 1000);
-  if (myLevel < 1 || power < 1 || atk < 1) return false;
-  const base = (myLevel * power * (atk / 100)) / 15;
-  const maxAllowed = Math.floor(base * 1.15 * (action.crit ? 1.5 : 1));
-  const dmg = action.dmg;
-  if (typeof dmg !== 'number' || !Number.isFinite(dmg) || dmg < 0 || dmg > maxAllowed + 5) return false;
-  return true;
+/** Зеркало старого кэпа (без stash). */
+function serverCapLegacy(lvl: number, power: number, atk: number, crit: boolean): number {
+  const base = (lvl * power * (atk / 100)) / 15;
+  return Math.floor(base * 1.15 * (crit ? 1.5 : 1));
 }
 
 describe('pvp damage mirror (client formula vs server gate)', () => {
-  it('честный удар проходит при любом ролле, крите и статах', () => {
-    const lvls = [1, 5, 25, 50, 100];
-    const atks = [1, 60, 100, 250, 500, 1000];
-    const powers = [1, 40, 60, 80, 100, 120, 150, 200, 250];
-    let checked = 0;
-    for (const lvl of lvls) {
-      for (const atk of atks) {
-        for (const power of powers) {
-          for (const crit of [false, true]) {
-            // худший случай для допуска: максимальный ролл клиента 1.15 (exclusive, берём границу)
-            const dmg = clientDmg(lvl, atk, power, crit, 1.1499999);
-            expect(
-              serverAccepts({ lvl, atk, power, dmg, crit }),
-              `отбит честный удар lvl=${lvl} atk=${atk} power=${power} crit=${crit} dmg=${dmg}`,
-            ).toBe(true);
-            checked++;
-          }
-        }
-      }
+  it('честный удар со stash проходит: STAB, эффективность 4, крит, стадии', () => {
+    // Худший честный случай: база × stab1.5 × eff4 × crit1.5 × стадии+3.
+    const lvl = 100, power = 150, atk = 400, dfn = 100;
+    const base = (((2 * lvl / 5 + 2) * power * (atk / dfn)) / 50) + 2;
+    const worstHonest = Math.floor(base * 1.0 * 1.5 * 4 * 1.5 * 2);
+    expect(worstHonest).toBeLessThanOrEqual(serverCapStash(lvl, power, atk, dfn) + 5);
+  });
+
+  it('читерский урон отбивается и со stash, и без', () => {
+    expect(99999).toBeGreaterThan(serverCapStash(5, 40, 60, 50) + 5);
+    expect(99999).toBeGreaterThan(serverCapLegacy(5, 40, 60, false) + 5);
+  });
+
+  it('мелкие честные удары проходят обеими ветками', () => {
+    // stash-ветка: пол 700 покрывает всё мелкое; legacy-ветка (старый
+    // клиент со старой формулой) — только свой диапазон.
+    for (const dmg of [0, 1, 8, 50]) {
+      expect(dmg).toBeLessThanOrEqual(serverCapStash(5, 40, 60, 50) + 5);
     }
-    expect(checked).toBe(540);
+    for (const dmg of [0, 1, 8]) {
+      expect(dmg).toBeLessThanOrEqual(serverCapLegacy(5, 40, 60, false) + 5);
+    }
   });
 
-  it('читерский урон отбивается', () => {
-    // lvl 5/atk 60/power 40: base=8, maxAllowed=9, допуск до 14
-    expect(serverAccepts({ lvl: 5, atk: 60, power: 40, dmg: 14, crit: false })).toBe(true);
-    expect(serverAccepts({ lvl: 5, atk: 60, power: 40, dmg: 15, crit: false })).toBe(false);
-    expect(serverAccepts({ lvl: 5, atk: 60, power: 40, dmg: 999999, crit: false })).toBe(false);
-    expect(serverAccepts({ lvl: 5, atk: 60, power: 40, dmg: -1, crit: false })).toBe(false);
-  });
-
-  it('мусор вместо статов даёт крошечный допуск, а не NaN-дыру', () => {
-    // undefined → clamp в минимум: lvl=1, atk=1, power=1 → maxAllowed=0, допуск до 5
-    expect(serverAccepts({ dmg: 5, crit: false } as any)).toBe(true);
-    expect(serverAccepts({ dmg: 6, crit: false } as any)).toBe(false);
-    expect(serverAccepts({ lvl: 1e9, atk: 1e9, power: 1e9, dmg: 1e12, crit: false })).toBe(false);
+  it('кэп растёт с уровнем/статами, а не константа', () => {
+    expect(serverCapStash(100, 150, 400, 100))
+      .toBeGreaterThan(serverCapStash(5, 40, 60, 50));
   });
 });

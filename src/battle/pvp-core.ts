@@ -33,6 +33,68 @@ import { getSpriteUrl } from '../utils/sprite.js';
 import { autoSave } from '../game/save.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { checkAchievement } from '../ui/achievements.js';
+import { calculateDamage, checkAccuracy, getTypeMultiplier, statStageModify } from './logic.js';
+import { calculateStat } from './stats.js';
+
+/** Подписи статов для лога баффов. */
+const STAGE_LABELS: Record<string, string> = {
+  atk: 'Атака', def: 'Защита', spa: 'Спец. атака', spd: 'Спец. защита', spe: 'Скорость',
+};
+
+/**
+ * Танцы и баффы: самобаффы стадий (как в диком бою, без статусов).
+ * Формат: slug мува → [стадия, дельта]. Кап ±6 держит statStageModify.
+ * Неизвестные статус-атаки — 0 урона без эффекта.
+ */
+const DANCE_BUFFS: Record<string, Array<[string, number]>> = {
+  'swords-dance': [['atk', 2]],
+  'dragon-dance': [['atk', 1], ['spe', 1]],
+  'calm-mind': [['spa', 1], ['spd', 1]],
+  'nasty-plot': [['spa', 2]],
+  'iron-defense': [['def', 2]],
+  'amnesia': [['spd', 2]],
+  'agility': [['spe', 2]],
+  'bulk-up': [['atk', 1], ['def', 1]],
+  'quiver-dance': [['spa', 1], ['spd', 1], ['spe', 1]],
+  'growth': [['spa', 1]],
+  'howl': [['atk', 1]],
+  'meditate': [['atk', 1]],
+  'harden': [['def', 1]],
+  'withdraw': [['def', 1]],
+  'defense-curl': [['def', 1]],
+  'barrier': [['def', 2]],
+  'acid-armor': [['def', 2]],
+  'cosmic-power': [['def', 1], ['spd', 1]],
+  'coil': [['atk', 1], ['def', 1]],
+  'work-up': [['atk', 1], ['spa', 1]],
+  'shell-smash': [['atk', 2], ['spa', 2], ['spe', 2], ['def', -1], ['spd', -1]],
+  'shift-gear': [['atk', 1], ['spe', 2]],
+};
+
+/** Слаг мува: 'Hyper Beam' → 'hyper-beam'. */
+function moveSlug(name: unknown): string {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/** Базовые статы [hp,atk,def,spa,spd,spe] из apiData (нули → 50). */
+function baseStatsOf(mon: any): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const v = Number(mon?.apiData?.stats?.[i]?.base_stat);
+    out.push(Number.isFinite(v) && v > 0 ? v : 50);
+  }
+  return out;
+}
+
+/** Посчитанные на уровне статы {patk,pdef,satk,sdef} для обмена в mon_data. */
+export function battleStatsOf(mon: any, level: number): { patk: number; pdef: number; satk: number; sdef: number } {
+  const calc = (stat: string) => {
+    try {
+      return Math.max(1, Math.floor(Number(calculateStat(mon, stat, { level })) || 1));
+    } catch { return 50; }
+  };
+  return { patk: calc('attack'), pdef: calc('defense'), satk: calc('special-attack'), sdef: calc('special-defense') };
+}
 
 /**
  * showPvpPanel — открыть панель PvP (M-18: вкладка «PvP-Арена»).
@@ -129,15 +191,33 @@ export function openPvPArena(battleId, opponent, myFirst) {
   modal.style.display = 'flex';
 
   // ── Отправка данных о своём покемоне оппоненту ──
-  // Сервер пересылает это второму игроку
+  // Сервер пересылает это второму игроку. Типы/статы/стадии нужны обеим
+  // сторонам для честного урона (STAB, эффективность, защита) — как в диком.
+  // Стадии боя не должны утекать в сейв: снапшот восстанавливаем в endPvP.
+  sendMyMonData(battleId);
+}
+
+/**
+ * Отправка своего покемона оппоненту (mon_data): старт боя и пересинхрон
+ * после реконнекта (pvp_rejoin). Типы/статы/стадии — для честного урона.
+ */
+export function sendMyMonData(battleId: unknown): void {
   const mon = state.pvpMyMon;
+  if (!mon || !state.socket) return;
+  const myLvl = mon.baseLevel + (mon.candiesEaten || 0);
+  state.pvpStageBackup = JSON.parse(JSON.stringify(mon.statStages || {}));
+  const myTypes = (mon.apiData?.types || []).map((t: any) => t?.type?.name || t).filter(Boolean);
   state.socket.emit('pvp_action', { battleId, action: {
     type: 'mon_data',
     name: mon.nickname || mon.apiData?.name,
-    lvl: mon.baseLevel + (mon.candiesEaten || 0),
+    lvl: myLvl,
     hp: mon.currentHp,
     maxHp: mon.maxHp,
-    sprite: getSpriteUrl(mon)
+    sprite: getSpriteUrl(mon),
+    types: myTypes,
+    stats: baseStatsOf(mon),
+    calc: battleStatsOf(mon, myLvl),
+    stages: { ...(mon.statStages || {}) },
   }});
 }
 
@@ -270,9 +350,21 @@ export async function updatePvPUI() {
   // пока шёл fetch (параллельный вызов успел вставить свои кнопки).
   movesDiv.innerHTML = '';
 
-  // Создаём кнопки для каждой атаки
+  // Создаём кнопки для каждой атаки. Детали (тип/сила/точность) догружаются
+  // асинхронно: имя и заглушка — сразу, сила и класс — по готовности.
+  // PP в PvP нет (не синхронизируется между клиентами), только сила.
   topMoves.forEach((m, i) => {
-    // Асинхронная загрузка деталей атаки с сайта лиги (для определения типа)
+    const btn = document.createElement('span');
+    btn.className = 'reborn-move-link';
+    btn.style.opacity = state.pvpMyTurn ? '1' : '0.5'; // Затемняем если не мой ход
+    btn.textContent = m.name;
+    btn.onclick = () => {
+      if (!state.pvpMyTurn) { showToast('Сейчас ход соперника!', true); return; }
+      doPvPAttack(i);
+    };
+    movesDiv.appendChild(btn);
+    // Асинхронная загрузка деталей атаки (тип для цвета, сила для кнопки
+    // и полный объект — для честного урона в doPvPAttack).
     fetchSiteMoveDetail(m).then(d => {
       if (seq !== pvpRenderSeq) return; // рендер уже протух
       state.pvpMovesDetailed[i] = d;
@@ -280,33 +372,27 @@ export async function updatePvPUI() {
       if (btns[i]) {
         btns[i].classList.remove('move-type-physical', 'move-type-special', 'move-type-status');
         if (d.damage_class?.name) btns[i].classList.add(`move-type-${d.damage_class.name}`);
+        (btns[i] as any).textContent = `${d.name || m.name}${d.power != null ? ` · ${d.power}` : ' · —'}`;
+        (btns[i] as any).title = `Тип: ${d.type?.name || '?'} / ${d.damage_class?.name || '?'} · Точн.: ${d.accuracy ?? '—'}`;
       }
     }).catch(() => {});
-
-    const btn = document.createElement('span');
-    btn.className = 'reborn-move-link';
-    btn.textContent = m.name;
-    btn.style.opacity = state.pvpMyTurn ? '1' : '0.5'; // Затемняем если не мой ход
-    btn.onclick = () => {
-      if (!state.pvpMyTurn) { showToast('Сейчас ход соперника!', true); return; }
-      doPvPAttack(i);
-    };
-    movesDiv.appendChild(btn);
   });
 }
 
 /**
  * doPvPAttack — выполнить PvP-атаку.
  *
- * УПРОЩЁННАЯ ФОРМУЛА (не использует calculateDamage):
- *   rawDmg = ((lvl * power * (atk / 100)) / 15) * random(0.85-1.15)
- *   crit = 6.25% × 1.5
+ * ПОЛНАЯ формула дикого боя (calculateDamage): STAB ×1.5, эффективность по
+ * типам оппонента, физ/спец разделение по настоящим статам, точность
+ * (промахи), фикс-урон (Seismic Toss...), OHKO, криты. Статус-танцы из
+ * DANCE_BUFFS баффают стадии вместо урона.
  *
  * ЧТО ДЕЛАЕТ:
- *   1. Вычисляет урон по упрощённой формуле
- *   2. Добавляет запись в лог
- *   3. Переключает state.pvpMyTurn = false
- *   4. Отправляет данные атаки на сервер через socket
+ *   1. Точность (промах — ход переходит, урона нет)
+ *   2. Танцы — стадии, остальное — calculateDamage
+ *   3. Богатая запись в лог (как в диком бою)
+ *   4. Переключает state.pvpMyTurn = false
+ *   5. Отправляет данные атаки на сервер через socket
  *
  * ГДЕ ВЫЗЫВАЕТСЯ: из кнопок атак в updatePvPUI()
  */
@@ -314,29 +400,110 @@ export function doPvPAttack(moveIdx) {
   if (!state.pvpMyMon || !state.pvpBattleId) return;
   const detailed = state.pvpMovesDetailed[moveIdx];
   const moveName = detailed?.name || 'Атака';
-  const lvl = state.pvpMyMon.baseLevel + (state.pvpMyMon.candiesEaten || 0);
-  const atk = (state.pvpMyMon.apiData?.stats?.[1]?.base_stat || 60); // Base Attack
-  // Статус-атаки (damage_class=status или power=null) урона НЕ наносят:
-  // раньше power падал на дефолт 60 и танец снимал пол-HP. Неизвестная атака
-  // (детали не загрузились) — считаем боевой с power 60, как раньше.
-  const isStatus = detailed != null
-    && (detailed.damage_class?.name === 'status' || detailed.power == null);
-  const power = detailed?.power || 60;
-  // Упрощённая формула урона (без учёта STAB, типов, защит и т.д.)
-  const rawDmg = Math.floor(((lvl * power * (atk / 100)) / 15) * (0.85 + Math.random() * 0.3));
-  const crit = Math.random() < 0.0625; // 1/16 шанс крита
-  const dmg = isStatus ? 0 : (crit ? Math.floor(rawDmg * 1.5) : rawDmg);
-
+  const mon = state.pvpMyMon;
+  const lvl = mon.baseLevel + (mon.candiesEaten || 0);
   const logEl = document.getElementById('pvp-log');
-  logEl.innerHTML = isStatus
-    ? `Вы: ${moveName}!\n${logEl.innerHTML}`
-    : `Вы: ${moveName}! ${crit ? '💥Крит! ' : ''}(-${dmg})\n${logEl.innerHTML}`;
+  const opp = state.pvpOppMon || {};
+
+  // ── Статус-танцы: бафф стадий вместо урона ──
+  const dance = detailed?.name ? DANCE_BUFFS[moveSlug(detailed.name)] : undefined;
+  if (detailed && dance) {
+    if (!mon.statStages) mon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+    for (const [stat, delta] of dance) {
+      mon.statStages = statStageModify(mon.statStages, stat, delta as number);
+    }
+    const buffText = dance
+      .map(([stat, delta]) => `${STAGE_LABELS[stat] || stat} ${delta > 0 ? '+' : ''}${delta}`)
+      .join(', ');
+    logEl.innerHTML = `Вы: ${moveName}! ${buffText}\n${logEl.innerHTML}`;
+    state.pvpMyTurn = false;
+    state.socket.emit('pvp_action', {
+      battleId: state.pvpBattleId,
+      action: {
+        type: 'attack', moveName, dmg: 0, crit: false, lvl, dance: true,
+        moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name,
+      },
+    });
+    updatePvPUI();
+    return;
+  }
+
+  // ── Точность (как в диком бою) ──
+  const acc = checkAccuracy(detailed || { accuracy: 100, name: moveName });
+  if (!acc.hit) {
+    logEl.innerHTML = `Вы: ${moveName}! — промах\n${logEl.innerHTML}`;
+    state.pvpMyTurn = false;
+    state.socket.emit('pvp_action', {
+      battleId: state.pvpBattleId,
+      action: {
+        type: 'attack', moveName, dmg: 0, crit: false, lvl, missed: true,
+        moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name,
+      },
+    });
+    updatePvPUI();
+    return;
+  }
+
+  // ── Честный урон: та же формула, что в диком бою ──
+  const oppTypes = Array.isArray(opp.types) ? opp.types : [];
+  const myTypes = (mon.apiData?.types || []).map((t: any) => t?.type?.name || t).filter(Boolean);
+  const oppStats = Array.isArray(opp.stats) ? opp.stats : [];
+  const statAt = (i: number) => {
+    const v = Number(oppStats[i]);
+    return Number.isFinite(v) && v > 0 ? v : 50;
+  };
+  const eff = getTypeMultiplier(detailed?.type?.name, oppTypes.length ? oppTypes : undefined);
+  const stab = myTypes.includes(detailed?.type?.name) ? 1.5 : 1;
+  let dmg = 0;
+  let crit = false;
+  let mods = '';
+  try {
+    const res = calculateDamage({
+      move: detailed || { name: moveName, power: 60, type: { name: 'normal' }, damage_class: { name: 'physical' } },
+      attacker: mon,
+      defender: {
+        apiData: {
+          types: oppTypes.map((t: any) => ({ type: { name: typeof t === 'string' ? t : t?.type?.name } })),
+          stats: [0, 1, 2, 3, 4, 5].map((i) => ({ base_stat: statAt(i) })),
+        },
+        ivs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        statStages: opp.stages || null,
+        currentHp: opp.currentHp,
+        maxHp: opp.maxHp,
+      },
+      attackerLevel: lvl,
+      defenderLevel: opp.lvl || lvl,
+      defenderCurrentHp: opp.currentHp,
+      defenderMaxHp: opp.maxHp,
+      attackerCurrentHp: mon.currentHp,
+      attackerMaxHp: mon.maxHp,
+    });
+    dmg = res.damage;
+    crit = res.isCrit;
+    mods = (res.messages || []).map((m: string) => String(m).replace(/[!.]+$/, '').toLowerCase()).join(', ');
+  } catch {
+    // Фолбэк, если калькулятор упал: минимальный чип-урон, бой не висит.
+    dmg = 1;
+  }
+
+  logEl.innerHTML = dmg > 0
+    ? `Вы: ${moveName}! −${dmg} HP${mods ? ` — ${mods}` : ''}\n${logEl.innerHTML}`
+    : `Вы: ${moveName}!${mods ? ` — ${mods}` : ''}\n${logEl.innerHTML}`;
 
   state.pvpMyTurn = false; // Передаём ход оппоненту
-  // Отправляем данные атаки + статы для server-authoritative валидации
+  // Отправляем данные атаки + статы для server-authoritative валидации.
+  // eff/stab/missed — для богатого лога оппонента и серверного кэпа.
+  const atkCalc = { patk: 0, pdef: 0, satk: 0, sdef: 0 };
+  try { Object.assign(atkCalc, battleStatsOf(mon, lvl)); } catch { /* ignore */ }
   state.socket.emit('pvp_action', {
     battleId: state.pvpBattleId,
-    action: { type: 'attack', moveName, dmg, crit, lvl, atk, power },
+    action: {
+      type: 'attack', moveName, dmg, crit, lvl,
+      atk: atkCalc.patk, power: detailed?.power ?? 60,
+      moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name,
+      eff, stab, mods, calc: atkCalc,
+    },
   });
   updatePvPUI();
 }
@@ -381,4 +548,12 @@ export function endPvP(won, announce = true) {
     state.pvpBattleId = null;
     autoSave();
   }
+  // Стадии боя не утекают в сейв: восстанавливаем стартовые (иначе +6 атаки
+  // после каждого танца навсегда).
+  try {
+    if (state.pvpMyMon && state.pvpStageBackup) {
+      state.pvpMyMon.statStages = { ...(state.pvpStageBackup || {}) };
+    }
+  } catch { /* ignore */ }
+  state.pvpStageBackup = null;
 }

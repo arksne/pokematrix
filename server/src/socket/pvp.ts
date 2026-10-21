@@ -27,10 +27,19 @@ function clampInt(value: unknown, min: number, max: number): number {
 }
 // Активные PvP-сессии: battleId → { playerA, playerB }
 // arena=true — бой с PvP-Арены (M-18): награда со стриком, а не базовые 500.
-const activeBattles = new Map<string, { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null; arena: boolean }>();
+// st — засташенные статы сторон из mon_data {A:{lvl,atk,def},B:{...}} для
+// валидации урона (иначе проверяем по полям самой атаки — слабее).
+export interface PvPBattle {
+  playerA: string; playerB: string; userA: number; userB: number;
+  startedAt: number; lastActivityAt: number; lastActorSocketId: string | null;
+  arena: boolean;
+  st: {
+    A: { lvl: number; patk: number; pdef: number; satk: number; sdef: number } | null;
+    B: { lvl: number; patk: number; pdef: number; satk: number; sdef: number } | null;
+  } | null;
+}
+const activeBattles = new Map<string, PvPBattle>();
 
-/** Сколько живёт бой без активности. */
-const BATTLE_TTL_MS = 10 * 60 * 1000;
 /** Вызов без ответа: через столько считаем оппонента AFK. */
 const CHALLENGE_TTL_MS = 60 * 1000;
 /** Без ходов столько: AFK-сторона проигрывает ( было: висело до 10-мин TTL ). */
@@ -129,7 +138,7 @@ async function freshSaveVersion(db: any, userId: number): Promise<number | undef
 function getBattleForSocket(
   battleId: unknown,
   socketId: string,
-): { battle: { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null; arena: boolean }; isPlayerA: boolean } | null {
+): { battle: PvPBattle; isPlayerA: boolean } | null {
   if (typeof battleId !== 'string' || !battleId) return null;
   const battle = activeBattles.get(battleId);
   if (!battle) return null;
@@ -160,7 +169,7 @@ function getBattleForSocketOrUser(
   io: Server,
   battleId: unknown,
   socket: Socket,
-): { battle: { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null; arena: boolean }; isPlayerA: boolean } | null {
+): { battle: PvPBattle; isPlayerA: boolean } | null {
   if (typeof battleId !== 'string' || !battleId) return null;
   const battle = activeBattles.get(battleId);
   if (!battle) return null;
@@ -240,7 +249,7 @@ async function sweepBattles(io: Server) {
 }
 
 /** AFK-победа активной стороне: рейтинг без денег. */
-async function settleTimeoutWin(io: Server, b: { playerA: string; playerB: string; userA: number; userB: number; lastActorSocketId: string | null; arena?: boolean }) {
+async function settleTimeoutWin(io: Server, b: PvPBattle & { arena?: boolean }) {
   const winnerSockId = b.lastActorSocketId!;
   const winnerIsA = winnerSockId === b.playerA;
   const winnerTg = winnerIsA ? b.userA : b.userB;
@@ -370,6 +379,7 @@ export function initPvP(io: Server, socket: Socket) {
       lastActivityAt: Date.now(),
       lastActorSocketId: null,
       arena,
+      st: null,
     });
     pendingChallenges.delete(socket.id);
     pendingChallenges.delete(challenger.socketId);
@@ -496,6 +506,24 @@ export function initPvP(io: Server, socket: Socket) {
       battle.lastActorSocketId = socket.id;
     }
 
+    // Stash статов из mon_data для валидации урона: уровень и посчитанные
+    // клиентом атака/защита (физ/спец). Дальше cap считается по stash, а не
+    // по полям каждой атаки (их легко раздуть).
+    if (data.action?.type === 'mon_data') {
+      const c = data.action?.calc;
+      const num = (v: unknown) => {
+        const n = Math.floor(Number(v));
+        return Number.isFinite(n) ? Math.min(600, Math.max(1, n)) : 50;
+      };
+      const st = {
+        lvl: clampInt(data.action?.lvl, 1, 100),
+        patk: num(c?.patk), pdef: num(c?.pdef),
+        satk: num(c?.satk), sdef: num(c?.sdef),
+      };
+      if (!battle.st) battle.st = { A: null, B: null };
+      if (found.isPlayerA) battle.st.A = st; else battle.st.B = st;
+    }
+
     // ── Валидация типа действия ──
     const validTypes = ['attack', 'switch', 'surrender', 'mon_data', 'fainted', 'hp_update'];
     if (data.action?.type && !validTypes.includes(data.action.type)) {
@@ -506,11 +534,9 @@ export function initPvP(io: Server, socket: Socket) {
       return;
     }
 
-    // ── Проверка урона по серверным данным бойца ──
-    // Раньше «server-authoritative validation» считала границы из тех же клиентских
-    // полей lvl/atk/power, что прислал отправитель, поэтому проверяла ровно
-    // ничего: при lvl=1e9 допустимым становился любой урон.
-    // Теперь уровень и атака берутся из сейма, а power ограничен таблицей.
+    // ── Проверка урона: честная формула дикого боя + запас ──
+    // Stash из mon_data (уровень + посчитанные атака/защита) — основа кэпа.
+    // Без stash (старый клиент, боящийся мон) — прежняя формула по полям атаки.
     const action = data.action;
     if (action?.type === 'attack' && typeof action.dmg === 'number') {
       const myUserId = socket.data.user?.tgId;
@@ -519,17 +545,32 @@ export function initPvP(io: Server, socket: Socket) {
       // бои висли: оппонент не получал ход, оба ждали «хода противника».
       const myLevel = clampInt(action.lvl ?? action.level, 1, 100);
       const power = clampInt(action.power, 1, 250);
-      // Атака берётся из сейма отправителя; при недоступности — консервативный минимум.
       // Потолок 600 — щедрый реальный максимум стата на 100 уровне; 1000 дарил
       // читерам двукратный урон поверх формулы.
-      const atk = clampInt(action.atk, 1, 600);
-      if (!Number.isFinite(myUserId) || myLevel < 1 || power < 1 || atk < 1) {
+      const atkClaimed = clampInt(action.atk, 1, 600);
+      if (!Number.isFinite(myUserId) || myLevel < 1 || power < 1 || atkClaimed < 1) {
         socket.emit('pvp_action_rejected', { reason: 'Invalid attack data' });
         return;
       }
 
-      const base = ((myLevel * power * (atk / 100)) / 15);
-      const maxAllowed = Math.floor(base * 1.15 * (action.crit ? 1.5 : 1));
+      const st = found.isPlayerA ? battle.st?.A : battle.st?.B;
+      let maxAllowed: number;
+      if (st) {
+        // Физ/спец пара по классу урона; неизвестный класс — пара с большим кэпом
+        // (никаких ложных отклонений честных ударов).
+        const phys = (action.damageClass || 'physical') !== 'special';
+        const A = phys ? st.patk : st.satk;
+        const D = phys ? st.pdef : st.sdef;
+        const base = (((2 * myLevel / 5 + 2) * power * (A / Math.max(1, D))) / 50) + 2;
+        // Запас ×20 покрывает STAB 1.5 × эффективность 4 × крит 1.5 × стадии.
+        // Это backstop против абсурда (99999), а не точная валидация: точную
+        // даёт stash (статы зафиксированы на бой, раздуть посреди боя нельзя).
+        // Пол 700 — OHKO и мелкие базы не упираются в кэп.
+        maxAllowed = Math.max(Math.floor(base * 1.15 * 20) + 8, 700);
+      } else {
+        const base = ((myLevel * power * (atkClaimed / 100)) / 15);
+        maxAllowed = Math.floor(base * 1.15 * (action.crit ? 1.5 : 1));
+      }
       if (!Number.isFinite(action.dmg) || action.dmg < 0 || action.dmg > maxAllowed + 5) {
         console.warn(`[pvp] INVALID DAMAGE from ${socket.id}: ${action.dmg}, max ${maxAllowed}`);
         socket.emit('pvp_action_rejected', { reason: 'Invalid damage value' });

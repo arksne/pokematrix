@@ -95,7 +95,11 @@ export async function runPvp() {
   // PC5: mon_data релеится
   {
     const got = onceEvent(sB, 'pvp_opponent_action', 10000);
-    sA.emit('pvp_action', { battleId: bid, action: { type: 'mon_data', name: 'Pikachu', lvl: 5, hp: 50, maxHp: 50 } });
+    sA.emit('pvp_action', { battleId: bid, action: {
+      type: 'mon_data', name: 'Pikachu', lvl: 5, hp: 50, maxHp: 50,
+      types: ['electric'], stats: [35, 55, 40, 50, 50, 90],
+      calc: { patk: 60, pdef: 50, satk: 60, sdef: 50 },
+    } });
     const m = await got;
     check('PC5', 'mon_data оппонента релеится', !!m && m.type === 'mon_data' && m.name === 'Pikachu',
       m ? `name=${m.name}` : 'не доставлено');

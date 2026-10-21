@@ -129,6 +129,49 @@ const sockB = await connect(tokenB, 'B');
   }
 }
 
+// ── E11: валидация урона со stash (mon_data со статами) ──
+// Честный удар в пределах кэпа проходит, 99999 отбивается с rejected.
+{
+  const tA = await login(111000021, 'pvp_e11a');
+  const tB = await login(111000022, 'pvp_e11b');
+  const sA = await connect(tA, 'E11A');
+  const sB = await connect(tB, 'E11B');
+  const ch = onceEvent(sB, 'pvp_challenge_received', 3000);
+  sA.emit('pvp_challenge', 111000022);
+  if (!(await ch)) {
+    check('E11', 'валидация со stash: честный проходит, 99999 отбит', false, 'вызов не дошёл');
+  } else {
+    const pA = onceEvent(sA, 'pvp_start', 3000);
+    const pB = onceEvent(sB, 'pvp_start', 3000);
+    sB.emit('pvp_accept', 111000021);
+    const [eA, eB] = await Promise.all([pA, pB]);
+    const bid = eA?.battleId;
+    if (!bid || bid !== eB?.battleId) {
+      check('E11', 'валидация со stash: честный проходит, 99999 отбит', false, 'бой не начался');
+    } else {
+      sA.emit('pvp_action', { battleId: bid, action: {
+        type: 'mon_data', name: 'Pikachu', lvl: 5, hp: 50, maxHp: 50,
+        calc: { patk: 60, pdef: 50, satk: 60, sdef: 50 },
+      } });
+      await sleep(300);
+      const okP = onceEvent(sB, 'pvp_opponent_action', 3000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'tackle', dmg: 8, crit: false, lvl: 5, atk: 60, power: 40, damageClass: 'physical' } });
+      const ok = await okP;
+      const rejP = onceEvent(sA, 'pvp_action_rejected', 3000);
+      const leakP = onceEvent(sB, 'pvp_opponent_action', 2000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'tackle', dmg: 99999, crit: false, lvl: 5, atk: 60, power: 40, damageClass: 'physical' } });
+      const [rej, leak] = await Promise.all([rejP, leakP]);
+      check('E11', 'валидация со stash: честный проходит, 99999 отбит',
+        !!ok && !!rej && leak === null,
+        ok ? (rej ? `reject: ${rej.reason}` : 'отклонения не было') : 'честный удар не прошёл');
+      sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
+      await sleep(500);
+    }
+  }
+  sA.close();
+  sB.close();
+}
+
 // ── E5: нокаут в PvP виден обеим сторонам, награда доходит (L4) ──
 // Протокол: A бьёт → B присылает hp_update{fainted} + fainted → A видит
 // победу; B шлёт pvp_end{lose} → сервер сеттлит победу A (+500 + pvp_reward).
