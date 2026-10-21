@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
  * получал 409 → resolveSaveConflict видел свежеоштампованное облако «новее»
  * → applyCloudSave + тост «Загружена более новая версия» ровно в момент
  * окончания быстрого боя (~15с). Фикс: сейв отложен до pvp_reward /
- * pvp_arena_update (deferBattleEndSave / settleBattleEndSave).
+ * pvp_arena_update (deferSettleSave / confirmSettleSave).
  */
 vi.mock('../../game/save.js', () => ({ autoSave: vi.fn() }));
 vi.mock('../../utils/dom.js', () => ({ showToast: vi.fn() }));
@@ -22,14 +22,14 @@ vi.stubGlobal('document', {
 
 import { state } from '../../game/state.js';
 import { autoSave } from '../../game/save.js';
-import { endPvP, deferBattleEndSave, settleBattleEndSave } from '../pvp-core.js';
+import { endPvP, deferSettleSave, confirmSettleSave } from '../pvp-core.js';
 
 const autoSaveMock = autoSave as unknown as ReturnType<typeof vi.fn>;
 
 function resetState() {
   state.pvpBattleId = null;
-  state.pvpSettlePending = false;
-  if (state.pvpSettleTimer) { clearTimeout(state.pvpSettleTimer); state.pvpSettleTimer = null; }
+  state.settlePending = false;
+  if (state.settleTimer) { clearTimeout(state.settleTimer); state.settleTimer = null; }
   state.saveDirty = false;
   state.socket = { emit: vi.fn() };
   autoSaveMock.mockClear();
@@ -47,36 +47,36 @@ describe('отложенный сейв конца боя', () => {
     );
     expect(state.pvpBattleId).toBeNull();
     expect(autoSaveMock).not.toHaveBeenCalled();
-    expect(state.pvpSettlePending).toBe(true);
+    expect(state.settlePending).toBe(true);
   });
 
-  it('settleBattleEndSave сохраняет один раз и снимает флаг', () => {
-    state.pvpSettlePending = true;
-    settleBattleEndSave();
+  it('confirmSettleSave сохраняет один раз и снимает флаг', () => {
+    state.settlePending = true;
+    confirmSettleSave();
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
-    expect(state.pvpSettlePending).toBe(false);
-    settleBattleEndSave();
+    expect(state.settlePending).toBe(false);
+    confirmSettleSave();
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
   });
 
   it('без defer settle ничего не сохраняет', () => {
-    settleBattleEndSave();
+    confirmSettleSave();
     expect(autoSaveMock).not.toHaveBeenCalled();
   });
 
   it('фолбэк-таймер досылает сейв через 4с без подтверждения', () => {
     vi.useFakeTimers();
-    deferBattleEndSave();
+    deferSettleSave();
     expect(autoSaveMock).not.toHaveBeenCalled();
     vi.advanceTimersByTime(4000);
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
-    expect(state.pvpSettlePending).toBe(false);
+    expect(state.settlePending).toBe(false);
   });
 
   it('подтверждение до фолбэка отменяет таймер (без двойного сейва)', () => {
     vi.useFakeTimers();
-    deferBattleEndSave();
-    settleBattleEndSave();
+    deferSettleSave();
+    confirmSettleSave();
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(10000);
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
@@ -89,6 +89,6 @@ describe('отложенный сейв конца боя', () => {
       'pvp_end', expect.anything(),
     );
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
-    expect(state.pvpSettlePending).toBe(false);
+    expect(state.settlePending).toBe(false);
   });
 });

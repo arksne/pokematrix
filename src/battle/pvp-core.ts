@@ -109,8 +109,8 @@ export function openPvPArena(battleId, opponent, myFirst) {
       state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: 'surrender' } });
       state.pvpBattleId = null;
       // Сеттл поднимет версию (победителю — награда, мне на арене — утешительные):
-      // сейв только после подтверждения, иначе 409 + тост (см. deferBattleEndSave).
-      deferBattleEndSave();
+      // сейв только после подтверждения, иначе 409 + тост (см. deferSettleSave).
+      deferSettleSave();
       updateMoneyDisplay();
     });
   }
@@ -140,29 +140,29 @@ export function openPvPArena(battleId, opponent, myFirst) {
 }
 
 /**
- * Отложенный сейв конца боя: серверный сеттл pvp_end поднимает save_version
- * (награда победителю / утешительные проигравшему на арене), а ответ с новой
- * версией (pvp_reward / pvp_arena_update) приходит чуть позже. Мгновенный
- * autoSave() здесь слал протухшую версию → 409 → resolveSaveConflict видел
- * свежеоштампованное облако «новее» → applyCloudSave + тост «Загружена более
- * новая версия» ровно в момент окончания быстрого боя (~15с). Поэтому сейв
- * ждёт сеттл-подтверждения; фолбэк 4с — на случай потерянного пакета
- * (второй pvp_end — no-op без награды: версия не менялась, сейв безопасен).
+ * Отложенный сейв конца боя/сделки: серверный сеттл (pvp_end / trade_confirm)
+ * поднимает save_version, а ответ с новой версией (pvp_reward /
+ * pvp_arena_update / trade_settled) приходит чуть позже. Мгновенный autoSave()
+ * слал протухшую версию → 409 → resolveSaveConflict видел свежеоштампованное
+ * облако «новее» → applyCloudSave + тост «Загружена более новая версия» ровно
+ * в момент окончания быстрого боя (~15с). Поэтому сейв ждёт подтверждения;
+ * фолбэк 4с — на случай потерянного пакета (второй pvp_end — no-op без награды:
+ * версия не менялась, сейв безопасен).
  */
 const SETTLE_SAVE_DELAY_MS = 4000;
-export function deferBattleEndSave(): void {
-  state.pvpSettlePending = true;
+export function deferSettleSave(): void {
+  state.settlePending = true;
   state.saveDirty = true;
-  if (state.pvpSettleTimer) clearTimeout(state.pvpSettleTimer);
-  state.pvpSettleTimer = setTimeout(() => { settleBattleEndSave(); }, SETTLE_SAVE_DELAY_MS);
+  if (state.settleTimer) clearTimeout(state.settleTimer);
+  state.settleTimer = setTimeout(() => { confirmSettleSave(); }, SETTLE_SAVE_DELAY_MS);
 }
 
-/** Сеттл подтверждён (pvp_reward / pvp_arena_update) или сработал фолбэк:
- *  версия уже принята из ответа сервера — сейв безопасен. */
-export function settleBattleEndSave(): void {
-  if (state.pvpSettleTimer) { clearTimeout(state.pvpSettleTimer); state.pvpSettleTimer = null; }
-  if (!state.pvpSettlePending) return;
-  state.pvpSettlePending = false;
+/** Сеттл подтверждён или сработал фолбэк: версия уже принята из ответа
+ *  сервера — сейв безопасен. */
+export function confirmSettleSave(): void {
+  if (state.settleTimer) { clearTimeout(state.settleTimer); state.settleTimer = null; }
+  if (!state.settlePending) return;
+  state.settlePending = false;
   autoSave();
 }
 
@@ -317,7 +317,7 @@ export function doPvPAttack(moveIdx) {
  *   3. Закрывает модалку
  *   4. Отправляет результат на сервер
  *   5. Сбрасывает state.pvpBattleId
- *   6. Откладывает автосейв до сеттл-подтверждения (deferBattleEndSave):
+ *   6. Откладывает автосейв до сеттл-подтверждения (deferSettleSave):
  *      мгновенный сейв слал протухшую версию и получал 409 с тостом
  *      «более новая версия» ровно в конце боя.
  *
@@ -334,7 +334,7 @@ export function endPvP(won, announce = true) {
   if (announce) {
     state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: won ? 'win' : 'lose' } });
     state.pvpBattleId = null;
-    deferBattleEndSave();
+    deferSettleSave();
   } else {
     state.pvpBattleId = null;
     autoSave();

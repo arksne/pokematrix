@@ -132,6 +132,22 @@ function getBattleForSocket(
   return null;
 }
 
+/** Сокет уже дерётся (любой из живых боёв). */
+function isSocketInBattle(socketId: string): boolean {
+  for (const b of activeBattles.values()) {
+    if (b.playerA === socketId || b.playerB === socketId) return true;
+  }
+  return false;
+}
+
+/** Пользователь уже дерётся (с любого своего сокета). */
+function isUserInBattle(userId: number): boolean {
+  for (const b of activeBattles.values()) {
+    if (b.userA === userId || b.userB === userId) return true;
+  }
+  return false;
+}
+
 /** Уборка боёв по TTL. Без неё карта жила до перезапуска процесса. */
 async function sweepBattles(io: Server) {
   const now = Date.now();
@@ -196,6 +212,14 @@ export function initPvP(io: Server, socket: Socket) {
     const myUserId = socket.data.user?.tgId;
     if (!myUserId || !Number.isFinite(partnerUserId) || partnerUserId === myUserId) return; // не вызываем себя
 
+    // Второй параллельный бой: два живых боя между той же парой давали
+    // задвоенные атаки в одном окне (клиент не различает потоки) и рвали
+    // версии/сеттл. Вызывающий или партнёр уже в бою — вызов отклоняется.
+    if (isSocketInBattle(socket.id) || isUserInBattle(partnerUserId)) {
+      socket.emit('pvp_challenge_rejected', { reason: 'IN_BATTLE' });
+      return;
+    }
+
     // Бой с арены — только между участниками арены (оба вошли по жетону).
     if (wantArena) {
       const partnerInArena = [...arenaMembers.values()].some((m) => m.userId === partnerUserId);
@@ -240,6 +264,15 @@ export function initPvP(io: Server, socket: Socket) {
     if (!challengerSocket) return;
     const challengerUserId = challengerSocket.data.user?.tgId;
     if (!challengerUserId || challengerUserId === myUserId) return;
+
+    // Принятие, когда кто-то из пары уже дерётся (встречные вызовы, дабл-тап):
+    // второй бой ломал бы первый (см. pvp_challenge). Отклоняем обе стороны,
+    // чтобы вызывающий не висел до таймаута.
+    if (isSocketInBattle(socket.id) || isSocketInBattle(challenger.socketId)) {
+      socket.emit('pvp_challenge_rejected', { reason: 'IN_BATTLE' });
+      challengerSocket.emit('pvp_challenge_rejected', { reason: 'IN_BATTLE' });
+      return;
+    }
 
     if (activeBattles.size >= MAX_ACTIVE_BATTLES) {
       const oldest = [...activeBattles.entries()].sort((a, b) => a[1].startedAt - b[1].startedAt)[0];
@@ -409,7 +442,9 @@ export function initPvP(io: Server, socket: Socket) {
     const opponentSocketId = socket.id === battle.playerA ? battle.playerB : battle.playerA;
     const opponentSocket = io.sockets.sockets.get(opponentSocketId);
     if (opponentSocket) {
-      opponentSocket.emit('pvp_opponent_action', { ...data.action, dmg: data.action?.dmg ?? undefined });
+      // battleId в релее: клиент отбрасывает чужие потоки (два живых боя между
+      // той же парой давали задвоенные атаки в одном окне).
+      opponentSocket.emit('pvp_opponent_action', { ...data.action, dmg: data.action?.dmg ?? undefined, battleId: data?.battleId });
     }
   });
 

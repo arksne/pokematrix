@@ -61,6 +61,28 @@ function onlineDotHtml(isOnline: boolean): string {
 }
 
 /**
+ * Последний визит в ЧАСОВОМ ПОЯСЕ УСТРОЙСТВА. Сервер хранит last_seen как
+ * UTC-ISO (toISOString), а старый код просто отрезал кусок строки — время
+ * показывалось по Гринвичу (для Бишкека −6 часов). Свежее — относительно
+ * («5 мин назад»), остальное — локальным временем устройства.
+ */
+export function formatLastSeen(iso?: string | null): string {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return '';
+  const diffMin = (Date.now() - t) / 60000;
+  if (diffMin < 0) return 'только что';
+  if (diffMin < 1) return 'только что';
+  if (diffMin < 60) return `${Math.floor(diffMin)} мин назад`;
+  const d = new Date(t);
+  const hm = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return `сегодня ${hm}`;
+  const dm = d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+  const y = d.getFullYear() === new Date().getFullYear() ? '' : `${d.getFullYear()} `;
+  return `${y}${dm} ${hm}`;
+}
+
+/**
  * Перерисовать только онлайн-точки в уже загруженном списке (без refetch).
  * Вызывается из socket 'online_players' — иначе точки врут до перезахода.
  */
@@ -227,10 +249,11 @@ export async function loadAllTrainers() {
       const avatarHtml = trainerAvatarHtml(u.avatar, 44);
 
       // ── Последний визит ──
-      // Парсим ISO дату: "2026-07-05T14:30:00.000Z" → "2026-07-05 14:30"
+      // В часовом поясе устройства (formatLastSeen): сервер отдаёт UTC-ISO,
+      // голая нарезка строки показывала Гринвич вместо Бишкека (−6 часов).
       const lastSeen = u.lastSeen
-        ? u.lastSeen.slice(0, 16).replace('T', ' ')
-        : u.created_at?.slice(0, 10) || '';
+        ? formatLastSeen(u.lastSeen)
+        : (u.created_at ? formatLastSeen(u.created_at) : '');
 
       // ── Онлайн-статус ──
       // Сравнение по строкам: tg_id из БД и userId из сокета могут

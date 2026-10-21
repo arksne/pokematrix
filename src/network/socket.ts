@@ -47,7 +47,7 @@ async function renderOnlinePlayers() { (await import('../social/trainer-profile.
 async function updateTrainerLocationList(data: any) { (await import('../social/trainer-profile.js')).updateTrainerLocationList(data); }
 import { showTradeRequestModal } from '../ui/trade-request.js';
 import { openTradeWindow, renderTradeOffers, updateTradeConfirmUI, closeTradeWindow } from '../ui/trade-window.js';
-import { openPvPArena, endPvP, updatePvPUI, deferBattleEndSave, settleBattleEndSave } from '../battle/pvp-core.js';
+import { openPvPArena, endPvP, updatePvPUI, deferSettleSave, confirmSettleSave } from '../battle/pvp-core.js';
 import { renderTeamGrid, refreshProfileUI } from '../ui/profile.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { updateInventoryDisplay } from '../ui/inventory.js';
@@ -257,8 +257,17 @@ export function initTradeSocket() {
     try { trackNPCQuests('trade_x', { amount: 1 }); } catch {}
     closeTradeWindow();
     updateMoneyDisplay();
-    autoSave();
+    // Своп поднял save_version обоим — сейв только после trade_settled
+    // (там свежая версия), иначе 409 + ложный конфликт (та же гонка, что в PvP).
+    deferSettleSave();
     refreshProfileUI();
+  });
+
+  // Сеттл обмена: сервер поднял версии обоим при свопе — принимаем свою
+  // и досылаем отложенный сейв.
+  state.socket.on('trade_settled', (data: { saveVersion?: number }) => {
+    adoptServerSaveVersion(data?.saveVersion);
+    confirmSettleSave();
   });
 
   state.socket.on('trade_cancelled', (msg) => {
@@ -344,7 +353,8 @@ export function initTradeSocket() {
     showToast(reason, true);
   });
   state.socket.on('pvp_challenge_rejected', (data) => {
-    if (data?.reason === 'NOT_IN_ARENA') showToast('Оба бойца должны быть на арене!', true);
+    if (data?.reason === 'NOT_IN_ARENA') showToast('Оба бойца должны быть на арене!');
+    else if (data?.reason === 'IN_BATTLE') showToast('Один из бойцов уже в бою', true);
   });
   // Сброс стрика проигравшего (победа/сдача соперника уже сеттлится сервером).
   state.socket.on('pvp_arena_update', (data) => {
@@ -361,12 +371,15 @@ export function initTradeSocket() {
       }
       import('../ui/pvp-arena.js').then((m) => m.renderArenaStatus()).catch(() => {});
       // Сеттл подтверждён (версия принята выше): отложенный сейв можно слать.
-      settleBattleEndSave();
+      confirmSettleSave();
     }
   });
 
   state.socket.on('pvp_opponent_action', (action) => {
     if (!state.pvpBattleId) return;
+    // Чужой поток (второй живой бой той же пары): не рендерим, иначе атаки
+    // двоятся в одном окне. Старый сервер battleId не шлёт — пропускаем.
+    if (action?.battleId && action.battleId !== state.pvpBattleId) return;
     if (action.type === 'mon_data') {
       const oppNameEl = document.getElementById('pvp-opp-name');
       const oppLvlEl = document.getElementById('pvp-opp-lvl');
@@ -446,7 +459,7 @@ export function initTradeSocket() {
       state.pvpBattleId = null;
       // Пир уже сеттлит (или сеттлил): моя строка могла подняться —
       // сейв только после pvp_reward, иначе 409 + тост.
-      deferBattleEndSave();
+      deferSettleSave();
     }
     if (action.type === 'win' || action.type === 'lose') {
       // 'lose' от оппонента = ОН проиграл → победили мы (награда уже выдана
@@ -459,7 +472,7 @@ export function initTradeSocket() {
       if (pvpModal) pvpModal.style.display = 'none';
       state.pvpBattleId = null;
       // См. выше: сеттл пира в пути или уже случился — сейв откладываем.
-      deferBattleEndSave();
+      deferSettleSave();
     }
   });
 
@@ -492,7 +505,7 @@ export function initTradeSocket() {
       }
     }
     // Сеттл подтверждён (версия принята выше): отложенный сейв конца боя можно слать.
-    settleBattleEndSave();
+    confirmSettleSave();
   });
 }
 

@@ -560,10 +560,10 @@ export function startSaveHeartbeat() {
   saveHeartbeatOn = true;
   setInterval(() => {
     try {
-      // Сеттл конца боя в пути (pvp_end ушёл, pvp_reward ещё нет): сейв
-      // отложен до подтверждения версии, иначе 409 + тост «более новая версия».
-      // Фолбэк-таймер deferBattleEndSave сам досылает через ≤4с.
-      if (state.saveDirty && state.tgToken && !state.pvpSettlePending) cloudSave();
+      // Сеттл конца боя/сделки в пути (подтверждение ещё нет): сейв отложен
+      // до подтверждения версии, иначе 409 + тост «более новая версия».
+      // Фолбэк-таймер deferSettleSave сам досылает через ≤4с.
+      if (state.saveDirty && state.tgToken && !state.settlePending) cloudSave();
     } catch { /* следующий тик повторит */ }
   }, 60000);
 }

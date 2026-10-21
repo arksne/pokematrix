@@ -17,10 +17,35 @@ interface OnlinePlayer {
 // Карта подключённых игроков
 const onlinePlayers = new Map<string, OnlinePlayer>();
 
+let sweepTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Чистка онлайна по живости сокетов. disconnect не всегда доходит до
+ * сервера (обрыв сети, замороженный WebView, падение клиента): запись
+ * висела в карте вечно, и офлайн-тренеры светились зелёным. Раз в минуту
+ * выкидываем записи с мёртвым сокетом и переиздаём список, если он изменился.
+ * Живые сокеты не трогаем — старые клиенты без пингов не страдают.
+ */
+function sweepPresence(io: Server) {
+  let changed = false;
+  for (const [sockId] of onlinePlayers) {
+    const s = io.sockets.sockets.get(sockId);
+    if (!s?.connected) {
+      onlinePlayers.delete(sockId);
+      changed = true;
+    }
+  }
+  if (changed) io.emit('online_players', Array.from(onlinePlayers.values()));
+}
+
 /**
  * Инициализация lobby-событий для сокета.
  */
 export function initLobby(io: Server, socket: Socket) {
+  if (!sweepTimer) {
+    sweepTimer = setInterval(() => sweepPresence(io), 60_000);
+    sweepTimer.unref?.();
+  }
   const userId = socket.data.user?.tgId;
   const username = socket.data.user?.username || socket.data.user?.firstName || 'Тренер';
 

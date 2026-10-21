@@ -17,7 +17,7 @@ import { getOnlinePlayerByUserId } from './lobby.js';
 import { audit } from './audit.js';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 interface TradeSession {
   tradeId: string;
@@ -501,12 +501,15 @@ async function executeTradeSwap(
   try {
     const db = getDb();
     // Клиент ждёт офферы в форме {type, data} (см. toClientOffers): голый
-    // канонический {type, uid} роняет его обработчик — offer.data undefined,
+    // канонический {type, uid} ронял его обработчик — offer.data undefined,
     // модалка висит, зеркалирование не происходит, следующий автосейв
     // затирает серверный итог свопа. Гидрируем ДО мутаций, пока покемоны
     // ещё лежат в сейвах владельцев.
     let recvForInit: any[] = [];
     let recvForPart: any[] = [];
+    // DB-id сторон — для свежих версий после коммита (trade_settled).
+    let id1 = 0;
+    let id2 = 0;
     const uid1 = new Set(session.p1Offers.filter((o): o is Extract<CanonicalOffer, { type: 'pokemon' }> => o.type === 'pokemon').map((o) => o.uid));
     const uid2 = new Set(session.p2Offers.filter((o): o is Extract<CanonicalOffer, { type: 'pokemon' }> => o.type === 'pokemon').map((o) => o.uid));
     const egg1 = new Set(session.p1Offers.filter((o): o is Extract<CanonicalOffer, { type: 'egg' }> => o.type === 'egg').map((o) => o.uid));
@@ -521,6 +524,8 @@ async function executeTradeSwap(
       ]);
 
       if (!p1[0] || !p2[0]) throw new Error('Trade failed: user not found');
+      id1 = p1[0].id;
+      id2 = p2[0].id;
 
         // Строгий разбор: если сейв битый, лучше прервать трейд, чем записать
         // поверх прогресса состояние по умолчанию.
@@ -613,11 +618,13 @@ async function executeTradeSwap(
           save_data: JSON.stringify(stampSave(sd1)),
           pokemon_count: countMons(sd1),
           money: credit1,
+          save_version: sql`${users.save_version} + 1`,
         }).where(eq(users.tg_id, session.initiatorUserId)),
         tx.update(users).set({
           save_data: JSON.stringify(stampSave(sd2)),
           pokemon_count: countMons(sd2),
           money: credit2,
+          save_version: sql`${users.save_version} + 1`,
         }).where(eq(users.tg_id, session.partnerUserId)),
       ]);
     });
@@ -625,11 +632,30 @@ async function executeTradeSwap(
     // ── Уведомляем клиентов (данные — из БД, уже с новыми uid) ──
     if (initSocket) initSocket.emit('trade_execute', recvForInit);
     if (partSocket) partSocket.emit('trade_execute', recvForPart);
+    // Свежие версии — КАЖДОМУ своя: своп поднял save_version обоим, и клиент
+    // обязан принять её ДО следующего автосейва, иначе 409 + ложный конфликт
+    // (та же гонка, что была в конце PvP-боя). trade_execute несёт массив
+    // офферов (форму менять нельзя — сломаем старых клиентов), поэтому версии
+    // едут отдельным событием, а сейв после обмена отложен до него.
+    let sv1: number | undefined;
+    let sv2: number | undefined;
+    try {
+      const rows = await db.select({ v: users.save_version })
+        .from(users).where(eq(users.id, id1)).limit(1);
+      sv1 = typeof rows[0]?.v === 'number' ? rows[0].v : undefined;
+    } catch { /* ignore */ }
+    try {
+      const rows = await db.select({ v: users.save_version })
+        .from(users).where(eq(users.id, id2)).limit(1);
+      sv2 = typeof rows[0]?.v === 'number' ? rows[0].v : undefined;
+    } catch { /* ignore */ }
+    if (initSocket && typeof sv1 === 'number') initSocket.emit('trade_settled', { saveVersion: sv1 });
+    if (partSocket && typeof sv2 === 'number') partSocket.emit('trade_settled', { saveVersion: sv2 });
     audit({
       kind: 'trade_execute',
       sessionId: session.tradeId,
       actorTg: session.initiatorUserId,
-      detail: { a: session.initiatorUserId, b: session.partnerUserId, p1: session.p1Offers, p2: session.p2Offers },
+      detail: { a: session.initiatorUserId, b: session.partnerUserId, p1: session.p1Offers, p2: session.p2Offers, sv1, sv2 },
     });
   } catch (err) {
     console.error('[trade] executeTradeSwap failed:', err);

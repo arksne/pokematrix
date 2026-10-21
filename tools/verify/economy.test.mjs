@@ -48,6 +48,10 @@ const sockB = await connect(tokenB, 'B');
     check('E2', 'PvP: посторонний не получает награду за чужой бой', reward === null,
       reward ? `НАГРАДА ВЫДАЧА: ${JSON.stringify(reward)}` : 'награды нет');
     sockC.close();
+    // Бой A–B остался открытым: закрываем поражением B (награда A),
+    // иначе IN_BATTLE-гард не даст начать следующие бои.
+    sockB.emit('pvp_end', { battleId, action: { type: 'lose' } });
+    await sleep(500);
   }
 }
 
@@ -80,6 +84,26 @@ const sockB = await connect(tokenB, 'B');
     await sleep(2000);
     check('E4', 'PvP: повторный pvp_end не начисляет награду дважды', rewards.length <= 1,
       `наград: ${rewards.length} (ожидается не больше 1)`);
+  }
+}
+
+// ── E9: второй параллельный бой той же пары отклоняется ──
+// Два живых боя давали задвоенные атаки в одном окне клиента и рвали сеттл.
+{
+  const battleId = await startPvP(sockA, sockB, B_ID);
+  if (!battleId) {
+    check('E9', 'PvP: второй бой при открытом первом отклоняется', false, 'первый бой не начался');
+  } else {
+    const rejP = onceEvent(sockA, 'pvp_challenge_rejected', 3000);
+    const noStartB = onceEvent(sockB, 'pvp_start', 2000);
+    sockA.emit('pvp_challenge', B_ID);
+    const rej = await rejP;
+    const noStart = await noStartB;
+    check('E9', 'PvP: второй бой при открытом первом отклоняется',
+      !!rej && rej.reason === 'IN_BATTLE' && noStart === null,
+      rej ? `reason=${rej.reason}, второй старт: ${noStart ? 'ЕСТЬ!' : 'нет'}` : 'отклонения не было');
+    sockB.emit('pvp_end', { battleId, action: { type: 'lose' } });
+    await sleep(500);
   }
 }
 
