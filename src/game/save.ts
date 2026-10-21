@@ -855,6 +855,15 @@ function noteSaveError(code: number | string): void {
   try { state.lastSaveError = { code, at: Date.now() }; } catch { /* ignore */ }
 }
 
+/** Кольцевой журнал событий (бой/сейв) для диагностики по тапу. */
+export function diagLog(msg: string): void {
+  try {
+    const t = new Date().toISOString().slice(11, 19);
+    state.diagLog.push(`${t} ${msg}`);
+    while (state.diagLog.length > 15) state.diagLog.shift();
+  } catch { /* ignore */ }
+}
+
 /** true, если последний cloudLoad упал по сети (а не «сейва нет»).
  *  Нужно загрузке, чтобы отличить «новый игрок» ({}) от «оффлайна» (null). */
 export let cloudUnreachable = false;

@@ -205,53 +205,60 @@ export async function updatePvPUI() {
   document.getElementById('pvp-turn-indicator').style.color = state.pvpMyTurn ? '#34c759' : '#ff9500';
 
   // ── Загрузка атак ──
-  // Список атак берём из PokeAPI по apiData.id, а не из сохранённого
-  // apiData.moves: в сейв кладётся только 4 боевых слота, а перебрать нужно
-  // весь лёрнсет с level_learned_at. Раньше здесь читался
-  // apiData.moves[].version_group_details из сейва, поэтому сохранять его
-  // было нельзя — это 90% объёма apiData.
+  // ТОЛЬКО реальные мувы покемона (apiData.moves — 4 боевых слота из сейва:
+  // стартовые, выученные по уровню, TM). Раньше список собирался из всего
+  // лёрнсета PokeAPI (топ-4 по уровню) — в бою показывались «рандомные» атаки,
+  // которых у мона нет. Фолбэк на лёрнсет — только для старых сейвов без moves.
   const movesDiv = document.getElementById('pvp-moves');
   movesDiv.innerHTML = '';
   state.pvpMovesDetailed = [];
 
+  const savedMoves = (mon.apiData?.moves || [])
+    .filter((m: any) => m?.move?.name)
+    .slice(0, 4)
+    .map((m: any) => ({ name: m.move.name, url: m.move.url || '' }));
+
   const speciesId = mon.apiData?.id;
-  if (!speciesId) {
+  let topMoves: Array<{ name: string; url: string; level?: number }> = [];
+  if (savedMoves.length > 0) {
+    topMoves = savedMoves;
+  } else if (!speciesId) {
     movesDiv.innerHTML = '<span class="text-muted">Нет данных о покемоне</span>';
     return;
-  }
-
-  const seen = new Set();
-  const lm = [];
-  try {
-    const r = await fetch(`/api/pokeapi/pokemon/${speciesId}`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const pokeData = await r.json();
-    for (const entry of pokeData.moves || []) {
-      if (!entry.move?.url) continue;
-      const vgd = entry.version_group_details || [];
-      let learnLevel = 0;
-      let isLevelUp = false;
-      for (const detail of vgd) {
-        if (detail.move_learn_method?.name === 'level-up') {
-          learnLevel = detail.level_learned_at || 0;
-          isLevelUp = true;
-          break;
+  } else {
+    const seen = new Set();
+    const lm = [];
+    try {
+      const r = await fetch(`/api/pokeapi/pokemon/${speciesId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const pokeData = await r.json();
+      for (const entry of pokeData.moves || []) {
+        if (!entry.move?.url) continue;
+        const vgd = entry.version_group_details || [];
+        let learnLevel = 0;
+        let isLevelUp = false;
+        for (const detail of vgd) {
+          if (detail.move_learn_method?.name === 'level-up') {
+            learnLevel = detail.level_learned_at || 0;
+            isLevelUp = true;
+            break;
+          }
+        }
+        if (isLevelUp && learnLevel <= curLvl && !seen.has(entry.move.name)) {
+          seen.add(entry.move.name);
+          lm.push({ name: entry.move.name, url: entry.move.url, level: learnLevel });
         }
       }
-      if (isLevelUp && learnLevel <= curLvl && !seen.has(entry.move.name)) {
-        seen.add(entry.move.name);
-        lm.push({ name: entry.move.name, url: entry.move.url, level: learnLevel });
-      }
+    } catch (err) {
+      console.warn('[pvp] не удалось загрузить список атак:', err);
+      movesDiv.innerHTML = '<span class="text-muted">Не удалось загрузить атаки</span>';
+      return;
     }
-  } catch (err) {
-    console.warn('[pvp] не удалось загрузить список атак:', err);
-    movesDiv.innerHTML = '<span class="text-muted">Не удалось загрузить атаки</span>';
-    return;
-  }
 
-  // Сортируем: последние выученные атаки — первыми
-  lm.sort((a, b) => b.level - a.level);
-  const topMoves = lm.slice(0, 4); // Топ-4 атаки
+    // Сортируем: последние выученные атаки — первыми
+    lm.sort((a, b) => b.level - a.level);
+    topMoves = lm.slice(0, 4); // Топ-4 атаки
+  }
   state.pvpMovesDetailed = topMoves.map(() => null);
 
   // Протухший рендер (новее уже стартовал): выходим до вставки в DOM,
@@ -344,7 +351,10 @@ export function endPvP(won, announce = true) {
   showToast(won ? '🏆 Победа в PvP!' : '💀 Поражение в PvP...', !won);
   if (won) checkAchievement('pvp_win');
   // Награда теперь выдается сервером (слушаем pvp_reward)
-  document.getElementById('pvp-modal').style.display = 'none';
+  // Модалку гасим с паузой: мгновенное закрытие в момент нокаута читалось
+  // как «кик из боя». Бой уже учтён (pvpBattleId сброшен ниже), тапы harmless.
+  const modal = document.getElementById('pvp-modal');
+  setTimeout(() => { try { if (modal) modal.style.display = 'none'; } catch { /* ignore */ } }, 1200);
   // announce=false — бой уже закрыт сервером (AFK-таймаут): pvp_end не шлём,
   // иначе будет двойное начисление и лишний цикл. Сеттла с подъёмом версии
   // там тоже нет (только рейтинг) — сейв безопасен сразу.

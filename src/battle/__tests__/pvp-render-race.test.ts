@@ -87,4 +87,26 @@ describe('updatePvPUI: перекрывающиеся рендеры не дво
     await new Promise((r) => setTimeout(r, 0));
     expect(movesDiv.children.length).toBe(4);
   });
+
+  it('кнопки — реальные мувы покемона из сейва, а не лёрнсет', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => learnset(['x1', 'x2', 'x3', 'x4']) }));
+    vi.stubGlobal('fetch', fetchMock);
+    state.pvpMyMon = {
+      baseLevel: 100, candiesEaten: 0, currentHp: 146, maxHp: 350,
+      apiData: {
+        id: 130,
+        moves: [
+          { move: { name: 'waterfall', url: 'https://pokeapi.co/api/v2/move/127/' } },
+          { move: { name: 'crunch', url: 'https://pokeapi.co/api/v2/move/242/' } },
+        ],
+      },
+      nickname: 'gyarados',
+    } as any;
+    await updatePvPUI();
+    await new Promise((r) => setTimeout(r, 0));
+    // fetch лёрнсета вообще не нужен: мувы уже есть в сейве
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(movesDiv.children.length).toBe(2);
+    expect(movesDiv.children.map((b: any) => b.textContent)).toEqual(['waterfall', 'crunch']);
+  });
 });
