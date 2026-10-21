@@ -69,6 +69,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
   state.pvpOpponentName = opponent;
   state.pvpMyTurn = myFirst;
   state.pvpMyMon = alive;
+  state.pvpEndSent = false; // новый бой — pvp_end ещё не слали
 
   // ── Создание модалки (если ещё не создана) ──
   let modal = document.getElementById('pvp-modal');
@@ -108,6 +109,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
       modal.style.display = 'none';
       state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: 'surrender' } });
       state.pvpBattleId = null;
+      state.pvpEndSent = true;
       // Сеттл поднимет версию (победителю — награда, мне на арене — утешительные):
       // сейв только после подтверждения, иначе 409 + тост (см. deferSettleSave).
       deferSettleSave();
@@ -314,14 +316,21 @@ export function doPvPAttack(moveIdx) {
   const moveName = detailed?.name || 'Атака';
   const lvl = state.pvpMyMon.baseLevel + (state.pvpMyMon.candiesEaten || 0);
   const atk = (state.pvpMyMon.apiData?.stats?.[1]?.base_stat || 60); // Base Attack
+  // Статус-атаки (damage_class=status или power=null) урона НЕ наносят:
+  // раньше power падал на дефолт 60 и танец снимал пол-HP. Неизвестная атака
+  // (детали не загрузились) — считаем боевой с power 60, как раньше.
+  const isStatus = detailed != null
+    && (detailed.damage_class?.name === 'status' || detailed.power == null);
   const power = detailed?.power || 60;
   // Упрощённая формула урона (без учёта STAB, типов, защит и т.д.)
   const rawDmg = Math.floor(((lvl * power * (atk / 100)) / 15) * (0.85 + Math.random() * 0.3));
   const crit = Math.random() < 0.0625; // 1/16 шанс крита
-  const dmg = crit ? Math.floor(rawDmg * 1.5) : rawDmg;
+  const dmg = isStatus ? 0 : (crit ? Math.floor(rawDmg * 1.5) : rawDmg);
 
   const logEl = document.getElementById('pvp-log');
-  logEl.innerHTML = `Вы: ${moveName}! ${crit ? '💥Крит! ' : ''}(-${dmg})\n${logEl.innerHTML}`;
+  logEl.innerHTML = isStatus
+    ? `Вы: ${moveName}!\n${logEl.innerHTML}`
+    : `Вы: ${moveName}! ${crit ? '💥Крит! ' : ''}(-${dmg})\n${logEl.innerHTML}`;
 
   state.pvpMyTurn = false; // Передаём ход оппоненту
   // Отправляем данные атаки + статы для server-authoritative валидации
@@ -333,21 +342,27 @@ export function doPvPAttack(moveIdx) {
 }
 
 /**
- * endPvP — завершить PvP-бой.
+ * endPvP — завершить PvP-бой (победа/поражение).
  *
  * ЧТО ДЕЛАЕТ:
  *   1. Показывает toast с результатом (победа/поражение)
  *   2. При победе: +500 кредитов
- *   3. Закрывает модалку
+ *   3. Закрывает модалку (с паузой на нокаут — мгновенное гашение читалось как кик)
  *   4. Отправляет результат на сервер
  *   5. Сбрасывает state.pvpBattleId
  *   6. Откладывает автосейв до сеттл-подтверждения (deferSettleSave):
  *      мгновенный сейв слал протухшую версию и получал 409 с тостом
  *      «более новая версия» ровно в конце боя.
  *
+ * Двойной вызов (hp_update{fainted} + следом fainted) шлёт pvp_end ОДИН раз:
+ * сервер идемпотентен, но второй тост/таймер — мусор в UI.
  * ГДЕ ВЫЗЫВАЕТСЯ: из обработчика socket → 'pvp_result'
  */
 export function endPvP(won, announce = true) {
+  // Дубль (hp_update{fainted} + следом fainted): второй вызов — молча, иначе
+  // двоятся тост победы и лишние таймеры. Сервер и так идемпотентен.
+  if (announce && state.pvpEndSent) return;
+  if (announce) state.pvpEndSent = true;
   showToast(won ? '🏆 Победа в PvP!' : '💀 Поражение в PvP...', !won);
   if (won) checkAchievement('pvp_win');
   // Награда теперь выдается сервером (слушаем pvp_reward)

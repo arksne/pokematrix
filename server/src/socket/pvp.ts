@@ -13,7 +13,7 @@
  */
 import type { Server, Socket } from 'socket.io';
 import { parseSaveStrict, stampSave } from '../db/save-json.js';
-import { getOnlinePlayerByUserId } from './lobby.js';
+import { getOnlinePlayerByUserId, getOnlinePlayersByUserId } from './lobby.js';
 import { audit } from './audit.js';
 import { getDb } from '../db/index.js';
 import { users, battleRatings, arenaStats } from '../db/schema.js';
@@ -42,7 +42,13 @@ const pendingChallenges = new Map<string, { partnerUserId: number; challengerUse
 // Участники арены: socket.id → { tgId, имя, когда вошёл }.
 // Вход — только с жетоном arenaToken (сгорает при входе, списывает сервер).
 // Бои арены идут по тому же протоколу challenge/accept/start/action/end.
-const arenaMembers = new Map<string, { userId: number; username: string; joinedAt: number }>();
+const arenaMembers = new Map<number, { socketId: string; username: string; joinedAt: number }>();
+
+/** Участник арены по tgId (а не по socket.id — переподключение не должно
+ *  выкидывать с арены и заставлять платить жетон заново). */
+function inArena(userId: number): boolean {
+  return arenaMembers.has(userId);
+}
 
 /** ID жетона участия (паритет с src/battle/arena.ts). */
 const ARENA_TOKEN_ID = 'arenaToken';
@@ -74,10 +80,10 @@ function arenaLobbyList() {
   for (const b of activeBattles.values()) {
     if (b.arena) { inBattleUsers.add(b.userA); inBattleUsers.add(b.userB); }
   }
-  return [...arenaMembers.values()].map((m) => ({
-    userId: m.userId,
+  return [...arenaMembers.entries()].map(([userId, m]) => ({
+    userId,
     username: m.username,
-    inBattle: inBattleUsers.has(m.userId),
+    inBattle: inBattleUsers.has(userId),
   }));
 }
 
@@ -191,16 +197,19 @@ function isUserInBattle(userId: number): boolean {
  * его отложенный сейв уйдёт со старой версией → 409 + тост «более новая
  * версия» ровно в конце боя. Старый id — только фолбэк.
  */
-export function liveSocketFor(io: Server, userTg: number, fallbackId?: string | null) {  const online = getOnlinePlayerByUserId(userTg);
-  const fresh = online ? io.sockets.sockets.get(online.socketId) : undefined;
-  if (fresh?.connected) return fresh;
+export function liveSocketFor(io: Server, userTg: number, fallbackId?: string | null) {
+  // Перебираем ВСЕ сокеты юзера от свежего: первый может быть умирающим
+  // (disconnect ещё в обработке, connected уже false — пропускаем).
+  for (const online of getOnlinePlayersByUserId(userTg)) {
+    const s = io.sockets.sockets.get(online.socketId);
+    if (s?.connected) return s;
+  }
   if (fallbackId) {
     const old = io.sockets.sockets.get(fallbackId);
     if (old?.connected) return old;
   }
   return undefined;
 }
-
 /** Уборка боёв по TTL. Без неё карта жила до перезапуска процесса. */
 async function sweepBattles(io: Server) {
   const now = Date.now();
@@ -211,7 +220,9 @@ async function sweepBattles(io: Server) {
     liveSocketFor(io, ch.challengerUserId, sockId)?.emit('pvp_challenge_timeout', {});
   }
   for (const [battleId, b] of [...activeBattles]) {
-    if (now - b.startedAt < BATTLE_TTL_MS && now - b.lastActivityAt < INACTIVITY_TTL_MS) continue;
+    // Удаляем только по тишине 90с: лимит общего времени убивал длинные
+    // честные бои («Бой прерван» без наград при активной рубке).
+    if (now - b.lastActivityAt < INACTIVITY_TTL_MS) continue;
     activeBattles.delete(battleId);
     const timedOut = now - b.lastActivityAt >= INACTIVITY_TTL_MS;
     if (timedOut && b.lastActorSocketId) {
@@ -229,7 +240,7 @@ async function sweepBattles(io: Server) {
 }
 
 /** AFK-победа активной стороне: рейтинг без денег. */
-async function settleTimeoutWin(io: Server, b: { playerA: string; playerB: string; userA: number; userB: number; lastActorSocketId: string | null }) {
+async function settleTimeoutWin(io: Server, b: { playerA: string; playerB: string; userA: number; userB: number; lastActorSocketId: string | null; arena?: boolean }) {
   const winnerSockId = b.lastActorSocketId!;
   const winnerIsA = winnerSockId === b.playerA;
   const winnerTg = winnerIsA ? b.userA : b.userB;
@@ -242,6 +253,15 @@ async function settleTimeoutWin(io: Server, b: { playerA: string; playerB: strin
     const lId = byTg.get(loserTg);
     if (wId) await updateOrCreateRating(db, wId, 10, true);
     if (lId) await updateOrCreateRating(db, lId, -5, false);
+    // Арена: AFK — это поражение неактивной стороны: стрик сгорает (иначе
+    // выгодно уходить в AFK вместо поражения, сохраняя стрик). Денег нет
+    // обеим (антифарм альтов), утешительных тоже.
+    if (b.arena && lId) {
+      try {
+        await db.update(arenaStats).set({ streak: 0, updated_at: new Date().toISOString() })
+          .where(eq(arenaStats.user_id, lId));
+      } catch { /* ignore */ }
+    }
   } catch (e) {
     console.error('[pvp] timeout rating error:', e);
   }
@@ -274,8 +294,8 @@ export function initPvP(io: Server, socket: Socket) {
 
     // Бой с арены — только между участниками арены (оба вошли по жетону).
     if (wantArena) {
-      const partnerInArena = [...arenaMembers.values()].some((m) => m.userId === partnerUserId);
-      if (!arenaMembers.has(socket.id) || !partnerInArena) {
+      const partnerInArena = inArena(partnerUserId);
+      if (!inArena(myUserId) || !partnerInArena) {
         socket.emit('pvp_challenge_rejected', { reason: 'NOT_IN_ARENA' });
         return;
       }
@@ -332,13 +352,13 @@ export function initPvP(io: Server, socket: Socket) {
     }
 
     // M-18: бой аренный, только если вызов был с арены (с любой стороны
-    // флаг) И оба до сих пор на арене (жетон уже сожжён при входе).
+    // флаг) И оба до сих пор на арене (участники — по tgId, переживают реконнект).
     const pendingArena = [...pendingChallenges.values()].some(
       (p) => p.arena && (p.partnerUserId === myUserId || p.partnerUserId === challengerUserId),
     );
     const arena = (acceptArena || pendingArena)
-      && arenaMembers.has(challenger.socketId)
-      && arenaMembers.has(socket.id);
+      && inArena(challengerUserId)
+      && inArena(myUserId);
 
     const battleId = `pvp_${socket.id}_${challenger.socketId}_${Date.now()}`;
     activeBattles.set(battleId, {
@@ -371,10 +391,14 @@ export function initPvP(io: Server, socket: Socket) {
   socket.on('arena_join', async () => {
     const tgId = socket.data.user?.tgId;
     if (!tgId) return;
-    if (arenaMembers.has(socket.id)) {
+    if (inArena(tgId)) {
       // Вдогонку — свежая версия: если клиент когда-то разошёлся с сервером,
       // повторный вход молча чинит рассинхрон вместо грядущего 409.
       // Версия — приятное дополнение, не причина ронять вход.
+      // Жетон НЕ сжигаем повторно: участник уже внутри (иначе дабл-клик
+      // съедал второй жетон на 100k). Сокет обновляем (переподключение).
+      const m = arenaMembers.get(tgId)!;
+      m.socketId = socket.id;
       let sv: number | undefined;
       try {
         const db = getDb();
@@ -413,8 +437,8 @@ export function initPvP(io: Server, socket: Socket) {
         socket.emit('arena_join_rejected', { reason: 'NO_TOKEN' });
         return;
       }
-      arenaMembers.set(socket.id, {
-        userId: tgId,
+      arenaMembers.set(tgId, {
+        socketId: socket.id,
         username: socket.data.user?.firstName || socket.data.user?.username || 'Тренер',
         joinedAt: Date.now(),
       });
@@ -428,7 +452,11 @@ export function initPvP(io: Server, socket: Socket) {
   });
 
   socket.on('arena_leave', () => {
-    if (arenaMembers.delete(socket.id)) broadcastArenaLobby(io);
+    const tgId = socket.data.user?.tgId;
+    if (typeof tgId === 'number' && arenaMembers.get(tgId)?.socketId === socket.id) {
+      arenaMembers.delete(tgId);
+      broadcastArenaLobby(io);
+    }
   });
 
   // Текущий снимок лобби по запросу (клиент спрашивает при открытии вкладки).
@@ -438,7 +466,15 @@ export function initPvP(io: Server, socket: Socket) {
 
   // ── pvp_decline ──
   socket.on('pvp_decline', (fromId: number) => {
-    pendingChallenges.delete(socket.id);
+    // Чистим запись ВЫЗЫВАВШЕГО (ключ — его socket.id): раньше удалялся ключ
+    // отклонившего (пустой), и вызывавший через 60с получал ложный timeout
+    // поверх «отклонил».
+    const myId = socket.data.user?.tgId;
+    for (const [key, ch] of [...pendingChallenges]) {
+      if (ch.partnerUserId === myId && Number(fromId) === ch.challengerUserId) {
+        pendingChallenges.delete(key);
+      }
+    }
     const challenger = getOnlinePlayerByUserId(fromId);
     if (!challenger) return;
     const challengerSocket = io.sockets.sockets.get(challenger.socketId);
@@ -453,12 +489,20 @@ export function initPvP(io: Server, socket: Socket) {
     if (!found) return; // не участник боя
     const { battle } = found;
     battle.lastActivityAt = Date.now();
-    battle.lastActorSocketId = socket.id;
+    // AFK-атрибуция — только волевые ходы (атака/смена/сдача): автоответы
+    // hp_update/mon_data её не трогают, иначе победителем становился автор
+    // последней автоотбивки, а не тот, кто реально ходит.
+    if (data.action?.type === 'attack' || data.action?.type === 'switch' || data.action?.type === 'surrender') {
+      battle.lastActorSocketId = socket.id;
+    }
 
     // ── Валидация типа действия ──
     const validTypes = ['attack', 'switch', 'surrender', 'mon_data', 'fainted', 'hp_update'];
     if (data.action?.type && !validTypes.includes(data.action.type)) {
       console.warn(`[pvp] Invalid action type from ${socket.id}: ${data.action.type}`);
+      // Неизвестный тип НЕ дропаем молча: клиент уже переключил ход
+      // (pvpMyTurn=false) и зависнет до sweep без этого ответа.
+      socket.emit('pvp_action_rejected', { reason: 'Unknown action type' });
       return;
     }
 
@@ -476,7 +520,9 @@ export function initPvP(io: Server, socket: Socket) {
       const myLevel = clampInt(action.lvl ?? action.level, 1, 100);
       const power = clampInt(action.power, 1, 250);
       // Атака берётся из сейма отправителя; при недоступности — консервативный минимум.
-      const atk = clampInt(action.atk, 1, 1000);
+      // Потолок 600 — щедрый реальный максимум стата на 100 уровне; 1000 дарил
+      // читерам двукратный урон поверх формулы.
+      const atk = clampInt(action.atk, 1, 600);
       if (!Number.isFinite(myUserId) || myLevel < 1 || power < 1 || atk < 1) {
         socket.emit('pvp_action_rejected', { reason: 'Invalid attack data' });
         return;
@@ -535,9 +581,9 @@ export function initPvP(io: Server, socket: Socket) {
     const opponentTg = socket.id === battle.playerA ? battle.userB : battle.userA;
     const opponentSocket = liveSocketFor(io, opponentTg, opponentSocketId);
 
-    // Пересылаем оппоненту
+    // Пересылаем оппоненту (с battleId — клиент отбрасывает чужие потоки).
     if (opponentSocket) {
-      opponentSocket.emit('pvp_opponent_action', data?.action);
+      opponentSocket.emit('pvp_opponent_action', { ...data?.action, battleId });
     }
 
     try {
@@ -707,8 +753,18 @@ export function initPvP(io: Server, socket: Socket) {
   // Тест-ловушка: PC18/E10 закрывают второй сокет при живом первом.
   socket.on('disconnect', () => {
     pendingChallenges.delete(socket.id);
-    if (arenaMembers.delete(socket.id)) broadcastArenaLobby(io);
     const tg = socket.data.user?.tgId;
+    // Арена — по tgId: удаляем только свою запись и только если сокет тот же
+    // (чужой живой сокет того же юзера — не трогаем). Переподключение с арены
+    // не выкидывает и жетон не требует заново.
+    if (typeof tg === 'number') {
+      const m = arenaMembers.get(tg);
+      if (m && m.socketId === socket.id) {
+        const live = liveSocketFor(io, tg, null);
+        if (live) m.socketId = live.id;
+        else { arenaMembers.delete(tg); broadcastArenaLobby(io); }
+      }
+    }
     let replacement: string | null = null;
     if (typeof tg === 'number') {
       for (const [sid, s] of io.sockets.sockets) {
@@ -727,10 +783,13 @@ export function initPvP(io: Server, socket: Socket) {
           console.log(`[pvp] reattach-on-disconnect battleId=${battleId} user=${tg}`);
           continue;
         }
+        // Честный маркер вместо фейкового 'surrender': награды не было,
+        // клиент показывает «отключился», а не «сдался».
         const otherSocketId = battle.playerA === socket.id ? battle.playerB : battle.playerA;
-        const otherSocket = io.sockets.sockets.get(otherSocketId);
+        const otherSocket = liveSocketFor(io,
+          battle.playerA === socket.id ? battle.userB : battle.userA, otherSocketId);
         if (otherSocket) {
-          otherSocket.emit('pvp_opponent_action', { type: 'surrender' });
+          otherSocket.emit('pvp_opponent_action', { type: 'opponent_left', battleId });
         }
         activeBattles.delete(battleId);
       }

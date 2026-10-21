@@ -29,6 +29,7 @@ const autoSaveMock = autoSave as unknown as ReturnType<typeof vi.fn>;
 function resetState() {
   state.pvpBattleId = null;
   state.settlePending = false;
+  state.pvpEndSent = false;
   if (state.settleTimer) { clearTimeout(state.settleTimer); state.settleTimer = null; }
   state.saveDirty = false;
   state.socket = { emit: vi.fn() };
@@ -80,6 +81,16 @@ describe('отложенный сейв конца боя', () => {
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(10000);
     expect(autoSaveMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('двойной endPvP (hp_update + fainted) шлёт pvp_end один раз', () => {
+    state.pvpBattleId = 'pvp_x';
+    endPvP(true);
+    endPvP(true);
+    const ends = state.socket.emit.mock.calls.filter((c: any[]) => c[0] === 'pvp_end');
+    expect(ends.length).toBe(1);
+    expect(autoSaveMock).not.toHaveBeenCalled();
+    expect(state.settlePending).toBe(true);
   });
 
   it('AFK-таймаут (announce=false) сохраняется сразу: сеттла с версией там нет', () => {

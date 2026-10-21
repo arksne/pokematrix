@@ -370,10 +370,10 @@ export function initTradeSocket() {
       m.renderArenaStatus();
     }).catch(() => {});
   });
-  state.socket.on('arena_joined', (data?: { saveVersion?: number }) => {
-    showToast('🎟️ Вы на арене! Жетон сгорел.', false);
+  state.socket.on('arena_joined', (data?: { saveVersion?: number; already?: boolean }) => {
+    showToast(data?.already === true ? 'Вы уже на арене.' : '🎟️ Вы на арене! Жетон сгорел.', false);
     adoptServerSaveVersion(data?.saveVersion);
-    import('../ui/pvp-arena.js').then((m) => m.onArenaJoined(data?.saveVersion)).catch(() => {});
+    import('../ui/pvp-arena.js').then((m) => m.onArenaJoined(data?.saveVersion, data?.already)).catch(() => {});
   });
   state.socket.on('arena_join_rejected', (data) => {
     const reason = data?.reason === 'NO_TOKEN'
@@ -409,6 +409,17 @@ export function initTradeSocket() {
     // Чужой поток (второй живой бой той же пары): не рендерим, иначе атаки
     // двоятся в одном окне. Старый сервер battleId не шлёт — пропускаем.
     if (action?.battleId && action.battleId !== state.pvpBattleId) return;
+    // Оппонент отключился (сервер удалил бой): честное завершение без награды.
+    // Битый/неизвестный пейлоад — туда же, а не молчаливое зависание.
+    if (!action || typeof action !== 'object' || action.type === 'opponent_left') {
+      const pvpModal = document.getElementById('pvp-modal');
+      if (pvpModal) pvpModal.style.display = 'none';
+      showToast('Соперник отключился — бой завершён без награды', true);
+      state.pvpBattleId = null;
+      state.pvpMyTurn = false;
+      autoSave();
+      return;
+    }
     if (action.type === 'mon_data') {
       const oppNameEl = document.getElementById('pvp-opp-name');
       const oppLvlEl = document.getElementById('pvp-opp-lvl');

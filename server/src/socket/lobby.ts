@@ -106,10 +106,12 @@ export function getOnlinePlayer(socketId: string): OnlinePlayer | undefined {
  * сеттла и получит 409 + тост «более новая версия» в конце боя.
  */
 export function getOnlinePlayerByUserId(userId: number): OnlinePlayer | undefined {
-  let best: OnlinePlayer | undefined;
-  for (const player of onlinePlayers.values()) {
-    if (player.userId !== userId) continue;
-    if (!best || (player.lastPing || 0) > (best.lastPing || 0)) best = player;
-  }
-  return best;
+  return getOnlinePlayersByUserId(userId)[0];
+}
+
+/** Все сокеты юзера, свежие первыми (для перебора живых). */
+export function getOnlinePlayersByUserId(userId: number): OnlinePlayer[] {
+  return [...onlinePlayers.values()]
+    .filter((p) => p.userId === userId)
+    .sort((a, b) => (b.lastPing || 0) - (a.lastPing || 0));
 }

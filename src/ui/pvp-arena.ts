@@ -218,15 +218,21 @@ export function renderArenaLeaders() {
 // Клиент зеркалит списание, иначе следующий автосейв воскресит жетон.
 // Версию сейва тоже принимаем от сервера: его запись сожгла жетон и
 // подняла save_version, без этого следующий автосейв 409ит.
-export function onArenaJoined(saveVersion?: unknown) {
+// already=true (повторный вход): жетон НЕ сжигаем повторно — иначе дабл-клик
+// съедал второй жетон, и сейв фиксировал фантомную трату.
+export function onArenaJoined(saveVersion?: unknown, already?: unknown) {
   state.inArena = true;
   adoptServerSaveVersion(saveVersion);
-  const qty = state.inventory?.[ARENA_TOKEN_ID] || 0;
-  if (qty > 1) {
-    state.inventory[ARENA_TOKEN_ID] = qty - 1;
+  if (already !== true) {
+    const qty = state.inventory?.[ARENA_TOKEN_ID] || 0;
+    if (qty > 1) {
+      state.inventory[ARENA_TOKEN_ID] = qty - 1;
+    } else {
+      delete state.inventory[ARENA_TOKEN_ID];
+    }
+    renderArenaStatus();
+    autoSave();
   } else {
-    delete state.inventory[ARENA_TOKEN_ID];
+    renderArenaStatus();
   }
-  renderArenaStatus();
-  autoSave();
 }
