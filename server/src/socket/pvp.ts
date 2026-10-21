@@ -676,11 +676,33 @@ export function initPvP(io: Server, socket: Socket) {
   });
 
   // ── disconnect → очистка PvP ──
+  // Переподключение (новый socket.id) НЕ должно убивать бой: сначала ищем
+  // другой живой сокет того же юзера и перепривязываем бой на него. Иначе
+  // реконнект посреди боя удалял бой + слал оппоненту фейковое 'surrender',
+  // а вернувшийся игрок упирался в удалённый бой (вечный фриз → «вылет»).
+  // Тест-ловушка: PC18/E10 закрывают второй сокет при живом первом.
   socket.on('disconnect', () => {
     pendingChallenges.delete(socket.id);
     if (arenaMembers.delete(socket.id)) broadcastArenaLobby(io);
+    const tg = socket.data.user?.tgId;
+    let replacement: string | null = null;
+    if (typeof tg === 'number') {
+      for (const [sid, s] of io.sockets.sockets) {
+        if (sid !== socket.id && s.connected && (s.data.user as any)?.tgId === tg) {
+          replacement = sid;
+          break;
+        }
+      }
+    }
     for (const [battleId, battle] of activeBattles) {
       if (battle.playerA === socket.id || battle.playerB === socket.id) {
+        if (replacement) {
+          if (battle.playerA === socket.id) battle.playerA = replacement;
+          if (battle.playerB === socket.id) battle.playerB = replacement;
+          battle.lastActivityAt = Date.now();
+          console.log(`[pvp] reattach-on-disconnect battleId=${battleId} user=${tg}`);
+          continue;
+        }
         const otherSocketId = battle.playerA === socket.id ? battle.playerB : battle.playerA;
         const otherSocket = io.sockets.sockets.get(otherSocketId);
         if (otherSocket) {

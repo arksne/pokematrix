@@ -151,24 +151,20 @@ for (;;) {
       const cand = io(BASE, {
         auth: { token },
         transports: ['websocket'],
-        reconnection: true,
-        reconnectionDelay: 2000,
-        reconnectionDelayMax: 10000,
+        reconnection: false,
       });
       cand.on('connect', () => {
         console.log(`[${ts()}] [bot] сокет подключён, онлайн как ${BOT_NAME} (tg ${BOT_ID})`);
         cand.emit('join_lobby', {});
         resolve(cand);
       });
-      cand.on('connect_error', (e) => console.log(`[${ts()}] [bot] connect_error: ${e?.message}`));
+      cand.on('connect_error', (e) => {
+        console.log(`[${ts()}] [bot] connect_error: ${e?.message}`);
+        resolve(null);
+      });
       setTimeout(() => resolve(null), 25000);
     });
-    if (!s) {
-      console.log(`[${ts()}] [bot] не подключился, повтор через 10с`);
-      token = null;
-      await sleep(10000);
-      continue;
-    }
+    if (!s) throw new Error('connect failed');
     sock = s;
     battleId = null;
     wire(s);
