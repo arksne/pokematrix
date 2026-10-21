@@ -139,6 +139,11 @@ export const state: Record<string, any> = {
   pvpOppMon: null as any,          // Покемон оппонента
   pvpMyTurn: false,                // Флаг: мой ход
   pvpMovesDetailed: [] as Array<any>, // Детали атак в PvP
+  // Бой закончен локально, серверный сеттл (pvp_end → +версия) ещё в пути:
+  // автосейв отложен до pvp_reward/pvp_arena_update, иначе POST со старой
+  // версией получает 409 → тост «более новая версия» ровно в конце боя.
+  pvpSettlePending: false,       // ждём сеттл, сейвы отложены
+  pvpSettleTimer: null as any,   // фолбэк-таймер отложенного сейва
   // ── M-18: PvP-Арена ──────────────────────────────────────
   inArena: false,                  // Я на арене (вошёл по жетону)
   arenaLobby: [] as Array<any>,    // Кто на арене: [{ userId, username, inBattle }]

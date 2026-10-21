@@ -47,7 +47,7 @@ async function renderOnlinePlayers() { (await import('../social/trainer-profile.
 async function updateTrainerLocationList(data: any) { (await import('../social/trainer-profile.js')).updateTrainerLocationList(data); }
 import { showTradeRequestModal } from '../ui/trade-request.js';
 import { openTradeWindow, renderTradeOffers, updateTradeConfirmUI, closeTradeWindow } from '../ui/trade-window.js';
-import { openPvPArena, endPvP, updatePvPUI } from '../battle/pvp-core.js';
+import { openPvPArena, endPvP, updatePvPUI, deferBattleEndSave, settleBattleEndSave } from '../battle/pvp-core.js';
 import { renderTeamGrid, refreshProfileUI } from '../ui/profile.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { updateInventoryDisplay } from '../ui/inventory.js';
@@ -360,7 +360,8 @@ export function initTradeSocket() {
         showToast(`Утешительный приз арены: +¥${data.consolation.toLocaleString()}`, false);
       }
       import('../ui/pvp-arena.js').then((m) => m.renderArenaStatus()).catch(() => {});
-      autoSave();
+      // Сеттл подтверждён (версия принята выше): отложенный сейв можно слать.
+      settleBattleEndSave();
     }
   });
 
@@ -443,7 +444,9 @@ export function initTradeSocket() {
       const pvpModal = document.getElementById('pvp-modal');
       if (pvpModal) pvpModal.style.display = 'none';
       state.pvpBattleId = null;
-      autoSave();
+      // Пир уже сеттлит (или сеттлил): моя строка могла подняться —
+      // сейв только после pvp_reward, иначе 409 + тост.
+      deferBattleEndSave();
     }
     if (action.type === 'win' || action.type === 'lose') {
       // 'lose' от оппонента = ОН проиграл → победили мы (награда уже выдана
@@ -455,7 +458,8 @@ export function initTradeSocket() {
       const pvpModal = document.getElementById('pvp-modal');
       if (pvpModal) pvpModal.style.display = 'none';
       state.pvpBattleId = null;
-      autoSave();
+      // См. выше: сеттл пира в пути или уже случился — сейв откладываем.
+      deferBattleEndSave();
     }
   });
 
@@ -483,11 +487,12 @@ export function initTradeSocket() {
           m.renderArenaStatus();
           void m.refreshArenaLeaders();
         }).catch(() => {});
-        autoSave();
       } else {
         showToast(`🏆 +${data.money}¥ за победу в PvP!`, false);
       }
     }
+    // Сеттл подтверждён (версия принята выше): отложенный сейв конца боя можно слать.
+    settleBattleEndSave();
   });
 }
 
