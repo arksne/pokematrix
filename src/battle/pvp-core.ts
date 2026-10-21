@@ -179,8 +179,17 @@ export function confirmSettleSave(): void {
  * сортируются по уровню изучения (от высокого к низкому),
  * выбираются топ-4.
  */
+/**
+ * Счётчик рендеров updatePvPUI: функция асинхронна (fetch мувсета) и дёргается
+ * по 2–3 раза на событие (open + каждый attack/hp_update). Без барьера два
+ * перекрывшихся вызова давали 4+4=8 кнопок атак: чистка идёт ДО await,
+ * вставка — ПОСЛЕ. Протухший рендер отваливается, не трогая DOM.
+ */
+let pvpRenderSeq = 0;
+
 export async function updatePvPUI() {
   if (!state.pvpMyMon) return;
+  const seq = ++pvpRenderSeq;
   const mon = state.pvpMyMon;
   const curLvl = mon.baseLevel + (mon.candiesEaten || 0);
   // ── Свой покемон ──
@@ -245,10 +254,18 @@ export async function updatePvPUI() {
   const topMoves = lm.slice(0, 4); // Топ-4 атаки
   state.pvpMovesDetailed = topMoves.map(() => null);
 
+  // Протухший рендер (новее уже стартовал): выходим до вставки в DOM,
+  // иначе два перекрывшихся вызова дают задвоенные кнопки (4+4=8).
+  if (seq !== pvpRenderSeq) return;
+  // Чистим ПЕРЕД вставкой: чистка в начале функции уже могла устареть,
+  // пока шёл fetch (параллельный вызов успел вставить свои кнопки).
+  movesDiv.innerHTML = '';
+
   // Создаём кнопки для каждой атаки
   topMoves.forEach((m, i) => {
     // Асинхронная загрузка деталей атаки с сайта лиги (для определения типа)
     fetchSiteMoveDetail(m).then(d => {
+      if (seq !== pvpRenderSeq) return; // рендер уже протух
       state.pvpMovesDetailed[i] = d;
       const btns = movesDiv.querySelectorAll('.reborn-move-link');
       if (btns[i]) {
