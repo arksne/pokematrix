@@ -104,6 +104,9 @@ export async function connect(token, label = '') {
     if (label) console.log(`  !! ${label}: ${e.message}`);
   });
   s.emit('join_lobby', {});
+  const pingT = setInterval(() => { try { s.emit('lobby_ping'); } catch {} }, 30000);
+  if (pingT.unref) pingT.unref();
+  s.on('disconnect', () => clearInterval(pingT));
   await sleep(400);
   return s;
 }

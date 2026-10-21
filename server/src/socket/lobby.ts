@@ -12,6 +12,7 @@ interface OnlinePlayer {
   socketId: string; // то же, для совместимости
   username: string;
   userId: number;   // Telegram user ID
+  lastPing: number; // последний признак жизни (join_lobby / lobby_ping)
 }
 
 // Карта подключённых игроков
@@ -20,17 +21,17 @@ const onlinePlayers = new Map<string, OnlinePlayer>();
 let sweepTimer: NodeJS.Timeout | null = null;
 
 /**
- * Чистка онлайна по живости сокетов. disconnect не всегда доходит до
- * сервера (обрыв сети, замороженный WebView, падение клиента): запись
- * висела в карте вечно, и офлайн-тренеры светились зелёным. Раз в минуту
- * выкидываем записи с мёртвым сокетом и переиздаём список, если он изменился.
- * Живые сокеты не трогаем — старые клиенты без пингов не страдают.
+ * Чистка онлайна. Два условия удаления: мёртвый сокет ИЛИ тишина дольше
+ * 150с (протухший зомби: disconnect потерян, а TCP ещё кажется живым —
+ * именно такие дубли висели в списке рядом с живым сокетом, и награды
+ * уходили в мёртвый). Живые сокеты со свежими пингами не трогаем.
  */
 function sweepPresence(io: Server) {
+  const now = Date.now();
   let changed = false;
-  for (const [sockId] of onlinePlayers) {
+  for (const [sockId, p] of onlinePlayers) {
     const s = io.sockets.sockets.get(sockId);
-    if (!s?.connected) {
+    if (!s?.connected || now - (p.lastPing || 0) > 150_000) {
       onlinePlayers.delete(sockId);
       changed = true;
     }
@@ -60,6 +61,7 @@ export function initLobby(io: Server, socket: Socket) {
       socketId: socket.id,
       username: name,
       userId: id,
+      lastPing: Date.now(),
     });
 
     // Уведомить всех
@@ -72,6 +74,15 @@ export function initLobby(io: Server, socket: Socket) {
         last_seen: new Date().toISOString(),
       }).where(eq(users.tg_id, id));
     } catch {}
+  });
+
+  // ── lobby_ping ──
+  // Признак жизни каждые 30с: без него нельзя отличить живой сокет от зомби
+  // (disconnect потерян, TCP ещё дышит). Зомби-двойники уводили награды и
+  // вызовы в мёртвый сокет. Sweep чистит тишину старше 150с.
+  socket.on('lobby_ping', () => {
+    const p = onlinePlayers.get(socket.id);
+    if (p) p.lastPing = Date.now();
   });
 
   // ── disconnect ──
@@ -90,10 +101,15 @@ export function getOnlinePlayer(socketId: string): OnlinePlayer | undefined {
 
 /**
  * Получить OnlinePlayer по Telegram user ID.
+ * При дублях (реконнект, две вкладки) — САМЫЙ СВЕЖИЙ: награды и вызовы
+ * должны идти в живой сокет, а не в зомби, иначе клиент не примет версию
+ * сеттла и получит 409 + тост «более новая версия» в конце боя.
  */
 export function getOnlinePlayerByUserId(userId: number): OnlinePlayer | undefined {
+  let best: OnlinePlayer | undefined;
   for (const player of onlinePlayers.values()) {
-    if (player.userId === userId) return player;
+    if (player.userId !== userId) continue;
+    if (!best || (player.lastPing || 0) > (best.lastPing || 0)) best = player;
   }
-  return undefined;
+  return best;
 }

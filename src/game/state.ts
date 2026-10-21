@@ -110,6 +110,9 @@ export const state: Record<string, any> = {
   refreshToken: null as string | null, // Refresh token (30 дней, localStorage)
   isAdmin: false,                  // Флаг админа (проверяется на сервере)
   saveVersion: 0,                  // Версия сохранения (для deadlock detection)
+  // Диагностика рассинхрона (тап ×5 по облачку): что и когда пошло не так.
+  lastSaveError: null as any,     // { code, at } последнего отклонения сейва
+  lastReward: null as any,        // { money, saveVersion, at } последней награды
   lastCloudSync: 0,                // Timestamp последней облачной синхронизации
   saveRetryCount: 0,               // Счётчик повторных попыток сохранения
   saveInProgress: false,           // Флаг: идёт сохранение

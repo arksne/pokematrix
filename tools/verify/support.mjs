@@ -86,6 +86,10 @@ export async function connect(token, label = '') {
   // Клиент после подключения вступает в лобби; без этого игрока нет в
   // onlinePlayers и вызовы pvp_challenge / trade_request не находят партнёра.
   s.emit('join_lobby', {});
+  // Признак жизни: сервер чистит тишину старше 150с (зомби-сокеты).
+  const pingT = setInterval(() => { try { s.emit('lobby_ping'); } catch {} }, 30000);
+  if (pingT.unref) pingT.unref();
+  s.on('disconnect', () => clearInterval(pingT));
   await sleep(250);
   return s;
 }

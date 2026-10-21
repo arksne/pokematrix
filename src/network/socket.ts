@@ -55,6 +55,9 @@ import { autoSave, adoptServerSaveVersion } from '../game/save.js';
 import { trackNPCQuests } from '../game/quest-track.js';
 import { getSpriteUrl } from '../utils/sprite.js';
 
+/** Интервал lobby_ping (признак жизни для присутствия и наград). */
+let lobbyPingTimer: any = null;
+
 export function initTradeSocket() {
   if (state.socket) return;
   const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : API_BASE.replace('/api', '');
@@ -107,11 +110,19 @@ export function initTradeSocket() {
   state.socket.on('connect', () => {
     state.socket.emit('join_lobby', { username: state.tgUser?.first_name || state.tgUser?.username || 'Тренер', userId: state.tgUser?.id });
     initChatSocket();
+    // Признак жизни для присутствия и маршрутизации наград: без пинга сервер
+    // через 150с сочтёт сокет зомби и будет слать вызовы/награды в другой
+    // (см. lobby_ping). Старый интервал чистим, чтобы не плодить дубли.
+    if (lobbyPingTimer) clearInterval(lobbyPingTimer);
+    lobbyPingTimer = setInterval(() => {
+      try { state.socket?.emit('lobby_ping'); } catch { /* следующий тик повторит */ }
+    }, 30000);
   });
 
   state.socket.on('disconnect', () => {
     state.onlinePlayersList = [];
     renderOnlinePlayers();
+    if (lobbyPingTimer) { clearInterval(lobbyPingTimer); lobbyPingTimer = null; }
   });
 
   state.socket.on('location_update', (data) => {
@@ -268,6 +279,7 @@ export function initTradeSocket() {
   // и досылаем отложенный сейв.
   state.socket.on('trade_settled', (data: { saveVersion?: number }) => {
     adoptServerSaveVersion(data?.saveVersion);
+    try { state.lastReward = { money: 0, saveVersion: data?.saveVersion, at: Date.now() }; } catch { /* ignore */ }
     confirmSettleSave();
   });
 
@@ -499,6 +511,7 @@ export function initTradeSocket() {
   // уже лежат в серверном сейве, клиент зеркалит их в свой.
   state.socket.on('pvp_reward', (data: { money: number; items?: Array<{ id: string; qty: number }>; streak?: number; best?: number; wins?: number; arena?: boolean; saveVersion?: number }) => {
     adoptServerSaveVersion(data?.saveVersion);
+    try { state.lastReward = { money: data?.money || 0, saveVersion: data?.saveVersion, at: Date.now() }; } catch { /* ignore */ }
     if (data.money) {
       state.inventory['credit'] = (state.inventory['credit'] || 0) + data.money;
       updateMoneyDisplay();

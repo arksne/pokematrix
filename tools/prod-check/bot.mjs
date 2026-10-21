@@ -156,6 +156,9 @@ for (;;) {
       cand.on('connect', () => {
         console.log(`[${ts()}] [bot] сокет подключён, онлайн как ${BOT_NAME} (tg ${BOT_ID})`);
         cand.emit('join_lobby', {});
+        const pingT = setInterval(() => { try { cand.emit('lobby_ping'); } catch {} }, 30000);
+        if (pingT.unref) pingT.unref();
+        cand.on('disconnect', () => clearInterval(pingT));
         resolve(cand);
       });
       cand.on('connect_error', (e) => {

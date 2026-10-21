@@ -751,6 +751,7 @@ export async function doCloudSave(attempt = 0) {
     // 429 = rate limited — don't retry, just stop hammering the server
     if (res.status === 429) {
       console.warn('Cloud save rate-limited (429), backing off');
+      noteSaveError(429);
       const btnSync = document.getElementById('btn-cloud-sync');
       if (btnSync) { btnSync.textContent = '☁️✗'; setTimeout(() => { btnSync.textContent = '☁️ Авто'; }, 5000); }
       return null;
@@ -768,6 +769,7 @@ export async function doCloudSave(attempt = 0) {
     // времени: свежее побеждает, но игрок не теряет ни то, ни другое молча.
     if (res.status === 409) {
       console.warn('Cloud save conflict (409) — сервер держит более новую версию');
+      noteSaveError(409);
       const conflict = await res.json().catch(() => null);
       await resolveSaveConflict(conflict);
       return null;
@@ -780,6 +782,7 @@ export async function doCloudSave(attempt = 0) {
         const body = await res.clone().json().catch(() => null);
         const details = (body as any)?.details || (body as any)?.error || 'без деталей';
         console.warn('[save] 422 validation failed:', JSON.stringify(details).slice(0, 500));
+        noteSaveError(422);
         const first = Array.isArray(details) ? details[0] : String(details);
         showToast(`☁️ Сейв отклонён: ${String(first).slice(0, 90)}`, true);
         return null; // ретраить бессмысленно: тот же сейв снова не примут
@@ -805,6 +808,7 @@ export async function doCloudSave(attempt = 0) {
   } catch (e: any) {
     const reason = e?.message || String(e);
     console.warn(`Cloud save failed (attempt ${attempt + 1}/${MAX_RETRIES})`, reason);
+    noteSaveError('net');
     if (attempt < MAX_RETRIES - 1) {
       state.saveRetryCount = attempt + 1;
       const delay = RETRY_DELAYS[attempt];
@@ -845,6 +849,11 @@ export async function doCloudSave(attempt = 0) {
  *  Единственный надёжный якорь для optimistic locking: _v внутри save_data
  *  отстаёт (штампуется ДО записи), а слать его — значит 409 на каждом буте. */
 export let cloudServerVersion: number | null = null;
+
+/** Последняя ошибка сейва — для диагностики по тапу (см. initCloudEvents). */
+function noteSaveError(code: number | string): void {
+  try { state.lastSaveError = { code, at: Date.now() }; } catch { /* ignore */ }
+}
 
 /** true, если последний cloudLoad упал по сети (а не «сейва нет»).
  *  Нужно загрузке, чтобы отличить «новый игрок» ({}) от «оффлайна» (null). */
@@ -1044,6 +1053,29 @@ export async function openLeaderboard() {
   }
 }
 
+declare const __BUILD_COMMIT__: string | undefined;
+
+/** Сводка для диагностики по тапу: что знает клиент о версиях и ошибках. */
+export function buildDiagText(): string {
+  const ago = (at: unknown) => {
+    if (typeof at !== 'number' || !Number.isFinite(at)) return '—';
+    const s = Math.max(0, Math.round((Date.now() - at) / 1000));
+    return s < 60 ? `${s}с назад` : `${Math.floor(s / 60)}мин назад`;
+  };
+  const err = (state as any).lastSaveError;
+  const rw = (state as any).lastReward;
+  const lines = [
+    `сборка: ${typeof __BUILD_COMMIT__ === 'string' ? __BUILD_COMMIT__.slice(0, 7) : '?'}`,
+    `версия сейва: ${state.saveVersion} (сервер видел: ${cloudServerVersion ?? '?'})`,
+    `последний синк: ${ago(state.lastCloudSync)}, грязный: ${state.saveDirty ? 'да' : 'нет'}`,
+    `последняя ошибка сейва: ${err ? `${err.code} ${ago(err.at)}` : 'нет'}`,
+    `последняя награда: ${rw ? `+${rw.money} sv=${rw.saveVersion} ${ago(rw.at)}` : 'нет'}`,
+    `бой: ${state.pvpBattleId ? 'да' : 'нет'}, сеттл: ${state.settlePending ? 'ждёт' : 'нет'}`,
+    `сокет: ${state.socket?.connected ? 'в сети' : 'НЕТ СЕТИ'}`,
+  ];
+  return lines.join('\n');
+}
+
 export function initCloudEvents() {
   const btnLeaderboard = document.getElementById('btn-leaderboard');
   if (btnLeaderboard) {
@@ -1053,7 +1085,18 @@ export function initCloudEvents() {
   if (btnSync) {
     btnSync.textContent = state.tgToken ? '☁️ Авто' : '☁️ —';
     btnSync.title = state.tgToken ? 'Авто-синхронизация активна' : 'Оффлайн';
-    btnSync.onclick = null; // auto-sync, no manual click needed
+    // Диагностика рассинхрона: 5 быстрых тапов по облачку — показать сводку
+    // (сборка, версии, последняя ошибка/награда). Работает и в WebView.
+    let diagTaps: number[] = [];
+    btnSync.onclick = () => {
+      const now = Date.now();
+      diagTaps = diagTaps.filter((t) => now - t < 2000);
+      diagTaps.push(now);
+      if (diagTaps.length >= 5) {
+        diagTaps = [];
+        try { alert(buildDiagText()); } catch { /* ignore */ }
+      }
+    };
   }
   const closeLeaderboard = document.getElementById('btn-close-leaderboard');
   if (closeLeaderboard) {
