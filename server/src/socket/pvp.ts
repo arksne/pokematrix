@@ -140,6 +140,42 @@ function isSocketInBattle(socketId: string): boolean {
   return false;
 }
 
+/**
+ * Бой для сокета: сначала строго по socket.id, затем — переподключение.
+ *
+ * Мобильный клиент (Telegram WebView) при обрыве сети переподключается с
+ * НОВЫМ socket.id: старый код молча отбрасывал все его ходы (не участник),
+ * реле оппонента уходило в мёртвый сокет, и через 90с AFK-таймаут выкидывал
+ * игрока из боя без единой ошибки в логах. Теперь узнаём своего по tgId
+ * (из JWT, подделать нельзя) и перепривязываем сокет на лету; обе стороны
+ * получают pvp_rejoin и пересинхронизируют HP через mon_data.
+ */
+function getBattleForSocketOrUser(
+  io: Server,
+  battleId: unknown,
+  socket: Socket,
+): { battle: { playerA: string; playerB: string; userA: number; userB: number; startedAt: number; lastActivityAt: number; lastActorSocketId: string | null; arena: boolean }; isPlayerA: boolean } | null {
+  if (typeof battleId !== 'string' || !battleId) return null;
+  const battle = activeBattles.get(battleId);
+  if (!battle) return null;
+  if (battle.playerA === socket.id) return { battle, isPlayerA: true };
+  if (battle.playerB === socket.id) return { battle, isPlayerA: false };
+  const tg = socket.data.user?.tgId;
+  if (typeof tg !== 'number') return null;
+  if (tg === battle.userA || tg === battle.userB) {
+    const isA = tg === battle.userA;
+    if (isA) battle.playerA = socket.id; else battle.playerB = socket.id;
+    battle.lastActivityAt = Date.now();
+    const otherId = isA ? battle.playerB : battle.playerA;
+    io.sockets.sockets.get(otherId)?.emit('pvp_rejoin', { battleId });
+    socket.emit('pvp_rejoin', { battleId });
+    console.log(`[pvp] reattach battleId=${battleId} user=${tg}`);
+    audit({ kind: 'pvp_reattach', sessionId: battleId, actorTg: tg, detail: {} });
+    return { battle, isPlayerA: isA };
+  }
+  return null;
+}
+
 /** Пользователь уже дерётся (с любого своего сокета). */
 function isUserInBattle(userId: number): boolean {
   for (const b of activeBattles.values()) {
@@ -397,7 +433,7 @@ export function initPvP(io: Server, socket: Socket) {
 
   // ── pvp_action ──
   socket.on('pvp_action', (data: { battleId?: unknown; action?: any }) => {
-    const found = getBattleForSocket(data?.battleId, socket.id);
+    const found = getBattleForSocketOrUser(io, data?.battleId, socket);
     if (!found) return; // не участник боя
     const { battle } = found;
     battle.lastActivityAt = Date.now();
@@ -460,7 +496,7 @@ export function initPvP(io: Server, socket: Socket) {
   // оппонент. Рейтинг пишется обоим, +500 и pvp_reward — победителю.
   socket.on('pvp_end', async (data: { battleId?: unknown; action?: any }) => {
     const battleId = data?.battleId;
-    const found = getBattleForSocket(battleId, socket.id);
+    const found = getBattleForSocketOrUser(io, battleId, socket);
     if (!found || typeof battleId !== 'string') return; // не участник боя
     const { battle } = found;
 

@@ -53,6 +53,7 @@ import { updateMoneyDisplay } from '../ui/location.js';
 import { updateInventoryDisplay } from '../ui/inventory.js';
 import { autoSave, adoptServerSaveVersion } from '../game/save.js';
 import { trackNPCQuests } from '../game/quest-track.js';
+import { getSpriteUrl } from '../utils/sprite.js';
 
 export function initTradeSocket() {
   if (state.socket) return;
@@ -305,6 +306,22 @@ export function initTradeSocket() {
     endPvP(!!data?.won, false);
   });
 
+  // Переподключение посреди боя (новый socket.id): сервер перепривязал нас
+  // к бою и просит пересинхронизацию — шлём свежее mon_data, оппонент делает
+  // то же самое. Иначе оба смотрят на застывшие HP после обрыва.
+  state.socket.on('pvp_rejoin', () => {
+    if (!state.pvpBattleId || !state.pvpMyMon) return;
+    const mon = state.pvpMyMon;
+    showToast('Соединение восстановлено, бой продолжается', false);
+    state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: {
+      type: 'mon_data',
+      name: mon.nickname || mon.apiData?.name,
+      lvl: mon.baseLevel + (mon.candiesEaten || 0),
+      hp: mon.currentHp,
+      maxHp: mon.maxHp,
+      sprite: getSpriteUrl(mon)
+    }});
+  });
   // Сервер отбил атаку валидацией (pvp_action_rejected): удар никому не
   // ушёл, а ход уже переключён на оппонента — без этого обработчика бой
   // виснет навсегда на «Ожидание хода соперника...». Возвращаем ход.
@@ -353,7 +370,7 @@ export function initTradeSocket() {
     showToast(reason, true);
   });
   state.socket.on('pvp_challenge_rejected', (data) => {
-    if (data?.reason === 'NOT_IN_ARENA') showToast('Оба бойца должны быть на арене!');
+    if (data?.reason === 'NOT_IN_ARENA') showToast('Оба бойца должны быть на арене!', true);
     else if (data?.reason === 'IN_BATTLE') showToast('Один из бойцов уже в бою', true);
   });
   // Сброс стрика проигравшего (победа/сдача соперника уже сеттлится сервером).

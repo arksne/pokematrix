@@ -107,6 +107,28 @@ const sockB = await connect(tokenB, 'B');
   }
 }
 
+// ── E10: переподключение посреди боя — ходы с нового сокета принимаются ──
+// Мобильный клиент при обрыве сети переподключается с новым socket.id;
+// раньше его ходы молча отбрасывались (не участник), реле уходило в мёртвый
+// сокет, и через 90с AFK-таймаут выкидывал игрока без единой ошибки.
+{
+  const battleId = await startPvP(sockA, sockB, B_ID);
+  if (!battleId) {
+    check('E10', 'PvP: ходы с переподключённого сокета принимаются', false, 'бой не начался');
+  } else {
+    const sA2 = await connect(tokenA, 'A2');
+    const atkP = onceEvent(sockB, 'pvp_opponent_action', 4000);
+    sA2.emit('pvp_action', { battleId, action: { type: 'attack', moveName: 'tackle', dmg: 8, crit: false, lvl: 5, atk: 60, power: 40 } });
+    const atk = await atkP;
+    check('E10', 'PvP: ходы с переподключённого сокета принимаются',
+      !!atk && atk.type === 'attack' && atk.dmg === 8,
+      atk ? `dmg=${atk.dmg}` : 'релея нет — ходы с нового сокета отброшены');
+    sA2.close();
+    sockB.emit('pvp_end', { battleId, action: { type: 'lose' } });
+    await sleep(500);
+  }
+}
+
 // ── E5: нокаут в PvP виден обеим сторонам, награда доходит (L4) ──
 // Протокол: A бьёт → B присылает hp_update{fainted} + fainted → A видит
 // победу; B шлёт pvp_end{lose} → сервер сеттлит победу A (+500 + pvp_reward).

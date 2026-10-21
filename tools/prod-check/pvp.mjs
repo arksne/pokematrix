@@ -79,6 +79,19 @@ export async function runPvp() {
       rej ? `reason=${rej.reason}, второй старт: ${ns ? 'ЕСТЬ!' : 'нет'}` : 'отклонения не было');
   }
 
+  // PC18: обрыв+переподключение — ходы с нового сокета принимаются
+  {
+    const sA2 = await connect(tA, 'A2');
+    const atkP = onceEvent(sB, 'pvp_opponent_action', 10000);
+    sA2.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'tackle', dmg: 8, crit: false, lvl: 5, atk: 60, power: 40 } });
+    const atk = await atkP;
+    check('PC18', 'ходы с переподключённого сокета принимаются (reattach)',
+      !!atk && atk.type === 'attack' && atk.dmg === 8,
+      atk ? `dmg=${atk.dmg}` : 'релея нет — ходы с нового сокета отброшены');
+    sA2.close();
+    await sleep(500);
+  }
+
   // PC5: mon_data релеится
   {
     const got = onceEvent(sB, 'pvp_opponent_action', 10000);

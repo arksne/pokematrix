@@ -10,6 +10,7 @@ export type AuditKind =
   | 'pvp_start'
   | 'pvp_end'
   | 'pvp_settle'
+  | 'pvp_reattach'
   | 'arena_join'
   | 'trade_execute'
   | 'save_reject';
