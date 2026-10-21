@@ -36,7 +36,7 @@ const CHALLENGE_TTL_MS = 60 * 1000;
 /** Без ходов столько: AFK-сторона проигрывает ( было: висело до 10-мин TTL ). */
 const INACTIVITY_TTL_MS = 90 * 1000;
 /** Ожидающие вызовы: socketId вызывающего → { кому, когда, арена ли }. */
-const pendingChallenges = new Map<string, { partnerUserId: number; at: number; arena: boolean }>();
+const pendingChallenges = new Map<string, { partnerUserId: number; challengerUserId: number; at: number; arena: boolean }>();
 
 // ── M-18: PvP-Арена ──────────────────────────────────────────
 // Участники арены: socket.id → { tgId, имя, когда вошёл }.
@@ -184,6 +184,23 @@ function isUserInBattle(userId: number): boolean {
   return false;
 }
 
+/**
+ * Живой сокет пользователя: сначала свежий онлайн-словник, иначе записанный
+ * в бою/вызове. Уведомления о сеттле (pvp_reward, pvp_arena_update, rejoin)
+ * ДОЛЖНЫ доходить: если слать их в мёртвый socket.id, клиент не примет версию,
+ * его отложенный сейв уйдёт со старой версией → 409 + тост «более новая
+ * версия» ровно в конце боя. Старый id — только фолбэк.
+ */
+export function liveSocketFor(io: Server, userTg: number, fallbackId?: string | null) {  const online = getOnlinePlayerByUserId(userTg);
+  const fresh = online ? io.sockets.sockets.get(online.socketId) : undefined;
+  if (fresh?.connected) return fresh;
+  if (fallbackId) {
+    const old = io.sockets.sockets.get(fallbackId);
+    if (old?.connected) return old;
+  }
+  return undefined;
+}
+
 /** Уборка боёв по TTL. Без неё карта жила до перезапуска процесса. */
 async function sweepBattles(io: Server) {
   const now = Date.now();
@@ -191,7 +208,7 @@ async function sweepBattles(io: Server) {
   for (const [sockId, ch] of [...pendingChallenges]) {
     if (now - ch.at < CHALLENGE_TTL_MS) continue;
     pendingChallenges.delete(sockId);
-    io.sockets.sockets.get(sockId)?.emit('pvp_challenge_timeout', {});
+    liveSocketFor(io, ch.challengerUserId, sockId)?.emit('pvp_challenge_timeout', {});
   }
   for (const [battleId, b] of [...activeBattles]) {
     if (now - b.startedAt < BATTLE_TTL_MS && now - b.lastActivityAt < INACTIVITY_TTL_MS) continue;
@@ -202,8 +219,8 @@ async function sweepBattles(io: Server) {
       // нет (иначе вызов альта + AFK = печатный станок).
       await settleTimeoutWin(io, b);
     } else {
-      io.sockets.sockets.get(b.playerA)?.emit('pvp_opponent_left', 'Бой прерван');
-      io.sockets.sockets.get(b.playerB)?.emit('pvp_opponent_left', 'Бой прерван');
+      liveSocketFor(io, b.userA, b.playerA)?.emit('pvp_opponent_left', 'Бой прерван');
+      liveSocketFor(io, b.userB, b.playerB)?.emit('pvp_opponent_left', 'Бой прерван');
     }
   }
   // Арена: флаги inBattle могли измениться — обновить лобби.
@@ -213,8 +230,8 @@ async function sweepBattles(io: Server) {
 
 /** AFK-победа активной стороне: рейтинг без денег. */
 async function settleTimeoutWin(io: Server, b: { playerA: string; playerB: string; userA: number; userB: number; lastActorSocketId: string | null }) {
-  const winnerSock = b.lastActorSocketId!;
-  const winnerIsA = winnerSock === b.playerA;
+  const winnerSockId = b.lastActorSocketId!;
+  const winnerIsA = winnerSockId === b.playerA;
   const winnerTg = winnerIsA ? b.userA : b.userB;
   const loserTg = winnerIsA ? b.userB : b.userA;
   try {
@@ -228,9 +245,8 @@ async function settleTimeoutWin(io: Server, b: { playerA: string; playerB: strin
   } catch (e) {
     console.error('[pvp] timeout rating error:', e);
   }
-  io.sockets.sockets.get(winnerSock)?.emit('pvp_timeout', { won: true });
-  const loserSock = winnerIsA ? b.playerB : b.playerA;
-  io.sockets.sockets.get(loserSock)?.emit('pvp_timeout', { won: false });
+  liveSocketFor(io, winnerTg, winnerSockId)?.emit('pvp_timeout', { won: true });
+  liveSocketFor(io, loserTg, winnerIsA ? b.playerB : b.playerA)?.emit('pvp_timeout', { won: false });
 }
 
 export function initPvP(io: Server, socket: Socket) {
@@ -277,7 +293,7 @@ export function initPvP(io: Server, socket: Socket) {
       ...(wantArena ? { arena: true } : {}),
     });
     // Вызов висит максимум минуту: без ответа вызывающий не ждёт в AFK вечно
-    pendingChallenges.set(socket.id, { partnerUserId, at: Date.now(), arena: wantArena });
+    pendingChallenges.set(socket.id, { partnerUserId, challengerUserId: myUserId, at: Date.now(), arena: wantArena });
   });
 
   // ── pvp_accept ──
@@ -476,7 +492,8 @@ export function initPvP(io: Server, socket: Socket) {
     }
 
     const opponentSocketId = socket.id === battle.playerA ? battle.playerB : battle.playerA;
-    const opponentSocket = io.sockets.sockets.get(opponentSocketId);
+    const opponentTg = socket.id === battle.playerA ? battle.userB : battle.userA;
+    const opponentSocket = liveSocketFor(io, opponentTg, opponentSocketId);
     if (opponentSocket) {
       // battleId в релее: клиент отбрасывает чужие потоки (два живых боя между
       // той же парой давали задвоенные атаки в одном окне).
@@ -515,7 +532,8 @@ export function initPvP(io: Server, socket: Socket) {
     audit({ kind: 'pvp_end', sessionId: battleId, actorTg: socket.data.user?.tgId, detail: { action: actionType, arena: battle.arena } });
 
     const opponentSocketId = socket.id === battle.playerA ? battle.playerB : battle.playerA;
-    const opponentSocket = io.sockets.sockets.get(opponentSocketId);
+    const opponentTg = socket.id === battle.playerA ? battle.userB : battle.userA;
+    const opponentSocket = liveSocketFor(io, opponentTg, opponentSocketId);
 
     // Пересылаем оппоненту
     if (opponentSocket) {
@@ -604,7 +622,10 @@ export function initPvP(io: Server, socket: Socket) {
           return { reward, streak, best, wins };
         });
 
-        const winnerSock = winnerIsSender ? socket : opponentSocket;
+        // Награду шлём на ЖИВОЙ сокет победителя (по tgId): после реконнекта
+        // записанный в бою socket.id может быть мёртв — иначе клиент не примет
+        // версию и его отложенный сейв даст 409 + тост «более новая версия».
+        const winnerSock = liveSocketFor(io, winnerTg, winnerIsSender ? socket.id : opponentSocketId);
         winnerSock?.emit('pvp_reward', {
           money: settled.reward.money,
           items: settled.reward.items,
@@ -615,8 +636,9 @@ export function initPvP(io: Server, socket: Socket) {
           saveVersion: await freshSaveVersion(db, wId),
         });
         // Проигравший узнаёт о сбросе стрика и утешительных
-        // (клиент обновит счётчик и покажет тост).
-        const loserSock = winnerIsSender ? opponentSocket : socket;
+        // (клиент обновит счётчик и покажет тост). Тоже живой сокет.
+        // loserTg уже посчитан выше (winnerIsSender ? oppTg : senderTg).
+        const loserSock = liveSocketFor(io, loserTg, winnerIsSender ? opponentSocketId : socket.id);
         loserSock?.emit('pvp_arena_update', {
           streak: 0, arena: true, consolation: ARENA_LOSS_CONSOLATION,
           saveVersion: await freshSaveVersion(db, lId),
@@ -664,8 +686,10 @@ export function initPvP(io: Server, socket: Socket) {
 
         // Уведомляем победителя о награде (если онлайн).
         // Версию читаем ПОСЛЕ коммита: внутри транзакции её ещё не видно.
+        // Сокет — живой (по tgId): награда с версией обязана дойти, иначе
+        // отложенный сейв клиента даст 409 + тост «более новая версия».
         if (rewarded) {
-          const winnerSock = winnerIsSender ? socket : opponentSocket;
+          const winnerSock = liveSocketFor(io, winnerTg, winnerIsSender ? socket.id : opponentSocketId);
           winnerSock?.emit('pvp_reward', { money: 500, saveVersion: await freshSaveVersion(db, wId) });
           audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { arena: false, money: 500 } });
         }

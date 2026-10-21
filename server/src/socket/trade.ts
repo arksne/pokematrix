@@ -14,6 +14,7 @@
 import type { Server, Socket } from 'socket.io';
 import { parseSaveStrict, stampSave } from '../db/save-json.js';
 import { getOnlinePlayerByUserId } from './lobby.js';
+import { liveSocketFor } from './pvp.js';
 import { audit } from './audit.js';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
@@ -630,8 +631,13 @@ async function executeTradeSwap(
     });
 
     // ── Уведомляем клиентов (данные — из БД, уже с новыми uid) ──
-    if (initSocket) initSocket.emit('trade_execute', recvForInit);
-    if (partSocket) partSocket.emit('trade_execute', recvForPart);
+    // Сокеты перевыпускаем по tgId: после реконнекта записанные в сессии
+    // могут быть мертвы — иначе итог обмена и версия не дойдут (та же потеря,
+    // что была с pvp_reward: отложенный сейв даст 409 + ложный конфликт).
+    const liveInit = liveSocketFor(io, session.initiatorUserId, session.initiatorId);
+    const livePart = liveSocketFor(io, session.partnerUserId, session.partnerId);
+    if (liveInit) liveInit.emit('trade_execute', recvForInit);
+    if (livePart) livePart.emit('trade_execute', recvForPart);
     // Свежие версии — КАЖДОМУ своя: своп поднял save_version обоим, и клиент
     // обязан принять её ДО следующего автосейва, иначе 409 + ложный конфликт
     // (та же гонка, что была в конце PvP-боя). trade_execute несёт массив
@@ -649,8 +655,8 @@ async function executeTradeSwap(
         .from(users).where(eq(users.id, id2)).limit(1);
       sv2 = typeof rows[0]?.v === 'number' ? rows[0].v : undefined;
     } catch { /* ignore */ }
-    if (initSocket && typeof sv1 === 'number') initSocket.emit('trade_settled', { saveVersion: sv1 });
-    if (partSocket && typeof sv2 === 'number') partSocket.emit('trade_settled', { saveVersion: sv2 });
+    if (liveInit && typeof sv1 === 'number') liveInit.emit('trade_settled', { saveVersion: sv1 });
+    if (livePart && typeof sv2 === 'number') livePart.emit('trade_settled', { saveVersion: sv2 });
     audit({
       kind: 'trade_execute',
       sessionId: session.tradeId,
