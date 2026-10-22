@@ -102,6 +102,253 @@ function broadcastArenaLobby(io: Server) {
   io.emit('arena_lobby', arenaLobbyList());
 }
 
+/**
+ * Тренировочный спарринг-бот: боёв сколько угодно, наград/рейтинга/стриков
+ * нет (иначе его будут фармить). Клиент закрывает такие бои штатно по
+ * pvp_reward с training:true.
+ */
+const SPARRING_BOT_TG = new Set<number>([777900201]);
+
+/** Награда прямого боя по стрику (у арены своя таблица — там вход по жетону). */
+export function directRewardForStreak(streak: number): { money: number; items: Array<{ id: string; qty: number }> } {
+  const tier = !Number.isFinite(streak) || streak < 1 ? 1 : Math.min(5, Math.floor(streak));
+  return { money: 10000 + 5000 * tier, items: [] };
+}
+/** Утешительные проигравшему прямого боя (у арены свои 10000). */
+export const DIRECT_LOSS_CONSOLATION = 2000;
+
+/** ELO, K=32. */
+function eloDelta(myRating: number, oppRating: number, won: boolean): number {
+  const expected = 1 / (1 + Math.pow(10, (oppRating - myRating) / 400));
+  return Math.round(32 * ((won ? 1 : 0) - expected));
+}
+
+/** Прочитать или создать строку боевого рейтинга (внутри транзакции). */
+async function readOrCreateBattleRow(tx: any, userId: number) {
+  const existing = (await tx.select().from(battleRatings).where(eq(battleRatings.user_id, userId)).limit(1))[0];
+  if (existing) return existing;
+  await tx.insert(battleRatings).values({
+    user_id: userId, rating: 1000, wins: 0, losses: 0, streak: 0, best_streak: 0,
+    updated_at: new Date().toISOString(),
+  });
+  return { user_id: userId, rating: 1000, wins: 0, losses: 0, streak: 0, best_streak: 0 };
+}
+
+/**
+ * Общий сеттл победы: арена и обычный бой, pvp_end и AFK/дисконнект.
+ * Возвращает пакет для pvp_reward (null — только для бот-боёв, там шлём
+ * напрямую внутри). Версии поднимаются обоим участникам, уведомления идут
+ * на живые сокеты — иначе клиент не примет версию и даст 409.
+ */
+async function settleBattleAsWin(
+  io: Server,
+  battle: PvPBattle,
+  battleId: string,
+  winnerTg: number,
+  loserTg: number,
+): Promise<{ reward: { money: number; items: Array<{ id: string; qty: number }> }; streak: number; best: number; wins: number; ratingW: number; ratingL: number; arena: boolean } | null> {
+  const db = getDb();
+  const rows = await db.select({ id: users.id, tg: users.tg_id }).from(users);
+  const byTg = new Map(rows.map((r: any) => [r.tg, r.id]));
+  const wId = winnerTg ? byTg.get(winnerTg) : undefined;
+  const lId = loserTg ? byTg.get(loserTg) : undefined;
+
+  // Спарринг-бот: бой без последствий, но клиент должен закрыться штатно —
+  // шлём pvp_reward с training:true (версия не менялась, сейв безопасен).
+  if (SPARRING_BOT_TG.has(winnerTg) || SPARRING_BOT_TG.has(loserTg)) {
+    const sv = wId ? await freshSaveVersion(db, wId) : undefined;
+    liveSocketFor(io, winnerTg, null)?.emit('pvp_reward', { money: 0, training: true, battleId, saveVersion: sv });
+    audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { training: true, arena: battle.arena } });
+    if (battle.arena) broadcastArenaLobby(io);
+    return null;
+  }
+
+  // ── M-18: финал боя С АРЕНЫ: стрик + нарастающий приз ──
+  if (battle.arena && wId && lId) {
+    const settled = await db.transaction(async (tx) => {
+      // Рейтинг обоим — ELO.
+      const wR0 = await readOrCreateBattleRow(tx, wId);
+      const lR0 = await readOrCreateBattleRow(tx, lId);
+      const dW = eloDelta(wR0.rating, lR0.rating, true);
+      const dL = eloDelta(lR0.rating, wR0.rating, false);
+      await tx.update(battleRatings).set({
+        rating: Math.max(1, wR0.rating + dW), wins: (wR0.wins || 0) + 1,
+        updated_at: new Date().toISOString(),
+      }).where(eq(battleRatings.user_id, wId));
+      await tx.update(battleRatings).set({
+        rating: Math.max(1, lR0.rating + dL), losses: (lR0.losses || 0) + 1,
+        updated_at: new Date().toISOString(),
+      }).where(eq(battleRatings.user_id, lId));
+
+      // Стрик победителя +1, лучший/всего — вверх.
+      const wSt: any = await readOrCreateArenaRow(tx, wId);
+      const streak = (Number(wSt.streak) || 0) + 1;
+      const best = Math.max(Number(wSt.best) || 0, streak);
+      const wins = (Number(wSt.wins) || 0) + 1;
+      await tx.update(arenaStats).set({
+        wins, streak, best, updated_at: new Date().toISOString(),
+      }).where(eq(arenaStats.user_id, wId));
+      const reward = arenaRewardForStreak(streak);
+
+      // Деньги + предметы победителю.
+      const wRow = (await tx.select({ id: users.id, save_data: users.save_data })
+        .from(users)
+        .where(eq(users.id, wId))
+        .for('update')
+        .limit(1))[0];
+      if (wRow) {
+        const sd: any = parseSaveStrict(wRow.save_data, wId);
+        if (!sd.inventory) sd.inventory = {};
+        sd.inventory.credit = (sd.inventory.credit || 0) + reward.money;
+        for (const item of reward.items) {
+          sd.inventory[item.id] = (sd.inventory[item.id] || 0) + item.qty;
+        }
+        await tx.update(users)
+          .set({
+            save_data: JSON.stringify(stampSave(sd)),
+            money: sd.inventory.credit || 0,
+            save_version: sql`${users.save_version} + 1`,
+          })
+          .where(eq(users.id, wId));
+      }
+
+      // Стрик проигравшего сбрасывается (поражение/сдача = 0),
+      // утешительные ARENA_LOSS_CONSOLATION — в тот же сейв.
+      const lSt: any = await readOrCreateArenaRow(tx, lId);
+      if ((Number(lSt.streak) || 0) !== 0) {
+        await tx.update(arenaStats).set({
+          streak: 0, updated_at: new Date().toISOString(),
+        }).where(eq(arenaStats.user_id, lId));
+      }
+      const lRow = (await tx.select({ id: users.id, save_data: users.save_data })
+        .from(users)
+        .where(eq(users.id, lId))
+        .for('update')
+        .limit(1))[0];
+      if (lRow) {
+        const lsd: any = parseSaveStrict(lRow.save_data, lId);
+        if (!lsd.inventory) lsd.inventory = {};
+        lsd.inventory.credit = (lsd.inventory.credit || 0) + ARENA_LOSS_CONSOLATION;
+        await tx.update(users)
+          .set({
+            save_data: JSON.stringify(stampSave(lsd)),
+            money: lsd.inventory.credit || 0,
+            save_version: sql`${users.save_version} + 1`,
+          })
+          .where(eq(users.id, lId));
+      }
+      return { reward, streak, best, wins, ratingW: dW, ratingL: dL };
+    });
+
+    const winnerSock = liveSocketFor(io, winnerTg, null);
+    winnerSock?.emit('pvp_reward', {
+      money: settled.reward.money,
+      items: settled.reward.items,
+      streak: settled.streak,
+      best: settled.best,
+      wins: settled.wins,
+      arena: true,
+      battleId,
+      saveVersion: await freshSaveVersion(db, wId),
+    });
+    const loserSock = liveSocketFor(io, loserTg, null);
+    loserSock?.emit('pvp_arena_update', {
+      streak: 0, arena: true, consolation: ARENA_LOSS_CONSOLATION,
+      battleId,
+      saveVersion: await freshSaveVersion(db, lId),
+    });
+    console.log(`[pvp] settle battleId=${battleId} arena winner=${winnerTg} streak=${settled.streak} money=${settled.reward.money}`);
+    audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { arena: true, money: settled.reward.money, items: settled.reward.items, streak: settled.streak, best: settled.best } });
+    broadcastArenaLobby(io);
+    return { ...settled, arena: true };
+  }
+
+  // ── Обычный бой: ELO + стрик-награда + утешительные ──
+  if (!wId || !lId) return null;
+  const settled = await db.transaction(async (tx) => {
+    const wR0 = await readOrCreateBattleRow(tx, wId);
+    const lR0 = await readOrCreateBattleRow(tx, lId);
+    const dW = eloDelta(wR0.rating, lR0.rating, true);
+    const dL = eloDelta(lR0.rating, wR0.rating, false);
+    const streak = (Number(wR0.streak) || 0) + 1;
+    const best = Math.max(Number(wR0.best_streak) || 0, streak);
+    await tx.update(battleRatings).set({
+      rating: Math.max(1, wR0.rating + dW),
+      wins: (wR0.wins || 0) + 1,
+      streak, best_streak: best,
+      updated_at: new Date().toISOString(),
+    }).where(eq(battleRatings.user_id, wId));
+    await tx.update(battleRatings).set({
+      rating: Math.max(1, lR0.rating + dL),
+      losses: (lR0.losses || 0) + 1,
+      streak: 0,
+      updated_at: new Date().toISOString(),
+    }).where(eq(battleRatings.user_id, lId));
+    const reward = directRewardForStreak(streak);
+
+    const rewarded = await (async () => {
+      const userRow = (await tx.select({ id: users.id, save_data: users.save_data })
+        .from(users)
+        .where(eq(users.id, wId))
+        .for('update')
+        .limit(1))[0];
+      if (!userRow) return false;
+      const sd: any = parseSaveStrict(userRow.save_data, wId);
+      if (!sd.inventory) sd.inventory = {};
+      sd.inventory.credit = (sd.inventory.credit || 0) + reward.money;
+      await tx.update(users)
+        .set({
+          save_data: JSON.stringify(stampSave(sd)),
+          money: sd.inventory.credit || 0,
+          save_version: sql`${users.save_version} + 1`,
+        })
+        .where(eq(users.id, wId));
+      // Утешительные проигравшему.
+      const lRow = (await tx.select({ id: users.id, save_data: users.save_data })
+        .from(users)
+        .where(eq(users.id, lId))
+        .for('update')
+        .limit(1))[0];
+      if (lRow) {
+        const lsd: any = parseSaveStrict(lRow.save_data, lId);
+        if (!lsd.inventory) lsd.inventory = {};
+        lsd.inventory.credit = (Number(lsd.inventory.credit) || 0) + DIRECT_LOSS_CONSOLATION;
+        await tx.update(users)
+          .set({
+            save_data: JSON.stringify(stampSave(lsd)),
+            money: lsd.inventory.credit || 0,
+            save_version: sql`${users.save_version} + 1`,
+          })
+          .where(eq(users.id, lId));
+      }
+      return true;
+    })();
+    if (!rewarded) throw new Error('settle: winner save missing');
+    return { reward, streak, best, wins: (wR0.wins || 0) + 1, ratingW: dW, ratingL: dL };
+  });
+
+  const winnerSock = liveSocketFor(io, winnerTg, null);
+  winnerSock?.emit('pvp_reward', {
+    money: settled.reward.money,
+    items: [],
+    streak: settled.streak,
+    best: settled.best,
+    wins: settled.wins,
+    arena: false,
+    battleId,
+    saveVersion: await freshSaveVersion(db, wId),
+  });
+  const loserSock = liveSocketFor(io, loserTg, null);
+  loserSock?.emit('pvp_arena_update', {
+    streak: 0, arena: false, consolation: DIRECT_LOSS_CONSOLATION,
+    battleId,
+    saveVersion: await freshSaveVersion(db, lId),
+  });
+  console.log(`[pvp] settle battleId=${battleId} direct winner=${winnerTg} streak=${settled.streak} money=${settled.reward.money} elo=${settled.ratingW}/${settled.ratingL}`);
+  audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { arena: false, money: settled.reward.money, streak: settled.streak } });
+  return { ...settled, arena: false };
+}
+
 /** Прочитать или создать строку статистики арены (внутри транзакции). */
 async function readOrCreateArenaRow(tx: any, userId: number) {
   const existing = (await tx.select().from(arenaStats).where(eq(arenaStats.user_id, userId)).limit(1))[0];
@@ -234,10 +481,8 @@ async function sweepBattles(io: Server) {
     if (now - b.lastActivityAt < INACTIVITY_TTL_MS) continue;
     activeBattles.delete(battleId);
     const timedOut = now - b.lastActivityAt >= INACTIVITY_TTL_MS;
-    if (timedOut && b.lastActorSocketId) {
-      // AFK-проигрыш: победитель — активная сторона. Рейтинг — да, деньги —
-      // нет (иначе вызов альта + AFK = печатный станок).
-      await settleTimeoutWin(io, b);
+    if (timedOut) {
+      await settleTimeoutWin(io, b, battleId);
     } else {
       liveSocketFor(io, b.userA, b.playerA)?.emit('pvp_opponent_left', 'Бой прерван');
       liveSocketFor(io, b.userB, b.playerB)?.emit('pvp_opponent_left', 'Бой прерван');
@@ -248,34 +493,20 @@ async function sweepBattles(io: Server) {
   broadcastArenaLobby(io);
 }
 
-/** AFK-победа активной стороне: рейтинг без денег. */
-async function settleTimeoutWin(io: Server, b: PvPBattle & { arena?: boolean }) {
-  const winnerSockId = b.lastActorSocketId!;
-  const winnerIsA = winnerSockId === b.playerA;
+/** AFK-финал: тишина 90с с обеих сторон — монета (проигравший сбрасывает стрик).
+ * Победитель получает ПОЛНЫЙ сеттл (награда+стрик): дисконнект и AFK — это
+ * сдача, а не «рейтинг без денег». Альт-фарм лечится отдельно, если появится. */
+async function settleTimeoutWin(io: Server, b: PvPBattle, battleId: string) {
+  const winnerIsA = Math.random() < 0.5;
   const winnerTg = winnerIsA ? b.userA : b.userB;
   const loserTg = winnerIsA ? b.userB : b.userA;
+  console.log(`[pvp] timeout battleId=${battleId} coin winner=${winnerTg}`);
+  audit({ kind: 'pvp_end', sessionId: battleId, actorTg: null, detail: { action: 'timeout', coin: true, arena: b.arena } });
   try {
-    const db = getDb();
-    const rows = await db.select({ id: users.id, tg: users.tg_id }).from(users);
-    const byTg = new Map(rows.map((r: any) => [r.tg, r.id]));
-    const wId = byTg.get(winnerTg);
-    const lId = byTg.get(loserTg);
-    if (wId) await updateOrCreateRating(db, wId, 10, true);
-    if (lId) await updateOrCreateRating(db, lId, -5, false);
-    // Арена: AFK — это поражение неактивной стороны: стрик сгорает (иначе
-    // выгодно уходить в AFK вместо поражения, сохраняя стрик). Денег нет
-    // обеим (антифарм альтов), утешительных тоже.
-    if (b.arena && lId) {
-      try {
-        await db.update(arenaStats).set({ streak: 0, updated_at: new Date().toISOString() })
-          .where(eq(arenaStats.user_id, lId));
-      } catch { /* ignore */ }
-    }
+    await settleBattleAsWin(io, b, battleId, winnerTg, loserTg);
   } catch (e) {
-    console.error('[pvp] timeout rating error:', e);
+    console.error('[pvp] timeout settle error:', e);
   }
-  liveSocketFor(io, winnerTg, winnerSockId)?.emit('pvp_timeout', { won: true });
-  liveSocketFor(io, loserTg, winnerIsA ? b.playerB : b.playerA)?.emit('pvp_timeout', { won: false });
 }
 
 export function initPvP(io: Server, socket: Socket) {
@@ -628,159 +859,11 @@ export function initPvP(io: Server, socket: Socket) {
     }
 
     try {
-      const db = getDb();
-      // tgId обоих — из боя (сокет оппонента мог уже отвалиться).
       const senderTg = socket.data.user?.tgId;
       const oppTg = battle.userA === senderTg ? battle.userB : battle.userA;
       const winnerTg = winnerIsSender ? senderTg : oppTg;
       const loserTg = winnerIsSender ? oppTg : senderTg;
-
-      const rows = await db.select({ id: users.id, tg: users.tg_id }).from(users);
-      const byTg = new Map(rows.map((r: any) => [r.tg, r.id]));
-      const wId = winnerTg ? byTg.get(winnerTg) : undefined;
-      const lId = loserTg ? byTg.get(loserTg) : undefined;
-
-      // ── M-18: финал боя С АРЕНЫ: стрик + нарастающий приз ──
-      // Протокол тот же (E6), но pvp_reward расширен: { money, items, streak,
-      // best, wins, arena: true }. Обычные бои (в т.ч. E5) идут старым путём.
-      if (battle.arena && wId && lId) {
-        const settled = await db.transaction(async (tx) => {
-          // Рейтинг обоим — как в обычном бою.
-          await updateOrCreateRating(tx, wId, 10, true);
-          await updateOrCreateRating(tx, lId, -5, false);
-
-          // Стрик победителя +1, лучший/всего — вверх.
-          const wSt: any = await readOrCreateArenaRow(tx, wId);
-          const streak = (Number(wSt.streak) || 0) + 1;
-          const best = Math.max(Number(wSt.best) || 0, streak);
-          const wins = (Number(wSt.wins) || 0) + 1;
-          await tx.update(arenaStats).set({
-            wins, streak, best, updated_at: new Date().toISOString(),
-          }).where(eq(arenaStats.user_id, wId));
-          const reward = arenaRewardForStreak(streak);
-
-          // Деньги + предметы победителю.
-          const wRow = (await tx.select({ id: users.id, save_data: users.save_data })
-            .from(users)
-            .where(eq(users.id, wId))
-            .for('update')
-            .limit(1))[0];
-          if (wRow) {
-            const sd: any = parseSaveStrict(wRow.save_data, wId);
-            if (!sd.inventory) sd.inventory = {};
-            sd.inventory.credit = (sd.inventory.credit || 0) + reward.money;
-            for (const item of reward.items) {
-              sd.inventory[item.id] = (sd.inventory[item.id] || 0) + item.qty;
-            }
-            await tx.update(users)
-              .set({
-                save_data: JSON.stringify(stampSave(sd)),
-                money: sd.inventory.credit || 0,
-                save_version: sql`${users.save_version} + 1`,
-              })
-              .where(eq(users.id, wId));
-          }
-
-          // Стрик проигравшего сбрасывается (поражение/сдача = 0),
-          // утешительные ARENA_LOSS_CONSOLATION — в тот же сейв.
-          const lSt: any = await readOrCreateArenaRow(tx, lId);
-          if ((Number(lSt.streak) || 0) !== 0) {
-            await tx.update(arenaStats).set({
-              streak: 0, updated_at: new Date().toISOString(),
-            }).where(eq(arenaStats.user_id, lId));
-          }
-          const lRow = (await tx.select({ id: users.id, save_data: users.save_data })
-            .from(users)
-            .where(eq(users.id, lId))
-            .for('update')
-            .limit(1))[0];
-          if (lRow) {
-            const lsd: any = parseSaveStrict(lRow.save_data, lId);
-            if (!lsd.inventory) lsd.inventory = {};
-            lsd.inventory.credit = (lsd.inventory.credit || 0) + ARENA_LOSS_CONSOLATION;
-            await tx.update(users)
-              .set({
-                save_data: JSON.stringify(stampSave(lsd)),
-                money: lsd.inventory.credit || 0,
-                save_version: sql`${users.save_version} + 1`,
-              })
-              .where(eq(users.id, lId));
-          }
-          return { reward, streak, best, wins };
-        });
-
-        // Награду шлём на ЖИВОЙ сокет победителя (по tgId): после реконнекта
-        // записанный в бою socket.id может быть мёртв — иначе клиент не примет
-        // версию и его отложенный сейв даст 409 + тост «более новая версия».
-        const winnerSock = liveSocketFor(io, winnerTg, winnerIsSender ? socket.id : opponentSocketId);
-        winnerSock?.emit('pvp_reward', {
-          money: settled.reward.money,
-          items: settled.reward.items,
-          streak: settled.streak,
-          best: settled.best,
-          wins: settled.wins,
-          arena: true,
-          saveVersion: await freshSaveVersion(db, wId),
-        });
-        // Проигравший узнаёт о сбросе стрика и утешительных
-        // (клиент обновит счётчик и покажет тост). Тоже живой сокет.
-        // loserTg уже посчитан выше (winnerIsSender ? oppTg : senderTg).
-        const loserSock = liveSocketFor(io, loserTg, winnerIsSender ? opponentSocketId : socket.id);
-        loserSock?.emit('pvp_arena_update', {
-          streak: 0, arena: true, consolation: ARENA_LOSS_CONSOLATION,
-          saveVersion: await freshSaveVersion(db, lId),
-        });
-        console.log(`[pvp] settle battleId=${battleId} arena winner=${winnerTg} streak=${settled.streak} money=${settled.reward.money}`);
-        audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { arena: true, money: settled.reward.money, items: settled.reward.items, streak: settled.streak, best: settled.best } });
-        broadcastArenaLobby(io);
-        return;
-      }
-
-      // ── Server-authoritative рейтинг обоим ──
-      if (wId) await updateOrCreateRating(db, wId, 10, true);
-      if (lId) await updateOrCreateRating(db, lId, -5, false);
-
-      // ── Server-authoritative награда (+500 победителю) ──
-      if (wId) {
-        // Раньше чтение и запись save_data шли без транзакции: два
-        // одновременных pvp_end перечитывали один и тот же сейв, и вторая
-        // запись затирала первую вместе с её кредитами. Строка пользователя
-        // теперь блокируется на всё время транзакции, и economy делает то же
-        // самое, поэтому клиентский POST /save между чтением и записью тоже
-        // не может потеряться.
-        const rewarded = await db.transaction(async (tx) => {
-          const userRow = (await tx.select({ id: users.id, save_data: users.save_data })
-            .from(users)
-            .where(eq(users.id, wId))
-            .for('update')
-            .limit(1))[0];
-
-          if (!userRow) return false;
-
-          const sd: any = parseSaveStrict(userRow.save_data, wId);
-          if (!sd.inventory) sd.inventory = {};
-          sd.inventory.credit = (sd.inventory.credit || 0) + 500;
-
-          await tx.update(users)
-            .set({
-              save_data: JSON.stringify(stampSave(sd)),
-              money: sd.inventory.credit || 0,
-              save_version: sql`${users.save_version} + 1`,
-            })
-            .where(eq(users.id, wId));
-          return true;
-        });
-
-        // Уведомляем победителя о награде (если онлайн).
-        // Версию читаем ПОСЛЕ коммита: внутри транзакции её ещё не видно.
-        // Сокет — живой (по tgId): награда с версией обязана дойти, иначе
-        // отложенный сейв клиента даст 409 + тост «более новая версия».
-        if (rewarded) {
-          const winnerSock = liveSocketFor(io, winnerTg, winnerIsSender ? socket.id : opponentSocketId);
-          winnerSock?.emit('pvp_reward', { money: 500, saveVersion: await freshSaveVersion(db, wId) });
-          audit({ kind: 'pvp_settle', sessionId: battleId, actorTg: winnerTg, detail: { arena: false, money: 500 } });
-        }
-      }
+      await settleBattleAsWin(io, battle, battleId, winnerTg, loserTg);
     } catch (e) {
       console.error('[pvp] rating/reward save error:', e);
     }
@@ -824,45 +907,21 @@ export function initPvP(io: Server, socket: Socket) {
           console.log(`[pvp] reattach-on-disconnect battleId=${battleId} user=${tg}`);
           continue;
         }
-        // Честный маркер вместо фейкового 'surrender': награды не было,
-        // клиент показывает «отключился», а не «сдался».
-        const otherSocketId = battle.playerA === socket.id ? battle.playerB : battle.playerA;
-        const otherSocket = liveSocketFor(io,
-          battle.playerA === socket.id ? battle.userB : battle.userA, otherSocketId);
-        if (otherSocket) {
-          otherSocket.emit('pvp_opponent_action', { type: 'opponent_left', battleId });
-        }
+        // Ушёл по-настоящему: засчитываем сдачу — выживший получает ПОЛНЫЙ
+        // сеттл (награда+стрик+рейтинг), как за обычную победу. Молча удалять
+        // бой и слать фейковый 'surrender' больше нельзя: оппонент оставался
+        // с застывшим боем без награды.
+        const leaverIsA = battle.playerA === socket.id;
+        const winnerTg = leaverIsA ? battle.userB : battle.userA;
+        const loserTg = leaverIsA ? battle.userA : battle.userB;
         activeBattles.delete(battleId);
+        audit({ kind: 'pvp_end', sessionId: battleId, actorTg: tg, detail: { action: 'disconnect', arena: battle.arena } });
+        settleBattleAsWin(io, battle, battleId, winnerTg, loserTg).catch((e) => {
+          console.error('[pvp] disconnect settle error:', e);
+        });
       }
     }
-    // Арена: вышедший мог драться — обновить флаги inBattle в лобби.
-    broadcastArenaLobby(io);
+  // Арена: вышедший мог драться — обновить флаги inBattle в лобби.
+  broadcastArenaLobby(io);
   });
-}
-
-/**
- * updateOrCreateRating — обновить или создать запись рейтинга.
- */
-async function updateOrCreateRating(db: any, userId: number, delta: number, won: boolean) {
-  try {
-    const existing = (await db.select().from(battleRatings).where(eq(battleRatings.user_id, userId)).limit(1))[0];
-    if (existing) {
-      await db.update(battleRatings).set({
-        rating: Math.max(1, existing.rating + delta),
-        wins: existing.wins + (won ? 1 : 0),
-        losses: existing.losses + (won ? 0 : 1),
-        updated_at: new Date().toISOString(),
-      }).where(eq(battleRatings.user_id, userId));
-    } else {
-      await db.insert(battleRatings).values({
-        user_id: userId,
-        rating: Math.max(1, 1000 + delta),
-        wins: won ? 1 : 0,
-        losses: won ? 0 : 1,
-        updated_at: new Date().toISOString(),
-      });
-    }
-  } catch (e) {
-    console.error('[pvp] updateOrCreateRating error:', e);
-  }
 }

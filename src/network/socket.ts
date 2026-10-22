@@ -47,7 +47,7 @@ async function renderOnlinePlayers() { (await import('../social/trainer-profile.
 async function updateTrainerLocationList(data: any) { (await import('../social/trainer-profile.js')).updateTrainerLocationList(data); }
 import { showTradeRequestModal } from '../ui/trade-request.js';
 import { openTradeWindow, renderTradeOffers, updateTradeConfirmUI, closeTradeWindow } from '../ui/trade-window.js';
-import { openPvPArena, endPvP, updatePvPUI, deferSettleSave, confirmSettleSave, sendMyMonData } from '../battle/pvp-core.js';
+import { openPvPArena, endPvP, updatePvPUI, deferSettleSave, confirmSettleSave, sendMyMonData, handleMyFaint, clearPvpReplaceWait, grantPvpExp, renderPvpTeams, closePvpModalIf, waitPvpReplacement } from '../battle/pvp-core.js';
 import { renderTeamGrid, refreshProfileUI } from '../ui/profile.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { updateInventoryDisplay } from '../ui/inventory.js';
@@ -379,22 +379,29 @@ export function initTradeSocket() {
     else if (data?.reason === 'IN_BATTLE') showToast('Один из бойцов уже в бою', true);
   });
   // Сброс стрика проигравшего (победа/сдача соперника уже сеттлится сервером).
-  state.socket.on('pvp_arena_update', (data) => {
-    if (data?.arena === true && typeof data.streak === 'number') {
-      adoptServerSaveVersion(data?.saveVersion);
-      state.pvpStreak = data.streak;
-      state.pvpLosses = (state.pvpLosses || 0) + 1;
-      if (typeof data.consolation === 'number' && data.consolation > 0) {
-        // Утешительные уже лежат в серверном сейве — зеркалим локально,
-        // иначе следующий автосейв затёр бы их (версия-то уже принята выше).
-        state.inventory['credit'] = (state.inventory['credit'] || 0) + data.consolation;
-        updateMoneyDisplay();
-        showToast(`Утешительный приз арены: +¥${data.consolation.toLocaleString()}`, false);
-      }
-      import('../ui/pvp-arena.js').then((m) => m.renderArenaStatus()).catch(() => {});
-      // Сеттл подтверждён (версия принята выше): отложенный сейв можно слать.
-      confirmSettleSave();
+  // ── pvp_arena_update: утешение проигравшему (арена И обычные бои) ──
+  // { streak, arena, consolation, saveVersion, battleId }. Версию принимаем
+  // всегда; стрик/поражение в счётчики — только для арены.
+  state.socket.on('pvp_arena_update', async (data: { streak?: number; arena?: boolean; consolation?: number; saveVersion?: number; battleId?: string }) => {
+    if (typeof data?.saveVersion !== 'number') return;
+    adoptServerSaveVersion(data.saveVersion);
+    clearPvpReplaceWait();
+    if (typeof data.consolation === 'number' && data.consolation > 0) {
+      // Утешительные уже лежат в серверном сейве — зеркалим локально,
+      // иначе следующий автосейв затёр бы их (версия-то уже принята выше).
+      state.inventory['credit'] = (state.inventory['credit'] || 0) + data.consolation;
+      updateMoneyDisplay();
+      store.emit('money:changed');
+      showToast(`Утешительный приз${data.arena ? ' арены' : ''}: +${data.consolation.toLocaleString()}¥`, false);
     }
+    if (data.arena === true) {
+      if (typeof data.streak === 'number') state.pvpStreak = data.streak;
+      state.pvpLosses = (state.pvpLosses || 0) + 1;
+      import('../ui/pvp-arena.js').then((m) => { m.renderArenaStatus(); }).catch(() => {});
+    }
+    await grantPvpExp(false);
+    closePvpModalIf(data?.battleId);
+    confirmSettleSave();
   });
 
   state.socket.on('pvp_opponent_action', (action) => {
@@ -410,6 +417,7 @@ export function initTradeSocket() {
       showToast('Соперник отключился — бой завершён без награды', true);
       state.pvpBattleId = null;
       state.pvpMyTurn = false;
+      clearPvpReplaceWait();
       autoSave();
       return;
     }
@@ -426,12 +434,27 @@ export function initTradeSocket() {
       if (action.sprite && oppSprite) oppSprite.src = action.sprite;
       if (!state.pvpOppMon) state.pvpOppMon = {};
       // Типы/статы/стадии оппонента — для честного урона и стадий в обе стороны.
+      state.pvpOppMon.name = action.name;
       state.pvpOppMon.currentHp = action.hp;
       state.pvpOppMon.maxHp = action.maxHp;
       state.pvpOppMon.lvl = action.lvl;
       if (Array.isArray(action.types)) state.pvpOppMon.types = action.types;
       if (Array.isArray(action.stats)) state.pvpOppMon.stats = action.stats;
       if (action.stages && typeof action.stages === 'object') state.pvpOppMon.stages = { ...action.stages };
+      // Снимок команды соперника (для баров) + уровень для XP.
+      if (Array.isArray(action.team)) state.pvpOppTeam = action.team.map((m: any) => ({ ...m }));
+      if (Number.isFinite(Number(action.lvl))) {
+        const lvls = Array.isArray(state.pvpEnemyLvls) ? state.pvpEnemyLvls : [];
+        lvls.push(Number(action.lvl));
+        state.pvpEnemyLvls = lvls;
+      }
+      // Замена пришла: бой продолжается, ход наш (выжидательная пауза снята).
+      if (state.pvpAwaitingReplacement) {
+        clearPvpReplaceWait();
+        showToast(`Соперник выпускает: ${action.name}! Ваш ход!`, false);
+        state.pvpMyTurn = true;
+      }
+      renderPvpTeams();
     }
     if (action.type === 'attack') {
       if (state.pvpMyMon && !action.missed) {
@@ -486,14 +509,31 @@ export function initTradeSocket() {
           state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: { type: 'fainted' } });
         }
       }
-      if (fainted) endPvP(false);
+      if (fainted) handleMyFaint();
     }
     if (action.type === 'hp_update') {
-      // Живой бар оппонента + конец боя: оппонент упал — победа.
+      // Живой бар оппонента + нокаут: оппонент упал — ждём замену, а не конец
+      // боя (командный формат: бой идёт, пока есть живые). Если замены нет
+      // 15с (клиент соперника мёртв) — забираем победу сами.
       // Стадии оппонента запоминаем: свой урон считаем с его защитой.
       if (action.stages && typeof action.stages === 'object') {
         if (!state.pvpOppMon) state.pvpOppMon = {};
         state.pvpOppMon.stages = { ...action.stages };
+      }
+      if (typeof action.hp === 'number') {
+        if (!state.pvpOppMon) state.pvpOppMon = {};
+        state.pvpOppMon.currentHp = action.hp;
+        if (typeof action.maxHp === 'number' && action.maxHp > 0) state.pvpOppMon.maxHp = action.maxHp;
+        // Синхроним бар команды соперника (точка гаснет при нокауте).
+        if (Array.isArray(state.pvpOppTeam) && state.pvpOppMon.name) {
+          const row = state.pvpOppTeam.find((m: any) => m?.name === state.pvpOppMon.name);
+          if (row) { row.hp = action.hp; if (typeof action.maxHp === 'number') row.maxHp = action.maxHp; }
+        }
+        renderPvpTeams();
+      }
+      if (action.fainted) {
+        waitPvpReplacement();
+        return;
       }
       const oppHpEl = document.getElementById('pvp-opp-hp');
       const oppHpFill = document.getElementById('pvp-opp-hp-fill');
@@ -501,22 +541,39 @@ export function initTradeSocket() {
         if (oppHpEl) oppHpEl.textContent = `${action.hp}/${action.maxHp}`;
         if (oppHpFill) oppHpFill.style.width = `${Math.max(0, (action.hp / action.maxHp) * 100)}%`;
       }
-      if (action.fainted) {
-        if (state.pvpOppMon) state.pvpOppMon.currentHp = 0;
-        endPvP(true);
-      }
       return;
     }
     if (action.type === 'fainted') {
-      // Оппонент упал — победа (награда придёт через pvp_reward / pvp_end).
-      if (state.pvpOppMon) state.pvpOppMon.currentHp = 0;
+      // Оппонент упал — ждём замену (см. выше); награда — только если это был
+      // последний (придёт pvp_end lose от соперника).
+      if (state.pvpOppMon) {
+        state.pvpOppMon.currentHp = 0;
+        if (Array.isArray(state.pvpOppTeam) && state.pvpOppMon.name) {
+          const row = state.pvpOppTeam.find((m: any) => m?.name === state.pvpOppMon.name);
+          if (row) row.hp = 0;
+        }
+        renderPvpTeams();
+      }
       const oppHpEl = document.getElementById('pvp-opp-hp');
       if (oppHpEl) oppHpEl.textContent = '0 (нокаут)';
-      endPvP(true);
+      waitPvpReplacement();
+      return;
+    }
+    if (action.type === 'switch') {
+      // Добровольная смена соперника: ход переходит нам.
+      const logEl = document.getElementById('pvp-log');
+      if (logEl) {
+        const logEntry = document.createElement('div');
+        logEntry.textContent = `${state.pvpOpponentName}: замена покемона!`;
+        logEl.prepend(logEntry);
+      }
+      state.pvpMyTurn = true;
+      updatePvPUI();
       return;
     }
     if (action.type === 'surrender') {
       showToast('🏆 Соперник сдался! Победа!', false);
+      clearPvpReplaceWait();
       // Награда выдаётся сервером через pvp_reward
       const pvpModal = document.getElementById('pvp-modal');
       if (pvpModal) pvpModal.style.display = 'none';
@@ -532,6 +589,7 @@ export function initTradeSocket() {
       if (action.type === 'lose') {
         showToast('🏆 Соперник повержен! Победа!', false);
       }
+      clearPvpReplaceWait();
       const pvpModal = document.getElementById('pvp-modal');
       if (pvpModal) pvpModal.style.display = 'none';
       state.pvpBattleId = null;
@@ -541,34 +599,45 @@ export function initTradeSocket() {
   });
 
   // ── pvp_reward: server-authoritative награда за PvP победу ──
-  // M-18: бой с арены присылает расширенный пакет
-  // { money, items, streak, best, wins, arena: true } — деньги и предметы
-  // уже лежат в серверном сейве, клиент зеркалит их в свой.
-  state.socket.on('pvp_reward', (data: { money: number; items?: Array<{ id: string; qty: number }>; streak?: number; best?: number; wins?: number; arena?: boolean; saveVersion?: number }) => {
+  // Пакет: { money, items, streak, best, wins, arena, training?, saveVersion, battleId }.
+  // Деньги и предметы уже лежат в серверном сейве, клиент зеркалит их в свой.
+  // training — спарринг-бот: без награды/рейтинга/стадий, только закрытие боя.
+  // Модалку закрываем только если награда относится к текущему бою.
+  state.socket.on('pvp_reward', async (data: { money: number; items?: Array<{ id: string; qty: number }>; streak?: number; best?: number; wins?: number; arena?: boolean; training?: boolean; saveVersion?: number; battleId?: string }) => {
     adoptServerSaveVersion(data?.saveVersion);
     try { state.lastReward = { money: data?.money || 0, saveVersion: data?.saveVersion, at: Date.now() }; } catch { /* ignore */ }
+    clearPvpReplaceWait();
+    if (data?.training) {
+      showToast('Тренировочный бой завершён (без награды)', false);
+      closePvpModalIf(data?.battleId);
+      confirmSettleSave();
+      return;
+    }
     if (data.money) {
       state.inventory['credit'] = (state.inventory['credit'] || 0) + data.money;
       updateMoneyDisplay();
       store.emit('money:changed');
-      if (data.arena === true) {
-        // Предметы приза — через addItem (проверяет ITEMS, шлёт inventory:changed).
-        for (const item of data.items || []) {
-          if (item?.id && item.qty > 0) addItem(item.id, item.qty);
-        }
-        // Серверный стрик — в поверхностные метрики тренеркарты (блок G).
-        if (typeof data.streak === 'number') state.pvpStreak = data.streak;
-        if (typeof data.best === 'number') state.pvpBestStreak = Math.max(state.pvpBestStreak || 0, data.best);
-        state.pvpWins = (state.pvpWins || 0) + 1;
-        showToast(`🏆 Арена: +${data.money}¥, стрик ${data.streak}! Приз уже в рюкзаке.`, false);
-        import('../ui/pvp-arena.js').then((m) => {
-          m.renderArenaStatus();
-          void m.refreshArenaLeaders();
-        }).catch(() => {});
-      } else {
-        showToast(`🏆 +${data.money}¥ за победу в PvP!`, false);
-      }
     }
+    // Предметы приза — через addItem (проверяет ITEMS, шлёт inventory:changed).
+    for (const item of data.items || []) {
+      if (item?.id && item.qty > 0) addItem(item.id, item.qty);
+    }
+    // Серверный стрик/победы — в поверхностные метрики тренеркарты (блок G).
+    if (typeof data.streak === 'number') state.pvpStreak = data.streak;
+    if (typeof data.best === 'number') state.pvpBestStreak = Math.max(state.pvpBestStreak || 0, data.best);
+    if (typeof data.wins === 'number') state.pvpWins = data.wins; else state.pvpWins = (state.pvpWins || 0) + 1;
+    if (data.arena === true) {
+      showToast(`🏆 Арена: +${data.money}¥, стрик ${data.streak}! Приз уже в рюкзаке.`, false);
+      import('../ui/pvp-arena.js').then((m) => {
+        m.renderArenaStatus();
+        void m.refreshArenaLeaders();
+      }).catch(() => {});
+    } else {
+      showToast(`🏆 +${data.money}¥ за победу в PvP!${typeof data.streak === 'number' && data.streak > 1 ? ` Стрик: ${data.streak}!` : ''}`, false);
+    }
+    // XP участникам — до отложенного сейва, чтобы прогресс ушёл этим же сейвом.
+    await grantPvpExp(true);
+    closePvpModalIf(data?.battleId);
     // Сеттл подтверждён (версия принята выше): отложенный сейв конца боя можно слать.
     confirmSettleSave();
   });

@@ -137,28 +137,31 @@ export async function runPvp() {
       hp && f ? 'оба события дошли' : 'синхронизации нет');
   }
 
-  // PC9: поражение B → награда A (+500, saveVersion)
+  // PC9: поражение B → награда A (стрик: money = 10000 + 5000*min(streak,5))
   const beforeA = await getSave(tA);
   const beforeB = await getSave(tB);
+  let rewardMoneyPc9 = 0;
   {
     const rw = onceEvent(sA, 'pvp_reward', 10000);
     sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
     const r = await rw;
-    check('PC9', 'победитель получает +500 и свежую saveVersion',
-      !!r && r.money === 500 && typeof r.saveVersion === 'number',
-      r ? `money=${r.money} sv=${r.saveVersion}` : 'награды нет');
+    const expected = (r && typeof r.streak === 'number') ? 10000 + 5000 * Math.min(r.streak, 5) : -1;
+    check('PC9', 'победитель получает награду за стрик и свежую saveVersion',
+      !!r && r.money === expected && r.arena === false && typeof r.saveVersion === 'number',
+      r ? `money=${r.money} (ждём ${expected}) streak=${r.streak} sv=${r.saveVersion}` : 'награды нет');
     var rewardSv = r?.saveVersion;
+    rewardMoneyPc9 = r?.money || 0;
   }
 
-  // PC10: кредит победителя в БД +500, у проигравшего без изменений
+  // PC10: кредит победителя в БД +награда, у проигравшего без изменений
   {
     await sleep(800);
     const afterA = await getSave(tA);
     const afterB = await getSave(tB);
     const dA = (afterA.saveData.inventory?.credit || 0) - (beforeA.saveData.inventory?.credit || 0);
     const dB = (afterB.saveData.inventory?.credit || 0) - (beforeB.saveData.inventory?.credit || 0);
-    check('PC10', 'кредит в БД: +500 победителю, 0 проигравшему', dA === 500 && dB === 0,
-      `ΔA=${dA} ΔB=${dB}`);
+    check('PC10', 'кредит в БД: награда победителю, 0 проигравшему', dA === rewardMoneyPc9 && dB === 0,
+      `ΔA=${dA} (награда ${rewardMoneyPc9}) ΔB=${dB}`);
   }
 
   // PC11: повторные pvp_end не платят дважды
@@ -174,8 +177,8 @@ export async function runPvp() {
     const afterA = await getSave(tA);
     const dA = (afterA.saveData.inventory?.credit || 0) - (beforeA.saveData.inventory?.credit || 0);
     check('PC11', 'повторные pvp_end не начисляют награду дважды',
-      rewards.length === 0 && dA === 500,
-      `наград: ${rewards.length}, Δкредита: ${dA} (было 500)`);
+      rewards.length === 0 && dA === rewardMoneyPc9,
+      `наград: ${rewards.length}, Δкредита: ${dA} (было ${rewardMoneyPc9})`);
   }
 
   // PC12: saveVersion из награды == версии в БД
@@ -195,9 +198,10 @@ export async function runPvp() {
       const rwA = onceEvent(sA, 'pvp_reward', 3000);
       sA.emit('pvp_end', { battleId: b2, action: { type: 'surrender' } });
       const [rB, rA] = await Promise.all([rwB, rwA]);
+      const expectedB = (rB && typeof rB.streak === 'number') ? 10000 + 5000 * Math.min(rB.streak, 5) : -1;
       check('PC13', 'surrender отдаёт победу оппоненту',
-        !!rB && rB.money === 500 && rA === null,
-        rB ? `B получил ${rB.money}, A: ${rA ? 'ТОЖЕ ПОЛУЧИЛ!' : 'ничего'}` : 'награды нет вообще');
+        !!rB && rB.money === expectedB && rB.arena === false && rA === null,
+        rB ? `B получил ${rB.money} (ждём ${expectedB}), A: ${rA ? 'ТОЖЕ ПОЛУЧИЛ!' : 'ничего'}` : 'награды нет вообще');
     }
   }
 

@@ -65,6 +65,8 @@ export const battleRatings = pgTable('battle_ratings', {
   rating: integer('rating').default(1000),
   wins: integer('wins').default(0),
   losses: integer('losses').default(0),
+  streak: integer('streak').default(0),
+  best_streak: integer('best_streak').default(0),
   updated_at: text('updated_at'),
 });
 

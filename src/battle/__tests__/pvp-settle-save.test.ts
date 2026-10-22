@@ -93,13 +93,14 @@ describe('отложенный сейв конца боя', () => {
     expect(state.settlePending).toBe(true);
   });
 
-  it('AFK-таймаут (announce=false) сохраняется сразу: сеттла с версией там нет', () => {
+  it('AFK-таймаут (announce=false): pvp_end не шлём, сейв отложен до pvp_reward', () => {
     state.pvpBattleId = 'pvp_timeout';
     endPvP(false, false);
     expect(state.socket.emit).not.toHaveBeenCalledWith(
       'pvp_end', expect.anything(),
     );
-    expect(autoSaveMock).toHaveBeenCalledTimes(1);
-    expect(state.settlePending).toBe(false);
+    expect(autoSaveMock).not.toHaveBeenCalled();
+    expect(state.settlePending).toBe(true);
+    expect(state.pvpBattleId).toBeNull();
   });
 });

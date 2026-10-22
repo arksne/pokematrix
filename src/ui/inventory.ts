@@ -761,6 +761,44 @@ function trackUse(itemId: string): void {
   } catch { /* ignore */ }
 }
 
+// ── grantBattleExp: опыт без предмета (PvP-награды, квесты) ──
+// Тот же level-up цикл, что в feedExp, но без списания и тостов: вызывающий
+// сам решает, как сообщить (пачкой), иначе 6 покемонов = 6 тостов.
+// Возвращает число level-up.
+export async function grantBattleExp(mon: any, amount: number): Promise<number> {
+  if (!mon || (mon.baseLevel + (mon.candiesEaten || 0)) >= 100 || !(amount > 0)) return 0;
+  if (typeof mon.exp !== 'number') {
+    mon.exp = Math.pow(mon.baseLevel, 3);
+    mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
+  }
+  mon.exp += amount;
+  let ups = 0;
+  const st = mon.apiData?.stats;
+  const bHp = (st && typeof st[0]?.base_stat === 'number') ? st[0].base_stat : 45;
+  const iHp = (mon.ivs && typeof mon.ivs.hp === 'number') ? mon.ivs.hp : 0;
+  const eHp = (mon.evs && typeof mon.evs.hp === 'number') ? mon.evs.hp : 0;
+  while (mon.exp >= mon.expToNext && (mon.baseLevel + (mon.candiesEaten || 0)) < 100) {
+    mon.baseLevel++;
+    ups++;
+    mon.expToNext = Math.pow(mon.baseLevel + 1, 3);
+    const lvl = mon.baseLevel + (mon.candiesEaten || 0);
+    const oldMax = mon.maxHp;
+    mon.maxHp = Math.floor(0.01 * (2 * bHp + iHp + Math.floor(0.25 * eHp)) * lvl) + lvl + 10;
+    mon.currentHp += (mon.maxHp - oldMax);
+    const m = await import('../battle/core.js');
+    if (typeof m.grantLevelUpEVs === 'function') {
+      m.grantLevelUpEVs(mon);
+    }
+  }
+  const evoTarget = await _checkEvolution(mon);
+  if (evoTarget) {
+    await _triggerEvolution(mon, evoTarget.name);
+    if (evoTarget.shedBonus) await _maybeGrantShedinja(mon);
+  }
+  await checkNewMovesOnLevelUp(mon, mon.baseLevel + (mon.candiesEaten || 0));
+  return ups;
+}
+
 // ── feedExp: скормить EXP-конфету ──
 // Даёт опыт (не уровень напрямую): инициализация exp, добавление,
 // цикл level-up с пересчётом HP/EV/эволюцией/атаками — как в бою.

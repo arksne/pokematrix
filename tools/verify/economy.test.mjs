@@ -172,7 +172,90 @@ const sockB = await connect(tokenB, 'B');
   sB.close();
 }
 
-// ── E5: нокаут в PvP виден обеим сторонам, награда доходит (L4) ──
+// ── E12: добровольная смена посреди боя — бой продолжается ──
+// A шлёт switch + mon_data нового мона; B видит замену и ходит следующим.
+{
+  const tA = await login(111000031, 'pvp_e12a');
+  const tB = await login(111000032, 'pvp_e12b');
+  const sA = await connect(tA, 'E12A');
+  const sB = await connect(tB, 'E12B');
+  const ch = onceEvent(sB, 'pvp_challenge_received', 3000);
+  sA.emit('pvp_challenge', 111000032);
+  if (!(await ch)) {
+    check('E12', 'PvP: смена покемона посреди боя', false, 'вызов не дошёл');
+  } else {
+    const pA = onceEvent(sA, 'pvp_start', 3000);
+    const pB = onceEvent(sB, 'pvp_start', 3000);
+    sB.emit('pvp_accept', 111000031);
+    const [eA, eB] = await Promise.all([pA, pB]);
+    const bid = eA?.battleId;
+    if (!bid || bid !== eB?.battleId) {
+      check('E12', 'PvP: смена покемона посреди боя', false, 'бой не начался');
+    } else {
+      const swP = onceEvent(sB, 'pvp_opponent_action', 4000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'switch', name: 'Pikachu' } });
+      const sw = await swP;
+      const monP = onceEvent(sB, 'pvp_opponent_action', 4000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'mon_data', name: 'Pikachu', lvl: 5, hp: 50, maxHp: 50 } });
+      const mon = await monP;
+      const atkP = onceEvent(sA, 'pvp_opponent_action', 4000);
+      sB.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'tackle', dmg: 8, crit: false, lvl: 5, atk: 60, power: 40 } });
+      const atk = await atkP;
+      check('E12', 'PvP: смена покемона посреди боя',
+        !!sw && sw.type === 'switch' && !!mon && mon.type === 'mon_data' && !!atk && atk.type === 'attack',
+        sw && mon ? (atk ? 'замена прошла, бой идёт' : 'после смены ход не дошёл') : 'релей смены не дошёл');
+      sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
+      await sleep(500);
+    }
+  }
+  sA.close();
+  sB.close();
+}
+
+// ── E13: нокаут не кончает бой — замена продолжает его до сеттла ──
+// B присылает hp_update{fainted} (его мон упал); A НЕ шлёт pvp_end, ждёт
+// замену; B шлёт mon_data нового — бой идёт дальше и сеттлится поражением B.
+{
+  const tA = await login(111000041, 'pvp_e13a');
+  const tB = await login(111000042, 'pvp_e13b');
+  const sA = await connect(tA, 'E13A');
+  const sB = await connect(tB, 'E13B');
+  const ch = onceEvent(sB, 'pvp_challenge_received', 3000);
+  sA.emit('pvp_challenge', 111000042);
+  if (!(await ch)) {
+    check('E13', 'PvP: нокаут продолжает бой заменой', false, 'вызов не дошёл');
+  } else {
+    const pA = onceEvent(sA, 'pvp_start', 3000);
+    const pB = onceEvent(sB, 'pvp_start', 3000);
+    sB.emit('pvp_accept', 111000041);
+    const [eA, eB] = await Promise.all([pA, pB]);
+    const bid = eA?.battleId;
+    if (!bid || bid !== eB?.battleId) {
+      check('E13', 'PvP: нокаут продолжает бой заменой', false, 'бой не начался');
+    } else {
+      // B: мой мон упал.
+      const noEnd = onceEvent(sB, 'pvp_opponent_action', 2500);
+      sB.emit('pvp_action', { battleId: bid, action: { type: 'hp_update', hp: 0, maxHp: 50, fainted: true } });
+      await noEnd;
+      // A: замена B приходит — бой продолжается.
+      const monP = onceEvent(sA, 'pvp_opponent_action', 4000);
+      sB.emit('pvp_action', { battleId: bid, action: { type: 'mon_data', name: 'Pikachu-2', lvl: 5, hp: 50, maxHp: 50 } });
+      const mon = await monP;
+      const atkP = onceEvent(sB, 'pvp_opponent_action', 4000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'tackle', dmg: 8, crit: false, lvl: 5, atk: 60, power: 40 } });
+      const atk = await atkP;
+      // B сдаётся поражением — сеттл с наградой A.
+      const rwP = onceEvent(sA, 'pvp_reward', 5000);
+      sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
+      const rw = await rwP;
+      check('E13', 'PvP: нокаут продолжает бой заменой',
+        !!mon && mon.type === 'mon_data' && !!atk && !!rw && rw.money === 15000,
+        mon ? (atk ? (rw ? `сеттл после замены: +${rw.money}` : 'награды нет') : 'атака после замены не прошла') : 'замена не дошла');
+    }
+  }
+  sA.close();
+  sB.close();
+}
 // Протокол: A бьёт → B присылает hp_update{fainted} + fainted → A видит
 // победу; B шлёт pvp_end{lose} → сервер сеттлит победу A (+500 + pvp_reward).
 {
@@ -211,16 +294,16 @@ const sockB = await connect(tokenB, 'B');
       const faint = await faintRecv;
       faintedOk = !!faint && faint.type === 'fainted';
     }
-    // B сдаёт бой поражением → сервер должен наградить A
+    // B сдаёт бой поражением → сервер должен наградить A (стрик 1: 15000)
     const rewardRecv = onceEvent(sA, 'pvp_reward', 5000);
     sB.emit('pvp_end', { battleId: bidB, action: { type: 'lose' } });
     const reward = await rewardRecv;
-    rewardOk = !!reward && reward.money === 500;
+    rewardOk = !!reward && reward.money === 15000 && reward.streak === 1 && reward.arena === false;
     // Награда несёт свежую saveVersion (сервер поднял её сеттлом).
     const verW = (await api('/api/save', { method: 'GET', token: tA })).json?.saveVersion;
     const svOk = typeof reward?.saveVersion === 'number' && reward.saveVersion === verW;
-    check('E5b', 'PvP: победитель получает +500 через чужой lose', rewardOk && svOk,
-      !rewardOk ? 'pvp_reward не пришёл' : `saveVersion=${reward?.saveVersion}/${verW}`);
+    check('E5b', 'PvP: победитель получает награду за стрик через чужой lose', rewardOk && svOk,
+      !rewardOk ? `pvp_reward не пришёл / не та сумма: ${JSON.stringify(reward)}` : `saveVersion=${reward?.saveVersion}/${verW}`);
   }
   check('E5', 'PvP: нокаут синхронизируется (hp_update + fainted)', sameBattle && hpSyncOk && faintedOk,
     !sameBattle ? 'бой не создался' : `hp_update: ${hpSyncOk}, fainted: ${faintedOk}`);

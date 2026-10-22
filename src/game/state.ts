@@ -148,6 +148,13 @@ export const state: Record<string, any> = {
   // версией получает 409 → тост «более новая версия» ровно в конце боя/сделки.
   settlePending: false,          // ждём сеттл, сейвы отложены
   settleTimer: null as any,      // фолбэк-таймер отложенного сейва
+  pvpEndSent: false,             // pvp_end уже ушёл (защита от двойного вызова)
+  pvpStageBackup: null as any,   // снапшот стадий на старт боя (восстанавливаем в конце)
+  pvpParticipants: [] as string[], // uid своих участников боя (для XP)
+  pvpEnemyLvls: [] as number[],  // уровни виденных соперников (для XP)
+  pvpAwaitingReplacement: false, // ждём замену упавшего мона соперника
+  pvpReplaceTimer: null as any,  // фолбэк: нет замены 15с — забираем победу
+  pvpOppTeam: null as any,       // последний снимок команды соперника (из mon_data)
   // ── M-18: PvP-Арена ──────────────────────────────────────
   inArena: false,                  // Я на арене (вошёл по жетону)
   arenaLobby: [] as Array<any>,    // Кто на арене: [{ userId, username, inBattle }]

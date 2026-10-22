@@ -50,6 +50,13 @@
       "when": 1792528166283,
       "tag": "0007_gigantic_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792663179065,
+      "tag": "0008_public_bill_hollister",
+      "breakpoints": true
     }
   ]
 }

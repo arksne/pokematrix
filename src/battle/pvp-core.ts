@@ -132,6 +132,13 @@ export function openPvPArena(battleId, opponent, myFirst) {
   state.pvpMyTurn = myFirst;
   state.pvpMyMon = alive;
   state.pvpEndSent = false; // новый бой — pvp_end ещё не слали
+  // Участники и уровни соперника — для XP в конце боя.
+  state.pvpParticipants = alive?.uid ? [alive.uid] : [];
+  state.pvpEnemyLvls = [];
+  state.pvpOppMon = null;
+  state.pvpOppTeam = null;
+  if (state.pvpReplaceTimer) { clearTimeout(state.pvpReplaceTimer); state.pvpReplaceTimer = null; }
+  state.pvpAwaitingReplacement = false;
 
   // ── Создание модалки (если ещё не создана) ──
   let modal = document.getElementById('pvp-modal');
@@ -144,12 +151,14 @@ export function openPvPArena(battleId, opponent, myFirst) {
       <div class="reborn-battle-arena" style="max-width:440px;width:95%;">
         <div class="text-center p-8"><span id="pvp-opponent-name" class="fw-bold"></span></div>
         <div class="text-center fs-09" id="pvp-turn-indicator"></div>
+        <div class="text-center fs-09" id="pvp-opp-team" style="margin:2px 0;"></div>
         <div class="reborn-pokemon-row">
           <div class="reborn-side-panel">
             <div class="reborn-poke-header"><span id="pvp-my-name"></span> <span id="pvp-my-lvl"></span></div>
             <div class="reborn-hp-bar"><div class="reborn-hp-fill" id="pvp-my-hp-fill"></div></div>
             <div class="reborn-hp-text" id="pvp-my-hp"></div>
             <div class="reborn-sprite-box"><img class="reborn-sprite" id="pvp-my-sprite" src=""></div>
+            <div class="text-center fs-09" id="pvp-my-team" style="margin-top:2px;"></div>
           </div>
           <div class="reborn-side-panel">
             <div class="reborn-poke-header"><span id="pvp-opp-name"></span> <span id="pvp-opp-lvl"></span></div>
@@ -163,12 +172,12 @@ export function openPvPArena(battleId, opponent, myFirst) {
           <div class="reborn-log-container"><div class="reborn-battle-log" id="pvp-log"></div></div>
         </div>
         <button class="tma-btn w-full mt-8" id="btn-pvp-leave">Сдаться</button>
+        <button class="tma-btn w-full mt-8" id="btn-pvp-switch" style="margin-top:6px;">🔄 Смена</button>
       </div>
     `;
     document.body.appendChild(modal);
     // Обработчик кнопки "Сдаться"
-    document.getElementById('btn-pvp-leave').addEventListener('click', () => {
-      modal.style.display = 'none';
+    document.getElementById('btn-pvp-leave').addEventListener('click', () => {      modal.style.display = 'none';
       state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: 'surrender' } });
       state.pvpBattleId = null;
       state.pvpEndSent = true;
@@ -176,6 +185,11 @@ export function openPvPArena(battleId, opponent, myFirst) {
       // сейв только после подтверждения, иначе 409 + тост (см. deferSettleSave).
       deferSettleSave();
       updateMoneyDisplay();
+    });
+    // Добровольная смена: ход сгорает (как договорились в опроснике).
+    document.getElementById('btn-pvp-switch').addEventListener('click', () => {
+      if (!state.pvpBattleId || !state.pvpMyTurn) return;
+      openPvpSwitchPicker('switch');
     });
   }
 
@@ -187,6 +201,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
   document.getElementById('pvp-opp-hp-fill').style.width = '100%';     // HP бар — полный
   (document.getElementById('pvp-opp-sprite') as HTMLImageElement).src = ''; // Спрайт — пока пусто
   document.getElementById('pvp-log').innerHTML = '';
+  renderPvpTeams();
   updatePvPUI();                                                        // UI своего покемона
   modal.style.display = 'flex';
 
@@ -205,7 +220,12 @@ export function sendMyMonData(battleId: unknown): void {
   const mon = state.pvpMyMon;
   if (!mon || !state.socket) return;
   const myLvl = mon.baseLevel + (mon.candiesEaten || 0);
-  state.pvpStageBackup = JSON.parse(JSON.stringify(mon.statStages || {}));
+  // Снапшот стадий — только при смене бойца (не при каждом ресинке, иначе
+  // переподключение посреди баффов зафиксирует +6 как «стартовые»).
+  if ((state as any).pvpStageBackupUid !== mon.uid) {
+    state.pvpStageBackup = JSON.parse(JSON.stringify(mon.statStages || {}));
+    (state as any).pvpStageBackupUid = mon.uid;
+  }
   const myTypes = (mon.apiData?.types || []).map((t: any) => t?.type?.name || t).filter(Boolean);
   state.socket.emit('pvp_action', { battleId, action: {
     type: 'mon_data',
@@ -218,7 +238,176 @@ export function sendMyMonData(battleId: unknown): void {
     stats: baseStatsOf(mon),
     calc: battleStatsOf(mon, myLvl),
     stages: { ...(mon.statStages || {}) },
+    team: (state.myTeam || []).slice(0, 6).map((m: any) => ({
+      name: m?.nickname || m?.apiData?.name || '?',
+      hp: m?.currentHp ?? 0,
+      maxHp: m?.maxHp ?? 1,
+    })),
   }});
+  trackPvpParticipant(mon);
+}
+
+/** Закрыть модалку боя, если событие относится к текущему бою (или без привязки). */
+export function closePvpModalIf(battleId?: unknown): void {
+  try {
+    if (battleId && state.pvpBattleId && battleId !== state.pvpBattleId) return;
+    const modal = document.getElementById('pvp-modal');
+    if (modal) modal.style.display = 'none';
+    state.pvpBattleId = null;
+    state.pvpMyTurn = false;
+  } catch { /* ignore */ }
+}
+
+/** Участник боя — для XP в конце (только вышедшие на поле). */
+export function trackPvpParticipant(mon: any): void {
+  try {
+    if (!mon?.uid) return;
+    const list = Array.isArray(state.pvpParticipants) ? state.pvpParticipants : [];
+    if (!list.includes(mon.uid)) list.push(mon.uid);
+    state.pvpParticipants = list;
+  } catch { /* ignore */ }
+}
+
+/** Полосы команд: свои 6 (точка = жив/пал/текущий) + чужие по последнему снимку. */
+export function renderPvpTeams(): void {
+  try {
+    const myBox = document.getElementById('pvp-my-team');
+    if (myBox) {
+      myBox.innerHTML = (state.myTeam || []).slice(0, 6).map((m: any) => {
+        const alive = (m?.currentHp || 0) > 0;
+        const cur = state.pvpMyMon && m?.uid && state.pvpMyMon.uid === m.uid;
+        const dot = alive ? '🟢' : '🔴';
+        return `<span style="${cur ? 'outline:2px solid #34c759;border-radius:50%;' : ''}margin:0 1px;" title="${(m?.nickname || m?.apiData?.name || '?') + ' ' + (m?.currentHp || 0) + '/' + (m?.maxHp || '?')}">${dot}</span>`;
+      }).join('');
+    }
+    const oppBox = document.getElementById('pvp-opp-team');
+    if (oppBox) {
+      const team = Array.isArray(state.pvpOppTeam) ? state.pvpOppTeam : [];
+      const curName = state.pvpOppMon?.name;
+      oppBox.innerHTML = team.slice(0, 6).map((m: any) => {
+        const alive = (Number(m?.hp) || 0) > 0;
+        const cur = curName && m?.name === curName;
+        const dot = alive ? '🟢' : '🔴';
+        return `<span style="${cur ? 'outline:2px solid #ff9500;border-radius:50%;' : ''}margin:0 1px;" title="${m?.name || '?'}: ${m?.hp ?? '?'}">${dot}</span>`;
+      }).join('');
+    }
+  } catch { /* ignore */ }
+}
+
+/**
+ * Выбор бойца: добровольная смена ('switch', ход сгорает) или замена после
+ * нокаута ('faint', ход уже потрачен — замена не тратит лишний).
+ */
+export function openPvpSwitchPicker(mode: 'switch' | 'faint'): void {
+  try { document.getElementById('pvp-switch-modal')?.remove(); } catch { /* ignore */ }
+  const box = document.createElement('div');
+  box.id = 'pvp-switch-modal';
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  const alive = (state.myTeam || []).filter((m: any) => m && (m.currentHp || 0) > 0
+    && (!state.pvpMyMon || m.uid !== state.pvpMyMon.uid));
+  const title = mode === 'faint' ? 'Ваш покемон пал! Кто выходит?' : 'Кого выпускаем? (ход сгорит)';
+  box.innerHTML = `<div style="background:#1c1c2e;border-radius:12px;padding:16px;max-width:320px;width:90%;">
+    <div style="font-weight:bold;margin-bottom:10px;text-align:center;">${title}</div>
+    <div id="pvp-switch-list"></div>
+    ${mode === 'switch' ? '<button id="pvp-switch-cancel" class="tma-btn w-full" style="margin-top:8px;">Отмена</button>' : ''}
+  </div>`;
+  document.body.appendChild(box);
+  const list = document.getElementById('pvp-switch-list');
+  for (const m of alive) {
+    const b = document.createElement('button');
+    b.className = 'tma-btn w-full';
+    b.style.marginTop = '6px';
+    b.textContent = `${m.nickname || m.apiData?.name || '?'} Ур.${(m.baseLevel || 1) + (m.candiesEaten || 0)} HP ${m.currentHp}/${m.maxHp}`;
+    b.onclick = () => { try { box.remove(); } catch {} pvpPickFighter(m, mode); };
+    list?.appendChild(b);
+  }
+  if (mode === 'switch') {
+    document.getElementById('pvp-switch-cancel')!.onclick = () => { try { box.remove(); } catch {} };
+  }
+}
+
+/** Поставить бойца на поле: смена (с ходом) или замена после нокаута. */
+export function pvpPickFighter(mon: any, mode: 'switch' | 'faint'): void {
+  if (!mon || !state.pvpBattleId) return;
+  state.pvpMyMon = mon;
+  state.pvpEndSent = false; // новая фаза боя — будущий pvp_end разрешён
+  if (mon.statStages == null) mon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+  sendMyMonData(state.pvpBattleId);
+  if (mode === 'switch') {
+    state.socket.emit('pvp_action', {
+      battleId: state.pvpBattleId,
+      action: { type: 'switch', name: mon.nickname || mon.apiData?.name },
+    });
+  }
+  state.pvpMyTurn = false;
+  const logEl = document.getElementById('pvp-log');
+  if (logEl) {
+    const logEntry = document.createElement('div');
+    logEntry.textContent = `Вы выпускаете: ${mon.nickname || mon.apiData?.name}!`;
+    logEl.prepend(logEntry);
+  }
+  renderPvpTeams();
+  updatePvPUI();
+}
+
+/** Мой покемон упал: есть кем продолжить — выбор, иначе поражение. */
+export function handleMyFaint(): void {
+  const others = (state.myTeam || []).filter((m: any) => m && (m.currentHp || 0) > 0);
+  if (others.length === 0) {
+    endPvP(false);
+    return;
+  }
+  showToast('Ваш покемон пал! Выберите следующего.', true);
+  state.pvpMyTurn = false;
+  openPvpSwitchPicker('faint');
+  updatePvPUI();
+}
+
+/** Соперник упал: ждём замену до 15с, иначе забираем победу (клиент соперника мёртв). */
+export function waitPvpReplacement(): void {
+  if (!state.pvpBattleId || state.pvpAwaitingReplacement) return;
+  state.pvpAwaitingReplacement = true;
+  state.pvpMyTurn = false;
+  showToast('Соперник повержен! Ждём замену…', false);
+  const ind = document.getElementById('pvp-turn-indicator');
+  if (ind) ind.textContent = '⏳ Ждём замену соперника…';
+  if (state.pvpReplaceTimer) clearTimeout(state.pvpReplaceTimer);
+  state.pvpReplaceTimer = setTimeout(() => {
+    state.pvpReplaceTimer = null;
+    if (state.pvpAwaitingReplacement && state.pvpBattleId) {
+      state.pvpAwaitingReplacement = false;
+      endPvP(true);
+    }
+  }, 15000);
+  updatePvPUI();
+}
+
+/** Бой точно окончен: снять ожидание замены (награда/сдача/выход). */
+export function clearPvpReplaceWait(): void {
+  state.pvpAwaitingReplacement = false;
+  if (state.pvpReplaceTimer) { clearTimeout(state.pvpReplaceTimer); state.pvpReplaceTimer = null; }
+}
+
+/** XP участникам боя (победителям больше, слабым — больше за сильного врага). */
+export async function grantPvpExp(won: boolean): Promise<void> {
+  try {
+    const { grantBattleExp } = await import('../ui/inventory.js');
+    const uids = [...new Set(state.pvpParticipants || [])];
+    const enemyLvls = (state.pvpEnemyLvls || []).filter((n) => Number.isFinite(n) && (n as number) > 0) as number[];
+    const avgEnemy = enemyLvls.length ? enemyLvls.reduce((a, b) => a + b, 0) / enemyLvls.length : 5;
+    let total = 0;
+    let ups = 0;
+    for (const m of state.myTeam || []) {
+      if (!m?.uid || !uids.includes(m.uid)) continue;
+      const lvl = (m.baseLevel || 1) + (m.candiesEaten || 0);
+      const gain = Math.max(0, Math.round((won ? 25 : 10) * avgEnemy / Math.max(1, lvl)));
+      if (gain <= 0) continue;
+      ups += await grantBattleExp(m, gain);
+      total += gain;
+    }
+    state.pvpParticipants = [];
+    if (total > 0) showToast(`PvP-опыт: +${total} EXP${ups ? ` (уровни: ${ups})` : ''}`, false);
+  } catch { /* ignore */ }
 }
 
 /**
@@ -283,8 +472,14 @@ export async function updatePvPUI() {
   (document.getElementById('pvp-my-sprite') as HTMLImageElement).src = sprite;
 
   // ── Индикатор хода ──
-  document.getElementById('pvp-turn-indicator').textContent = state.pvpMyTurn ? '🎯 Ваш ход!' : '⏳ Ожидание хода соперника...';
+  // Пока ждём замену соперника — не затираем текст ожидания чужим ходом.
+  if (!state.pvpAwaitingReplacement) {
+    document.getElementById('pvp-turn-indicator').textContent = state.pvpMyTurn ? '🎯 Ваш ход!' : '⏳ Ожидание хода соперника...';
+  }
   document.getElementById('pvp-turn-indicator').style.color = state.pvpMyTurn ? '#34c759' : '#ff9500';
+
+  // Бары команд: HP и нокауты обновляются каждый тик UI.
+  renderPvpTeams();
 
   // ── Загрузка атак ──
   // ТОЛЬКО реальные мувы покемона (apiData.moves — 4 боевых слота из сейва:
@@ -537,16 +732,18 @@ export function endPvP(won, announce = true) {
   // как «кик из боя». Бой уже учтён (pvpBattleId сброшен ниже), тапы harmless.
   const modal = document.getElementById('pvp-modal');
   setTimeout(() => { try { if (modal) modal.style.display = 'none'; } catch { /* ignore */ } }, 1200);
-  // announce=false — бой уже закрыт сервером (AFK-таймаут): pvp_end не шлём,
-  // иначе будет двойное начисление и лишний цикл. Сеттла с подъёмом версии
-  // там тоже нет (только рейтинг) — сейв безопасен сразу.
+  // announce=false — бой уже закрыт сервером (AFK-таймаут/монета): pvp_end не шлём,
+  // иначе будет двойное начисление и лишний цикл. Сеттл ТАМ теперь полный
+  // (награда+версия), поэтому сейв — тоже только после подтверждения.
   if (announce) {
     state.socket.emit('pvp_end', { battleId: state.pvpBattleId, action: { type: won ? 'win' : 'lose' } });
     state.pvpBattleId = null;
+    clearPvpReplaceWait();
     deferSettleSave();
   } else {
     state.pvpBattleId = null;
-    autoSave();
+    clearPvpReplaceWait();
+    deferSettleSave();
   }
   // Стадии боя не утекают в сейв: восстанавливаем стартовые (иначе +6 атаки
   // после каждого танца навсегда).
@@ -556,4 +753,5 @@ export function endPvP(won, announce = true) {
     }
   } catch { /* ignore */ }
   state.pvpStageBackup = null;
+  (state as any).pvpStageBackupUid = null;
 }
