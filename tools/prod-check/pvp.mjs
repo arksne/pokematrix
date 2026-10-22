@@ -153,14 +153,14 @@ export async function runPvp() {
     rewardMoneyPc9 = r?.money || 0;
   }
 
-  // PC10: кредит победителя в БД +награда, у проигравшего без изменений
+  // PC10: кредит победителя +награда, у проигравшего +утешительные 2000
   {
     await sleep(800);
     const afterA = await getSave(tA);
     const afterB = await getSave(tB);
     const dA = (afterA.saveData.inventory?.credit || 0) - (beforeA.saveData.inventory?.credit || 0);
     const dB = (afterB.saveData.inventory?.credit || 0) - (beforeB.saveData.inventory?.credit || 0);
-    check('PC10', 'кредит в БД: награда победителю, 0 проигравшему', dA === rewardMoneyPc9 && dB === 0,
+    check('PC10', 'кредит в БД: награда победителю, утешительные проигравшему', dA === rewardMoneyPc9 && dB === 2000,
       `ΔA=${dA} (награда ${rewardMoneyPc9}) ΔB=${dB}`);
   }
 
