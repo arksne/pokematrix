@@ -12,10 +12,11 @@
 //
 // ОТЛИЧИЯ ОТ WILD/GYM БОЯ:
 //   - Данные оппонента приходят через Socket.IO (не PokeAPI)
-//   - Упрощённый расчёт урона (не использует calculateDamage из logic.ts)
+//   - Урон считается формулой Pokémon по боевым статам (calc из mon_data,
+//     battleStatsOf), а не по base_stat — обе стороны считают одинаково.
 //   - Ходы переключаются: мой ход → ход оппонента → мой ход
 //   - Нет авто-охоты, предметов в бою, смены покемона
-//   - Простая формула: lvl * power * atk / 15 * рандом
+//   - Формула: ((2*lvl/5+2) * power * (A/D))/50 + 2 × модификаторы
 //
 // ЗАВИСИМОСТИ:
 //   state — глобальное состояние игры
@@ -34,7 +35,7 @@ import { autoSave } from '../game/save.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { checkAchievement } from '../ui/achievements.js';
 import { calculateDamage, checkAccuracy, getTypeMultiplier, statStageModify, isStatusImmune, applyStatusEffect } from './logic.js';
-import { calculateStat } from './stats.js';
+import { calculateStat, stageMultiplier } from './stats.js';
 import { HEAL_HP } from '../data/item-effects.js';
 import { normMoveName, isChargeMove, canHitHidden, hideVerb, isOhkoMove, getFixedDamage, hasFixedDamage, isTrapChipMove } from './special-moves.js';
 
@@ -1209,6 +1210,86 @@ export function usePvpItem(itemId: string): void {
   pvpSend({ type: 'item', item: itemId, label });
 }
 
+/** Урон PvP: формула Pokémon по реальным боевым статам (battleStatsOf / calc
+ * из mon_data), а не к base_stat. Считает атакующий и шлёт оппоненту — стороны
+ * не рассинхронятся, потому что урон применяет получатель из присланного dmg. */
+function calcPvpDamage({
+  move, attackerStats, defenderStats, attackerStages, defenderStages,
+  attackerLevel, defenderLevel, weather, attackerAbility, defenderAbility,
+  foeTypesList, myTypesList, myGrounded,
+}: {
+  move: any;
+  attackerStats: { patk: number; pdef: number; satk: number; sdef: number };
+  defenderStats: { patk: number; pdef: number; satk: number; sdef: number };
+  attackerStages: any; defenderStages: any;
+  attackerLevel: number; defenderLevel: number;
+  weather: string; attackerAbility: string | null; defenderAbility: string | null;
+  foeTypesList: string[]; myTypesList: string[]; myGrounded: boolean;
+}): { damage: number; isCrit: boolean; mods: string } {
+  const dcat = move?.damage_class?.name || 'status';
+  const isPhysical = dcat === 'physical';
+  const isSpecial = dcat === 'special';
+  if (!isPhysical && !isSpecial) return { damage: 0, isCrit: false, mods: '' };
+
+  const power = Number(move?.power) || 0;
+  const type = move?.type?.name || 'normal';
+
+  // Фиксированный урон (Seismic Toss и т.п.): урон = уровень, игнорируем статы.
+  if (hasFixedDamage(move)) {
+    const fixed = getFixedDamage(move, { attackerLevel });
+    const f = Number.isFinite(Number(fixed)) ? Number(fixed) : 0;
+    return { damage: Math.max(1, Math.floor(f)), isCrit: false, mods: 'фиксированный урон' };
+  }
+
+  const atkShort = isPhysical ? 'atk' : 'spa';
+  const defShort = isPhysical ? 'def' : 'spd';
+  let A = isPhysical ? attackerStats.patk : attackerStats.satk;
+  let D = isPhysical ? defenderStats.pdef : defenderStats.sdef;
+  const as = attackerStages?.[atkShort];
+  const ds = defenderStages?.[defShort];
+  if (as) A = Math.floor(A * stageMultiplier(as));
+  if (ds) D = Math.floor(D * stageMultiplier(ds));
+  D = Math.max(1, D);
+
+  const base = Math.floor(Math.floor(((2 * attackerLevel / 5 + 2) * power * (A / Math.max(1, D))) / 50) + 2);
+
+  const mods: string[] = [];
+  let mult = 1;
+
+  if (myTypesList.includes(type)) { mult *= 1.5; mods.push('stab'); }
+
+  const eff = getTypeMultiplier(type, foeTypesList.length ? foeTypesList : undefined);
+  mult *= eff;
+  if (eff > 1) mods.push('суперэффективно');
+  else if (eff > 0 && eff < 1) mods.push('малоэффективно');
+  else if (eff === 0) mods.push('не подействовало');
+
+  let isCrit = false;
+  const highCrit = ['slash', 'stone-edge', 'night-slash', 'crabhammer', 'razor-leaf', 'aero-blast', 'cross-chop', 'karate-chop', 'slice'].includes(moveSlug(move?.name));
+  if (Math.random() < (highCrit ? 1 / 8 : 1 / 16)) {
+    isCrit = true; mult *= 1.5; mods.push('критический удар');
+  }
+  mult *= 0.85 + Math.random() * 0.15;
+
+  if (isPhysical && screenUp(pvpField.foeScreens, 'reflect')) { mult *= 0.5; mods.push('экран'); }
+  if (isSpecial && screenUp(pvpField.foeScreens, 'light')) { mult *= 0.5; mods.push('экран'); }
+
+  if (weather === 'sun') { if (type === 'fire') mult *= 1.5; else if (type === 'water') mult *= 0.5; }
+  else if (weather === 'rain') { if (type === 'water') mult *= 1.5; else if (type === 'fire') mult *= 0.5; }
+
+  if (myGrounded) {
+    const terr = pvpTerrainActive();
+    const mt = type;
+    if ((terr === 'grassy' && mt === 'grass') || (terr === 'electric' && mt === 'electric')
+      || (terr === 'psychic' && mt === 'psychic') || (terr === 'misty' && mt === 'dragon')) {
+      mult *= 1.3;
+    }
+  }
+
+  if (eff === 0) return { damage: 0, isCrit: false, mods: mods.join(', ') };
+  return { damage: Math.max(1, Math.floor(base * mult)), isCrit, mods: mods.join(', ') };
+}
+
 export function doPvPAttack(moveIdx: number): void {
   const mon = state.pvpMyMon;
   if (!mon || !state.pvpBattleId) return;
@@ -1531,61 +1612,31 @@ export function doPvPAttack(moveIdx: number): void {
     return;
   }
 
-  // --- Честный урон ---
+  // --- Честный урон (формула Pokémon по боевым статам из mon_data) ---
   const opp = state.pvpOppMon || {};
-  const oppStats = Array.isArray(opp.stats) ? opp.stats : [];
-  const statAt = (i: number) => { const v = Number(oppStats[i]); return Number.isFinite(v) && v > 0 ? v : 50; };
-  let dmg = 0;
-  let crit = false;
-  let mods = '';
-  try {
-    const res = calculateDamage({
-      move: struggling ? { name: 'Struggle', power: 50, type: { name: '???' }, damage_class: { name: 'physical' } } : detailed,
-      attacker: mon,
-      defender: {
-        apiData: {
-          types: foeT.map((t: any) => ({ type: { name: t } })),
-          stats: [0, 1, 2, 3, 4, 5].map((i) => ({ base_stat: statAt(i) })),
-        },
-        ivs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-        evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-        statStages: opp.stages || null,
-        currentHp: opp.currentHp,
-        maxHp: opp.maxHp,
-      },
-      attackerLevel: lvl,
-      defenderLevel: opp.lvl || lvl,
-      defenderCurrentHp: opp.currentHp,
-      defenderMaxHp: opp.maxHp,
-      attackerCurrentHp: mon.currentHp,
-      attackerMaxHp: mon.maxHp,
-      attackerAbilityName: myAb || undefined,
-      defenderAbilityName: foeAb || undefined,
-      attackerHeldItem: myHeld() || undefined,
-      weather: pvpWeatherForCalc(myAb, foeAb),
-    });
-    dmg = res.damage;
-    crit = res.isCrit;
-    mods = (res.messages || []).map((m: string) => String(m).replace(/[!.]+$/, '').toLowerCase()).join(', ');
-  } catch {
-    dmg = 1;
-  }
-  // Экраны соперника режут урон вдвое.
-  if (dmg > 0) {
-    if ((dcat === 'physical' && screenUp(pvpField.foeScreens, 'reflect'))
-      || (dcat === 'special' && screenUp(pvpField.foeScreens, 'light'))) {
-      dmg = Math.max(1, Math.floor(dmg / 2));
-      mods = mods ? `${mods}, экран` : 'экран';
-    }
-  }
-  // Террейн усиливает.
-  if (dmg > 0 && isGrounded(myT, myAb)) {
-    const terr = pvpTerrainActive();
-    const mt = detailed?.type?.name;
-    if ((terr === 'grassy' && mt === 'grass') || (terr === 'electric' && mt === 'electric') || (terr === 'psychic' && mt === 'psychic')) {
-      dmg = Math.floor(dmg * 1.3);
-    }
-  }
+  const foeCalc: { patk: number; pdef: number; satk: number; sdef: number } = (opp as any)?.calc || { patk: 50, pdef: 50, satk: 50, sdef: 50 };
+  const myCalc = { patk: 0, pdef: 0, satk: 0, sdef: 0 };
+  try { Object.assign(myCalc, battleStatsOf(mon, lvl)); } catch { /* ignore */ }
+  const weather = pvpWeatherForCalc(myAb, foeAb);
+  const myG = isGrounded(myT, myAb);
+  const res = calcPvpDamage({
+    move: struggling ? { name: 'Struggle', power: 50, type: { name: '???' }, damage_class: { name: 'physical' } } : detailed,
+    attackerStats: myCalc,
+    defenderStats: foeCalc,
+    attackerStages: mon.statStages || null,
+    defenderStages: opp.stages || null,
+    attackerLevel: lvl,
+    defenderLevel: opp.lvl || lvl,
+    weather,
+    attackerAbility: myAb,
+    defenderAbility: foeAb,
+  foeTypesList: foeT,
+  myTypesList: myT,
+  myGrounded: myG,
+});
+  let dmg = res.damage;
+  let crit = res.isCrit;
+  let mods = res.mods;
   // Facade вдвое по статусу. Payback/Revenge/Avalanche — условия.
   if (slug === 'facade' && mon.status) dmg = dmg * 2;
   if (slug === 'payback' && (pvpFoeVol.lastMoveName || (state as any).pvpFoeActed)) dmg = dmg * 2;
