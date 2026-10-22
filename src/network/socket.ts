@@ -441,13 +441,18 @@ export function initTradeSocket() {
       if (Array.isArray(action.types)) state.pvpOppMon.types = action.types;
       if (Array.isArray(action.stats)) state.pvpOppMon.stats = action.stats;
       if (action.stages && typeof action.stages === 'object') state.pvpOppMon.stages = { ...action.stages };
-      // Снимок команды соперника (для баров) + уровень для XP.
-      if (Array.isArray(action.team)) state.pvpOppTeam = action.team.map((m: any) => ({ ...m }));
-      if (Number.isFinite(Number(action.lvl))) {
-        const lvls = Array.isArray(state.pvpEnemyLvls) ? state.pvpEnemyLvls : [];
-        lvls.push(Number(action.lvl));
-        state.pvpEnemyLvls = lvls;
-      }
+    // Снимок команды соперника (для баров) + уровень/база опыта для XP.
+    if (Array.isArray(action.team)) state.pvpOppTeam = action.team.map((m: any) => ({ ...m }));
+    if (Number.isFinite(Number(action.lvl))) {
+      const lvls = Array.isArray(state.pvpEnemyLvls) ? state.pvpEnemyLvls : [];
+      lvls.push(Number(action.lvl));
+      state.pvpEnemyLvls = lvls;
+    }
+    if (Number.isFinite(Number(action.baseExp))) {
+      const arr = Array.isArray((state as any).pvpEnemyBaseExp) ? (state as any).pvpEnemyBaseExp : [];
+      arr.push(Number(action.baseExp));
+      (state as any).pvpEnemyBaseExp = arr;
+    }
       // Замена пришла: бой продолжается, ход наш (выжидательная пауза снята).
       if (state.pvpAwaitingReplacement) {
         clearPvpReplaceWait();

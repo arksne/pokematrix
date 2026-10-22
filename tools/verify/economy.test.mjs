@@ -249,7 +249,7 @@ const sockB = await connect(tokenB, 'B');
       sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
       const rw = await rwP;
       check('E13', 'PvP: нокаут продолжает бой заменой',
-        !!mon && mon.type === 'mon_data' && !!atk && !!rw && rw.money === 15000,
+        !!mon && mon.type === 'mon_data' && !!atk && !!rw && rw.money === 3000,
         mon ? (atk ? (rw ? `сеттл после замены: +${rw.money}` : 'награды нет') : 'атака после замены не прошла') : 'замена не дошла');
     }
   }
@@ -294,11 +294,11 @@ const sockB = await connect(tokenB, 'B');
       const faint = await faintRecv;
       faintedOk = !!faint && faint.type === 'fainted';
     }
-    // B сдаёт бой поражением → сервер должен наградить A (стрик 1: 15000)
+    // B сдаёт бой поражением → сервер должен наградить A (стрик 1: 3000)
     const rewardRecv = onceEvent(sA, 'pvp_reward', 5000);
     sB.emit('pvp_end', { battleId: bidB, action: { type: 'lose' } });
     const reward = await rewardRecv;
-    rewardOk = !!reward && reward.money === 15000 && reward.streak === 1 && reward.arena === false;
+    rewardOk = !!reward && reward.money === 3000 && reward.streak === 1 && reward.arena === false;
     // Награда несёт свежую saveVersion (сервер поднял её сеттлом).
     const verW = (await api('/api/save', { method: 'GET', token: tA })).json?.saveVersion;
     const svOk = typeof reward?.saveVersion === 'number' && reward.saveVersion === verW;

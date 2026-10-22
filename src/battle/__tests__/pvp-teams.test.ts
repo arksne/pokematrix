@@ -132,19 +132,32 @@ describe('командные бои', () => {
     expect((modal as any).style.display).toBe('none');
   });
 
-  it('grantPvpExp: слабым больше, чужие не получают', async () => {
+  it('grantPvpExp: как в диком бою floor(baseExp*lvl/7), чужие не получают', async () => {
     const { grantBattleExp } = await import('../../ui/inventory.js');
     state.myTeam = [mon('m1', 50, 10), mon('m2', 50, 50), mon('mx', 50, 50)];
     state.pvpParticipants = ['m1', 'm2'];
     state.pvpEnemyLvls = [50];
-    await grantPvpExp(true); // avgEnemy 50: m1(lvl10): 25*50/10=125; m2(lvl50): 25
+    (state as any).pvpEnemyBaseExp = [100];
+    await grantPvpExp(true); // floor(100*50/7) = 714 обоим участникам
     const calls = (grantBattleExp as any).mock.calls;
     const byUid: Record<string, number> = {};
     for (const [m, amount] of calls) byUid[m.uid] = amount;
-    expect(byUid['m1']).toBe(125);
-    expect(byUid['m2']).toBe(25);
+    expect(byUid['m1']).toBe(714);
+    expect(byUid['m2']).toBe(714);
     expect('mx' in byUid).toBe(false);
     expect(state.pvpParticipants).toEqual([]);
+  });
+
+  it('grantPvpExp проигравшим: половина дикого', async () => {
+    const { grantBattleExp } = await import('../../ui/inventory.js');
+    (grantBattleExp as any).mockClear();
+    state.myTeam = [mon('m1', 50, 10)];
+    state.pvpParticipants = ['m1'];
+    state.pvpEnemyLvls = [50];
+    (state as any).pvpEnemyBaseExp = [100];
+    await grantPvpExp(false); // floor(714/2) = 357
+    const calls = (grantBattleExp as any).mock.calls;
+    expect(calls[0][1]).toBe(357);
   });
 
   it('sendMyMonData несёт команду для баров соперника', () => {

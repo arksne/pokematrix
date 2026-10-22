@@ -112,10 +112,10 @@ const SPARRING_BOT_TG = new Set<number>([777900201]);
 /** Награда прямого боя по стрику (у арены своя таблица — там вход по жетону). */
 export function directRewardForStreak(streak: number): { money: number; items: Array<{ id: string; qty: number }> } {
   const tier = !Number.isFinite(streak) || streak < 1 ? 1 : Math.min(5, Math.floor(streak));
-  return { money: 10000 + 5000 * tier, items: [] };
+  return { money: 2000 + 1000 * tier, items: [] };
 }
 /** Утешительные проигравшему прямого боя (у арены свои 10000). */
-export const DIRECT_LOSS_CONSOLATION = 2000;
+export const DIRECT_LOSS_CONSOLATION = 500;
 
 /** ELO, K=32. */
 function eloDelta(myRating: number, oppRating: number, won: boolean): number {

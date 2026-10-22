@@ -135,6 +135,7 @@ export function openPvPArena(battleId, opponent, myFirst) {
   // Участники и уровни соперника — для XP в конце боя.
   state.pvpParticipants = alive?.uid ? [alive.uid] : [];
   state.pvpEnemyLvls = [];
+  (state as any).pvpEnemyBaseExp = [];
   state.pvpOppMon = null;
   state.pvpOppTeam = null;
   if (state.pvpReplaceTimer) { clearTimeout(state.pvpReplaceTimer); state.pvpReplaceTimer = null; }
@@ -227,6 +228,7 @@ export function sendMyMonData(battleId: unknown): void {
     (state as any).pvpStageBackupUid = mon.uid;
   }
   const myTypes = (mon.apiData?.types || []).map((t: any) => t?.type?.name || t).filter(Boolean);
+  const myBaseExp = Number(mon.apiData?.base_experience);
   state.socket.emit('pvp_action', { battleId, action: {
     type: 'mon_data',
     name: mon.nickname || mon.apiData?.name,
@@ -235,6 +237,7 @@ export function sendMyMonData(battleId: unknown): void {
     maxHp: mon.maxHp,
     sprite: getSpriteUrl(mon),
     types: myTypes,
+    baseExp: Number.isFinite(myBaseExp) && myBaseExp > 0 ? myBaseExp : 50,
     stats: baseStatsOf(mon),
     calc: battleStatsOf(mon, myLvl),
     stages: { ...(mon.statStages || {}) },
@@ -388,19 +391,24 @@ export function clearPvpReplaceWait(): void {
   if (state.pvpReplaceTimer) { clearTimeout(state.pvpReplaceTimer); state.pvpReplaceTimer = null; }
 }
 
-/** XP участникам боя (победителям больше, слабым — больше за сильного врага). */
+/** XP участникам боя — РОВНО как в диком бою: floor(baseExp × lvl / 7).
+ * baseExp и уровень — усреднённые по увиденным соперникам; проигравшим —
+ * половина (утешение). Lucky Egg ×1.5 — как в диком. */
 export async function grantPvpExp(won: boolean): Promise<void> {
   try {
     const { grantBattleExp } = await import('../ui/inventory.js');
     const uids = [...new Set(state.pvpParticipants || [])];
-    const enemyLvls = (state.pvpEnemyLvls || []).filter((n) => Number.isFinite(n) && (n as number) > 0) as number[];
-    const avgEnemy = enemyLvls.length ? enemyLvls.reduce((a, b) => a + b, 0) / enemyLvls.length : 5;
+    const lvls = (state.pvpEnemyLvls || []).filter((n) => Number.isFinite(n) && (n as number) > 0) as number[];
+    const bases = ((state as any).pvpEnemyBaseExp || []).filter((n: unknown) => Number.isFinite(n) && (n as number) > 0) as number[];
+    const avgLvl = lvls.length ? lvls.reduce((a, b) => a + b, 0) / lvls.length : 5;
+    const avgBase = bases.length ? bases.reduce((a, b) => a + b, 0) / bases.length : 50;
     let total = 0;
     let ups = 0;
     for (const m of state.myTeam || []) {
       if (!m?.uid || !uids.includes(m.uid)) continue;
-      const lvl = (m.baseLevel || 1) + (m.candiesEaten || 0);
-      const gain = Math.max(0, Math.round((won ? 25 : 10) * avgEnemy / Math.max(1, lvl)));
+      let gain = Math.floor(avgBase * avgLvl / 7);
+      if (!won) gain = Math.floor(gain / 2);
+      if (m.heldItem === 'luckyEgg') gain = Math.floor(gain * 1.5);
       if (gain <= 0) continue;
       ups += await grantBattleExp(m, gain);
       total += gain;

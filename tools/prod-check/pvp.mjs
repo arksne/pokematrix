@@ -137,7 +137,7 @@ export async function runPvp() {
       hp && f ? 'оба события дошли' : 'синхронизации нет');
   }
 
-  // PC9: поражение B → награда A (стрик: money = 10000 + 5000*min(streak,5))
+  // PC9: поражение B → награда A (стрик: money = 2000 + 1000*min(streak,5))
   const beforeA = await getSave(tA);
   const beforeB = await getSave(tB);
   let rewardMoneyPc9 = 0;
@@ -145,7 +145,7 @@ export async function runPvp() {
     const rw = onceEvent(sA, 'pvp_reward', 10000);
     sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
     const r = await rw;
-    const expected = (r && typeof r.streak === 'number') ? 10000 + 5000 * Math.min(r.streak, 5) : -1;
+    const expected = (r && typeof r.streak === 'number') ? 2000 + 1000 * Math.min(r.streak, 5) : -1;
     check('PC9', 'победитель получает награду за стрик и свежую saveVersion',
       !!r && r.money === expected && r.arena === false && typeof r.saveVersion === 'number',
       r ? `money=${r.money} (ждём ${expected}) streak=${r.streak} sv=${r.saveVersion}` : 'награды нет');
@@ -153,14 +153,14 @@ export async function runPvp() {
     rewardMoneyPc9 = r?.money || 0;
   }
 
-  // PC10: кредит победителя +награда, у проигравшего +утешительные 2000
+  // PC10: кредит победителя +награда, у проигравшего +утешительные 500
   {
     await sleep(800);
     const afterA = await getSave(tA);
     const afterB = await getSave(tB);
     const dA = (afterA.saveData.inventory?.credit || 0) - (beforeA.saveData.inventory?.credit || 0);
     const dB = (afterB.saveData.inventory?.credit || 0) - (beforeB.saveData.inventory?.credit || 0);
-    check('PC10', 'кредит в БД: награда победителю, утешительные проигравшему', dA === rewardMoneyPc9 && dB === 2000,
+    check('PC10', 'кредит в БД: награда победителю, утешительные проигравшему', dA === rewardMoneyPc9 && dB === 500,
       `ΔA=${dA} (награда ${rewardMoneyPc9}) ΔB=${dB}`);
   }
 
@@ -198,7 +198,7 @@ export async function runPvp() {
       const rwA = onceEvent(sA, 'pvp_reward', 3000);
       sA.emit('pvp_end', { battleId: b2, action: { type: 'surrender' } });
       const [rB, rA] = await Promise.all([rwB, rwA]);
-      const expectedB = (rB && typeof rB.streak === 'number') ? 10000 + 5000 * Math.min(rB.streak, 5) : -1;
+        const expectedB = (rB && typeof rB.streak === 'number') ? 2000 + 1000 * Math.min(rB.streak, 5) : -1;
       check('PC13', 'surrender отдаёт победу оппоненту',
         !!rB && rB.money === expectedB && rB.arena === false && rA === null,
         rB ? `B получил ${rB.money} (ждём ${expectedB}), A: ${rA ? 'ТОЖЕ ПОЛУЧИЛ!' : 'ничего'}` : 'награды нет вообще');
