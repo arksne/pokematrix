@@ -103,6 +103,24 @@ const PVP_WEATHER: Record<string, string> = {
 const PROTECT_MOVES = new Set(['protect', 'detect']);
 /** Принудительная смена уроном (Roar/Whirlwind — нет, только эти). */
 const FORCED_SWITCH_MOVES = new Set(['dragon-tail', 'circle-throw']);
+/** Принудительная смена без урона. */
+const ROAR_MOVES = new Set(['roar', 'whirlwind', 'teleport']);
+/** Дебаффы стадий соперника: мув -> [[стат, дельта]]. */
+const DEBUFF_MOVES: Record<string, Array<[string, number]>> = {
+  growl: [['atk', -1]], 'play-nice': [['atk', -1]], charm: [['atk', -2]],
+  'feather-dance': [['atk', -2]], tickle: [['atk', -1], ['def', -1]],
+  'baby-doll-eyes': [['atk', -1]], 'noble-roar': [['atk', -1], ['spa', -1]],
+  'tail-whip': [['def', -1]], leer: [['def', -1]], screech: [['def', -2]],
+  'fake-tears': [['spd', -2]], 'metal-sound': [['spd', -2]], 'struggle-bug': [['spa', -1]],
+  'electroweb': [['spe', -1]], 'icy-wind': [['spe', -1]], 'rock-tomb': [['spe', -1]],
+  bulldoze: [['spe', -1]], 'mud-shot': [['spe', -1]], 'scary-face': [['spe', -2]],
+  'string-shot': [['spe', -2]], 'cotton-guard': [['spe', -1]],
+};
+/** Лечение: мув -> доля maxHp (roost теряет полёт до конца чужого хода). */
+const HEAL_MOVES: Record<string, number> = {
+  roost: 0.5, recover: 0.5, 'slack-off': 0.5, 'soft-boiled': 0.5,
+  'milk-drink': 0.5, 'shore-up': 0.5, synthesis: 0.5, 'morning-sun': 0.5, moonlight: 0.5,
+};
 
 /** Поле боя (симметрично считается обеими сторонами из общего потока ходов). */
 export interface PvpFieldState {
@@ -427,7 +445,6 @@ export function sendMyMonData(battleId: unknown): void {
     sprite: getSpriteUrl(mon),
     types: myTypes,
     ability: mon.abilityName || mon.ability || null,
-    held: mon.heldItem || null,
     status: mon.status || null,
     baseExp: Number.isFinite(myBaseExp) && myBaseExp > 0 ? myBaseExp : 50,
     stats: baseStatsOf(mon),
@@ -496,7 +513,7 @@ export function renderPvpTeams(): void {
  */
 export function openPvpSwitchPicker(mode: 'switch' | 'faint' | 'baton'): void {
   try { document.getElementById('pvp-switch-modal')?.remove(); } catch { /* ignore */ }
-  if (mode !== 'faint' && pvpVol.trapUntilRound != null && pvpRoundNow() < pvpVol.trapUntilRound) {
+  if (mode !== 'faint' && mode !== 'baton' && pvpVol.trapUntilRound != null && pvpRoundNow() < pvpVol.trapUntilRound) {
     showToast('Ловушка держит! Смена невозможна!', true);
     return;
   }
@@ -530,7 +547,7 @@ export function openPvpSwitchPicker(mode: 'switch' | 'faint' | 'baton'): void {
 /** Поставить бойца на поле: смена / замена после нокаута / Baton Pass. */
 export function pvpPickFighter(mon: any, mode: 'switch' | 'faint' | 'baton'): void {
   if (!mon || !state.pvpBattleId) return;
-  if (mode !== 'faint' && pvpVol.trapUntilRound != null && pvpRoundNow() < pvpVol.trapUntilRound) {
+  if (mode !== 'faint' && mode !== 'baton' && pvpVol.trapUntilRound != null && pvpRoundNow() < pvpVol.trapUntilRound) {
     showToast('Ловушка держит! Смена невозможна!', true);
     return;
   }
@@ -841,7 +858,10 @@ function myTypes(): string[] {
 }
 function foeTypes(): string[] {
   const o: any = state.pvpOppMon || {};
-  return Array.isArray(o.types) ? o.types.map((t: any) => (typeof t === 'string' ? t : t?.type?.name)).filter(Boolean) : [];
+  const ts: string[] = Array.isArray(o.types) ? o.types.map((t: any) => (typeof t === 'string' ? t : t?.type?.name)).filter(Boolean) : [];
+  // Roost снимает полёт до конца чужого хода.
+  if (o.roosted) return ts.filter((t: string) => t !== 'flying');
+  return ts;
 }
 function myAbility(): string | null { return state.pvpMyMon?.abilityName || state.pvpMyMon?.ability || null; }
 function foeAbility(): string | null { return (state.pvpOppMon as any)?.ability || null; }
@@ -859,6 +879,8 @@ function pvpSend(action: any): void {
     pvpVol.lastMoveDamaging = action.damageClass === 'physical' || action.damageClass === 'special';
   }
   if (!PROTECT_MOVES.has(moveSlug(action?.moveName || ''))) pvpVol.protectStreak = 0;
+  // Roost соперника истёк моим ходом.
+  if ((state.pvpOppMon as any)?.roosted) (state.pvpOppMon as any).roosted = false;
   (state as any).pvpFoeActed = false;
   (state as any).pvpWasHit = false;
   state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action });
@@ -896,6 +918,15 @@ export function beginOwnTurn(): boolean {
       updatePvPUI();
       if (mon.currentHp <= 0) { sendOwnFaint(); handleMyFaint(); return false; }
     }
+  }
+  // Кошмар: 1/4 max HP пока сплю и кошмар активен.
+  if ((mon as any).nightmare && (mon as any).status === 'slp' && (mon.currentHp || 0) > 0) {
+    const dmg = Math.max(1, Math.floor((mon.maxHp || 1) / 4));
+    mon.currentHp = Math.max(0, mon.currentHp - dmg);
+    pvpLog(`Кошмар мучает! −${dmg} HP`);
+    renderPvpTeams();
+    updatePvPUI();
+    if (mon.currentHp <= 0) { sendOwnFaint(); handleMyFaint(); return false; }
   }
   // Ожог/яд/токсик.
   const st = (mon as any).status;
@@ -1017,7 +1048,6 @@ const PVP_USABLE_ITEMS = new Set([
 
 function pvpRoundNow(): number { return Number(state.pvpRound) || 0; }
 function myHeld(): string | null { return (state.pvpMyMon as any)?.heldItem || null; }
-function foeHeld(): string | null { return (state.pvpOppMon as any)?.held || null; }
 function foeStatus(): string | null { return (state.pvpOppMon as any)?.status || null; }
 /** Приблизительная скорость для правила «быстрый ходит первым»
  * (только базовые статы+уровень+стадии+паралич — одинаково с обеих сторон). */
@@ -1163,7 +1193,7 @@ export function usePvpItem(itemId: string): void {
     used = true;
   } else if (itemId === 'ether' || itemId === 'maxEther') {
     ensurePvpPP(mon);
-    const entries = (mon.movesPP || []).map((p: any, i: number) => ({ p, i }))
+    const entries = ((mon as any).movesPP || []).map((p: any, i: number) => ({ p, i }))
       .filter((e: any) => e.p && e.p.current < e.p.max);
     if (entries.length === 0) { showToast('PP полные!', true); return; }
     entries.sort((a: any, b: any) => (a.p.current / a.p.max) - (b.p.current / b.p.max));
@@ -1285,6 +1315,7 @@ export function doPvPAttack(moveIdx: number): void {
       return;
     }
     (mon as any).status = null;
+    (mon as any).nightmare = false;
     pvpLog(`Вы проснулись!`);
   } else if (st === 'frz') {
     const thaw = Math.random() < 0.2 || pvpWeatherForCalc(myAbility(), foeAbility()) === 'sun';
@@ -1402,8 +1433,46 @@ export function doPvPAttack(moveIdx: number): void {
   const fieldAction = pvpFieldMove(mon, slug, moveName, lvl, detailed);
   if (fieldAction) return;
 
+  // --- Лечение (roost/recover/…) ---
+  const healAction = pvpHealMove(mon, slug, moveName, lvl, detailed);
+  if (healAction) return;
+
+  // --- Roar/Whirlwind/Teleport: принудительная смена без урона ---
+  if (ROAR_MOVES.has(slug)) {
+    pvpLog(`Вы: ${moveName}! Противника сдувает!`);
+    pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, forcedSwitch: true,
+      moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+    return;
+  }
+
+  // --- Trick/Switcheroo: обмен холдами (резолвит получатель, ответ — trick-result) ---
+  if (slug === 'trick' || slug === 'switcheroo') {
+    pvpLog(`Вы: ${moveName}! Пытаетесь обменяться холдами…`);
+    pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, trick: true, myHeld: (mon as any).heldItem || null,
+      moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+    renderPvpTeams();
+    updatePvPUI();
+    return;
+  }
+
   // --- Статус-атаки без урона (thunder wave, will-o-wisp, …) ---
   if (!isDamaging) {
+    // Чистые дебаффы (growl, leer, …): точность, затем стадии у цели.
+    const deb = DEBUFF_MOVES[slug];
+    if (deb) {
+      const acc = checkAccuracy(detailed && Number.isFinite(Number(detailed.accuracy)) ? detailed : { accuracy: 100, name: moveName });
+      if (!acc.hit) {
+        pvpLog(`Вы: ${moveName}! Промах!`);
+        pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, missed: true,
+          moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+        return;
+      }
+      const buffText = deb.map(([s2, d2]) => `${STAGE_LABELS[s2] || s2} ${d2 > 0 ? '+' : ''}${d2}`).join(', ');
+      pvpLog(`Вы: ${moveName}! Враг: ${buffText}`);
+      pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, debuff: deb,
+        moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+      return;
+    }
     const ail = ailmentToStatus(detailed?.meta?.ailment?.name);
     const isConf = (detailed?.meta?.ailment?.name || '').toLowerCase() === 'confusion' || CONFUSING_MOVES.has(slug);
     if (!ail && !isConf) {
@@ -1493,7 +1562,6 @@ export function doPvPAttack(moveIdx: number): void {
       attackerAbilityName: myAb || undefined,
       defenderAbilityName: foeAb || undefined,
       attackerHeldItem: myHeld() || undefined,
-      defenderHeldItem: foeHeld() || undefined,
       weather: pvpWeatherForCalc(myAb, foeAb),
     });
     dmg = res.damage;
@@ -1523,6 +1591,9 @@ export function doPvPAttack(moveIdx: number): void {
   if (slug === 'payback' && (pvpFoeVol.lastMoveName || (state as any).pvpFoeActed)) dmg = dmg * 2;
   if ((slug === 'revenge' || slug === 'avalanche') && (state as any).pvpWasHit) dmg = dmg * 2;
 
+  // Hex/Venoshock вдвое по статусу.
+  if ((slug === 'hex' || slug === 'venoshock') && foeStatus()) dmg = dmg * 2;
+
   // Отдача / дренирование.
   let recoil = 0;
   const drainPct = Number(detailed?.meta?.drain);
@@ -1530,7 +1601,7 @@ export function doPvPAttack(moveIdx: number): void {
   else if (PVP_RECOIL_MOVES.has(slug)) recoil = Math.floor(dmg / 4);
   if (struggling) recoil = Math.max(1, Math.floor((mon.maxHp || 1) / 4));
   let healed = 0;
-  if (Number.isFinite(drainPct) && (drainPct as number) > 0 && dmg > 0 && !DREAM_EATER_LIKE.has(slug)) {
+  if (Number.isFinite(drainPct) && (drainPct as number) > 0 && dmg > 0) {
     healed = Math.floor(dmg * ((drainPct as number) / 100));
   }
   if (recoil > 0 && dmg > 0) mon.currentHp = Math.max(0, mon.currentHp - recoil);
@@ -1551,6 +1622,7 @@ export function doPvPAttack(moveIdx: number): void {
     forcedSwitch: FORCED_SWITCH_MOVES.has(slug) || undefined,
     trap: isTrapChipMove(slug) ? { name: slug, turns: 4 } : undefined,
     flinchChance: flChance || undefined,
+    debuff: (DEBUFF_MOVES[slug] as any) || undefined,
     ailment: undefined, ailChance: undefined,
   });
   // Замок: тики, в конце — путаница.
@@ -1575,6 +1647,53 @@ export function doPvPAttack(moveIdx: number): void {
 }
 
 /** Полевые/статусные ходы без урона. Возвращает true если ход выполнен. */
+/** Лечение в бою: доля maxHp (погода влияет на synthesis/morning-sun/moonlight/shore-up). */
+function pvpHealMove(mon: any, slug: string, moveName: string, lvl: number, detailed: any): boolean {
+  if (slug === 'strength-sap') {
+    const foe: any = state.pvpOppMon || {};
+    const foeAtk = Number(foe?.calc?.patk) || Number(foe?.stats?.[1]) || 50;
+    const heal = Math.min(mon.maxHp - mon.currentHp, Math.max(1, Math.floor(foeAtk)));
+    if ((mon.currentHp || 0) >= (mon.maxHp || 1) && heal <= 0) {
+      showToast('HP полное!', true);
+      return false;
+    }
+    mon.currentHp = Math.min(mon.maxHp, mon.currentHp + heal);
+    pvpLog(`Вы: ${moveName}! Впитали атаку (+${heal} HP), атака врага −1!`);
+    pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl,
+      debuff: [['atk', -1]], heal: heal, myHp: mon.currentHp,
+      moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+    renderPvpTeams();
+    updatePvPUI();
+    return true;
+  }
+  const frac = HEAL_MOVES[slug];
+  if (!frac) return false;
+  if ((mon.currentHp || 0) <= 0 || (mon.currentHp || 0) >= (mon.maxHp || 1)) {
+    showToast('HP полное или покемон без сознания!', true);
+    return false;
+  }
+  let mult = frac;
+  const w = pvpWeatherForCalc(myAbility(), foeAbility());
+  if (slug === 'synthesis' || slug === 'morning-sun' || slug === 'moonlight') {
+    mult = (w === 'sun') ? 2 / 3 : (w === 'rain' || w === 'sandstorm' || w === 'hail') ? 1 / 4 : 1 / 2;
+  } else if (slug === 'shore-up' && w === 'sandstorm') {
+    mult = 2 / 3;
+  }
+  const heal = Math.max(1, Math.floor((mon.maxHp || 1) * mult));
+  mon.currentHp = Math.min(mon.maxHp, mon.currentHp + heal);
+  if (slug === 'roost') {
+    (mon as any).pvpRoosted = true;
+    pvpLog(`Вы: ${moveName}! +${heal} HP, приземлились (тип полёта снят до хода соперника)!`);
+  } else {
+    pvpLog(`Вы: ${moveName}! +${heal} HP!`);
+  }
+  pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, heal: heal, myHp: mon.currentHp, roost: slug === 'roost' || undefined,
+    moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+  renderPvpTeams();
+  updatePvPUI();
+  return true;
+}
+
 function pvpFieldMove(mon: any, slug: string, moveName: string, lvl: number, detailed: any): boolean {
   const wtype = WEATHER_MOVES[slug];
   if (wtype) {
@@ -1647,6 +1766,18 @@ function pvpFieldMove(mon: any, slug: string, moveName: string, lvl: number, det
     pvpVol.perishUntilRound = pvpRoundNow() + 6;
     pvpLog(`Вы: ${moveName}! Обратный отсчёт начался!`);
     pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, perish: true,
+      moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+    return true;
+  }
+  if (slug === 'nightmare') {
+    if (foeStatus() !== 'slp') {
+      pvpLog(`Вы: ${moveName}! Но противник не спит — не сработало.`);
+      pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, missed: true, noEffect: true,
+        moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
+      return true;
+    }
+    pvpLog(`Вы: ${moveName}! Кошмары!`);
+    pvpSend({ type: 'attack', moveName, dmg: 0, crit: false, lvl, nightmare: true,
       moveType: detailed?.type?.name, damageClass: detailed?.damage_class?.name });
     return true;
   }
@@ -1779,6 +1910,19 @@ export function applyIncomingPvpAction(action: any): void {
     return;
   }
 
+  // --- Ответ на Trick: мой новый холд (без тика раунда — это реакция) ---
+  if (action.type === 'trick-result' || (action as any)['trick-result']) {
+    if (!(action as any).failed && typeof (action as any).held === 'string') {
+      if (mon) (mon as any).heldItem = (action as any).held || null;
+      pvpLog(`Обмен состоялся! Ваш холд: ${(action as any).held || 'ничего'}.`);
+    } else {
+      pvpLog(`Обмен не удался.`);
+    }
+    renderPvpTeams();
+    updatePvPUI();
+    return;
+  }
+
   if (action.type !== 'attack') return;
   const a = action as any;
   const moveName: string = a.moveName || 'Атака';
@@ -1799,9 +1943,9 @@ export function applyIncomingPvpAction(action: any): void {
   const replyHpUnchanged = () => {
     if (state.socket && state.pvpBattleId && state.pvpMyMon) {
       state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: {
-        type: 'hp_update', hp: state.pvpMyMon.currentHp, maxHp: state.pvpMyMon.maxHp || 1,
-        stages: { ...(state.pvpMyMon.statStages || {}) }, status: (state.pvpMyMon as any).status || null,
-      } });
+      type: 'hp_update', hp: state.pvpMyMon.currentHp, maxHp: state.pvpMyMon.maxHp || 1,
+      stages: { ...(state.pvpMyMon.statStages || {}) }, status: (state.pvpMyMon as any).status || null,
+    } });
     }
   };
   const passTurn = () => { state.pvpMyTurn = true; renderPvpTeams(); updatePvPUI(); };
@@ -1915,24 +2059,123 @@ export function applyIncomingPvpAction(action: any): void {
     return;
   }
   if (a.taunt) {
-    pvpVol.tauntUntilRound = pvpRoundNow() + 6;
-    pvpLog(`${foeName}: ${moveName}! Насмешка! Только атаки!`);
+    const blk = consumeBlock(slug);
+    if (blk && blockedLog(moveName, blk)) return;
+    if ((mon as any).heldItem === 'mental-herb') {
+      (mon as any).heldItem = null;
+      pvpLog(`Mental Herb съедена! Насмешка снята!`);
+    } else {
+      pvpVol.tauntUntilRound = pvpRoundNow() + 6;
+      pvpLog(`${foeName}: ${moveName}! Насмешка! Только атаки!`);
+    }
     passTurn();
     return;
   }
   if (a.encore && a.encore.move) {
-    pvpVol.encoreMove = a.encore.move;
-    pvpVol.encoreUntilRound = pvpRoundNow() + 6;
-    pvpLog(`${foeName}: ${moveName}! На бис: ${a.encore.move}!`);
+    const blk = consumeBlock(slug);
+    if (blk && blockedLog(moveName, blk)) return;
+    if ((mon as any).heldItem === 'mental-herb') {
+      (mon as any).heldItem = null;
+      pvpLog(`Mental Herb съедена! На бис снят!`);
+    } else {
+      pvpVol.encoreMove = a.encore.move;
+      pvpVol.encoreUntilRound = pvpRoundNow() + 6;
+      pvpLog(`${foeName}: ${moveName}! На бис: ${a.encore.move}!`);
+    }
     passTurn();
     return;
   }
   if (a.disabled && a.disabled.move) {
-    pvpVol.disabledMove = a.disabled.move;
-    pvpVol.disabledUntilRound = pvpRoundNow() + 8;
-    pvpLog(`${foeName}: ${moveName}! ${a.disabled.move} отключён!`);
+    const blk0 = consumeBlock(slug);
+    if (blk0 && blockedLog(moveName, blk0)) return;
+    // Mental Herb чистит disable сразу.
+    if ((mon as any).heldItem === 'mental-herb') {
+      (mon as any).heldItem = null;
+      pvpLog(`Mental Herb съедена! Отключение снято!`);
+    } else {
+      pvpVol.disabledMove = a.disabled.move;
+      pvpVol.disabledUntilRound = pvpRoundNow() + 8;
+      pvpLog(`${foeName}: ${moveName}! ${a.disabled.move} отключён!`);
+    }
     passTurn();
     return;
+  }
+  if (a.heal) {
+    pvpLog(`${foeName}: ${moveName}! Восстановился (+${a.heal} HP)!`);
+    if (typeof a.myHp === 'number' && state.pvpOppMon) {
+      (state.pvpOppMon as any).currentHp = a.myHp;
+      renderPvpTeams();
+    }
+    if (a.roost && state.pvpOppMon) (state.pvpOppMon as any).roosted = true;
+    passTurn();
+    return;
+  }
+  if (a.trick) {
+    const blk = consumeBlock(slug);
+    if (blk && blockedLog(moveName, blk)) return;
+    // Sticky Hold с любой стороны отменяет обмен; отправителю уходит отказ.
+    const myAb = normAbil(myAbility());
+    const foeAb = normAbil((state.pvpOppMon as any)?.ability);
+    if (myAb === 'stickyhold' || foeAb === 'stickyhold') {
+      pvpLog(`${foeName}: ${moveName}! Липкий захват — обмен не удался.`);
+      if (state.socket && state.pvpBattleId) {
+        state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: { type: 'trick-result', failed: true } });
+      }
+      passTurn();
+      return;
+    }
+    const myH = (mon as any).heldItem || null;
+    const foeH = typeof a.myHeld === 'string' ? a.myHeld : null;
+    (mon as any).heldItem = foeH;
+    pvpLog(`${foeName}: ${moveName}! Обмен холдами: теперь у вас ${foeH || 'ничего'}!`);
+    if (state.socket && state.pvpBattleId) {
+      state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: { type: 'trick-result', held: myH } });
+    }
+    replyHpUnchanged();
+    passTurn();
+    return;
+  }
+  if (a.nightmare) {
+    const blk = consumeBlock(slug);
+    if (blk && blockedLog(moveName, blk)) return;
+    (mon as any).nightmare = true;
+    pvpLog(`${foeName}: ${moveName}! Кошмары начались!`);
+    passTurn();
+    return;
+  }
+  if (a.debuff && Array.isArray(a.debuff)) {
+    const blk = consumeBlock(slug);
+    if (blk && blockedLog(moveName, blk)) return;
+    const abil = normAbil(myAbility());
+    if (abil === 'clearbody' || abil === 'whitesmoke' || abil === 'fullmetalbody') {
+      pvpLog(`Вы: ${moveName}! Не действует (защита от понижения)!`);
+    } else {
+      if (!mon.statStages) mon.statStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+      for (const [s2, d2] of a.debuff) {
+        mon.statStages = statStageModify(mon.statStages, s2 as string, d2 as number);
+      }
+      const txt = (a.debuff as any[]).map(([s2, d2]: any[]) => `${STAGE_LABELS[s2] || s2} ${d2 > 0 ? '+' : ''}${d2}`).join(', ');
+      pvpLog(`Вы: ${moveName}! Стадии: ${txt}`);
+    }
+    renderPvpTeams();
+    updatePvPUI();
+  }
+
+  // --- Моя защита / кукла против входящих статусных эффектов ---
+  function consumeBlock(mvSlug: string): 'protect' | 'sub' | null {
+    if (pvpVol.protectActive && !PIERCE_PROTECT.has(mvSlug)) {
+      pvpVol.protectActive = false;
+      return 'protect';
+    }
+    if (pvpVol.substituteHp > 0 && !PIERCE_PROTECT.has(mvSlug) && !PVP_SOUND.has(mvSlug)) return 'sub';
+    return null;
+  }
+  function blockedLog(mvName: string, blk: 'protect' | 'sub'): boolean {
+    if (blk === 'protect') pvpLog(`Вы защитились от ${mvName}!`);
+    else pvpLog(`Заменитель принял ${mvName} на себя!`);
+    replyHpUnchanged();
+    passTurn();
+    return true;
   }
 
   // --- Моя защита: блокирует дамаг и статусы ---
@@ -2048,8 +2291,12 @@ export function applyIncomingPvpAction(action: any): void {
     mon.currentHp = Math.max(0, (mon.currentHp || 0) - dmg);
     (state as any).pvpWasHit = true;
   }
-  // Сброс принудительной сменой.
+  // Сброс принудительной сменой (кукла держит строй, кроме звука/пробития).
   let forced = !!a.forcedSwitch && (mon.currentHp || 0) > 0;
+  if (forced && pvpVol.substituteHp > 0 && !PIERCE_PROTECT.has(slug) && !PVP_SOUND.has(slug)) {
+    pvpLog(`Заменитель держит строй!`);
+    forced = false;
+  }
   if (forced) {
     const others = (state.myTeam || []).filter((m: any) => m && (m.currentHp || 0) > 0
       && (!state.pvpMyMon || m.uid !== state.pvpMyMon.uid));

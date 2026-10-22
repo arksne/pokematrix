@@ -312,8 +312,8 @@ const sockB = await connect(tokenB, 'B');
   sB.close();
 }
 
-// ── E14: новые типы ходов фазы 2 ретранслируются (item/dbond/charge) ──
-// Сервер принимает item + dbond (validTypes) и пересылает без rejected.
+// ── E14: новые типы ходов фазы 2 ретранслируются (item/dbond/charge/trick) ──
+// Сервер принимает item + dbond + trick-result (validTypes) и пересылает без rejected.
 {
   const tA = await login(111000051, 'pvp_e14a');
   const tB = await login(111000052, 'pvp_e14b');
@@ -343,12 +343,19 @@ const sockB = await connect(tokenB, 'B');
       const chgP = onceEvent(sB, 'pvp_opponent_action', 3000);
       sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'fly', dmg: 0, crit: false, lvl: 5, charging: { move: 'fly' } } });
       const chg = await chgP;
+      const trP = onceEvent(sB, 'pvp_opponent_action', 3000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'trick', dmg: 0, crit: false, lvl: 5, trick: true, myHeld: 'leftovers' } });
+      const tr = await trP;
+      const trAckP = onceEvent(sA, 'pvp_opponent_action', 3000);
+      sB.emit('pvp_action', { battleId: bid, action: { type: 'trick-result', held: 'choice-band' } });
+      const trAck = await trAckP;
       const rejP = onceEvent(sA, 'pvp_action_rejected', 2000);
       sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'tackle', dmg: 99999, crit: false, lvl: 5, atk: 60, power: 40 } });
       const [rej, leak] = await Promise.all([rejP, onceEvent(sB, 'pvp_opponent_action', 1500)]);
-      check('E14', 'PvP: item/dbond/charge ретранслируются, 99999 отбит',
-        !!item && item.type === 'item' && !!dbond && dbond.type === 'dbond' && !!chg && chg.charging?.move === 'fly' && !!rej && leak === null,
-        item && dbond ? (chg ? (rej ? 'ок' : 'валидация не отбила') : 'charge не дошёл') : 'item/dbond не дошли');
+      check('E14', 'PvP: item/dbond/charge/trick ретранслируются, 99999 отбит',
+        !!item && item.type === 'item' && !!dbond && dbond.type === 'dbond' && !!chg && chg.charging?.move === 'fly'
+        && !!tr && tr.trick === true && !!trAck && trAck.type === 'trick-result' && !!rej && leak === null,
+        item && dbond ? (chg ? (tr ? (trAck ? (rej ? 'ок' : 'валидация не отбила') : 'trick-result не дошёл') : 'trick не дошёл') : 'charge не дошёл') : 'item/dbond не дошли');
       sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
       await sleep(500);
       sA.close(); sB.close();

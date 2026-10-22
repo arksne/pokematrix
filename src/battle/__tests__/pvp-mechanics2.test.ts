@@ -277,4 +277,84 @@ describe('pvp phase2 sender', () => {
     expect((state.pvpMyMon as any).movesPP[0].current).toBe(10);
     expect((state as any).inventory.ether).toBe(0);
   });
+
+  it('roost: лечит 50% и снимает полёт', () => {
+    (state.pvpMyMon as any).currentHp = 40;
+    state.pvpMovesDetailed = [dmgOf('roost', { power: null, damage_class: { name: 'status' }, type: { name: 'flying' } })];
+    doPvPAttack(0);
+    expect((state.pvpMyMon as any).currentHp).toBe(100);
+    const a = emitAction();
+    expect(a.heal).toBe(60);
+    expect(a.roost).toBe(true);
+  });
+
+  it('synthesis: на солнце 2/3, в дождь 1/4', () => {
+    (state.pvpMyMon as any).currentHp = 20;
+    const syn = [dmgOf('synthesis', { power: null, damage_class: { name: 'status' }, type: { name: 'grass' } })];
+    state.pvpMovesDetailed = syn;
+    pvpField.weather = { type: 'sun', untilRound: 999 };
+    (state as any).pvpRound = 0;
+    doPvPAttack(0);
+    expect(emitAction().heal).toBe(80);
+  });
+
+  it('strength sap: лечит по атаке врага и режет её', () => {
+    (state.pvpMyMon as any).currentHp = 40;
+    (state.pvpOppMon as any).calc = { patk: 90 };
+    state.pvpMovesDetailed = [dmgOf('strength-sap', { power: null, damage_class: { name: 'status' }, type: { name: 'grass' } })];
+    doPvPAttack(0);
+    expect((state.pvpMyMon as any).currentHp).toBe(120);
+    const a = emitAction();
+    expect(a.heal).toBe(80);
+    expect(a.debuff).toEqual([['atk', -1]]);
+  });
+
+  it('nightmare без сна: отказ', () => {
+    state.pvpMovesDetailed = [dmgOf('nightmare', { power: null, damage_class: { name: 'status' }, type: { name: 'ghost' } })];
+    doPvPAttack(0);
+    const a = emitAction();
+    expect(a.missed).toBe(true);
+    expect(a.noEffect).toBe(true);
+  });
+
+  it('trick: шлёт намерение, локально холд не меняет', () => {
+    (state.pvpMyMon as any).heldItem = 'leftovers';
+    state.pvpMovesDetailed = [dmgOf('trick', { power: null, damage_class: { name: 'status' }, type: { name: 'psychic' } })];
+    doPvPAttack(0);
+    const a = emitAction();
+    expect(a.trick).toBe(true);
+    expect(a.myHeld).toBe('leftovers');
+    expect((state.pvpMyMon as any).heldItem).toBe('leftovers');
+  });
+
+  it('roar: принудительная смена без урона', () => {
+    state.pvpMovesDetailed = [dmgOf('roar', { power: null, accuracy: 100, damage_class: { name: 'status' }, type: { name: 'normal' } })];
+    doPvPAttack(0);
+    const a = emitAction();
+    expect(a.dmg).toBe(0);
+    expect(a.forcedSwitch).toBe(true);
+  });
+
+  it('growl: шлёт дебафф', () => {
+    state.pvpMovesDetailed = [dmgOf('growl', { power: null, accuracy: 100, damage_class: { name: 'status' }, type: { name: 'normal' } })];
+    doPvPAttack(0);
+    const a = emitAction();
+    expect(a.debuff).toEqual([['atk', -1]]);
+    expect(a.dmg).toBe(0);
+  });
+
+  it('hex вдвое по статусу', () => {
+    (state.pvpOppMon as any).status = 'brn';
+    state.pvpMovesDetailed = [dmgOf('hex', { power: 65, damage_class: { name: 'special' }, type: { name: 'ghost' } })];
+    doPvPAttack(0);
+    const a = emitAction();
+    (state.pvpOppMon as any).status = null;
+    state.pvpMovesDetailed = [dmgOf('hex', { power: 65, damage_class: { name: 'special' }, type: { name: 'ghost' } })];
+    state.pvpMyTurn = true;
+    const before = (state.pvpMyMon as any).currentHp;
+    void before;
+    doPvPAttack(0);
+    const b = emitAction();
+    expect(a.dmg).toBeGreaterThan(b.dmg);
+  });
 });

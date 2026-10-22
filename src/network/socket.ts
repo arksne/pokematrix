@@ -439,9 +439,9 @@ export function initTradeSocket() {
       state.pvpOppMon.lvl = action.lvl;
       if (Array.isArray(action.types)) state.pvpOppMon.types = action.types;
       if (typeof action.ability === 'string' || action.ability == null) state.pvpOppMon.ability = action.ability || null;
-      if (typeof action.held === 'string' || action.held == null) state.pvpOppMon.held = action.held || null;
       if (typeof action.status === 'string' || action.status == null) state.pvpOppMon.status = action.status || null;
       if (Array.isArray(action.stats)) state.pvpOppMon.stats = action.stats;
+      if (action.calc && typeof action.calc === 'object') (state.pvpOppMon as any).calc = { ...action.calc };
       if (action.stages && typeof action.stages === 'object') state.pvpOppMon.stages = { ...action.stages };
     // Снимок команды соперника (для баров) + уровень/база опыта для XP.
     if (Array.isArray(action.team)) state.pvpOppTeam = action.team.map((m: any) => ({ ...m }));
@@ -465,7 +465,7 @@ export function initTradeSocket() {
       }
       renderPvpTeams();
     }
-    if (action.type === 'attack' || action.type === 'item' || action.type === 'dbond') {
+    if (action.type === 'attack' || action.type === 'item' || action.type === 'dbond' || action.type === 'trick-result') {
       applyIncomingPvpAction(action);
       return;
     }

@@ -155,6 +155,18 @@ export async function runPvp() {
       m ? `kind=${m.kind}` : 'не доставлено');
   }
 
+  // PC21: trick + trick-result релеится (обмен холдами без трекинга)
+  {
+    const got = onceEvent(sB, 'pvp_opponent_action', 10000);
+    sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'trick', dmg: 0, crit: false, lvl: 5, trick: true, myHeld: 'leftovers' } });
+    const m = await got;
+    const got2 = onceEvent(sA, 'pvp_opponent_action', 10000);
+    sB.emit('pvp_action', { battleId: bid, action: { type: 'trick-result', held: 'choice-band' } });
+    const m2 = await got2;
+    check('PC21', 'trick + trick-result релеится', !!m && m.trick === true && !!m2 && m2.type === 'trick-result',
+      m && m2 ? 'обмен дошёл в обе стороны' : 'не доставлено');
+  }
+
   // PC9: поражение B → награда A (стрик: money = 2000 + 1000*min(streak,5))
   const beforeA = await getSave(tA);
   const beforeB = await getSave(tB);

@@ -757,7 +757,7 @@ export function initPvP(io: Server, socket: Socket) {
 
     // ── Валидация типа действия ──
     const validTypes = ['attack', 'switch', 'surrender', 'mon_data', 'fainted',
-      'hp_update', 'item', 'dbond'];
+      'hp_update', 'item', 'dbond', 'trick-result'];
     if (data.action?.type && !validTypes.includes(data.action.type)) {
       console.warn(`[pvp] Invalid action type from ${socket.id}: ${data.action.type}`);
       // Неизвестный тип НЕ дропаем молча: клиент уже переключил ход

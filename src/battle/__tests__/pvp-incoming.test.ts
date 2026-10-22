@@ -31,7 +31,7 @@ vi.stubGlobal('document', {
 import { state } from '../../game/state.js';
 import {
   applyIncomingPvpAction, resetPvpVol, resetPvpFoeVol, resetPvpField,
-  pvpVol, pvpField, myApproxSpeed, foeApproxSpeed,
+  pvpVol, pvpField, myApproxSpeed, foeApproxSpeed, beginOwnTurn,
 } from '../pvp-core.js';
 
 function resetBattle() {
@@ -199,5 +199,65 @@ describe('pvp phase2 receiver', () => {
     expect(a).toBeGreaterThan(0);
     expect(b).toBeGreaterThan(0);
     expect(myApproxSpeed()).toBe(a);
+  });
+
+  it('debuff применяется, clear body блокирует', () => {
+    applyIncomingPvpAction(atk('growl', { dmg: 0, debuff: [['atk', -1]] }));
+    expect((state.pvpMyMon as any).statStages.atk).toBe(-1);
+    (state.pvpMyMon as any).statStages.atk = 0;
+    (state.pvpMyMon as any).abilityName = 'clear-body';
+    applyIncomingPvpAction(atk('growl', { dmg: 0, debuff: [['atk', -1]] }));
+    expect((state.pvpMyMon as any).statStages.atk).toBe(0);
+  });
+
+  it('nightmare тикает только во сне', () => {
+    (state.pvpMyMon as any).status = 'slp';
+    applyIncomingPvpAction({ type: 'attack', moveName: 'nightmare', dmg: 0, crit: false, lvl: 50, nightmare: true });
+    expect(beginOwnTurn()).toBe(true);
+    expect((state.pvpMyMon as any).currentHp).toBe(90);
+  });
+
+  it('roost соперника снимает полёт для моего урона', () => {
+    (state.pvpOppMon as any).types = ['flying'];
+    applyIncomingPvpAction({ type: 'attack', moveName: 'roost', dmg: 0, crit: false, lvl: 50, heal: 30, myHp: 200, roost: true });
+    expect((state.pvpOppMon as any).roosted).toBe(true);
+  });
+
+  it('trick: обмен + ack, липкий захват отменяет', () => {
+    (state.pvpMyMon as any).heldItem = 'leftovers';
+    applyIncomingPvpAction({ type: 'attack', moveName: 'trick', dmg: 0, crit: false, lvl: 50, trick: true, myHeld: 'choice-band' });
+    expect((state.pvpMyMon as any).heldItem).toBe('choice-band');
+    const sent = (state.socket.emit as any).mock.calls.map((c: any[]) => c[1]?.action).find((a: any) => a?.type === 'trick-result');
+    expect(sent.held).toBe('leftovers');
+    (state.pvpMyMon as any).heldItem = 'leftovers';
+    (state.pvpOppMon as any).ability = 'sticky-hold';
+    applyIncomingPvpAction({ type: 'attack', moveName: 'trick', dmg: 0, crit: false, lvl: 50, trick: true, myHeld: 'choice-band' });
+    expect((state.pvpMyMon as any).heldItem).toBe('leftovers');
+    const fail = (state.socket.emit as any).mock.calls.map((c: any[]) => c[1]?.action).find((a: any) => a?.type === 'trick-result' && a.failed);
+    expect(fail).toBeTruthy();
+  });
+
+  it('trick-result применяет холд без тика раунда', () => {
+    (state as any).pvpRound = 10;
+    (state.pvpMyMon as any).heldItem = 'leftovers';
+    applyIncomingPvpAction({ type: 'trick-result', held: 'choice-band' });
+    expect((state.pvpMyMon as any).heldItem).toBe('choice-band');
+    expect((state as any).pvpRound).toBe(10);
+  });
+
+  it('mental herb снимает taunt', () => {
+    (state.pvpMyMon as any).heldItem = 'mental-herb';
+    applyIncomingPvpAction({ type: 'attack', moveName: 'taunt', dmg: 0, crit: false, lvl: 50, taunt: true });
+    expect(pvpVol.tauntUntilRound).toBe(0);
+    expect((state.pvpMyMon as any).heldItem).toBeNull();
+  });
+
+  it('forced switch блокируется куклой, roar-звук проходит', () => {
+    pvpVol.substituteHp = 10;
+    (state as any).myTeam = [state.pvpMyMon, { uid: 'u2', nickname: 'b', baseLevel: 5, candiesEaten: 0, currentHp: 60, maxHp: 60, apiData: { name: 'b', types: [], stats: [] }, statStages: null }];
+    applyIncomingPvpAction(atk('dragon-tail', { damageClass: 'physical', forcedSwitch: true }));
+    expect((state.pvpMyMon as any).nickname).toBe('pika');
+    applyIncomingPvpAction(atk('roar', { damageClass: 'status', forcedSwitch: true }));
+    expect((state.pvpMyMon as any).nickname).toBe('b');
   });
 });
