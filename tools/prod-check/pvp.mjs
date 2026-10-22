@@ -137,6 +137,24 @@ export async function runPvp() {
       hp && f ? 'оба события дошли' : 'синхронизации нет');
   }
 
+  // PC19: предмет релеится (новый тип фазы 2)
+  {
+    const got = onceEvent(sB, 'pvp_opponent_action', 10000);
+    sA.emit('pvp_action', { battleId: bid, action: { type: 'item', item: 'potion', label: '+20 HP' } });
+    const m = await got;
+    check('PC19', 'предмет релеится', !!m && m.type === 'item' && m.item === 'potion',
+      m ? `item=${m.item}` : 'не доставлено');
+  }
+
+  // PC20: dbond релеится (новый тип фазы 2)
+  {
+    const got = onceEvent(sB, 'pvp_opponent_action', 10000);
+    sA.emit('pvp_action', { battleId: bid, action: { type: 'dbond', kind: 'grudge' } });
+    const m = await got;
+    check('PC20', 'dbond релеится', !!m && m.type === 'dbond' && m.kind === 'grudge',
+      m ? `kind=${m.kind}` : 'не доставлено');
+  }
+
   // PC9: поражение B → награда A (стрик: money = 2000 + 1000*min(streak,5))
   const beforeA = await getSave(tA);
   const beforeB = await getSave(tB);

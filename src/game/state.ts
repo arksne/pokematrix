@@ -155,6 +155,8 @@ export const state: Record<string, any> = {
   pvpAwaitingReplacement: false, // ждём замену упавшего мона соперника
   pvpReplaceTimer: null as any,  // фолбэк: нет замены 15с — забираем победу
   pvpOppTeam: null as any,       // последний снимок команды соперника (из mon_data)
+  pvpRound: 0,                   // общий счётчик волевых ходов боя (для поля/таймеров)
+  pvpItemsUsed: 0,               // предметов использовано в текущем бою (лимит 3)
   // ── M-18: PvP-Арена ──────────────────────────────────────
   inArena: false,                  // Я на арене (вошёл по жетону)
   arenaLobby: [] as Array<any>,    // Кто на арене: [{ userId, username, inBattle }]

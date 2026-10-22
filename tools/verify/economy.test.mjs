@@ -312,6 +312,50 @@ const sockB = await connect(tokenB, 'B');
   sB.close();
 }
 
+// ── E14: новые типы ходов фазы 2 ретранслируются (item/dbond/charge) ──
+// Сервер принимает item + dbond (validTypes) и пересылает без rejected.
+{
+  const tA = await login(111000051, 'pvp_e14a');
+  const tB = await login(111000052, 'pvp_e14b');
+  const sA = await connect(tA, 'E14A');
+  const sB = await connect(tB, 'E14B');
+  const ch = onceEvent(sB, 'pvp_challenge_received', 3000);
+  sA.emit('pvp_challenge', 111000052);
+  if (!(await ch)) {
+    check('E14', 'PvP: item/dbond ретранслируются', false, 'вызов не дошёл');
+    sA.close(); sB.close();
+  } else {
+    const pA = onceEvent(sA, 'pvp_start', 3000);
+    const pB = onceEvent(sB, 'pvp_start', 3000);
+    sB.emit('pvp_accept', 111000051);
+    const [eA, eB] = await Promise.all([pA, pB]);
+    const bid = eA?.battleId;
+    if (!bid || bid !== eB?.battleId) {
+      check('E14', 'PvP: item/dbond ретранслируются', false, 'бой не начался');
+      sA.close(); sB.close();
+    } else {
+      const itemP = onceEvent(sB, 'pvp_opponent_action', 3000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'item', item: 'potion', label: '+20 HP' } });
+      const item = await itemP;
+      const dbondP = onceEvent(sB, 'pvp_opponent_action', 3000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'dbond', kind: 'grudge' } });
+      const dbond = await dbondP;
+      const chgP = onceEvent(sB, 'pvp_opponent_action', 3000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'fly', dmg: 0, crit: false, lvl: 5, charging: { move: 'fly' } } });
+      const chg = await chgP;
+      const rejP = onceEvent(sA, 'pvp_action_rejected', 2000);
+      sA.emit('pvp_action', { battleId: bid, action: { type: 'attack', moveName: 'tackle', dmg: 99999, crit: false, lvl: 5, atk: 60, power: 40 } });
+      const [rej, leak] = await Promise.all([rejP, onceEvent(sB, 'pvp_opponent_action', 1500)]);
+      check('E14', 'PvP: item/dbond/charge ретранслируются, 99999 отбит',
+        !!item && item.type === 'item' && !!dbond && dbond.type === 'dbond' && !!chg && chg.charging?.move === 'fly' && !!rej && leak === null,
+        item && dbond ? (chg ? (rej ? 'ок' : 'валидация не отбила') : 'charge не дошёл') : 'item/dbond не дошли');
+      sB.emit('pvp_end', { battleId: bid, action: { type: 'lose' } });
+      await sleep(500);
+      sA.close(); sB.close();
+    }
+  }
+}
+
 // ══════════════════════ M-18: PvP-Арена ══════════════════════
 // E6: бой с арены идёт по тому же протоколу (challenge/accept/start/
 // attack → hp_update/fainted → pvp_end/lose → pvp_reward), жетон сгорает

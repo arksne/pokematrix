@@ -47,7 +47,7 @@ async function renderOnlinePlayers() { (await import('../social/trainer-profile.
 async function updateTrainerLocationList(data: any) { (await import('../social/trainer-profile.js')).updateTrainerLocationList(data); }
 import { showTradeRequestModal } from '../ui/trade-request.js';
 import { openTradeWindow, renderTradeOffers, updateTradeConfirmUI, closeTradeWindow } from '../ui/trade-window.js';
-import { openPvPArena, endPvP, updatePvPUI, deferSettleSave, confirmSettleSave, sendMyMonData, handleMyFaint, clearPvpReplaceWait, grantPvpExp, renderPvpTeams, closePvpModalIf, waitPvpReplacement } from '../battle/pvp-core.js';
+import { openPvPArena, endPvP, updatePvPUI, deferSettleSave, confirmSettleSave, sendMyMonData, handleMyFaint, clearPvpReplaceWait, grantPvpExp, renderPvpTeams, closePvpModalIf, waitPvpReplacement, applyIncomingPvpAction, myApproxSpeed, foeApproxSpeed } from '../battle/pvp-core.js';
 import { renderTeamGrid, refreshProfileUI } from '../ui/profile.js';
 import { updateMoneyDisplay } from '../ui/location.js';
 import { updateInventoryDisplay } from '../ui/inventory.js';
@@ -433,12 +433,14 @@ export function initTradeSocket() {
       if (oppHpFill) oppHpFill.style.width = `${(action.hp / action.maxHp) * 100}%`;
       if (action.sprite && oppSprite) oppSprite.src = action.sprite;
       if (!state.pvpOppMon) state.pvpOppMon = {};
-      // Типы/статы/стадии оппонента — для честного урона и стадий в обе стороны.
       state.pvpOppMon.name = action.name;
       state.pvpOppMon.currentHp = action.hp;
       state.pvpOppMon.maxHp = action.maxHp;
       state.pvpOppMon.lvl = action.lvl;
       if (Array.isArray(action.types)) state.pvpOppMon.types = action.types;
+      if (typeof action.ability === 'string' || action.ability == null) state.pvpOppMon.ability = action.ability || null;
+      if (typeof action.held === 'string' || action.held == null) state.pvpOppMon.held = action.held || null;
+      if (typeof action.status === 'string' || action.status == null) state.pvpOppMon.status = action.status || null;
       if (Array.isArray(action.stats)) state.pvpOppMon.stats = action.stats;
       if (action.stages && typeof action.stages === 'object') state.pvpOppMon.stages = { ...action.stages };
     // Снимок команды соперника (для баров) + уровень/база опыта для XP.
@@ -453,68 +455,19 @@ export function initTradeSocket() {
       arr.push(Number(action.baseExp));
       (state as any).pvpEnemyBaseExp = arr;
     }
-      // Замена пришла: бой продолжается, ход наш (выжидательная пауза снята).
+      // Замена пришла: бой продолжается. Быстрейший ходит первым
+      // (скорость считается одинаково с обеих сторон — рассинхрона нет).
       if (state.pvpAwaitingReplacement) {
         clearPvpReplaceWait();
-        showToast(`Соперник выпускает: ${action.name}! Ваш ход!`, false);
-        state.pvpMyTurn = true;
+        const first = myApproxSpeed() >= foeApproxSpeed();
+        state.pvpMyTurn = first;
+        showToast(`Соперник выпускает: ${action.name}! ${first ? 'Ваш ход!' : 'Ход соперника!'}`, !first);
       }
       renderPvpTeams();
     }
-    if (action.type === 'attack') {
-      if (state.pvpMyMon && !action.missed) {
-        state.pvpMyMon.currentHp -= action.dmg;
-        if (state.pvpMyMon.currentHp < 0) state.pvpMyMon.currentHp = 0;
-        updatePvPUI();
-      }
-      const logEl = document.getElementById('pvp-log');
-      if (logEl) {
-        // Богатый лог как в диком бою: модификаторы едут в релее (mods),
-        // иначе считаем эффективность локально по типу и своим типам.
-        let mods = typeof action.mods === 'string' ? action.mods : '';
-        if (!mods && action.moveType) {
-          try {
-            const myTypes = (state.pvpMyMon?.apiData?.types || []).map((t: any) => t?.type?.name || t).filter(Boolean);
-            const eff = getTypeMultiplier(action.moveType, myTypes);
-            const parts: string[] = [];
-            if (action.crit) parts.push('критический удар');
-            if (eff > 1) parts.push('суперэффективно');
-            else if (eff > 0 && eff < 1) parts.push('малоэффективно');
-            else if (eff === 0) parts.push('атака не возымела эффекта');
-            mods = parts.join(', ');
-          } catch { /* ignore */ }
-        }
-        const head = action.missed
-          ? `${state.pvpOpponentName}: ${action.moveName}! — промах`
-          : action.dmg > 0
-            ? `${state.pvpOpponentName}: ${action.moveName}! −${action.dmg} HP${mods ? ` — ${mods}` : ''}`
-            : `${state.pvpOpponentName}: ${action.moveName}!${mods ? ` — ${mods}` : ''}`;
-        const logEntry = document.createElement('div');
-        logEntry.textContent = head;
-        logEl.prepend(logEntry);
-      }
-      state.pvpMyTurn = true;
-      updatePvPUI();
-      // Синхронизация HP: атакующий иначе не узнает о нокауте (mon_data
-      // шлётся один раз при старте) и вечно ждёт чужого хода.
-      // Стадии шлём вместе: оппонент считает свой урон по нам с учётом защиты.
-      const fainted = !!state.pvpMyMon && state.pvpMyMon.currentHp <= 0;
-      if (state.socket && state.pvpBattleId) {
-        state.socket.emit('pvp_action', {
-          battleId: state.pvpBattleId,
-          action: {
-            type: 'hp_update',
-            hp: state.pvpMyMon ? state.pvpMyMon.currentHp : 0,
-            maxHp: state.pvpMyMon ? state.pvpMyMon.maxHp : 1,
-            fainted,
-            stages: { ...(state.pvpMyMon?.statStages || {}) },
-          },
-        });
-        if (fainted) {
-          state.socket.emit('pvp_action', { battleId: state.pvpBattleId, action: { type: 'fainted' } });
-        }
-      }
-      if (fainted) handleMyFaint();
+    if (action.type === 'attack' || action.type === 'item' || action.type === 'dbond') {
+      applyIncomingPvpAction(action);
+      return;
     }
     if (action.type === 'hp_update') {
       // Живой бар оппонента + нокаут: оппонент упал — ждём замену, а не конец
@@ -524,6 +477,10 @@ export function initTradeSocket() {
       if (action.stages && typeof action.stages === 'object') {
         if (!state.pvpOppMon) state.pvpOppMon = {};
         state.pvpOppMon.stages = { ...action.stages };
+      }
+      if (typeof action.status === 'string' || action.status == null) {
+        if (!state.pvpOppMon) state.pvpOppMon = {};
+        (state.pvpOppMon as any).status = action.status || null;
       }
       if (typeof action.hp === 'number') {
         if (!state.pvpOppMon) state.pvpOppMon = {};
@@ -565,15 +522,7 @@ export function initTradeSocket() {
       return;
     }
     if (action.type === 'switch') {
-      // Добровольная смена соперника: ход переходит нам.
-      const logEl = document.getElementById('pvp-log');
-      if (logEl) {
-        const logEntry = document.createElement('div');
-        logEntry.textContent = `${state.pvpOpponentName}: замена покемона!`;
-        logEl.prepend(logEntry);
-      }
-      state.pvpMyTurn = true;
-      updatePvPUI();
+      applyIncomingPvpAction(action);
       return;
     }
     if (action.type === 'surrender') {
