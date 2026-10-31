@@ -6,6 +6,7 @@
  */
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { gzipSync } from 'node:zlib';
 import express from 'express';
 import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
@@ -126,9 +127,61 @@ async function main() {
   app.use(express.json({ limit: '25mb' }));  // K1a: большие сейвы (много предметов)
   app.use(express.urlencoded({ extended: true }));
 
+  // ── gzip для JSON-ответов ────────────────────────────────
+  // Своими руками, без зависимости compression. Сейв игрока — это сотни
+  // килобайт JSON, который жмётся в 5-10 раз, а ответы /api/pokeapi/* —
+  // сотни килобайт PokeAPI-дампов. На мобильном интернете (а Mini App живёт
+  // именно там) это разница в секундах загрузки.
+  //
+  // Перехватываем res.send, а не res.json: Express-овский res.json сам
+  // вызывает res.send, зато прокси PokeAPI отдаёт готовую строку через
+  // res.type(...).send(...) — при обёртке только res.json он бы не жался.
+  // Статику и файлы не трогаем: sendFile/потоки идут мимо res.send.
+  app.use((req, res, next) => {
+    const accept = String(req.headers['accept-encoding'] || '');
+    if (!accept.includes('gzip')) return next();
+    const originalSend = res.send.bind(res);
+    res.send = (body: unknown) => {
+      try {
+        const encoded = String(res.getHeader('Content-Type') || '');
+        // Уже сжатое/бинарное не трогаем — двойное сжатие только вредит.
+        if (/image\/|video\/|audio\/|application\/(zip|gzip|octet-stream)|font\//.test(encoded)) {
+          return originalSend(body);
+        }
+        let buf: Buffer | null = null;
+        if (typeof body === 'string') buf = Buffer.from(body);
+        else if (Buffer.isBuffer(body)) buf = body;
+        else if (body && typeof body === 'object') buf = Buffer.from(JSON.stringify(body));
+        if (!buf || buf.length < 1024) return originalSend(body);
+        const gz = gzipSync(buf, { level: 6 });
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Vary', 'Accept-Encoding');
+        return res.end(gz);
+      } catch {
+        // Любая проблема с gzip не должна ломать ответ — отдаём как есть.
+        return originalSend(body);
+      }
+    };
+    next();
+  });
+
   // ── Static files (в продакшне — собранный клиент) ────────
   if (config.isProduction) {
-    app.use(express.static(CLIENT_DIST));
+    // Ассеты Vite хэшированные (app-<hash>.js), поэтому их можно кэшировать
+    // навсегда: смена сборки меняет имя файла. Раньше заголовков кэша не было
+    // вовсе, и Telegram-вебвью на каждой загрузке перекачивал ~1 МБ бандла —
+    // на мобильном интернете это медленно и жрёт трафик игрока.
+    // index.html и прочие некэшируемые файлы — только no-cache, иначе игрок
+    // залипнет на старом бандле (для этого же есть серверный /api/version).
+    app.use(express.static(CLIENT_DIST, {
+      setHeaders: (res, filePath) => {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    }));
   }
 
   // ── Pino logger middleware ────────────────────────────────
@@ -269,8 +322,11 @@ async function main() {
   });
 
   // ── SPA fallback (продакшн) ──────────────────────────────
+  // index.html не кэшируем: он ссылается на хэшированные чанки, и старая
+  // копия после деплоя даёт битую загрузку (лечится только баннером версии).
   if (config.isProduction) {
     app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile('index.html', { root: CLIENT_DIST });
     });
   }
