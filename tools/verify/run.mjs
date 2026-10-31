@@ -39,6 +39,8 @@ import { playwright } from './support.mjs';
 
 const KEEP_PG = process.argv.includes('--keep-pg');
 const SERVE_ONLY = process.argv.includes('--serve');
+// Секрет вебхука бота для стенда (в прод подставляется свой из окружения).
+const VERIFY_WEBHOOK_SECRET = 'verify-webhook-secret';
 const SKIP_BUILD = process.argv.includes('--skip-build') || existsSync(path.join(DIST_DIR, 'index.html'))
   && existsSync(path.join(SERVER_DIR, 'dist', 'index.js'));
 
@@ -350,7 +352,7 @@ function runSuite(name, file) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [path.join(TOOLS, file)], {
       cwd: REPO,
-      env: { ...process.env, VERIFY_PORT: String(APP_PORT), VERIFY_BOT_TOKEN: BOT_TOKEN },
+      env: { ...process.env, VERIFY_PORT: String(APP_PORT), VERIFY_BOT_TOKEN: BOT_TOKEN, VERIFY_WEBHOOK_SECRET },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let buf = '';
@@ -448,6 +450,10 @@ async function main() {
       ALLOW_DEV_LOGIN: 'false',
       CORS_ORIGINS: `http://localhost:${APP_PORT},http://${HOST_ALIAS}:${APP_PORT}`,
       LOG_LEVEL: 'info',
+      // Вебхук бота на стенде включаем намеренно: проверяем и «бот отвечает
+      // на /start», и то, что без секрета/с чужим секретом маршрут закрыт.
+      TELEGRAM_WEBHOOK_SECRET: VERIFY_WEBHOOK_SECRET,
+      PUBLIC_URL: APP_URL,
           DB_SSL: 'disable',
           // PGlite отдаёт одно соединение по pg-wire. С пулом больше одного
           // параллельные запросы рвали его с ECONNRESET, и чат отвечал 500.

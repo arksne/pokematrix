@@ -41,6 +41,9 @@ console.log*
 
 # Артефакты проверки работоспособности
 tools/verify/.state/
+# Артефакты прод-проверок (скриншоты, логи прогонов)
+tools/prod-check/.state/
+tools/prod-ops/.state/
 .neon
 
 # Экспорты переписки (не часть проекта)

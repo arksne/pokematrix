@@ -35,3 +35,11 @@ services:
         value: false
       - key: ADMIN_IDS
         sync: false
+      # Публичный адрес игры — из него бот строит кнопку «Играть».
+      - key: PUBLIC_URL
+        value: https://pokematrix.onrender.com
+      # Секрет вебхука Telegram: путь /api/telegram/webhook/<secret> и
+      # secret_token в setWebhook. Без него маршрут вебхука отвечает 404,
+      # то есть бот молчит на /start (сама игра при этом работает).
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false

@@ -26,6 +26,12 @@ export const config = {
   isProduction: process.env.NODE_ENV === 'production',
   logLevel: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
   adminIds: new Set((process.env.ADMIN_IDS || '').split(',').filter(Boolean).map(Number)),
+  // ── Telegram-бот (ответы на /start) ───────────────────────
+  // Без TELEGRAM_WEBHOOK_SECRET маршрут вебхука отключён: это защита от
+  // чужого POST, который иначе мог бы рассылать сообщения от имени бота.
+  telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || '',
+  // Публичный адрес игры для кнопки в ответе бота.
+  publicUrl: (process.env.PUBLIC_URL || 'https://pokematrix.onrender.com').replace(/\/+$/, ''),
 };
 
 // В production — требовать обязательные секреты из окружения

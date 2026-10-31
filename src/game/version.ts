@@ -37,7 +37,10 @@ export async function checkClientFreshness(): Promise<void> {
   const mine = clientBuildCommit();
   let server = '';
   try {
-    const res = await fetch(`${API_BASE}/api/version`);
+    // API_BASE уже содержит '/api' (config.ts), поэтому дописывать '/api' в
+    // путь нельзя: получался двойной префикс /api/api/version, сервер отвечал
+    // 404, и сверка версий молча не работала именно в проде.
+    const res = await fetch(`${API_BASE}/version`);
     if (!res.ok) return;
     const data = await res.json();
     server = typeof data?.commit === 'string' ? data.commit : '';

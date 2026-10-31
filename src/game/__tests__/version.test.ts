@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { isStaleBuild } from '../version.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { isStaleBuild, checkClientFreshness } from '../version.js';
 
 /**
  * Баннер свежести сборки: когда показывать «обнови игру».
@@ -26,5 +26,28 @@ describe('isStaleBuild', () => {
     ] as Array<[unknown, unknown]>) {
       expect(isStaleBuild(s, c), JSON.stringify([s, c])).toBe(false);
     }
+  });
+});
+
+/**
+ * Регрессия: клиент однажды запрашивал `${API_BASE}/api/version` при
+ * API_BASE='/api', то есть /api/api/version, и сервер отвечал 404 —
+ * сверка версий не работала ни разу. Проверяем сам URL запроса.
+ */
+describe('checkClientFreshness — адрес сверки версий', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('ходит на /api/version, без двойного префикса /api', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ commit: 'dev' }) }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await checkClientFreshness();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
+    expect(url).toBe('/api/version');
+    expect(url.startsWith('/api/api')).toBe(false);
   });
 });

@@ -143,7 +143,13 @@ t('W9', 'в покемен-центре появились кнопки дейс
   `кнопок: ${atCenter.actions}${atCenter.actionLabels.length ? ` (${atCenter.actionLabels.join(', ')})` : ''}`);
 t('W10', 'в покемен-центре есть кнопка обмена',
   atCenter.actionLabels.some((l) => /Обмен/i.test(l)), atCenter.actionLabels.join(', '));
-t('W10b', 'после перехода есть кнопка «Назад»', /Назад/.test(atCenter.backBtn), `«${atCenter.backBtn}»`);
+// Кнопку «Назад» (#btn-back) владелец убрал из UI как мешающую (см.
+// src/ui/location.ts:855): возврат делают прямыми кнопками переходов, а откуда
+// пришёл — видно в хлебных крошках «· ↩ <локация>». Проверяем доступный возврат,
+// а не удалённый элемент: иначе набор краснеет на осознанном решении.
+t('W10b', 'после перехода возврат доступен (↩-крошка и кнопки перехода)',
+  /↩/.test(atCenter.crumbs) && atCenter.nav > 0,
+  `крошки: «${atCenter.crumbs}», кнопок перехода: ${atCenter.nav}`);
 t('W10c', 'хлебные крошки показывают позицию', atCenter.crumbs.length > 0 && /›/.test(atCenter.crumbs),
   `«${atCenter.crumbs}»`);
 

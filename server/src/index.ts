@@ -36,6 +36,7 @@ import arenaRoutes from './routes/arena.js';
 import adminRoutes from './routes/admin.js';
 import clientErrorRoutes from './routes/client-error.js';
 import featuresRoutes from './routes/features.js';
+import telegramRoutes from './routes/telegram.js';
 
 // ── Pino logger ─────────────────────────────────────────────
 import { logger } from './logger.js';
@@ -104,7 +105,21 @@ async function main() {
 
   // ── Security headers ─────────────────────────────────────
   if (config.isProduction) {
-    app.use(helmet({ contentSecurityPolicy: false }));
+    // CSP отключён осознанно (инлайн-скрипты Telegram и статики), но именно
+    // поэтому стандартный frameguard Helmet оставлять нельзя: по умолчанию он
+    // отдаёт X-Frame-Options: SAMEORIGIN, а Telegram Web открывает Mini App
+    // в iframe с origin web.telegram.org — игра в браузерном Telegram просто
+    // не рендерилась («refused to display in a frame»).
+    // Вместо XFO ставим CSP frame-ancestors: разрешаем только свой origin и
+    // домены Telegram, чтобы заодно не открыть кликджекинг всему интернету.
+    app.use(helmet({ contentSecurityPolicy: false, frameguard: false }));
+    app.use((_req, res, next) => {
+      res.setHeader(
+        'Content-Security-Policy',
+        "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org https://telegram.org",
+      );
+      next();
+    });
   }
 
   // ── Body parsers ─────────────────────────────────────────
@@ -204,6 +219,12 @@ async function main() {
   // ── Гейт прогрева ─────────────────────────────────────────
   // Стоит ПЕРЕД всеми /api-маршрутами: пока поднимаются БД и миграции,
   // отвечаем 503 с понятным телом, а не connection refused и не падением.
+  //
+  // Вебхук Telegram живёт ДО гейта: бот должен отвечать на /start даже пока
+  // база греется или лежит — sendMessage не требует БД, а Telegram копит
+  // ретраи и в итоге снимает вебхук, если сервер молчит.
+  app.use('/api/telegram', telegramRoutes);
+
   app.use('/api', (req, res, next) => {
     if (serverReady) return next();
     res.setHeader('Retry-After', '3');

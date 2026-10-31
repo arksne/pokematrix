@@ -23,8 +23,13 @@ export async function runTrade() {
       body: { ...testSave(), saveData: sd, saveVersion: cur.saveVersion },
     });
     if (r.status !== 200) {
-      // Свежий юзер с версией 0: шлём как первый клиентский сейв.
-      const r2 = await api('/api/save', { method: 'POST', token, body: testSave({ ...build(testSave().saveData) }) });
+      // Свежий юзер с версией 0: шлём как первый клиентский сейв — тот же самый
+      // sd (с собранными overrides ВНУТРИ saveData), но без saveVersion.
+      // Раньше здесь стояло testSave({ ...build(...) }): testSave() накладывает
+      // переданный объект на ВНЕШНЮЮ обёртку {saveData, badgesCount, ...}, а не
+      // на saveData, поэтому кастомная команда/инвентарь молча терялись и
+      // падение маскировалось под «успешный» сейв.
+      const r2 = await api('/api/save', { method: 'POST', token, body: { ...testSave(), saveData: sd } });
       return r2.status;
     }
     return r.status;

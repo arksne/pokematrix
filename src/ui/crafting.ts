@@ -42,7 +42,13 @@ import { ITEMS } from '../data/items.js';                  // Справочни
 //   ingredients — { itemId: количество, ... }
 //   result     — ID предмета-результата
 //   qty        — сколько штук получается
-const CRAFTING_RECIPES = [
+//
+// Таблица продублирована на сервере (server/src/routes/economy.ts) намеренно:
+// tools/verify/item-audit.test.mjs парсит рецепты регулярками именно из ЭТОГО
+// файла (I-craft-res / I-craft-ing), поэтому «вынос» литералов в общий модуль
+// молча отключил бы проверки. Расхождение ловит vitest
+// src/game/__tests__/crafting-recipes.test.ts (сверяет обе таблицы + ITEMS).
+export const CRAFTING_RECIPES = [
   // ── Металлургия ──
   { id: 'metalIngot', name: 'Металлический слиток', category: 'Металлургия',
     ingredients: { 'ore': 3 }, result: 'metalIngot', qty: 1 },

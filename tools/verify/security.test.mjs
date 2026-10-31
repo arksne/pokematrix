@@ -92,6 +92,31 @@ const { check, finish } = createSuite('Безопасность');
     `/api/health -> ${alive.status}`);
 }
 
+// ── S10/S11: вебхук Telegram-бота
+// Бот — публичный эндпоинт, который умеет отправлять сообщения от имени
+// PokeMatrix. Раньше такого маршрута не было вовсе и бот молчал на /start.
+// Проверяем ровно границу безопасности: без секрета/с чужим секретом — отказ,
+// со своим — апдейт принят (и отправка сообщения запускается, но проводится
+// с тестовым токеном, поэтому Bot API вернёт 401 — это только лог).
+{
+  const secret = process.env.VERIFY_WEBHOOK_SECRET || 'verify-webhook-secret';
+  const wrong = await api(`/api/telegram/webhook/definitely-wrong-secret`, {
+    method: 'POST',
+    body: { message: { chat: { id: 1 }, text: '/start' } },
+  });
+  check('S10', 'вебхук бота с неверным секретом -> отказ', wrong.status === 403, `HTTP ${wrong.status}`);
+
+  const noHeader = await api('/api/telegram/webhook/' + secret, {
+    method: 'POST',
+    body: { message: { chat: { id: 1 }, text: '/start' } },
+  });
+  check('S11', 'вебхук бота принимает апдейт с верным секретом', noHeader.status === 200, `HTTP ${noHeader.status}`);
+
+  const status = await api('/api/telegram/status');
+  check('S12', 'вебхук бота включён на стенде', status.status === 200 && status.json?.enabled === true,
+    JSON.stringify(status.json));
+}
+
 // ── S6..S8: fail-fast при опасной конфигурации production
 {
   const runServer = (env) => new Promise((resolve) => {

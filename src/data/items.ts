@@ -611,7 +611,32 @@ export const ITEMS: ItemDef[] = [
   // Миграция 0006 чистит дроп-конфиг продакшена.
 
   // ── КРАФТ (crafting) ──────────────────────────────────────
-  // Материалы для крафта предметов. Используются в crafting.ts.
+  // Материалы и полуфабрикаты крафта из src/ui/crafting.ts (и той же таблицы
+  // рецептов в server/src/routes/economy.ts). Раньше эти id в ITEMS
+  // отсутствовали: рецепты «ссылались в пустоту», и кнопка «Создать» была
+  // навсегда недоступна — игрок с Набором Крафта не мог ничего скрафтить.
+  // Цена 0: сырьё не продаётся и не покупается, его источник — дроп с диких
+  // покемонов (src/data/drops.js), а полуфабрикаты — только крафт. Так
+  // экономика замкнута (I-buyable / I-half / I-source зелёные).
+  // Спрайты — ближайшие по смыслу существующие предметы PokeAPI.
+  { id: 'ore', nameRu: 'Руда', category: 'crafting', desc: 'Кусок руды. Сырьё для выплавки металла.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/hard-stone.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'mountainSand', nameRu: 'Горный песок', category: 'crafting', desc: 'Мелкий песок с горных склонов. Плавится в стекло.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/soft-sand.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'coal', nameRu: 'Уголь', category: 'crafting', desc: 'Кусок каменного угля. Топливо для плавильни.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/charcoal.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'cotton', nameRu: 'Хлопок', category: 'crafting', desc: 'Мягкий хлопок. Годится для бинтов.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/fluffy-tail.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'healingHerbs', nameRu: 'Лечебные травы', category: 'crafting', desc: 'Пучок целебных трав. Основа лекарств.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/revival-herb.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'wonderFlower', nameRu: 'Чудо-цветок', category: 'crafting', desc: 'Редкий цветок с чудодейственной силой.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/flower-sweet.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'shinyDust', nameRu: 'Блестящая пыль', category: 'crafting', desc: 'Сверкающая пыль. Ценный алхимический компонент.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/stardust.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'honeycomb', nameRu: 'Соты', category: 'crafting', desc: 'Медовые соты. Пахнут сладко.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/honey.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'woodenApricorn', nameRu: 'Деревянный априкорн', category: 'crafting', desc: 'Плод дерева априкорн. Заготовка для покеболов.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/red-apricorn.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'suspiciousEgg', nameRu: 'Подозрительное яйцо', category: 'crafting', desc: 'Яйцо неизвестного покемона. Лучше не трясти.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/lucky-egg.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'ancientGenome', nameRu: 'Древний геном', category: 'crafting', desc: 'Фрагмент ДНК древнего покемона.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/dna-splicers.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  // ── полуфабрикаты: создаются только крафтом ──
+  { id: 'metalIngot', nameRu: 'Металлический слиток', category: 'crafting', desc: 'Выплавленный слиток. Основа многих рецептов.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/metal-coat.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'glass', nameRu: 'Стекло', category: 'crafting', desc: 'Ровный лист стекла. Ремесленный материал.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/ice-stone.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'bandage', nameRu: 'Бинт', category: 'crafting', desc: 'Медицинский бинт. Ремесленный материал.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/white-herb.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'sparkles', nameRu: 'Блёстки', category: 'crafting', desc: 'Пригоршня сверкающих блёсток.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/star-piece.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'honeyJar', nameRu: 'Баночка мёда', category: 'crafting', desc: 'Сладкий мёд в баночке.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/max-honey.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
+  { id: 'fossil', nameRu: 'Окаменелость', category: 'crafting', desc: 'Оживлённая окаменелость древнего покемона.', sprite: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/helix-fossil.png', spriteType: 'pokeapi', price: 0, sellPrice: 0, isUsable: false, isBall: false, implemented: true },
 
   // ── mulch ──
 

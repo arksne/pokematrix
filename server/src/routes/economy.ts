@@ -513,10 +513,14 @@ const priceMap = new Map(ITEMS.map(i => [i.id, i.price]));
 export const SERVER_PRICE_MAP = priceMap;
 
 // ── Рецепты крафта (14 штук) ─────────────────────────────────
+// Копия src/ui/crafting.ts. Сервер обязан считать тем же составом, что и
+// клиент, иначе «Создать» на витрине и списание на сервере разойдутся.
+// Любое изменение таблицы — синхронно в обоих файлах; паритет проверяет
+// vitest src/game/__tests__/crafting-recipes.test.ts.
 interface Recipe {
   id: string; ingredients: Record<string, number>; result: string; qty: number;
 }
-const CRAFTING_RECIPES: Recipe[] = [
+export const CRAFTING_RECIPES: Recipe[] = [
   { id: 'metalIngot', ingredients: { 'ore': 3 }, result: 'metalIngot', qty: 1 },
   { id: 'glass', ingredients: { 'mountainSand': 2, 'coal': 1 }, result: 'glass', qty: 1 },
   { id: 'bandage', ingredients: { 'cotton': 3 }, result: 'bandage', qty: 1 },

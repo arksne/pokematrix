@@ -5,7 +5,7 @@
  * Опционально: PROD_BASE=https://pokematrix.onrender.com (по умолчанию).
  *
  * Токен в репо НЕ хранить — только через окружение.
- * Тестовые юзеры стабильны (777900101..105), переиспользуются между
+ * Тестовые юзеры стабильны (777900101..107), переиспользуются между
  * прогонами, чтобы не растить таблицу users.
  */
 import path from 'node:path';
@@ -18,6 +18,15 @@ const req = createRequire(path.join(REPO, 'package.json'));
 
 export const BASE = process.env.PROD_BASE || 'https://pokematrix.onrender.com';
 export const BOT_TOKEN = process.env.PROD_BOT_TOKEN || '';
+
+/**
+ * Таймаут одного HTTP-запроса к проду, мс. Переопределяется PROD_API_TIMEOUT_MS
+ * (удобно для быстрой разведки, пока прод лежит).
+ */
+export const API_TIMEOUT_MS = (() => {
+  const v = Number(process.env.PROD_API_TIMEOUT_MS);
+  return Number.isFinite(v) && v > 0 ? v : 20000;
+})();
 
 export function socketIoClient() {
   return req('socket.io-client').io;
@@ -44,15 +53,48 @@ export function createSuite(title) {
   return { check, finish, results };
 }
 
-export async function api(path_, { method = 'GET', token, body } = {}) {
-  const res = await fetch(BASE + path_, {
-    method,
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+/**
+ * Читаемая причина сетевого сбоя fetch.
+ * AbortSignal.timeout() даёт DOMException с name=TimeoutError и числовым
+ * code=23 (TIMEOUT_ERR) — без этой ветки диагноз выглядел как «error: 23».
+ */
+function netErrorCode(e, ms) {
+  const name = e?.name || '';
+  if (name === 'TimeoutError' || name === 'AbortError') return `timeout ${ms}ms`;
+  const parts = [];
+  const push = (v) => { if (v && !parts.includes(String(v))) parts.push(String(v)); };
+  push(e?.cause?.code);
+  push(e?.code);
+  // Connect-фейлы приходят AggregateError'ом: причина внутри errors[].
+  if (Array.isArray(e?.errors) && e.errors.length) {
+    push(e.errors.map((x) => x?.code || x?.message).filter(Boolean).join('/'));
+  }
+  if (!parts.length) push(e?.cause?.message || e?.message || name);
+  return parts.join(' ') || 'fetch failed';
+}
+
+export async function api(path_, { method = 'GET', token, body, timeoutMs } = {}) {
+  // Таймаут обязателен: когда прод «висит» (например, БД не отвечает из-за
+  // квоты Neon), fetch без сигнала ждёт бесконечно и весь прогон зависает на
+  // первой же проверке, вместо того чтобы честно показать FAIL.
+  const ms = timeoutMs ?? API_TIMEOUT_MS;
+  let res;
+  try {
+    res = await fetch(BASE + path_, {
+      method,
+      signal: AbortSignal.timeout(ms),
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch (e) {
+    // Сетевой сбой — это результат проверки (status 0), а не падение набора:
+    // иначе одно «нет ответа» убивало бы весь набор исключением.
+    const code = netErrorCode(e, ms);
+    return { status: 0, json: null, text: `network error: ${code}`, error: code };
+  }
   let json = null;
   let text = '';
   try {
@@ -77,8 +119,12 @@ function signInitData(botToken, user) {
   return decodeURIComponent(new URLSearchParams({ ...params, hash }).toString());
 }
 
-/** Вход тестового юзера: подпись HMAC настоящим токеном + регистрация. */
-export async function login(tgId, username, firstName) {
+/**
+ * Вход тестового юзера с обоими токенами.
+ * Возвращает { token, refreshToken, status, body } — refreshToken нужен SJ1,
+ * чтобы проверить обновление сессии, а не только сам факт логина.
+ */
+export async function loginWithTokens(tgId, username, firstName) {
   if (!BOT_TOKEN) throw new Error('PROD_BOT_TOKEN не задан');
   const initData = signInitData(
     BOT_TOKEN,
@@ -90,7 +136,12 @@ export async function login(tgId, username, firstName) {
   }
   const token = r.json.token;
   await api('/api/auth/register', { method: 'POST', token, body: { nickname: username } });
-  return token;
+  return { token, refreshToken: r.json.refreshToken || '', status: r.status, body: r.json, username };
+}
+
+/** Вход тестового юзера: подпись HMAC настоящим токеном + регистрация. */
+export async function login(tgId, username, firstName) {
+  return (await loginWithTokens(tgId, username, firstName)).token;
 }
 
 export async function connect(token, label = '') {
