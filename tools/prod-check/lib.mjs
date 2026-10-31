@@ -40,17 +40,27 @@ export function createSuite(title) {
     results.push({ id, name, pass: !!pass, detail });
     console.log(`  [${id}] ${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
   };
+  /**
+   * Информационная проверка: печатается, но НЕ влияет на итог набора.
+   * Для «мягких» фактов, которые зависят от env/раскатки, а не от кода
+   * (например, включён ли Telegram-шлюз на этом деплое).
+   */
+  const info = (id, name, detail = '') => {
+    results.push({ id, name, pass: true, info: true, detail });
+    console.log(`  [${id}] INFO  ${name}${detail ? '  — ' + detail : ''}`);
+  };
   const finish = () => {
+    const real = results.filter((r) => !r.info);
     const failed = results.filter((r) => !r.pass);
     console.log('');
     console.log(
       failed.length
         ? `ПРОВАЛЕНО: ${failed.map((f) => f.id).join(', ')}`
-        : `${title}: ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ (${results.length})`,
+        : `${title}: ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ (${real.length})`,
     );
     return failed.length === 0;
   };
-  return { check, finish, results };
+  return { check, info, finish, results };
 }
 
 /**

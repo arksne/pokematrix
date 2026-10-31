@@ -10,13 +10,16 @@
  */
 import { api, createSuite, loginWithTokens } from './lib.mjs';
 
-/** Коммит GitHub main на момент написания чеков (справочно, не критерий). */
-const EXPECTED_COMMIT = '5a26fe1';
+/**
+ * Справочный коммит main на момент прогона (main двигается — это НЕ критерий).
+ * Переопределяется PROD_EXPECTED_COMMIT, чтобы отчёт не врал после нового пуша.
+ */
+const EXPECTED_COMMIT = (process.env.PROD_EXPECTED_COMMIT || 'f31214c').toLowerCase();
 /** Стабильный тестовый юзер, переиспользуется между прогонами. */
 const CHAT_ID = 777900105;
 
 export async function runInfra() {
-  const { check, finish } = createSuite('Прод: инфраструктура');
+  const { check, info, finish } = createSuite('Прод: инфраструктура');
 
   // ── HF1: служба и БД живы ──────────────────────────────────
   {
@@ -26,6 +29,19 @@ export async function runInfra() {
       r.status !== 200
         ? `HTTP ${r.status} ${(r.text || '').slice(0, 100)}`
         : `db=${r.json?.db} uptime=${Math.round(Number(r.json?.uptime) || 0)}с`);
+  }
+
+  // ── HF2 (ИНФОРМАЦИОННАЯ): шлюз Telegram ────────────────────
+  // Контракт: server/src/routes/telegram.ts:127 → {enabled, publicUrl}.
+  // Намеренно НЕ валит прогон: enabled зависит от env на Render
+  // (TELEGRAM_WEBHOOK_SECRET + BOT_TOKEN), а не от кода, и на свежем деплое
+  // может быть false или 404. Фиксируем факт для отчёта.
+  {
+    const r = await api('/api/telegram/status');
+    info('HF2', 'GET /api/telegram/status (шлюз Telegram)',
+      r.status === 200
+        ? `enabled=${r.json?.enabled} publicUrl=${r.json?.publicUrl ?? '—'}`
+        : `HTTP ${r.status} ${(r.text || '').slice(0, 90)}`);
   }
 
   // ── V1: развёрнут ли тот коммит, который мы проверяем ───────
@@ -41,7 +57,7 @@ export async function runInfra() {
       r.status === 200 && isHex12,
       r.status !== 200
         ? `HTTP ${r.status} ${(r.text || '').slice(0, 100)}`
-        : `commit=${commit} branch=${r.json?.branch ?? '?'} (== main@${EXPECTED_COMMIT}: ${same ? 'да' : 'НЕТ'})`);
+        : `commit=${commit} branch=${r.json?.branch ?? '?'} (== ожидаемый ${EXPECTED_COMMIT}: ${same ? 'да' : 'НЕТ'})`);
   }
 
   // Логин нужен SJ1 (refresh-пара) и CH1 (отправка в чат). Один логин на две
