@@ -1,8 +1,15 @@
 name: Deploy to GitHub Pages
 
+# ⚠️ Прод — это Render (https://pokematrix.onrender.com), а НЕ GitHub Pages.
+# Клиент обращается к API по АБСОЛЮТНОМУ same-origin пути '/api' (см.
+# src/game/config.ts), поэтому статическая копия на Pages принципиально не
+# рабочая: у неё нет бэкенда, /api/* там отдаёт 404. Плюс Pages для репозитория
+# не включён, из-за чего deploy-pages@v4 падал на КАЖДОМ пуше в main и красил
+# историю коммитов в красный независимо от состояния кода.
+#
+# Поэтому workflow оставлен только для ручного запуска (например, чтобы
+# посмотреть собранный бандл или отдать статику на отдельный хост вместе с API).
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

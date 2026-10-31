@@ -25,6 +25,12 @@ jobs:
           node-version: 22.12
           cache: npm
       - run: npm ci
+      # Клиентский tsc разбирает и тесты, которые импортируют серверный код
+      # (src/game/__tests__/economy-parity.test.ts → server/src/routes/economy.ts).
+      # Без серверных зависимостей такой импорт давал TS2307 «Cannot find module
+      # 'express'/'drizzle-orm'», и job краснел на ровном месте.
+      - name: Зависимости сервера (клиентский tsc тянет server/*)
+        run: npm ci --prefix server
       - name: Типизация клиента
         run: npx tsc --noEmit
       - name: Тесты клиента
@@ -43,8 +49,13 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci --prefix server
+      # tsc запускаем из server/: там свой typescript (5.8.3) и свой tsconfig.
+      # Раньше вызывался корневой `npx tsc`, а корневые node_modules в этом job
+      # не ставились вовсе — npx тянул typescript из реестра, и шаг падал не
+      # из-за кода.
       - name: Типизация сервера
-        run: npx tsc --noEmit -p server/tsconfig.json
+        working-directory: server
+        run: npx tsc --noEmit
       - name: Сборка сервера
         run: npm run server:build
 
