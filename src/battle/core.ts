@@ -2250,12 +2250,24 @@ function applyVolatileAilment(target: any, isWildTarget: boolean, ailment: strin
   const tnm = monLogName(target, isWildTarget);
   switch (ailment) {
     case 'confusion': {
+      // Own Tempo: иммунитет к замешательству (описание обещало, а в PvE
+      // проверки не было — только в PvP).
+      const abil = String(abilityOf(target, isWildTarget) || '').toLowerCase();
+      if (abil === 'own-tempo') {
+        appendToLog(`${tnm} не путается (Свой ритм)!`, false, 'system');
+        return true;
+      }
       const turns = confusionTurns();
       vol.confusion = turns;
       appendToLog(`${tnm} сбит с толку!`, false, 'system');
       return true;
     }
     case 'infatuation': {
+      const abilI = String(abilityOf(target, isWildTarget) || '').toLowerCase();
+      if (abilI === 'oblivious') {
+        appendToLog(`${tnm} беспечен — влюблённость не действует!`, false, 'system');
+        return true;
+      }
       vol.attract = true;
       appendToLog(`${tnm} влюблён в ${sourceName}!`, false, 'system');
       return true;
@@ -2544,6 +2556,10 @@ function handleFieldAndTrickMoves(move: any, isPlayer: boolean): boolean {
     }
     // ── Taunt / Encore / Disable / Torment / Imprison ──
     case 'taunt': {
+      const tauntAbil = String(abilityOf(foe, isPlayer) || '').toLowerCase();
+      if (tauntAbil === 'oblivious') {
+        return done(`${fname} беспечен — насмешка не действует!`);
+      }
       monVol(foe).taunt = 3;
       return done(`${fname} в насмешке! Только атакующие приёмы!`);
     }
@@ -5231,6 +5247,7 @@ async function useMove(moveIndex) {
     S.activeWild.heldItem, // Bright Powder у дикого (если когда-нибудь появится)
     S.activePlayerMon.statStages?.acc || 0, // Sand Attack и т.п.
     S.activeWild.statStages?.eva || 0,      // Double Team и т.п.
+    !!S.activeWild.vol?.confusion,          // Tangled Feet у дикого
   );
   // ПРОХОД-741: наведение (lock-on/mind-reader) бьёт без промаха, разовое
   if (!accResult.hit && S.activePlayerMon.lockedOn) {
@@ -6856,6 +6873,7 @@ async function runEnemyTurnBody() {
     S.activePlayerMon.heldItem, // Bright Powder: уклонение игрока +1/9
     S.activeWild.statStages?.acc || 0,
     S.activePlayerMon.statStages?.eva || 0,
+    !!S.activePlayerMon.vol?.confusion,     // Tangled Feet у игрока
   );
   // Hustle: 20% additional miss chance for physical moves
   const wildAbilityName = abilityOf(S.activeWild, true);

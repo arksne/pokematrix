@@ -53,6 +53,33 @@ describe('stageMultiplier — канонные множители стадий',
   });
 });
 
+describe('checkAccuracy — способность Tangled Feet', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Способность была помечена implemented:true, но в коде не встречалась:
+  // в замешательстве уклонение не росло.
+  it('в замешательстве уклонение выше (точность ×0.75)', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.78);
+    const move = { accuracy: 100, name: 'tackle' };
+    expect(checkAccuracy(move, null, 'tangled-feet', 'clear').hit).toBe(true);
+    expect(checkAccuracy(move, null, 'tangled-feet', 'clear', null, 0, 0, true).hit).toBe(false);
+  });
+
+  it('без замешательства бонуса нет', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.78);
+    const move = { accuracy: 100, name: 'tackle' };
+    expect(checkAccuracy(move, null, 'tangled-feet', 'clear', null, 0, 0, false).hit).toBe(true);
+  });
+
+  it('другая способность в замешательстве не помогает', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.78);
+    const move = { accuracy: 100, name: 'tackle' };
+    expect(checkAccuracy(move, null, 'levitate', 'clear', null, 0, 0, true).hit).toBe(true);
+  });
+});
+
 describe('checkAccuracy — стадии точности/уклонения', () => {
   afterEach(() => {
     vi.restoreAllMocks();

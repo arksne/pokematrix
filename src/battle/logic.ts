@@ -294,6 +294,7 @@ export function statChangeKey(name: string): 'atk' | 'def' | 'spa' | 'spd' | 'sp
  * defenderHeldItem — предмет защитника (Bright Powder снижает точность на 10%).
  * attackerAccuracyStage / defenderEvasionStage — стадии точности/уклонения
  * (Sand Attack, Double Team, Flash…): точность ×stage(acc)/stage(eva).
+ * defenderConfused — нужен для Tangled Feet (уклонение +1 в замешательстве).
  */
 export function checkAccuracy(
   move,
@@ -302,7 +303,8 @@ export function checkAccuracy(
   weather = 'clear',
   defenderHeldItem = null,
   attackerAccuracyStage = 0,
-  defenderEvasionStage = 0
+  defenderEvasionStage = 0,
+  defenderConfused = false
 ) {
   const norm = (a) => (a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const atkAbil = norm(attackerAbility);
@@ -325,6 +327,10 @@ export function checkAccuracy(
 
   // Bright Powder — уклонение владельца выше на 1/9 (точность атакующего ×0.9).
   if (String(defenderHeldItem || '') === 'brightPowder') acc *= 0.9;
+
+  // Tangled Feet: в замешательстве уклонение выше (+1 стадия ≈ точность ×0.75).
+  // Способность была помечена реализованной, но в коде не встречалась вовсе.
+  if (defAbil === 'tangledfeet' && defenderConfused) acc *= 0.75;
 
   // Стадии точности атакующего и уклонения защитника.
   if (attackerAccuracyStage || defenderEvasionStage) {
