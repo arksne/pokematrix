@@ -37,7 +37,8 @@
 // Все ui/* импорты — это DOM-манипуляции (кнопки, модалки).
 // Все data/* импорты — статические конфиги (погода, предметы).
 import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';
-import { teamBlockedToast } from '../ui/team-hint.js';   // Подсказка «вся команда без сознания → Поке-центр»         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
+import { teamBlockedToast } from '../ui/team-hint.js';
+import { checkGymEntry, gymEntryRequirements } from './gym-entry.js';   // Условия входа в зал (текст + проверка)   // Подсказка «вся команда без сознания → Поке-центр»         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
 import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon, proxySpriteUrl } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
@@ -8018,6 +8019,12 @@ function openGymModal(locId) {
     trainInfo.innerHTML = '';
   }
 
+  // Условия входа показываем ЗАРАНЕЕ, а не тостом после нажатия «Сразиться!»
+  // (спека: понятность важнее канона). Тексты совпадают с проверкой старта —
+  // и то, и другое из src/battle/gym-entry.ts.
+  const reqEl = document.getElementById('gym-requirements');
+  if (reqEl) reqEl.textContent = gymEntryRequirements(leader);
+
   const teamList = document.getElementById('gym-team-list');
   teamList.innerHTML = '';
   leader.team.forEach((member, i) => {
@@ -8029,26 +8036,12 @@ function openGymModal(locId) {
 
   modal.style.display = 'flex';
   document.getElementById('btn-start-gym-battle').onclick = () => {
-    // Validate team before battle
-    const team = GS.myTeam.filter(m => m.currentHp > 0);
-    if (team.length < 4) {
-      showToast('У вас должно быть минимум 4 живых покемона для битвы с лидером!', true);
-      return;
-    }
-    // Check level cap: no pokemon above gym leader's level
-    const maxGymLvl = Math.max(...leader.team.map(m => m.level));
-    const overleveled = team.filter(m => (m.baseLevel + (m.candiesEaten || 0)) > maxGymLvl);
-    if (overleveled.length > 0) {
-      const names = overleveled.map(m => m.nickname || m.apiData?.name || '?').join(', ');
-      showToast(`Ваши покемоны выше уровнем, чем лидер! Уберите: ${names} (макс ${maxGymLvl} лв)`, true);
-      return;
-    }
-    // Check type duplicates: each pokemon must have a unique primary type
-    const primaryTypes = team.map(m => m.apiData?.types?.[0]?.type?.name).filter(Boolean);
-    const dupes = primaryTypes.filter((t, i) => primaryTypes.indexOf(t) !== i);
-    if (dupes.length > 0) {
-      const uniqueDupes = [...new Set(dupes)].join(', ');
-      showToast(`В команде есть повторяющиеся типы: ${uniqueDupes}. Смените покемонов!`, true);
+    // Условия входа (4+ живых, уникальные типы, уровень ≤ лидера) — в
+    // src/battle/gym-entry.ts: та же функция рисует текст в модалке, поэтому
+    // подсказка и проверка не могут разойтись.
+    const entry = checkGymEntry(GS.myTeam, leader);
+    if (!entry.ok) {
+      showToast(entry.error || 'Нельзя войти в зал', true);
       return;
     }
 
