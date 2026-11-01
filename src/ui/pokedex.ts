@@ -35,7 +35,8 @@ import { getPokedexState } from '../game/getters.js';
 // getTypeColor — возвращает HEX-цвет для типа покемона (например, 'fire' → '#FF4422')
 // getTypeGradient — возвращает CSS gradient для фона карточки по типам покемона
 import { getTypeColor, getTypeGradient, proxySpriteUrl } from '../utils/sprite.js';
-import { pokedexGridSprite } from './pokedex-sprite.js';   // Арт только для пойманных, остальные — 96px
+import { pokedexGridSprite } from './pokedex-sprite.js';
+import { debounce } from '../utils/debounce.js';   // Поиск: один рендер после паузы   // Арт только для пойманных, остальные — 96px
 // ── Данные, которых в покедексе раньше не было, хотя они лежали в проекте ──
 import { getAbilityNameRu, isAbilityImplemented } from '../data/abilities.js';  // RU-имя и «работает ли» способности
 import { MONSTER_DROP_TABLE } from '../data/drops.js';                            // что падает с покемона
@@ -133,6 +134,9 @@ export function openPokedex() {
   function renderGrid() {
     // Очищаем сетку
     grid.innerHTML = '';
+    // Карточки собираем в DocumentFragment и вставляем одним append: 1025
+    // отдельных appendChild заставляли браузер пересчитывать раскладку.
+    const fragment = document.createDocumentFragment();
     // Берём текущие значения фильтров
     const searchTerm = (searchEl as HTMLInputElement)?.value.toLowerCase().trim() || '';   // Поисковый запрос (нижний регистр)
     const genVal = (genFilter as HTMLSelectElement)?.value || 'all';                        // Выбранное поколение
@@ -204,11 +208,13 @@ export function openPokedex() {
         <img src="${getSpriteSrc(pokeapiId, isCaught)}" alt="${name}" loading="lazy" onerror="this.style.opacity='0.3'">
         <span class="poke-name">${name}</span>
       `;
-      // Добавляем ячейку в сетку DOM
-      grid.appendChild(cell);
+      // Добавляем ячейку в буфер (в DOM попадёт одним append ниже)
+      fragment.appendChild(cell);
       // Вешаем обработчик клика — открывает детальную карточку покемона
       cell.addEventListener('click', () => showPokedexInfo(name));
     });
+
+    grid.appendChild(fragment);
 
     // Обновляем счётчик: "Поймано: X / Y" (где Y — общее количество видов)
     countEl.innerText = `Поймано: ${pokedexCaught.size} / ${pokedexTotal}`;
@@ -241,7 +247,9 @@ export function openPokedex() {
 
   // ── Обработчики фильтров ──
   // Вешаем oninput на поиск — срабатывает при каждом вводе символа
-  searchEl.oninput = renderGrid;
+  // Дебаунс: сетка из 1025 карточек перерисовывалась на КАЖДОЕ нажатие
+  // клавиши — на телефоне ввод «залипал». Теперь один рендер после паузы.
+  searchEl.oninput = debounce(renderGrid, 180);
   // Вешаем onchange на фильтры — срабатывает при изменении выбора
   if (genFilter) genFilter.onchange = renderGrid;
   if (statusFilter) statusFilter.onchange = renderGrid;
