@@ -108,7 +108,7 @@ const TOUR = [
   { id: 'T1', label: 'мир', kind: 'world' },
   { id: 'T2', label: 'рюкзак', nav: 'view-backpack', content: 'inventory-items' },
   { id: 'T3', label: 'команда', nav: 'view-team', content: 'team-roster' },
-  { id: 'T4', label: 'чат', nav: 'view-chat', content: 'chat-messages' },
+  { id: 'T4', label: 'чат', nav: 'view-chat', content: 'chat-messages', waitMs: 6000 },
   { id: 'T5', label: 'тренеры', nav: 'view-trainers', content: 'trainers-all-panel', waitMs: 8000 },
   { id: 'T6', label: 'дроп', nav: 'view-drop', content: 'drop-list' },
   { id: 'T7', label: 'покедекс', click: 'btn-open-pokedex', modal: 'pokedex-modal', content: 'pokedex-grid' },
@@ -504,3 +504,4 @@ main().catch((e) => {
   console.error('Тур упал:', e);
   process.exit(2);
 });
+
