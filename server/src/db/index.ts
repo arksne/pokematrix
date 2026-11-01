@@ -9,6 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { retryWithBackoff } from '../lib/retry.js';   // повторы для транзиентных ошибок БД
 import * as schema from './schema.js';
 
 const { Pool } = pg;
@@ -72,10 +73,31 @@ export function getDb() {
 
 /**
  * Запуск миграций (вызывается при старте сервера).
+ *
+ * С повторами: в логах прода 2026-10-31 видно каскад «Migration FAILED» — Neon
+ * отдавал «exceeded the quota» и «Connection terminated due to connection
+ * timeout», каждый блип ронял контейнер, Render поднимал новый, тот падал снова
+ * (crash-loop). Транзиентную ошибку БД дешевле переждать: 5 попыток с паузами
+ * 2/4/8/16 с. После последней неудачи ошибка пробрасывается как раньше —
+ * в production сервер по-прежнему не стартует со сломанной схемой.
  */
-export async function runMigrations() {
+export async function runMigrations(opts: { attempts?: number; baseDelayMs?: number } = {}) {
   if (!db) throw new Error('Database not connected');
-  await migrate(db, { migrationsFolder: path.resolve(__dirname, 'migrations') });
+  await retryWithBackoff(
+    async () => {
+      await migrate(db, { migrationsFolder: path.resolve(__dirname, 'migrations') });
+    },
+    {
+      attempts: opts.attempts ?? 5,
+      baseDelayMs: opts.baseDelayMs ?? 2000,
+      onRetry: (err: unknown, attempt: number, delayMs: number) => {
+        logger.warn(
+          { err, attempt, delayMs },
+          '[db] Миграции не применились — повторяю (возможен блип БД)'
+        );
+      },
+    }
+  );
   console.log('[db] Migrations applied');
 }
 
