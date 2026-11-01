@@ -161,6 +161,50 @@ async function main() {
     );
 
     // ── C3: после подъёма оверлей исчезает, игра загружается ────────
+    // Новый тренер после логина видит регистрацию и выбор стартовой карты —
+    // проходим их так же, как живой игрок, иначе «готовности мира» не будет.
+    const isRegVisible = async () =>
+      page
+        .evaluate(() => {
+          const b = document.getElementById('btn-register');
+          const o = document.getElementById('register-overlay');
+          return (!!b && b.offsetHeight > 0) || (!!o && window.getComputedStyle(o).display !== 'none');
+        })
+        .catch(() => false);
+    const regDeadline = Date.now() + 60_000;
+    while (Date.now() < regDeadline && !(await isRegVisible())) {
+      const readyNow = await page
+        .evaluate(() => document.querySelectorAll('#nav-buttons .btn-nav, #loc-actions button').length > 0)
+        .catch(() => false);
+      if (readyNow) break;
+      await sleep(500);
+    }
+    if (await isRegVisible()) {
+      await page
+        .evaluate((nick) => {
+          const input = document.querySelector('#register-overlay input') || document.getElementById('reg-nickname');
+          if (input) {
+            input.value = nick;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          document.getElementById('btn-register')?.click();
+        }, `cold${String(TG_ID).slice(-4)}`)
+        .catch(() => {});
+      await sleep(3000);
+    }
+    // Стартовая карта (появляется с задержкой после отрисовки мира).
+    for (let i = 0; i < 25; i++) {
+      const starterOpen = await page
+        .evaluate(() => {
+          const m = document.getElementById('starter-modal');
+          return !!m && window.getComputedStyle(m).display !== 'none';
+        })
+        .catch(() => false);
+      if (!starterOpen) break;
+      await page.evaluate(() => document.querySelector('#starter-grid .starter-option')?.click()).catch(() => {});
+      await sleep(2000);
+    }
+
     let ready = false;
     const readyDeadline = Date.now() + 90_000;
     while (Date.now() < readyDeadline && !ready) {

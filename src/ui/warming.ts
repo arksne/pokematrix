@@ -24,9 +24,27 @@ export interface WarmingDocument {
   getElementById(id: string): WarmingElement | null;
   createElement(tag: string): WarmingElement;
   body: { appendChild(child: WarmingElement): void } | null;
-  /** Таймеры (в тестах — управляемые). */
-  setTimeout(fn: () => void, ms: number): unknown;
+  /** Таймеры: в браузере их даёт window, а не document (см. resolveTimers). */
+  setTimeout?(fn: () => void, ms: number): unknown;
   clearTimeout?(handle: unknown): void;
+}
+
+/**
+ * Таймеры берём у документа (в тестах — управляемые) или у globalThis.
+ * ВАЖНО: у реального `document` нет setTimeout — раньше из-за этого падал
+ * `setTimeout.bind(undefined)`, обработчик не ставился и оверлей не показывался
+ * (поймано проверкой cold-start на живом проде).
+ */
+function resolveTimers(doc: WarmingDocument): {
+  setTimeout: (fn: () => void, ms: number) => unknown;
+  clearTimeout?: (handle: unknown) => void;
+} {
+  const g = globalThis as any;
+  const setFn = typeof doc.setTimeout === 'function' ? doc.setTimeout.bind(doc) : g.setTimeout?.bind(g);
+  const clearFn =
+    typeof doc.clearTimeout === 'function' ? doc.clearTimeout.bind(doc) : g.clearTimeout?.bind(g);
+  if (typeof setFn !== 'function') return { setTimeout: () => 0, clearTimeout: undefined };
+  return { setTimeout: setFn, clearTimeout: typeof clearFn === 'function' ? clearFn : undefined };
 }
 
 export interface WarmingElement {
@@ -78,12 +96,7 @@ export function createWarmingUI(doc: WarmingDocument): WarmingUI {
   let overlay: WarmingElement | null = null;
   let hintTimer: unknown = null;
   let maxTimer: unknown = null;
-  const timers = {
-    // Оба метода биндим к документу: в тестах это методы класса FakeDoc, и без
-    // bind потеря this ломает очистку таймеров («reading 'filter' of undefined»).
-    setTimeout: doc.setTimeout.bind(doc),
-    clearTimeout: typeof doc.clearTimeout === 'function' ? doc.clearTimeout.bind(doc) : undefined,
-  };
+  const timers = resolveTimers(doc);
 
   function ensureOverlay(): WarmingElement | null {
     let el = doc.getElementById(WARMING_OVERLAY_ID);

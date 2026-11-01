@@ -139,6 +139,22 @@ describe('оверлей «Сервер просыпается…»', () => {
   });
 });
 
+describe('createWarmingUI на реальном document (у него НЕТ setTimeout)', () => {
+  it('таймеры берутся у globalThis, если у документа их нет', () => {
+    const doc = new FakeDoc();
+    // Имитируем настоящий document: методы таймеров отсутствуют.
+    delete (doc as any).setTimeout;
+    delete (doc as any).clearTimeout;
+    const ui = createWarmingUI(doc);
+    expect(() => ui.show()).not.toThrow();
+    expect(ui.visible).toBe(true);
+    const overlay = doc.getElementById(WARMING_OVERLAY_ID);
+    expect(overlay?.style.display).toBe('flex');
+    expect(() => ui.hide()).not.toThrow();
+    expect(doc.getElementById(WARMING_OVERLAY_ID)?.style.display).toBe('none');
+  });
+});
+
 describe('installWarmingHandler', () => {
   it('подписывает window.__pokematrixWarming на show/hide', () => {
     const doc = new FakeDoc();
