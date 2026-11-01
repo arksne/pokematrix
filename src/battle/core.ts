@@ -38,6 +38,7 @@
 // Все data/* импорты — статические конфиги (погода, предметы).
 import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';
 import { teamBlockedToast } from '../ui/team-hint.js';
+import { catchChance as computeCatchChance } from './catch-chance.js';   // Шанс поимки (Мастер-Болл — гарантированно)
 import { checkGymEntry, gymEntryRequirements } from './gym-entry.js';   // Условия входа в зал (текст + проверка)   // Подсказка «вся команда без сознания → Поке-центр»         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
@@ -7435,28 +7436,21 @@ function initEncounterEvents() {
       //   - Dusk Ball: ×3 ночью
       //   - Timer Ball: +0.3 за каждый ход
       //   - Love Ball: ×8 если противоположный пол
-      const speciesRate = S.activeWild.captureRate || S.activeWild.speciesData?.capture_rate || 100;
-      let catchRate = ((3 * S.wildMaxHP - 2 * S.wildCurHP) * speciesRate) / (3 * S.wildMaxHP);
-      catchRate = catchRate * ballCfg.mult;
-
-      // Бонус за статус-эффект
-      if (S.wildStatus === 'slp' || S.wildStatus === 'frz') catchRate *= 2.5;  // Сон/заморозка — лучший бонус
-      else if (S.wildStatus === 'par' || S.wildStatus === 'brn' || S.wildStatus === 'psn') catchRate *= 1.5;
-
-      // Специальные эффекты покеболов
-      if (item === 'quickBall' && S.battleRound < 1) catchRate *= 5;   // Quick Ball — только первый ход
-      if (item === 'duskBall' && !GS.isDaytime) catchRate *= 3;       // Dusk Ball — ночью
-      if (item === 'timerBall') catchRate *= 1 + S.battleRound * 0.3; // Timer Ball — чем дольше бой, тем выше
-
-      // Love Ball: x8 если противоположный пол
-      if (item === 'loveBall') {
-        const wildGender = S.activeWild.wildGender !== undefined ? S.activeWild.wildGender : (Math.random() < 0.5 ? 'male' : 'female');
-        const playerGender = S.activePlayerMon?.apiData?.gender || (Math.random() < 0.5 ? 'male' : 'female');
-        if (wildGender && playerGender && wildGender !== playerGender) catchRate *= 8;
-      }
-
-      // Конвертируем в вероятность (максимум 95%)
-      let catchChance = Math.min(0.95, catchRate / 255);
+      // Шанс поимки — src/battle/catch-chance.ts (формула + гарантия
+      // Мастер-Болла: раньше общий потолок 95% применялся и к нему, хотя по
+      // описанию он «ловит всегда»).
+      const catchChance = computeCatchChance({
+        wildMaxHp: S.wildMaxHP,
+        wildCurHp: S.wildCurHP,
+        speciesRate: S.activeWild.captureRate || S.activeWild.speciesData?.capture_rate || 100,
+        ballMult: ballCfg.mult,
+        item,
+        wildStatus: S.wildStatus,
+        battleRound: S.battleRound,
+        isDaytime: GS.isDaytime,
+        wildGender: S.activeWild.wildGender,
+        playerGender: S.activePlayerMon?.gender || S.activePlayerMon?.apiData?.gender,
+      });
 
       document.getElementById('battle-main-menu').style.display = 'none';
       appendToLog(`Вы бросили ${ballCfg.label}...`);
