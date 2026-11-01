@@ -25,7 +25,8 @@
     "backup:prod": "node tools/prod-ops/backup-db.mjs",
     "clean:test-users": "node tools/prod-ops/clean-test-users.mjs",
     "check:gameplay": "node tools/prod-ops/gameplay-check.mjs",
-    "check:cold-start": "node tools/prod-ops/cold-start-check.mjs"
+    "check:cold-start": "node tools/prod-ops/cold-start-check.mjs",
+    "check:onboarding": "node tools/prod-ops/onboarding-check.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
