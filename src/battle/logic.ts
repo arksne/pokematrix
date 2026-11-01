@@ -255,8 +255,9 @@ export function statStageModify(stages, stat, delta) {
  * Check accuracy of a move. Returns { hit: bool, message: string|null }.
  * move.accuracy from PokeAPI: null = never misses, number = percentage.
  * Always-hitting moves: accuracy is null, or the move has "guaranteed" meta.
+ * defenderHeldItem — предмет защитника (Bright Powder снижает точность на 10%).
  */
-export function checkAccuracy(move, attackerAbility = null, defenderAbility = null, weather = 'clear') {
+export function checkAccuracy(move, attackerAbility = null, defenderAbility = null, weather = 'clear', defenderHeldItem = null) {
   const norm = (a) => (a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const atkAbil = norm(attackerAbility);
   const defAbil = norm(defenderAbility);
@@ -275,6 +276,9 @@ export function checkAccuracy(move, attackerAbility = null, defenderAbility = nu
   // Sand Veil / Snow Cloak — уклонение защитника выше в свою погоду (−20% точности).
   if (defAbil === 'sandveil' && weather === 'sandstorm') acc *= 0.8;
   if (defAbil === 'snowcloak' && weather === 'hail') acc *= 0.8;
+
+  // Bright Powder — уклонение владельца выше на 1/9 (точность атакующего ×0.9).
+  if (String(defenderHeldItem || '') === 'brightPowder') acc *= 0.9;
 
   if (acc >= 100) return { hit: true, message: null };
   if (Math.random() * 100 < acc) return { hit: true, message: null };

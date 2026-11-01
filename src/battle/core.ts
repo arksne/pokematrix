@@ -38,7 +38,8 @@
 // Все data/* импорты — статические конфиги (погода, предметы).
 import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';
 import { teamBlockedToast } from '../ui/team-hint.js';
-import { catchChance as computeCatchChance } from './catch-chance.js';   // Шанс поимки (Мастер-Болл — гарантированно)
+import { catchChance as computeCatchChance } from './catch-chance.js';
+import { onWaterDamage, onIntimidated } from './held-effects.js';   // Absorb Bulb / Adrenaline Orb   // Шанс поимки (Мастер-Болл — гарантированно)
 import { checkGymEntry, gymEntryRequirements } from './gym-entry.js';   // Условия входа в зал (текст + проверка)   // Подсказка «вся команда без сознания → Поке-центр»         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
@@ -3745,6 +3746,14 @@ async function startHunt(encountersArray) {
     if (wildAbility === 'intimidate') {
       statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
+      // Adrenaline Orb: испуг поднимает владельцу Скорость (описание обещало,
+      // а предмет продавался за ¥4000 без эффекта).
+      const orb = onIntimidated(S.activePlayerMon.heldItem);
+      if (orb) {
+        if (orb.consume) S.activePlayerMon.heldItem = null;
+        statStageModify(S.activePlayerMon, orb.stat, orb.delta, true);
+        appendToLog(`${S.activePlayerMon.apiData.name} ${orb.message}`, false, 'system');
+      }
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
@@ -5116,6 +5125,7 @@ async function useMove(moveIndex) {
     abilityOf(S.activePlayerMon, false),
     abilityOf(S.activeWild, true),
     S.currentWeather,
+    S.activeWild.heldItem, // Bright Powder у дикого (если когда-нибудь появится)
   );
   // ПРОХОД-741: наведение (lock-on/mind-reader) бьёт без промаха, разовое
   if (!accResult.hit && S.activePlayerMon.lockedOn) {
@@ -6729,6 +6739,7 @@ async function runEnemyTurnBody() {
     abilityOf(S.activeWild, true),
     abilityOf(S.activePlayerMon, false),
     S.currentWeather,
+    S.activePlayerMon.heldItem, // Bright Powder: уклонение игрока +1/9
   );
   // Hustle: 20% additional miss chance for physical moves
   const wildAbilityName = abilityOf(S.activeWild, true);
@@ -6943,6 +6954,16 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
 
     S.activePlayerMon.currentHp -= hitDmg;
     if (S.activePlayerMon.currentHp < 0) S.activePlayerMon.currentHp = 0;
+    // Absorb Bulb: предмет продавался за ¥4000 без эффекта — теперь даёт
+    // +1 Спец. атаку за водный урон и расходуется.
+    if (hi === 0) {
+      const bulb = onWaterDamage(S.activePlayerMon.heldItem, chosenMove.type?.name);
+      if (bulb) {
+        if (bulb.consume) S.activePlayerMon.heldItem = null;
+        statStageModify(S.activePlayerMon, bulb.stat, bulb.delta, true);
+        appendToLog(`${S.activePlayerMon.apiData.name} ${bulb.message}`, false, 'system');
+      }
+    }
     totalDmg += hitDmg;
     hitsLanded++;
     updatePlayerHpUI();
@@ -8341,6 +8362,14 @@ async function startGymNextPokemon() {
     if (wildAbility === 'intimidate') {
       statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
+      // Adrenaline Orb: испуг поднимает владельцу Скорость (описание обещало,
+      // а предмет продавался за ¥4000 без эффекта).
+      const orb = onIntimidated(S.activePlayerMon.heldItem);
+      if (orb) {
+        if (orb.consume) S.activePlayerMon.heldItem = null;
+        statStageModify(S.activePlayerMon, orb.stat, orb.delta, true);
+        appendToLog(`${S.activePlayerMon.apiData.name} ${orb.message}`, false, 'system');
+      }
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
@@ -8518,6 +8547,14 @@ async function startEliteNextPokemon() {
     if (wildAbility === 'intimidate') {
       statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
+      // Adrenaline Orb: испуг поднимает владельцу Скорость (описание обещало,
+      // а предмет продавался за ¥4000 без эффекта).
+      const orb = onIntimidated(S.activePlayerMon.heldItem);
+      if (orb) {
+        if (orb.consume) S.activePlayerMon.heldItem = null;
+        statStageModify(S.activePlayerMon, orb.stat, orb.delta, true);
+        appendToLog(`${S.activePlayerMon.apiData.name} ${orb.message}`, false, 'system');
+      }
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
@@ -8622,6 +8659,14 @@ async function startChampionNextPokemon() {
     if (wildAbility === 'intimidate') {
       statStageModify(S.activePlayerMon, 'atk', -1, true);
       appendToLog(`${S.activeWild.name} отпугивает ${S.activePlayerMon.apiData.name}! Атака снижена!`);
+      // Adrenaline Orb: испуг поднимает владельцу Скорость (описание обещало,
+      // а предмет продавался за ¥4000 без эффекта).
+      const orb = onIntimidated(S.activePlayerMon.heldItem);
+      if (orb) {
+        if (orb.consume) S.activePlayerMon.heldItem = null;
+        statStageModify(S.activePlayerMon, orb.stat, orb.delta, true);
+        appendToLog(`${S.activePlayerMon.apiData.name} ${orb.message}`, false, 'system');
+      }
     }
     // Погодные способности срабатывают в тот же момент, что и Intimidate —
     // при выходе на поле. Раньше здесь был только Intimidate.
