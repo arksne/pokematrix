@@ -19,6 +19,8 @@ import { audit } from './audit.js';
 import { getDb } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { eq, sql } from 'drizzle-orm';
+import { logger } from '../logger.js';
+import { isExpectedTradeFailure, tradeFailureMessage, tradeFailureDetail } from '../lib/trade-errors.js';
 
 interface TradeSession {
   tradeId: string;
@@ -341,7 +343,13 @@ export function initTrade(io: Server, socket: Socket) {
         partnerSocket.emit('trade_partner_offers', toClientOffers(offers, saveData));
       }
     } catch (err) {
-      console.error('[trade] trade_offer failed:', err);
+      // Оффер проверяется по сейву: «нет такого покемона» — это отказ
+      // бизнес-правила, а не авария. В error оставляем только настоящие сбои.
+      if (isExpectedTradeFailure(err)) {
+        logger.warn({ detail: tradeFailureDetail(err) }, '[trade] оффер отклонён проверкой');
+      } else {
+        logger.error({ err }, '[trade] trade_offer failed');
+      }
       socket.emit('trade_offer_rejected', { reason: 'verification failed' });
     }
   });
@@ -664,10 +672,14 @@ async function executeTradeSwap(
       detail: { a: session.initiatorUserId, b: session.partnerUserId, p1: session.p1Offers, p2: session.p2Offers, sv1, sv2 },
     });
   } catch (err) {
-    console.error('[trade] executeTradeSwap failed:', err);
-    const msg = err instanceof Error && err.message.startsWith('Trade failed:')
-      ? err.message.replace('Trade failed: ', '')
-      : 'Ошибка выполнения обмена';
-    cancelBoth(msg);
+    // Отказ бизнес-правил (покемона уже отдали, нет места в команде, …) — это
+    // НЕ авария сервера: в прод-логах такие строки шли уровнем error и топили
+    // настоящие сбои (в том числе проверку TOCTOU из tools/prod-check).
+    if (isExpectedTradeFailure(err)) {
+      logger.warn({ detail: tradeFailureDetail(err) }, '[trade] обмен отклонён проверкой');
+    } else {
+      logger.error({ err }, '[trade] executeTradeSwap failed');
+    }
+    cancelBoth(tradeFailureMessage(err));
   }
 }
