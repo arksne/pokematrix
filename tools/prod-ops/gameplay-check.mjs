@@ -286,6 +286,36 @@ async function main() {
     check('G2', 'поиск покемонов приводит к встрече', encounterOpen, encounterOpen ? 'модалка боя открылась' : 'встречи не было за 4 попытки');
     await page.screenshot({ path: path.join(STATE_DIR, 'game-02-encounter.png') }).catch(() => {});
 
+    // Спрайты боя должны приехать с НАШЕГО домена (/api/sprite/...) и реально
+    // отрисоваться: раньше они шли напрямую с raw.githubusercontent.com, который
+    // в части регионов недоступен — вместо покемонов были «сломанные картинки».
+    let spritesOk = false;
+    let spritesDetail = 'бой не открылся';
+    if (encounterOpen) {
+      const spritesDeadline = Date.now() + 15_000;
+      while (Date.now() < spritesDeadline) {
+        const info = await page
+          .evaluate(() => {
+            const read = (id) => {
+              const el = document.getElementById(id);
+              return { src: el?.getAttribute('src') || '', w: el?.naturalWidth || 0 };
+            };
+            return { player: read('player-sprite'), wild: read('wild-sprite') };
+          })
+          .catch(() => null);
+        if (info && info.player.src && info.wild.src && info.player.w > 0 && info.wild.w > 0) {
+          spritesOk = info.player.src.includes('/api/sprite/') && info.wild.src.includes('/api/sprite/');
+          spritesDetail = `player: ${info.player.src.slice(0, 60)} (${info.player.w}px), wild: ${info.wild.src.slice(0, 60)} (${info.wild.w}px)`;
+          break;
+        }
+        spritesDetail = info
+          ? `sprites: player=${info.player.src || '—'}(${info.player.w}), wild=${info.wild.src || '—'}(${info.wild.w})`
+          : 'не удалось прочитать спрайты';
+        await sleep(700);
+      }
+    }
+    check('G2a', 'спрайты боя приходят через наш /api/sprite и отрисованы', spritesOk, spritesDetail);
+
     // ── G3. Бой: бьём по кнопкам атак, лог должен расти ────────────
     let attacks = 0;
     let battleEnded = false;
