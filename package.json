@@ -21,7 +21,9 @@
     "test": "vitest run",
     "verify": "node tools/verify/run.mjs",
     "verify:serve": "node tools/verify/run.mjs --serve",
-    "editor": "node tools/editor/gen-editor.mjs"
+    "editor": "node tools/editor/gen-editor.mjs",
+    "backup:prod": "node tools/prod-ops/backup-db.mjs",
+    "clean:test-users": "node tools/prod-ops/clean-test-users.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

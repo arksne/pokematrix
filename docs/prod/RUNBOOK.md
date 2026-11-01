@@ -117,6 +117,46 @@ Free-план: **5 ГБ public network transfer на проект в месяц*
 эндпоинт `pokemon_cache` мимо L1 (перезапуск инстанса Render обнуляет L1 —
 первый прогрев снова читает базу).
 
+---
+
+## 4.1. Резервные копии (данные игроков)
+
+Neon Free: одна ветка, история 6 часов, квота может выключить базу на месяц.
+Поэтому сохранения игроков снимаются локально скриптом:
+
+```powershell
+cd pokematrix
+$env:DATABASE_URL='postgresql://...'      # строка Neon
+npm run backup:prod                        # в ~\Documents\pokematrix-backups\<UTC-время>\
+# другой путь: node tools/prod-ops/backup-db.mjs --out=D:\backups\pm
+```
+
+Кладёт `users.json` (все игроки вместе с полным `save_data`), `save_history.jsonl`,
+`chat_messages.jsonl`, `arena_stats`/`battle_ratings`/`server_features`/`drop_config`,
+`manifest.json` с sha256 по каждому файлу и отдельный слепок игрока
+`<label>.json` + его копию `<label>-latest.json` в корне папки (по умолчанию —
+Джафар, tg_id можно задать `BACKUP_FOCUS_TG_ID`).
+
+В базе, кроме того, есть `save_history` (автоснимки сохранений) и админский
+`get_save`/`restore_save` — они помогают вернуть игрока, если сейв испорчен.
+
+Восстановить одного игрока из слепка (вручную, осознанно):
+
+```sql
+-- save_data — обычный JSON-текст; после вставки увеличьте save_version,
+-- иначе клиент с более новым локальным сейвом перезапишет восстановленное.
+UPDATE users
+   SET save_data = '<содержимое save_data_parsed как JSON-строка>',
+       save_version = save_version + 1
+ WHERE tg_id = 1631771412;
+```
+
+Резервные копии **не коммитятся** в репозиторий: там персональные данные
+игроков (tg_id, ники, username). Храните их локально и на втором диске
+(сделанные копии: `C:\Users\ARK\Documents\pokematrix-backups\` и
+`D:\pokematrix-backups\`).
+
+
 Быстрый способ проверить, что квота снова кончилась:
 
 ```powershell
