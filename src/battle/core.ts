@@ -50,7 +50,7 @@ import {
   fetchSiteLearnset, wildMovesFromLearnset, moveNameToSlug,
 } from '../data/learnset.js';                                           // мувсеты по уровню: таблица «Развитие»
 import { loadPowerTable, encounterWeightFor, loadEvoTable } from '../data/power.js';   // сила вида → редкость появления
-import { syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
+import { statChangeKey, syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
 import { rollWildIVs, perfectIVs } from './logic.js';                   // гены: усреднённые дикие / идеальные лидеры
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
 import { checkEvolution, triggerEvolution, maybeGrantShedinja } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
@@ -1298,15 +1298,14 @@ function handleEnemyStatusEffects(move) {
   // move.stat_changes — массив изменений статов (из PokeAPI)
   if (move.stat_changes && move.stat_changes.length > 0) {
     const monName = S.activeWild.name;
-    const statNameMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
     move.stat_changes.forEach(sc => {
-      const statKey = statNameMap[sc.stat.name];
+      const statKey = statChangeKey(sc.stat.name);
       if (statKey) {
         statStageModify(S.activeWild, statKey, sc.change, true); // Навязано игроком
         const newStage = S.activeWild.statStages[statKey]; // Текущее значение после изменения
         const sign = newStage >= 0 ? '+' : '';
         const dir = sc.change > 0 ? 'повышена' : 'понижена';
-        const labels = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
+        const labels: Record<string, string> = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость', acc: 'Точность', eva: 'Уклонение' };
         appendToLog(`${labels[statKey] || statKey} ${monName} ${dir} (${sign}${newStage})`, false, 'system');
       }
     });
@@ -1507,7 +1506,7 @@ function maybeConsumeTerrainSeed(mon: any): boolean {
  * Пример: "+2 Атк" (зелёный), "-1 Защ" (красный)
  */
 function updateStatBadges() {
-  const labels = { atk: 'Атк', def: 'Защ', spa: 'САт', spd: 'СЗа', spe: 'Скр' };
+  const labels = { atk: 'Атк', def: 'Защ', spa: 'САт', spd: 'СЗа', spe: 'Скр', acc: 'Точ', eva: 'Укл' };
   // Player badges — плашки для игрока
   const playerEl = document.getElementById('player-stat-badges');
   if (playerEl && S.activePlayerMon?.statStages) {
@@ -5126,6 +5125,8 @@ async function useMove(moveIndex) {
     abilityOf(S.activeWild, true),
     S.currentWeather,
     S.activeWild.heldItem, // Bright Powder у дикого (если когда-нибудь появится)
+    S.activePlayerMon.statStages?.acc || 0, // Sand Attack и т.п.
+    S.activeWild.statStages?.eva || 0,      // Double Team и т.п.
   );
   // ПРОХОД-741: наведение (lock-on/mind-reader) бьёт без промаха, разовое
   if (!accResult.hit && S.activePlayerMon.lockedOn) {
@@ -5279,16 +5280,17 @@ async function useMove(moveIndex) {
       const moveTarget = move.target?.name || 'selected-pokemon';
       const affectedMon = targetMap[moveTarget] || S.activeWild;
       const monName = affectedMon === S.activePlayerMon ? S.activePlayerMon.apiData.name : S.activeWild.name;
-      const statNameMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
-
       move.stat_changes.forEach(sc => {
-        const statKey = statNameMap[sc.stat.name];
+        // statChangeKey понимает и accuracy/evasion: раньше Sand Attack,
+        // Double Team, Flash, Smokescreen и Kinesis были пустышками — игра
+        // честно писала «ничего не произошло».
+        const statKey = statChangeKey(sc.stat.name);
         if (statKey) {
           statStageModify(affectedMon, statKey, sc.change, affectedMon !== S.activePlayerMon);
           const newStage = affectedMon.statStages[statKey];
           const sign = newStage >= 0 ? '+' : '';
           const dir = sc.change > 0 ? 'повышена' : 'понижена';
-          const labels = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
+          const labels: Record<string, string> = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость', acc: 'Точность', eva: 'Уклонение' };
           appendToLog(`${labels[statKey] || statKey} ${monName} ${dir} (${sign}${newStage})`, false, 'system');
           appliedStat = true;
         }
@@ -6740,6 +6742,8 @@ async function runEnemyTurnBody() {
     abilityOf(S.activePlayerMon, false),
     S.currentWeather,
     S.activePlayerMon.heldItem, // Bright Powder: уклонение игрока +1/9
+    S.activeWild.statStages?.acc || 0,
+    S.activePlayerMon.statStages?.eva || 0,
   );
   // Hustle: 20% additional miss chance for physical moves
   const wildAbilityName = abilityOf(S.activeWild, true);
@@ -7080,9 +7084,9 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
         const moveTarget = chosenMove.target?.name || 'selected-pokemon';
         const affectedMon = targetMap[moveTarget] || S.activePlayerMon;
         const monName = affectedMon === S.activeWild ? S.activeWild.name : S.activePlayerMon.apiData.name;
-        const statNameMap = { 'attack': 'atk', 'defense': 'def', 'special-attack': 'spa', 'special-defense': 'spd', 'speed': 'spe' };
+
         chosenMove.stat_changes.forEach(sc => {
-          const statKey = statNameMap[sc.stat.name];
+          const statKey = statChangeKey(sc.stat.name);
           if (statKey) {
             const oldStage = affectedMon.statStages[statKey] || 0;
             const newVal = Math.max(-6, Math.min(6, oldStage + sc.change));
@@ -7090,7 +7094,7 @@ appendToLog(`${isT ? '' : 'Дикий '}${S.activeWild.name} используе�
               statStageModify(affectedMon, statKey, sc.change, affectedMon !== S.activeWild);
               const sign = newVal >= 0 ? '+' : '';
               const dir = sc.change > 0 ? 'повышена' : 'понижена';
-              const labels = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость' };
+              const labels: Record<string, string> = { atk: 'Атака', def: 'Защита', spa: 'Сп. Атака', spd: 'Сп. Защита', spe: 'Скорость', acc: 'Точность', eva: 'Уклонение' };
               appendToLog(`${labels[statKey] || statKey} ${monName} ${dir} (${sign}${newVal})`, false, 'system');
             }
           }

@@ -252,12 +252,58 @@ export function statStageModify(stages, stat, delta) {
 }
 
 /**
+ * Множитель стадии стата (канон Pokémon): +1 → 4/3, −1 → 3/4, ±6 → 3 / 1/3.
+ * Используется для точности/уклонения (для остальных статов множитель считает
+ * боевая математика отдельно).
+ */
+export function stageMultiplier(stage: number): number {
+  const s = Math.max(-6, Math.min(6, Number(stage) || 0));
+  return s >= 0 ? (3 + s) / 3 : 3 / (3 - s);
+}
+
+/**
+ * PokeAPI-имя стата → ключ в statStages. Возвращает null для неизвестных.
+ * Включает accuracy/evasion: без них Sand Attack, Double Team, Flash,
+ * Smokescreen и Kinesis были пустышками — игра писала «ничего не произошло».
+ */
+export function statChangeKey(name: string): 'atk' | 'def' | 'spa' | 'spd' | 'spe' | 'acc' | 'eva' | null {
+  switch (String(name || '').toLowerCase()) {
+    case 'attack':
+      return 'atk';
+    case 'defense':
+      return 'def';
+    case 'special-attack':
+      return 'spa';
+    case 'special-defense':
+      return 'spd';
+    case 'speed':
+      return 'spe';
+    case 'accuracy':
+      return 'acc';
+    case 'evasion':
+      return 'eva';
+    default:
+      return null;
+  }
+}
+
+/**
  * Check accuracy of a move. Returns { hit: bool, message: string|null }.
  * move.accuracy from PokeAPI: null = never misses, number = percentage.
  * Always-hitting moves: accuracy is null, or the move has "guaranteed" meta.
  * defenderHeldItem — предмет защитника (Bright Powder снижает точность на 10%).
+ * attackerAccuracyStage / defenderEvasionStage — стадии точности/уклонения
+ * (Sand Attack, Double Team, Flash…): точность ×stage(acc)/stage(eva).
  */
-export function checkAccuracy(move, attackerAbility = null, defenderAbility = null, weather = 'clear', defenderHeldItem = null) {
+export function checkAccuracy(
+  move,
+  attackerAbility = null,
+  defenderAbility = null,
+  weather = 'clear',
+  defenderHeldItem = null,
+  attackerAccuracyStage = 0,
+  defenderEvasionStage = 0
+) {
   const norm = (a) => (a || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const atkAbil = norm(attackerAbility);
   const defAbil = norm(defenderAbility);
@@ -279,6 +325,11 @@ export function checkAccuracy(move, attackerAbility = null, defenderAbility = nu
 
   // Bright Powder — уклонение владельца выше на 1/9 (точность атакующего ×0.9).
   if (String(defenderHeldItem || '') === 'brightPowder') acc *= 0.9;
+
+  // Стадии точности атакующего и уклонения защитника.
+  if (attackerAccuracyStage || defenderEvasionStage) {
+    acc = (acc * stageMultiplier(attackerAccuracyStage)) / stageMultiplier(defenderEvasionStage);
+  }
 
   if (acc >= 100) return { hit: true, message: null };
   if (Math.random() * 100 < acc) return { hit: true, message: null };
