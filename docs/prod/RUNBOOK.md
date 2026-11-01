@@ -83,6 +83,11 @@ npm run check:gameplay
 #   ВАЖНО: скрипт ходит под тестовым tg_id — после прогона уберите аккаунты:
 #   $env:DATABASE_URL='...'; node tools/prod-ops/clean-test-users.mjs --apply
 
+# 3d. Холодный старт Render Free (первый игрок утром): имитируем 503 warming
+#     и проверяем, что клиент показывает «Сервер просыпается…», а потом грузится
+$env:PROD_BOT_TOKEN='<BOT_TOKEN>'; $env:PROD_TG_ID='777900390'
+npm run check:cold-start
+
 # 4. Локальный полный прогон (PGlite + Chromium, ~8 минут)
 npm run verify
 ```
