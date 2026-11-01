@@ -60,6 +60,7 @@ import { checkNPCQuestProgress } from '../ui/npcs.js';
 import { logItemHistory } from '../game/actions.js';
 import { showGymRewardSelection } from '../ui/gym-reward.js';
 import { API_BASE } from './config.js';
+import { renderFatalError, installGlobalErrorHandlers } from './fatal-error.js';   // Понятный экран сбоя вместо INIT ERROR
 
 // ── ТОЧКА ВХОДА ────────────────────────────────────────────
 // Всё начинается здесь.
@@ -69,6 +70,10 @@ import { API_BASE } from './config.js';
 // запускаем init немедленно.
 (async () => {
   try {
+    // Глобальные ошибки: раньше только консоль — игрок не понимал, почему
+    // нажатие не сработало. Теперь короткий тост (не чаще раза в 8 секунд).
+    try { installGlobalErrorHandlers({ showToast }); } catch { /* не критично */ }
+
     // ── 1. Настройка store (query handlers + event listeners) ──
     // Query handlers: функции, которые возвращают значение (не event-based).
     // Event listeners: UI обновления при мутациях state.
@@ -558,7 +563,7 @@ initGymEvents();
         }
       });
     }
-  } catch(e) { document.body.innerHTML += '<div class="error-bar" style="font-size:14px;padding:15px;white-space:pre-wrap"><b>INIT ERROR:</b> '+e.message+'<br><small>'+e.stack+'</small></div>'; console.error(e); }
+  } catch(e) { renderFatalError(e); }
 })();
 
 /**
