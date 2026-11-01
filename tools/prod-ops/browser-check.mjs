@@ -166,6 +166,16 @@ async function main() {
     apiCalls.some((c) => c.url.includes('/auth/tg') && c.status >= 200 && c.status < 300);
   const isRegScreen = () =>
     page.evaluate(() => !!document.getElementById('btn-register')).catch(() => false);
+  // ВАЖНО: #view-world виден ещё до инициализации клиента — это статическая
+  // заглушка в index.html («Мир (Канто)», «Вермилион»). Проверка только по нему
+  // изредка срабатывала слишком рано (холодный старт Render, медленные чанки):
+  // мир «виден», а /api/save ещё не ушёл и кнопки навигации не отрисованы —
+  // так B2/B9 падали на ровном месте. Поэтому готовность = клиент отрисовал
+  // ссылки локаций (#nav-buttons .btn-nav) — их в статической разметке нет.
+  const isReadyClient = async () =>
+    page
+      .evaluate(() => document.querySelectorAll('#nav-buttons .btn-nav, #loc-actions button').length > 0)
+      .catch(() => false);
   const isWorld = () =>
     page
       .evaluate(() => {
@@ -182,7 +192,7 @@ async function main() {
   while (Date.now() < deadline) {
     worldVisible = await isWorld();
     registrationShown = registrationShown || (await isRegScreen());
-    if ((worldVisible && authCallSeen()) || registrationShown) break;
+    if ((worldVisible && authCallSeen() && (await isReadyClient())) || registrationShown) break;
     await sleep(1000);
   }
 
@@ -215,6 +225,11 @@ async function main() {
   const worldDeadline = Date.now() + 90_000;
   while (Date.now() < worldDeadline && !(await isWorld())) await sleep(1000);
   worldVisible = await isWorld();
+
+  // Сейв грузится после логина, но до отрисовки локации: ждём его отдельно,
+  // а не рассчитываем, что к этому моменту он уже улетел.
+  const saveDeadline = Date.now() + 60_000;
+  while (Date.now() < saveDeadline && !apiCalls.some((c) => c.url.includes('/save'))) await sleep(500);
 
   const saveCall = apiCalls.find((c) => c.url.includes('/save'));
   check(
@@ -282,16 +297,32 @@ async function main() {
   // ── Переключение вкладок: доказываем, что UI живой, а не «нарисовался и замер» ──
   const tabCheck = await page
     .evaluate(() => {
-      const btns = Array.from(document.querySelectorAll('#nav-buttons [data-view], #nav-buttons button, .nav-btn'));
+      // Кнопки локаций клиент создаёт с классом .btn-nav (селектор .nav-btn
+      // когда-то искал несуществующий класс — проверка падала на «кнопок нет»),
+      // а вкладки внизу — .nav-item[data-target].
+      const btns = Array.from(
+        document.querySelectorAll('#nav-buttons button, #nav-buttons .btn-nav, .nav-item[data-target]')
+      );
       if (!btns.length) return { ok: false, detail: 'кнопок навигации нет' };
       const target = btns.find((b) => b.offsetHeight > 0);
       if (!target) return { ok: false, detail: 'нет видимых кнопок навигации' };
       target.click();
-      return { ok: true, detail: `${btns.length} кнопок, кликнули по первой видимой` };
+      return { ok: true, detail: `${btns.length} кнопок, кликнули по «${(target.textContent || '').trim().slice(0, 30)}»` };
     })
     .catch((e) => ({ ok: false, detail: String(e).slice(0, 120) }));
   await sleep(1200);
-  check('B9', 'навигация по вкладкам реагирует на клик', tabCheck.ok, tabCheck.detail);
+  // Реакция на клик: либо сменилась локация, либо переключилась вкладка.
+  const navReacted = await page
+    .evaluate(() => {
+      const activeView = document.querySelector('.app-view.active, .app-view[style*="display: flex"], .app-view[style*="display:flex"]');
+      const world = document.getElementById('view-world');
+      const worldShown = !!world && window.getComputedStyle(world).display !== 'none';
+      const locName = (document.getElementById('loc-name')?.textContent || '').trim();
+      return { worldShown, locName, activeView: activeView ? activeView.id : null };
+    })
+    .catch(() => ({}));
+  check('B9', 'навигация по вкладкам реагирует на клик', tabCheck.ok,
+    `${tabCheck.detail}; мир: ${navReacted.worldShown ? 'виден' : 'скрыт'}, локация: «${navReacted.locName || '—'}»`);
 
   // ── Возвращающийся игрок: перезагрузка должна поднять сейв из облака ──
   // Это главный сценарий живого игрока: Telegram открывает Mini App заново,
