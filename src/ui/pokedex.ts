@@ -35,6 +35,7 @@ import { getPokedexState } from '../game/getters.js';
 // getTypeColor — возвращает HEX-цвет для типа покемона (например, 'fire' → '#FF4422')
 // getTypeGradient — возвращает CSS gradient для фона карточки по типам покемона
 import { getTypeColor, getTypeGradient, proxySpriteUrl } from '../utils/sprite.js';
+import { pokedexGridSprite } from './pokedex-sprite.js';   // Арт только для пойманных, остальные — 96px
 // ── Данные, которых в покедексе раньше не было, хотя они лежали в проекте ──
 import { getAbilityNameRu, isAbilityImplemented } from '../data/abilities.js';  // RU-имя и «работает ли» способности
 import { MONSTER_DROP_TABLE } from '../data/drops.js';                            // что падает с покемона
@@ -118,16 +119,13 @@ export function openPokedex() {
   // Формат: 'league17_pokedex_shiny' = '1' (шайни) или '0' (обычные)
   let showShinyList = localStorage.getItem('league17_pokedex_shiny') === '1';
 
-  // ── getSpriteSrc: внутренняя функция получения URL спрайта ──
-  // Принимает pokeapiId — ID покемона в PokeAPI (число)
-  // Возвращает URL к официальному artwork (обычный или шайни)
-  function getSpriteSrc(pokeapiId: number) {
-    // Если включён режим шайни — берём shiny artwork
-    if (showShinyList) {
-      return `/api/sprite/pokemon/other/official-artwork/shiny/${pokeapiId}.png`;
-    }
-    // Иначе — обычный artwork
-    return `/api/sprite/pokemon/other/official-artwork/${pokeapiId}.png`;
+  // ── getSpriteSrc: URL спрайта для ячейки сетки ──
+  // Вынесено в src/ui/pokedex-sprite.ts: крупный арт только для пойманных,
+  // остальные — маленький спрайт 96px. Замер на проде: арт весит ~99 КБ, а
+  // ячеек на экране ~15 — это ~1.5 МБ мобильного трафика на экран прокрутки;
+  // у невиданных покемонов картинка затемнена в силуэт, разницы не видно.
+  function getSpriteSrc(pokeapiId: number, isCaught: boolean) {
+    return pokedexGridSprite(pokeapiId, { caught: isCaught, shiny: showShinyList });
   }
 
   // ── renderGrid: внутренняя функция отрисовки сетки покемонов ──
@@ -203,7 +201,7 @@ export function openPokedex() {
       //   .poke-name — имя покемона
       cell.innerHTML = `
         <span class="dex-num">#${pokeapiId}</span>
-        <img src="${getSpriteSrc(pokeapiId)}" alt="${name}" loading="lazy" onerror="this.style.opacity='0.3'">
+        <img src="${getSpriteSrc(pokeapiId, isCaught)}" alt="${name}" loading="lazy" onerror="this.style.opacity='0.3'">
         <span class="poke-name">${name}</span>
       `;
       // Добавляем ячейку в сетку DOM

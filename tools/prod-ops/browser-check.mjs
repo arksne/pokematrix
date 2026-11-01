@@ -137,6 +137,16 @@ async function main() {
   const apiCalls = [];
   const consoleErrors = [];
   const pageErrors = [];
+  // Размер трафика спрайтов считаем через Performance API: у response.body()
+  // часть тел к моменту обработки уже недоступна, и байты недосчитывались.
+  const spriteTraffic = () =>
+    page
+      .evaluate(() => {
+        const entries = performance.getEntriesByType('resource').filter((e) => e.name.includes('/api/sprite/'));
+        const bytes = entries.reduce((sum, e) => sum + (e.encodedBodySize || e.transferSize || 0), 0);
+        return { count: entries.length, bytes };
+      })
+      .catch(() => ({ count: 0, bytes: 0 }));
   page.on('response', (resp) => {
     const url = resp.url();
     if (!url.includes('/api/')) return;
@@ -350,6 +360,34 @@ async function main() {
   if (apiCalls.length) {
     for (const c of apiCalls.slice(0, 40)) console.log(`   ${String(c.status).padEnd(3)} ${c.method.padEnd(4)} ${c.url}`);
   }
+
+  // ── B13: бюджет трафика Покедекса ────────────────────────────
+  // В сетке 1025 покемонов. Крупный официальный арт на каждую ячейку — это
+  // ~100 КБ × 15 видимых = мегабайты на экран прокрутки; замер на проде дал
+  // 24.6 МБ на открытие Покедекса. В сетке арт должен быть только у пойманных,
+  // остальные — 96px спрайты. Бюджет: 4 МБ на открытие (с запасом).
+  const POKEDEX_SPRITE_BUDGET_BYTES = 4 * 1024 * 1024;
+  const before = await spriteTraffic();
+  const dexOpened = await page
+    .evaluate(() => {
+      const b = document.getElementById('btn-open-pokedex');
+      if (!b) return false;
+      b.click();
+      return true;
+    })
+    .catch(() => false);
+  await sleep(9000);
+  const after = await spriteTraffic();
+  const dexBytes = Math.max(0, after.bytes - before.bytes);
+  const dexCount = Math.max(0, after.count - before.count);
+  check(
+    'B13',
+    'Покедекс не тянет мегабайты картинок (арт только у пойманных)',
+    dexOpened && dexBytes > 0 && dexBytes <= POKEDEX_SPRITE_BUDGET_BYTES,
+    dexOpened
+      ? `спрайтов: ${dexCount}, ${(dexBytes / 1024 / 1024).toFixed(1)} МБ (бюджет ${POKEDEX_SPRITE_BUDGET_BYTES / 1024 / 1024} МБ)`
+      : 'кнопка Покедекса не найдена'
+  );
 
   await browser.close();
 

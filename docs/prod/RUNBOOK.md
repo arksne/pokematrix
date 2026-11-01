@@ -68,13 +68,16 @@ Invoke-RestMethod https://pokematrix.onrender.com/api/telegram/status  # enabled
 cd pokematrix
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; node tools/prod-check/run.mjs all
 
-# 3. Прод глазами игрока в Telegram (17 проверок в Chromium)
+# 3. Прод глазами игрока в Telegram (18 проверок в Chromium)
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; node tools/prod-ops/browser-check.mjs
 #   скриншоты: tools/prod-ops/.state/prod-browser*.png
 
 # 3b. Тур по всем экранам игры (24 проверки + скриншоты каждого экрана)
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; $env:PROD_TG_ID='777900311'
 node tools/prod-ops/ui-tour.mjs
+#   B13 — бюджет картинок Покедекса: сетка на 1025 покемонов не должна тянуть
+#   мегабайты арта (замер прода: 26.3 МБ на открытие). В сетке крупный арт только
+#   у пойманных, остальные — 96px спрайты; бюджет 4 МБ на открытие.
 #   мир, рюкзак, команда, чат, тренеры, дроп, покедекс, задания, достижения,
 #   лидерборд, аккаунт, PvP-арена, магазин, переход между локациями; скриншоты
 #   tools/prod-ops/.state/tour-*.png
