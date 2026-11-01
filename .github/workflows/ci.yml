@@ -33,6 +33,12 @@ jobs:
         run: npm ci --prefix server
       - name: Типизация клиента
         run: npx tsc --noEmit
+      # Серверные юнит-тесты (server/src/**/__tests__) импортируют vitest, а он
+      # стоит только в корневых зависимостях — поэтому проверяем их здесь, где
+      # есть и корневой node_modules, и серверный. В server/tsconfig.json тесты
+      # намеренно исключены из сборки.
+      - name: Типизация серверных тестов
+        run: npx tsc --noEmit -p server/tsconfig.tests.json
       - name: Тесты клиента
         run: npm run test:vitest
 

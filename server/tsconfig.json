@@ -14,5 +14,6 @@
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "//exclude": "Тесты в сборку не входят: раньше tsc компилировал их в dist (мусор в деплое), а в CI падал на импорте vitest, которого нет в server/node_modules. Типы тестов проверяются отдельно через server/tsconfig.tests.json.",
+  "exclude": ["node_modules", "dist", "src/**/__tests__/**"]
 }
