@@ -2,7 +2,10 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.{js,ts}'],
+    // Клиент + серверные юнит-тесты чистых функций (server/src/lib): кодеки,
+    // расчёты. Серверные тесты специально не тянут Express/БД — они про логику,
+    // а не про запущенный сервер (его проверяет tools/verify).
+    include: ['src/**/*.test.{js,ts}', 'server/src/**/*.test.ts'],
     environment: 'node',
     // Юнит-тестам хватает миллисекунд, но первый динамический импорт тяжёлого
     // модуля (trainer-card тянет половину UI-графа) на холодном/загруженном

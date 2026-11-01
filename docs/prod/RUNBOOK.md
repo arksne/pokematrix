@@ -146,7 +146,10 @@ npx --yes psql "$env:DATABASE_URL" -c "select 1"   # 402 quota / connection erro
 - Бесплатный Neon: 5 ГБ egress/мес и остановка на месяц при превышении.
   Следующий шаг для реальной нагрузки — план Launch (~$0.10/GB сверх 500 ГБ).
 - Render Free: засыпает после 15 минут без запросов, первый запрос ~30–60 с.
-  Для «игрок зашёл и сразу играет» нужен любой always-on план.
+  Пока сервис один и на Free — его греет `.github/workflows/keep-warm.yml`
+  (раз в 10 минут в часы активности, 540 инстанс-часов из 750 бесплатных;
+  тот же job служит аптайм-монитором — падает и шлёт письмо, если health не
+  200). Для настоящего always-on нужен платный план.
 - `craftersKit` (вход в крафт) сейчас не продаётся в магазинах — только дроп
   с machop/machoke/makuhita/smeargle. Если вернуть в магазин, убрать его из
   `REMOVED` в `src/ui/shops-assort.test.ts` (тест сверяет ассортимент).
@@ -154,6 +157,46 @@ npx --yes psql "$env:DATABASE_URL" -c "select 1"   # 402 quota / connection erro
   и команд-меню (кроме зарегистрированных `setMyCommands`) нет.
 - Админ-панель требует `ADMIN_PASS`, значение сгенерировано Render и никому не
   выдавалось; при необходимости задать своё в Dashboard → Environment.
+- Тестовые тренеры прод-проверок (tg_id 777900101…777900107 и т.п.) живут в
+  боевой базе вместе с игроками. Их сохранялки маленькие (~350 КБ на всех), но в
+  таблице лидеров и арена-статистике они видны как обычные игроки.
+  Чистка (только после согласия владельца, необратимо):
+
+  ```sql
+  DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
+  DELETE FROM arena_stats     WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
+  DELETE FROM battle_ratings  WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
+  DELETE FROM save_history    WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
+  DELETE FROM users           WHERE tg_id >= 777900000;
+  ```
+
+### Откуда взялась квота 5.5 ГБ (разбор)
+
+Главный источник — не тесты, а кэш PokeAPI в `pokemon_cache`:
+
+- 301 строка `pokemon/*` — в среднем **220 КБ** JSON (максимум 436 КБ),
+  `move/*` и `pokemon-species/*` — по 30 КБ. Суммарно ~83 МБ «логических»
+  данных, которые Postgres хранит TOAST-сжатыми (12 МБ на диске), но отдаёт
+  клиенту **распакованными** — в лимит Neon идёт именно распакованный объём.
+- До фикса таких чтений было столько же, сколько запросов `/api/pokeapi/*`:
+  клиент дёргает прокси на каждого встреченного покемона, его вид, эволюцию и
+  атаки. Даже с L1-кэшем в памяти холодный старт Render (каждые 15 минут простоя
+  на Free) сбрасывает память, и первые запросы снова тянут строки из базы.
+- Прод-проверки и браузерные проверки дают куда меньше: сейв тестового тренера
+  ~33 КБ, полный прогон `tools/prod-check` — единицы мегабайт на ~30 логинов и
+  записей. Даже десятки прогонов — это сотни мегабайт, а не гигабайты.
+
+Сейчас: в L2 строки лежат `gz:`+base64 (в 5–28 раз меньше), старые строки
+переписываются сжатыми при первом же чтении (ленивая миграция), а клиенту
+ответы уходят gzip'ом. Замерить факт просто:
+
+```sql
+SELECT count(*) FILTER (WHERE data LIKE 'gz:%') AS compressed,
+       count(*) FILTER (WHERE data NOT LIKE 'gz:%') AS legacy,
+       pg_size_pretty(avg(length(data)) FILTER (WHERE data LIKE 'gz:%')::bigint) AS avg_gz
+FROM pokemon_cache;
+```
+
 
 ---
 

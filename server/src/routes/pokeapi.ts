@@ -8,10 +8,10 @@
  */
 import { Router, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
-import { gzipSync, gunzipSync } from 'node:zlib';
 import { getDb } from '../db/index.js';
 import { pokemonCache } from '../db/schema.js';
 import { logger } from '../logger.js';
+import { encodeForDb, decodeFromDb, isCompressed, GZ_PREFIX } from '../lib/cache-codec.js';
 
 const router = Router();
 const POKEAPI_BASE = 'https://pokeapi.co/api/v2';
@@ -25,28 +25,10 @@ const FETCH_TIMEOUT = 10_000; // 10s
 // Каждый холодный старт Render обнуляет L1-кэш в памяти, и первые запросы
 // снова тянут эти строки из базы — именно это съело квоту в прошлый раз.
 //
-// Поэтому в L2 данные лежат сжатыми: gzip + base64 с префиксом 'gz:'. По
-// проводу из базы едет ~в 5-7 раз меньше, а на сервере распаковка занимает
-// доли миллисекунды (в память кладём уже распакованную строку).
-// Формат терпит оба варианта: старые строки без префикса читаются как JSON.
-const GZ_PREFIX = 'gz:';
-
-function encodeForDb(raw: string): string {
-  // Мелкие ответы незачем сжимать: base64 + заголовок съедят выигрыш.
-  if (raw.length < 2048) return raw;
-  return GZ_PREFIX + gzipSync(Buffer.from(raw, 'utf8'), { level: 6 }).toString('base64');
-}
-
-function decodeFromDb(stored: string): string {
-  if (!stored.startsWith(GZ_PREFIX)) return stored; // legacy-строка
-  try {
-    return gunzipSync(Buffer.from(stored.slice(GZ_PREFIX.length), 'base64')).toString('utf8');
-  } catch (err) {
-    // Битые данные в кэше не должны ронять запрос: считаем промахом.
-    logger.warn({ err }, '[pokeapi] не удалось распаковать строку кэша');
-    return '';
-  }
-}
+// Поэтому в L2 данные лежат сжатыми: gzip + base64 с префиксом 'gz:' (см.
+// lib/cache-codec.ts — там же юнит-тесты формата). По проводу из базы едет
+// в 5-30 раз меньше, распаковка занимает доли миллисекунды, а старые строки
+// без префикса продолжают читаться как обычный JSON.
 
 // ── L1-кэш в памяти ─────────────────────────────────────────
 // Раньше кэшем служила ТОЛЬКО таблица pokemon_cache: каждый запрос
@@ -191,7 +173,7 @@ router.get('*', async (req: Request, res: Response) => {
           // Ленивая миграция формата: старые строки лежат несжатым JSON'ом
           // (в базе таких ещё сотни), и каждое их чтение — лишний трафик Neon.
           // Переписываем в сжатый вид в фоне, без ожидания ответа клиенту.
-          if (!cached.data.startsWith(GZ_PREFIX)) {
+          if (!isCompressed(cached.data)) {
             void db.update(pokemonCache)
               .set({ data: encodeForDb(raw) })
               .where(eq(pokemonCache.name, pokePath))
