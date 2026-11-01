@@ -51,7 +51,7 @@ import {
   fetchSiteLearnset, wildMovesFromLearnset, moveNameToSlug,
 } from '../data/learnset.js';                                           // мувсеты по уровню: таблица «Развитие»
 import { loadPowerTable, encounterWeightFor, loadEvoTable } from '../data/power.js';   // сила вида → редкость появления
-import { statChangeKey, syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
+import { weatherHealPercent, statChangeKey, syntheticTackle } from './logic.js';                             // фолбэк-атака для дикого
 import { rollWildIVs, perfectIVs } from './logic.js';                   // гены: усреднённые дикие / идеальные лидеры
 import { apiFetch } from '../game/apiClient.js';                        // apiFetch — центральный HTTP-клиент с JWT
 import { checkEvolution, triggerEvolution, maybeGrantShedinja } from '../ui/evolution.js';   // Эволюция: проверка и запуск анимации
@@ -1088,7 +1088,9 @@ function handlePlayerStatusEffects(move) {
 
   // 1. Healing moves (Recover, Roost, Moonlight, Synthesis, etc.)
   // move.meta.healing — процент от макс HP (например 50 для Recover)
-  const healPct = move.meta?.healing;
+  // Morning Sun / Synthesis / Moonlight лечат по-разному в зависимости от
+  // погоды (засуха 2/3, дождь/буря/град 1/4), а не всегда 50%.
+  const healPct = weatherHealPercent(move.name, S.currentWeather, move.meta?.healing);
   if (healPct) {
     // Отрицательное лечение (clangorous-soul −33): не лечит, а срезает HP
     // ценой за бафф. Раньше попадало в «HP уже полное» без среза.
@@ -1294,7 +1296,9 @@ function handleEnemyStatusEffects(move) {
   }
 
   // 1. Healing for enemy
-  const healPct = move.meta?.healing;
+  // Morning Sun / Synthesis / Moonlight лечат по-разному в зависимости от
+  // погоды (засуха 2/3, дождь/буря/град 1/4), а не всегда 50%.
+  const healPct = weatherHealPercent(move.name, S.currentWeather, move.meta?.healing);
   if (healPct) {
     // Отрицательное лечение врага (зеркально игроку): срез HP за бафф.
     if (healPct < 0) {

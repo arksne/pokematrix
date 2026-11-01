@@ -133,7 +133,10 @@ for (const m of SEEDED) {
 // имена в коде не нужны: PokeAPI отдаёт meta.healing всем лечащим атакам.
 // Проверяем именно наличие общего пути, иначе тест врал бы на Softboiled и
 // Milk Drink, которые в бою работают.
-const healingPath = /const healPct = move\.meta\?\.healing/.test(core);
+// Morning Sun / Synthesis / Moonlight дополнительно проходят через
+// weatherHealPercent (погодное лечение 2/3 / 1/4) — это тот же общий путь,
+// поэтому принимаем обе формы записи.
+const healingPath = /healPct = (move\.meta\?\.healing|weatherHealPercent\()/.test(core);
 for (const name of ['recover', 'roost', 'moonlight', 'softboiled', 'milk-drink', 'synthesis', 'rest']) {
   suite.check(`H-${name}`, `${name} лечит через move.meta.healing`, healingPath, 'общий путь: meta.healing -> maxHp * pct');
 }

@@ -343,6 +343,26 @@ export function checkAccuracy(
 }
 
 /**
+ * Погодное лечение: Morning Sun / Synthesis / Moonlight.
+ *
+ * В засуху лечат 2/3 HP, в дождь/песчаную бурю/град — только 1/4, в обычную
+ * погоду — 1/2. Раньше игра лечила их всегда по 50% из meta.healing, то есть
+ * погода на них не влияла (в PvP при этом механика была).
+ */
+export const WEATHER_HEAL_MOVES = new Set(['morning-sun', 'synthesis', 'moonlight']);
+
+export function weatherHealPercent(slug: string, weather: string | null | undefined, basePct: number): number {
+  // Слаги канонно с дефисами ('morning-sun'): убирать дефисы нельзя, иначе
+  // сравнение с множеством никогда не совпадёт (эту ловушку и поймал тест).
+  const s = String(slug || '').toLowerCase().trim();
+  if (!WEATHER_HEAL_MOVES.has(s)) return basePct;
+  const w = String(weather || '').toLowerCase();
+  if (w === 'sun' || w === 'harsh-sunlight' || w === 'sunny') return 66;
+  if (w === 'rain' || w === 'rainy' || w === 'sandstorm' || w === 'hail' || w === 'snow' || w === 'snowstorm') return 25;
+  return Math.max(basePct, 50);
+}
+
+/**
  * Check type immunity for status ailments.
  * @param {string} ailment - move ailment name (paralysis, poison, burn, sleep, freeze, etc.)
  * @param {object} target - has .types[] and optionally .abilities[]
