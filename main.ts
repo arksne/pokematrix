@@ -60,6 +60,29 @@ declare global {
 // Эти функции доступны в window для быстрой отладки из консоли F12.
 // Используют store/state для мутаций.
 
+import { healStaleChunk } from './src/game/stale-chunk.js';
+
+// ── Самолечение после деплоя (устаревшие чанки) ────────────
+// Логика и её обоснование — в src/game/stale-chunk.ts (там же юнит-тесты):
+// игрок с открытым мини-приложением в момент деплоя получал
+// «Failed to fetch dynamically imported module» и мёртвый экран; лечим одной
+// перезагрузкой страницы (index.html отдаётся с no-cache).
+function heal(reason: string): boolean {
+  return healStaleChunk(reason, {
+    storage: (() => { try { return sessionStorage; } catch { return null; } })(),
+    reload: () => location.reload(),
+    warn: (msg, detail) => console.warn(msg, detail),
+  });
+}
+window.addEventListener('unhandledrejection', (e) => {
+  heal(String((e as PromiseRejectionEvent).reason ?? ''));
+});
+window.addEventListener('error', (e) => {
+  const t = e.target as HTMLElement | null;
+  if (t && (t as HTMLScriptElement).src) heal('error loading script: ' + (t as HTMLScriptElement).src);
+  else heal(String((e as ErrorEvent).message ?? ''));
+}, true);
+
 import('./src/game/init.js').then((m) => {
   // После загрузки init.ts, прокидываем функции для dev-консоли.
   // Каждая команда делает toast с результатом.
@@ -147,4 +170,22 @@ import('./src/game/init.js').then((m) => {
     } catch { init.showToast('Ошибка получения Mew', true); }
   };
   }
+}).catch((e) => {
+  // Сюда прилетает и устаревший чанк после деплоя (лечится перезагрузкой), и
+  // настоящая ошибка загрузки. Сообщаем игроку по-человечески: пустой экран без
+  // объяснений — худший вариант.
+  const msg = String(e?.message || e);
+  heal(msg);
+  console.error('[app] не удалось загрузить приложение:', e);
+  const err = document.createElement('div');
+  err.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-size:0.9rem;color:#fff;background:#0f2a44;z-index:99999;';
+  err.textContent = 'Не удалось загрузить игру. Закрой и открой мини-приложение заново.';
+  const retry = document.createElement('button');
+  retry.textContent = 'Перезагрузить';
+  retry.style.cssText = 'margin-top:12px;padding:8px 16px;border:none;border-radius:8px;background:#34c759;color:#fff;font-size:0.9rem;';
+  retry.onclick = () => location.reload();
+  err.appendChild(document.createElement('br'));
+  err.appendChild(retry);
+  document.body.appendChild(err);
 });
+
