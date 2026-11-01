@@ -117,6 +117,38 @@ const { check, finish } = createSuite('Безопасность');
     JSON.stringify(status.json));
 }
 
+// ── S13/S14: модерация чата (purge_chat)
+// В живом чате мат и оскорбления, а удалять сообщения было НЕЧЕМ. Добавили
+// админский purge_chat — проверяем границу: без админ-токена отказ, с токеном
+// dryRun ничего не удаляет и отдаёт количество совпадений.
+{
+  const noAuth = await api('/api/admin/api', {
+    method: 'POST',
+    body: { cmd: 'purge_chat', textPrefix: 'verify-nonexistent-' },
+  });
+  // 401 — нет заголовка Authorization (сервер отказывает раньше), 403 — токен
+  // есть, но не админский. Нам важно, что анонимный вызов не проходит.
+  check('S16', 'purge_chat без админ-токена не проходит (401/403)',
+    noAuth.status === 401 || noAuth.status === 403, `HTTP ${noAuth.status}`);
+
+  const dry = await api('/api/admin/api', {
+    method: 'POST',
+    token: process.env.ADMIN_PASS || 'verify-admin-pass',
+    body: { cmd: 'purge_chat', textPrefix: 'verify-nonexistent-', dryRun: true },
+  });
+  check('S17', 'purge_chat с админ-токеном: dryRun отвечает 200 и ничего не удаляет',
+    dry.status === 200 && dry.json?.dryRun === true && Number(dry.json?.matched) === 0,
+    `HTTP ${dry.status} ${JSON.stringify(dry.json).slice(0, 120)}`);
+
+  const noFilter = await api('/api/admin/api', {
+    method: 'POST',
+    token: process.env.ADMIN_PASS || 'verify-admin-pass',
+    body: { cmd: 'purge_chat' },
+  });
+  check('S18', 'purge_chat без фильтров отказывается чистить весь чат',
+    noFilter.status === 400, `HTTP ${noFilter.status}`);
+}
+
 // ── S6..S8: fail-fast при опасной конфигурации production
 {
   const runServer = (env) => new Promise((resolve) => {
@@ -158,3 +190,5 @@ const { check, finish } = createSuite('Безопасность');
 
 await sleep(50);
 finish();
+
+

@@ -10,10 +10,10 @@
  */
 import { parseSaveStrict, countSavePokemon, stampSave } from '../db/save-json.js';
 import { Router, Request, Response } from 'express';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray, like, lt } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
-import { users, serverFeatures, saveHistory } from '../db/schema.js';
+import { users, serverFeatures, saveHistory, chatMessages } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, message: { status: 'error', error: 'Too many admin requests' } });
@@ -333,6 +333,52 @@ router.post('/api', adminLimiter, async (req: Request, res: Response) => {
           io.emit('admin_announcement', { message: msg, timestamp: Date.now() });
         }
         res.json({ status: 'ok' });
+        break;
+      }
+
+      // ── purge_chat: модерация общего чата ──────────────────
+      // В живом чате игроки пишут мат, оскорбления и тестовый мусор, а удалить
+      // сообщение было НЕЧЕМ: единственный чат-эндпоинт умеет только читать и
+      // отправлять. Чистить приходилось руками в psql.
+      //   { action: 'purge_chat', ids?: number[], textPrefix?: string,
+      //     before?: ISO, dryRun?: boolean }
+      // Без фильтров ничего не удаляется: требуем хотя бы ids или textPrefix
+      // (или before), иначе один вызов снёс бы весь чат.
+      case 'purge_chat': {
+        const pb = req.body as any;
+        const ids = Array.isArray(pb.ids) ? pb.ids.map(Number).filter((n: number) => Number.isFinite(n)) : [];
+        const textPrefix = typeof pb.textPrefix === 'string' ? pb.textPrefix : '';
+        const before = typeof pb.before === 'string' ? pb.before : '';
+        if (ids.length === 0 && !textPrefix && !before) {
+          res.status(400).json({ status: 'error', error: 'need ids, textPrefix or before' });
+          return;
+        }
+        const conditions: any[] = [];
+        if (ids.length) conditions.push(inArray(chatMessages.id, ids));
+        if (textPrefix) conditions.push(like(chatMessages.text, `${textPrefix}%`));
+        if (before) conditions.push(lt(chatMessages.created_at, before));
+        const where = and(...conditions);
+
+        const doomed = await db.select({
+          id: chatMessages.id,
+          user_id: chatMessages.user_id,
+          text: chatMessages.text,
+        }).from(chatMessages).where(where).limit(500);
+
+        if (pb.dryRun) {
+          res.json({ status: 'ok', dryRun: true, matched: doomed.length, messages: doomed });
+          break;
+        }
+        if (doomed.length === 0) {
+          res.json({ status: 'ok', deleted: 0 });
+          break;
+        }
+        await db.delete(chatMessages).where(where);
+        // Прибираем и у клиентов: чат уже загружен в DOM, и удалённые сообщения
+        // иначе висят до перезагрузки.
+        const io = (req.app as any).get('io');
+        if (io) io.emit('chat_purged', { ids: doomed.map((m) => m.id) });
+        res.json({ status: 'ok', deleted: doomed.length, ids: doomed.map((m) => m.id) });
         break;
       }
 

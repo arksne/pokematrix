@@ -159,6 +159,15 @@ export function initAdminPanel() {
     '        <button class="tma-btn admin-toggle-feature" data-feat="free_shop" style="font-size:0.7rem;padding:6px;margin:0;background:#ff3b30;">🛍️ Free Shop</button>',
     '      </div>',
     '    </div>',
+    '    <div style="border-top:1px solid var(--tma-border);padding-top:6px;">',
+    '      <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">🧹 Модерация чата:</span>',
+    '      <input id="admin-purge-prefix" type="text" placeholder="префикс текста (напр. pc-check-) или id через запятую" style="width:100%;padding:6px;font-size:0.72rem;border:1px solid var(--tma-border);border-radius:6px;background:var(--tma-bg);color:var(--tma-text);margin-top:4px;">',
+    '      <div style="display:flex;gap:4px;margin-top:4px;">',
+    '        <button class="tma-btn" id="admin-purge-dry" style="flex:1;padding:6px;font-size:0.72rem;background:#007aff;margin:0;">🔍 Проверить</button>',
+    '        <button class="tma-btn" id="admin-purge-go" style="flex:1;padding:6px;font-size:0.72rem;background:#ff3b30;margin:0;">🧹 Удалить</button>',
+    '      </div>',
+    '      <div id="admin-purge-status" style="font-size:0.68rem;color:var(--tma-text-muted);background:rgba(0,0,0,0.2);padding:4px 6px;border-radius:6px;margin-top:4px;min-height:18px;">Пусто = ничего не удалится</div>',
+    '    </div>',
     '  </div>',
     '  <div id="tab-saves" class="admin-tab-content" style="display:none;flex-direction:column;gap:6px;">',
     '    <span style="font-size:0.7rem;font-weight:bold;color:var(--tma-text-muted);">💾 История сейвов (кнопка — вернуть копию):</span>',
@@ -465,6 +474,45 @@ export function initAdminPanel() {
       } catch (e) { console.error('[admin] toggle', e); showToast('API Error', true); }
     });
   });
+
+  // ── Модерация чата (purge_chat) ──
+  // В общем чате игроки пишут мат и мусор, а удалить сообщение было нечем.
+  // Поле принимает либо id через запятую, либо префикс текста. Пустое поле
+  // не отправляется, а сервер всё равно отказывает без фильтров.
+  const purgeStatus = document.getElementById('admin-purge-status') as HTMLElement | null;
+  const purgeInput = document.getElementById('admin-purge-prefix') as HTMLInputElement | null;
+  const runPurge = async (dryRun: boolean) => {
+    const raw = (purgeInput?.value || '').trim();
+    if (!raw) { showToast('Укажи префикс или id', true); return; }
+    const isIds = /^[\d,\s]+$/.test(raw);
+    const body: any = { cmd: 'purge_chat' };
+    if (isIds) body.ids = raw.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n));
+    else body.textPrefix = raw;
+    if (dryRun) body.dryRun = true;
+    if (purgeStatus) purgeStatus.textContent = dryRun ? 'Ищу…' : 'Удаляю…';
+    try {
+      const res = await apiFetch('/admin/api', { method: 'POST', body: JSON.stringify(body) });
+      const data = await res.json();
+      if (data.status !== 'ok') {
+        if (purgeStatus) purgeStatus.textContent = '❌ ' + (data.error || 'Error');
+        showToast('❌ ' + (data.error || 'Error'), true);
+        return;
+      }
+      const n = dryRun ? data.matched : data.deleted;
+      if (purgeStatus) {
+        purgeStatus.textContent = dryRun
+          ? `Найдено: ${n}${n ? ' — ' + (data.messages || []).slice(0, 3).map((m: any) => `#${m.id} ${String(m.text).slice(0, 20)}`).join('; ') : ''}`
+          : `Удалено: ${n}`;
+      }
+      showToast(dryRun ? `🔍 Найдено: ${n}` : `🧹 Удалено: ${n}`, false);
+    } catch (e) {
+      console.error('[admin] purge_chat', e);
+      if (purgeStatus) purgeStatus.textContent = '❌ API Error';
+      showToast('API Error', true);
+    }
+  };
+  document.getElementById('admin-purge-dry')?.addEventListener('click', () => { void runPurge(true); });
+  document.getElementById('admin-purge-go')?.addEventListener('click', () => { void runPurge(false); });
 
   document.getElementById('btn-admin-close')!.addEventListener('click', () => { modal.style.display = 'none'; });
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });

@@ -140,6 +140,20 @@ export function initChatSocket() {
     container.scrollTop = container.scrollHeight;
     chatLastTimestamp = msg.created_at;
   });
+
+  // ── Модерация: админ удалил сообщения ──
+  // Убираем их из уже отрисованного чата, иначе они висят до перезагрузки и
+  // выглядит, будто модерация не сработала.
+  s.off('chat_purged');
+  s.on('chat_purged', (payload: any) => {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const ids: number[] = Array.isArray(payload?.ids) ? payload.ids : [];
+    for (const id of ids) {
+      const el = container.querySelector(`[data-msg-id="${id}"]`);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+  });
 }
 
 // ── stopChatPolling: остановка polling'а ────────────────
