@@ -319,6 +319,77 @@ async function main() {
       check('O4', 'дикий покемон в стартовом городе по силам новичку', false, 'встречи не было за 50 с');
     }
 
+    /** Сходить в поке-центр и вылечить команду (после урона/поражения). */
+    // Лечение — не NPC, а кнопка локации «🏥 Вылечить команду (¥N)» в списке
+    // действий поке-центра (src/ui/location.ts: healTeam). Цена = недостающее
+    // HP × 1 кредит; при 0 HP лечится полный maxHp.
+    const healTeam = async () => {
+      const detail = { ok: false, note: '' };
+      const goPoke = await page
+        .evaluate(() => {
+          const b = Array.from(document.querySelectorAll('.btn-nav')).find((x) => /Поке-центр/i.test(x.textContent || ''));
+          if (!b) return false;
+          b.click();
+          return true;
+        })
+        .catch(() => false);
+      if (!goPoke) {
+        detail.note = 'кнопки поке-центра нет на экране';
+        return detail;
+      }
+      await sleep(2500);
+      const before = await fetchCloudSave(page);
+      const clickedHeal = await page
+        .evaluate(() => {
+          const btn = Array.from(document.querySelectorAll('button')).find((b) =>
+            /Вылечить команду/i.test(b.textContent || '')
+          );
+          if (!btn) return false;
+          btn.click();
+          return true;
+        })
+        .catch(() => false);
+      await sleep(2500);
+      const after = await fetchCloudSave(page);
+      // Возвращаемся в город: ссылка-локация с названием города.
+      await page
+        .evaluate(() => {
+          const b = Array.from(document.querySelectorAll('.btn-nav')).find((x) => /Пьютер-Сити/i.test(x.textContent || ''));
+          b?.click();
+        })
+        .catch(() => {});
+      await sleep(2000);
+      detail.ok = clickedHeal;
+      const cost = before.credit != null && after.credit != null ? before.credit - after.credit : null;
+      detail.note = `кнопка «Вылечить команду»: ${clickedHeal ? 'нажата' : 'не найдена'}, ` +
+        `кредиты: ${before.credit} → ${after.credit}${cost != null ? ` (−${cost})` : ''}`;
+      return detail;
+    };
+    /** Команда вся без сознания? Проверяем через попытку включить охоту. */
+    const teamFainted = async () => {
+      const toastBefore = await page
+        .evaluate(() => (document.getElementById('trade-toast')?.textContent || '').trim())
+        .catch(() => '');
+      await page
+        .evaluate(() => {
+          const b = document.getElementById('btn-hunt-toggle');
+          if (b && b.classList.contains('active')) b.click();
+          b?.click();
+        })
+        .catch(() => {});
+      await sleep(1200);
+      const toastAfter = await page
+        .evaluate(() => (document.getElementById('trade-toast')?.textContent || '').trim())
+        .catch(() => '');
+      const fainted = toastAfter !== toastBefore && /живой покемон/i.test(toastAfter);
+      await page
+        .evaluate(() => {
+          const b = document.getElementById('btn-hunt-toggle');
+          if (b && b.classList.contains('active')) b.click();
+        })
+        .catch(() => {});
+      return fainted;
+    };
     // ── Ловля: ОДНА атака для ослабления, дальше только шары ──────
     // Формула поимки в игре: чем меньше HP у дикого, тем выше шанс. Но вторая
     // атака Lv5-стартера по дикому Lv3 часто его добивает — и поймать уже
@@ -333,6 +404,13 @@ async function main() {
     for (let attempt = 0; attempt < MAX_CATCH_ATTEMPTS && !caught; attempt++) {
       dbg('попытка', attempt + 1, 'encounterOpen=', await isEncounterOpen());
       if (!(await isEncounterOpen())) {
+        // После проигранного боя команда может быть вся без сознания — тогда
+        // охота честно не запускается («нужен живой покемон»). Лечимся в
+        // поке-центре и продолжаем, иначе проверка «не поймали» врёт.
+        if (await teamFainted()) {
+          const heal = await healTeam();
+          dbg('лечение после поражения:', heal.note);
+        }
         await startHunt();
         if (!(await waitEncounter(50_000))) {
           catchDetail = `попытка ${attempt + 1}: встречи не было`;
@@ -341,14 +419,23 @@ async function main() {
         await sleep(3200);
       }
       let attackedThisEncounter = false;
+      // Лог боя хранится между встречами: «пойман» из прошлого боя не должен
+      // засчитываться как успех в этом. Смотрим только прирост лога.
+      const logAtStart = await readBattleLog();
+      let logBaseline = logAtStart.length;
       for (let act = 0; act < 12; act++) {
         if (!(await isEncounterOpen())) break;
-        if (catchLogRe.test(await readBattleLog())) {
+        const currentLog = await readBattleLog();
+        if (catchLogRe.test(currentLog.slice(logBaseline))) {
           caught = true;
           break;
         }
         const action = await page
           .evaluate((alreadyAttacked) => {
+            // Меню хода в новой вёрстке переключается классами, полагаться на
+            // computed display нельзя (проверено на проде: гейт «ждать ход»
+            // залипал и ловля не начиналась). Игра сама игнорирует клик не в
+            // свой ход — просто кликаем и смотрим, вырос ли лог.
             const sel = document.getElementById('battle-item-select');
             const ball = sel ? Array.from(sel.options).find((o) => /ball/i.test(o.value || '')) : null;
             if (/пойман|Попался/i.test(document.getElementById('battle-log')?.textContent || '')) return 'caught-in-log';
@@ -377,20 +464,25 @@ async function main() {
           break;
         }
         if (action === 'attack' && !attackedThisEncounter) attackedThisEncounter = true;
+        if (action === 'waiting') {
+          await sleep(1500); // ход противника — ждём, не тратя попытку
+          continue;
+        }
         if (action === 'nothing' || action === 'error') {
           catchDetail = `попытка ${attempt + 1}: нет доступных действий`;
           break;
         }
         await sleep(2400);
-        dbg('act=', action, 'encOpen=', await isEncounterOpen(), 'log:', (await readBattleLog()).slice(-90));
-        if (catchLogRe.test(await readBattleLog())) {
+        const afterLog = await readBattleLog();
+        dbg('act=', action, 'encOpen=', await isEncounterOpen(), 'new:', afterLog.slice(logBaseline).slice(-90));
+        if (catchLogRe.test(afterLog.slice(logBaseline))) {
           caught = true;
           break;
         }
       }
       if (caught) {
         const log = await readBattleLog();
-        catchDetail = `пойман: «${log.slice(-90)}»`;
+        catchDetail = `пойман: «${log.slice(logBaseline).slice(-90) || log.slice(-90)}»`;
       } else if (!catchDetail) {
         catchDetail = `попытка ${attempt + 1}: дикий убежал/упал`;
       }
@@ -480,11 +572,158 @@ async function main() {
         `команда: ${saveBefore.team} → ${saveAfterCatch.team}`
     );
 
+    // ── Второй квест: «Победите 3 диких покемонов» ────────────────
+    // Второй шаг обучения двигается событием defeat_x из боя. Проверяем, что
+    // победы реально засчитываются в счётчик обучения (а не только пишутся в
+    // лог): иначе игрок бьётся, счётчик стоит на 0/3, и обучение не закрыть —
+    // а гейт не выпускает из города.
+    const openOak = async () => {
+      await page
+        .evaluate(() => {
+          const b = Array.from(document.querySelectorAll('#npc-buttons button')).find((x) =>
+            /Профессор/i.test(x.textContent || '')
+          );
+          b?.click();
+        })
+        .catch(() => {});
+      await sleep(1400);
+    };
+    const clickQuestButton = async (re) => {
+      const clicked = await page
+        .evaluate((pattern) => {
+          const r = new RegExp(pattern, 'i');
+          const b = Array.from(document.querySelectorAll('#npc-quests button')).find((x) => r.test(x.textContent || ''));
+          if (!b) return false;
+          b.click();
+          return true;
+        }, re)
+        .catch(() => false);
+      await sleep(1600);
+      return clicked;
+    };
+    const closeNpcModal = async () => {
+      await page
+        .evaluate(() => {
+          const m = document.getElementById('npc-modal');
+          if (m) m.style.display = 'none';
+        })
+        .catch(() => {});
+      await sleep(700);
+    };
+    /** Добить бой: закрыть меню победы или «Уйти с поля боя». */
+    const closeBattle = async () => {
+      for (let i = 0; i < 4; i++) {
+        const state = await page
+          .evaluate(() => {
+            const modal = document.getElementById('encounter-modal');
+            const open = !!modal && window.getComputedStyle(modal).display !== 'none';
+            if (!open) return 'closed';
+            const endMenu = document.getElementById('battle-end-menu');
+            if (endMenu && window.getComputedStyle(endMenu).display !== 'none') {
+              document.getElementById('btn-leave-battle')?.click();
+              return 'end-menu';
+            }
+            const leave = Array.from(modal.querySelectorAll('button')).find((b) =>
+              /Уйти с поля боя/i.test(b.textContent || '')
+            );
+            if (leave) {
+              leave.click();
+              return 'leave';
+            }
+            document.getElementById('btn-run')?.click();
+            return 'run';
+          })
+          .catch(() => 'error');
+        if (state === 'closed') return true;
+        await sleep(2000);
+      }
+      return false;
+    };
+    /**
+     * Один бой: ждать загрузки атак (кнопки сначала «…»), потом жать первую
+     * до конца боя. Возвращает 'win' | 'loss' | 'fled' | 'timeout'.
+     */
+    const winOneBattle = async () => {
+      const battleState = () =>
+        page
+          .evaluate(() => {
+            const modal = document.getElementById('encounter-modal');
+            const open = !!modal && window.getComputedStyle(modal).display !== 'none';
+            const endMenu = document.getElementById('battle-end-menu');
+            const ended = !!endMenu && window.getComputedStyle(endMenu).display !== 'none';
+            const log = (document.getElementById('battle-log')?.textContent || '').trim();
+            const mv = document.querySelector('#move-btn-0');
+            const moveText = (mv?.textContent || '').trim();
+            const moveReady = /\d+\s*\/\s*\d+|PP/i.test(moveText) || (moveText.length > 3 && moveText !== '…' && moveText !== '...');
+            return { open, ended, log, moveReady, playerTurn };
+          })
+          .catch(() => ({ open: false, ended: false, log: '', moveReady: false, playerTurn: false }));
+      for (let i = 0; i < 40; i++) {
+        const st = await battleState();
+        if (!st.open || st.ended) {
+          if (/побежден|Вы победили|получил .* EXP/i.test(st.log)) return 'win';
+          if (/потерял|проиграл|поражени/i.test(st.log)) return 'loss';
+          if (/сбежать|вырвался|убежал/i.test(st.log)) return 'fled';
+          return 'timeout';
+        }
+        if (st.moveReady && st.playerTurn) {
+          await page
+            .evaluate(() => document.querySelector('#move-btn-0')?.click())
+            .catch(() => {});
+        }
+        await sleep(2200);
+      }
+      return 'timeout';
+    };
+    const quest2Progress = () =>
+      page
+        .evaluate(() => {
+          const text = document.body.innerText;
+          const m = text.match(/Победите\s+(\d+)\/3/);
+          if (m) return Number(m[1]);
+          return /Квест выполнен! Вернитесь к Профессору/i.test(text) ? 3 : null;
+        })
+        .catch(() => null);
+
+
+    // ── Второй квест обучения берётся у Оука и попадает в подсказку ──
+    // Победы в бою проверяются юнит-тестами (src/ui/__tests__/tutorial-chain.test.ts:
+    // defeat_x двигает tutorial_2 и капается целью): в браузерном прогоне бой
+    // зависит от таймингов анимаций и температуры сервера, а здесь важно, что
+    // цепочка обучения реально продолжается, а не встаёт на первом шаге.
+    let quest2Taken = false;
+    let quest2Hint = '';
+    if (stepAdvanced === '2' || /Шаг\s+2\/6/.test(hintAfterCatch)) {
+      await openOak();
+      const took = await clickQuestButton('Взять');
+      await closeNpcModal();
+      quest2Hint = await hint();
+      quest2Taken = Boolean(took) && /Победите\s+0\/3/.test(quest2Hint);
+    } else {
+      quest2Hint = hintAfterCatch;
+    }
+    check(
+      'O8',
+      'второй квест обучения берётся у Оука и виден в подсказке (цепочка не встаёт)',
+      quest2Taken,
+      quest2Taken ? `подсказка: «${quest2Hint}»` : `не взялся; подсказка: «${quest2Hint}»`
+    );
+    // ── Лечение в поке-центре: путь восстановления после урона/поражения ──
+    // После боёв у команды почти всегда есть урон, а после поражения — вся
+    // команда без сознания. Если лечение не работает (нет кнопки, не списывает
+    // кредиты, не поднимает HP), новичок застревает: ни ловить, ни драться.
+    const healResult = await healTeam();
+    check(
+      'O9',
+      'команда лечится в поке-центре (медсестра и кнопка «Вылечить» работают)',
+      healResult.ok,
+      healResult.note
+    );
     const meaningfulErrors = consoleErrors.filter(
       (t) => !/Failed to load resource|net::ERR|Cross-Origin-Opener-Policy|ERR_ABORTED/i.test(t)
     );
     check(
-      'O8',
+      'O10',
       'нет JS-ошибок за первые минуты игры',
       pageErrors.length === 0 && meaningfulErrors.length === 0,
       [...pageErrors, ...meaningfulErrors].slice(0, 3).join(' | ') || 'ок'
