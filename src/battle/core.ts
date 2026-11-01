@@ -64,6 +64,7 @@ import { store } from '../game/store.js';
 import { trackNPCQuests } from '../game/quest-track.js';     // Гринд-квесты NPC: тот же движок событий
 import { allNPCQuests, findQuestHolder, locName, questHowTo, questRewards, verifyQuest } from '../game/quest-track.js'; // Вкладка активных NPC-квестов в модалке
 import { checkAchievement } from '../ui/achievements.js';                                 // store — центральная игровая логика (giveReward, autoSave, updateInventoryDisplay, addItem, removeItem)
+import { baseWildLevelFor } from './wild-level.js';
 import { state } from '../game/state.js';                                 // state — глобальное состояние игры (инвентарь, команда, локация)
 import { generateUID, getTrainerId, LEGENDARY_SET } from '../utils/state.js';           // generateUID — уникальный ID для пойманного покемона; getTrainerId — ID тренера
 import { itemCategory } from '../utils/items.js';                        // itemCategory(id) → категория предмета (healing, ball, statusCure...)
@@ -3378,41 +3379,9 @@ function getWildLevel() {
  * Вынесено из getWildLevel(), чтобы бонус этажа считался ОДИН раз.
  */
 function baseWildLevel(loc: any): number {
-  const name = (loc?.name || '').toLowerCase();
-  const id = GS.currentLocationId || '';
-
-  // ── Если локация задаёт min/max уровень — используем его ──
-  if (loc && loc.wildMinLvl !== undefined && loc.wildMaxLvl !== undefined) {
-    const range = loc.wildMaxLvl - loc.wildMinLvl + 1;
-    return Math.floor(Math.random() * range) + loc.wildMinLvl;
-  }
-
-  // Johto routes early
-  if (id.includes('route29') || id.includes('route30') || id.includes('route31') || id.includes('newBark') || id.includes('cherrygrove')) return Math.floor(Math.random() * 11) + 5;
-  // Goldenrod
-  if (id.includes('goldenrod') && !id.includes('stadium')) return Math.floor(Math.random() * 6) + 5;
-  // Johto mid routes
-  if (id.includes('route34') || id.includes('route35') || id.includes('route36') || id.includes('route37') || id.includes('route38') || id.includes('route39') || id.includes('ilex') || id.includes('nationalPark')) return Math.floor(Math.random() * 11) + 15;
-  // Ecruteak + Olivine
-  if (id.includes('ecruteak') || id.includes('olivine') || id.includes('route42') || id.includes('lakeOfRage')) return Math.floor(Math.random() * 11) + 25;
-  // Blackthorn + Mt Silver
-  if (id.includes('blackthorn') || id.includes('mtSilver') || id.includes('route45') || id.includes('icePath')) return Math.floor(Math.random() * 11) + 35;
-  // Victory Road
-  if (id.includes('victory') || id.includes('indigo')) return Math.floor(Math.random() * 11) + 40;
-  // Late-game Kanto routes
-  if (/route_(1[6-9]|2[0-1])/.test(id) || id.includes('cerulean')) return Math.floor(Math.random() * 11) + 30;
-  // Mid-game Kanto
-  if (/route_(1[1-6])/.test(id) || id.includes('safari') || id.includes('fuchsia') || id.includes('lavender')) return Math.floor(Math.random() * 11) + 20;
-  // Early-mid
-  if (/route_[6-9]|10/.test(id) || id.includes('saffron') || id.includes('celadon')) return Math.floor(Math.random() * 11) + 12;
-  // Early
-  if (/route_[4-6]/.test(id) || id.includes('route_9') || id.includes('cerulean')) return Math.floor(Math.random() * 9) + 8;
-  // Very early
-  if (/route_[1-2]|22/.test(id) || id.includes('viridian') || id.includes('forest')) return Math.floor(Math.random() * 8) + 5;
-  // Starter area
-  if (id.includes('pallet')) return Math.floor(Math.random() * 6) + 3;
-  // Default for other regions
-  return Math.floor(Math.random() * 11) + 10;
+  // Вся таблица уровней (и два её бага) живут в чистом модуле wild-level.ts:
+  // там её можно покрыть юнит-тестами, не таща сюда пол-игры.
+  return baseWildLevelFor(GS.currentLocationId || '', loc);
 }
 
 /**

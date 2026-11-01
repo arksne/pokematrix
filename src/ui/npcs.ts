@@ -118,6 +118,42 @@ export function completeNPCQuest(npc: any, q: any): void {
     completeInFlight.delete(q.id);
   }
 }
+/**
+ * Собрать текст предложения квеста из шаблона NPC.
+ *
+ * Шаблоны вида «Вот задание: {target} {item}. Справишься?» рассчитаны на
+ * квесты-«принеси предмет». Но у учебных квестов Профессора Оука и у квестов
+ * «поймай N покемонов / победи / посети» предмета нет (targetItem: null), и
+ * подстановка давала игроку «Вот задание: 1 . Справишься?» — это видел каждый
+ * новичок на первом диалоге в игре (поймано проверкой NPC на живом проде).
+ *
+ * Правило: если предмета нет — вместо плейсхолдеров подставляем человеческое
+ * описание квеста (quest.desc). Остальные шаблоны (где плейсхолдеров нет или
+ * предмет есть) работают как раньше.
+ */
+export function buildQuestOfferText(
+  template: string,
+  quest: { targetQty?: number | null; targetItem?: string | null; desc?: string }
+): string {
+  if (!template) return '';
+  if (!/\{(target|item)\}/.test(template)) return template;
+
+  if (quest.targetItem) {
+    let withItem = template
+      .replace(/\{target\}/g, String(quest.targetQty ?? 1))
+      .replace(/\{item\}/g, itemDef(quest.targetItem).nameRu);
+    return withItem.replace(/\s+/g, ' ').replace(/\s+([.,!?;:])/g, '$1').trim();
+  }
+
+  const desc = (quest.desc || '').trim();
+  const out = template
+    .replace(/\{target\}\s*\{item\}/g, desc)
+    .replace(/\{item\}\s*\{target\}/g, desc)
+    .replace(/\{target\}/g, desc)
+    .replace(/\{item\}/g, '');
+  return out.replace(/\s+/g, ' ').replace(/\s+([.,!?;:])/g, '$1').trim();
+}
+
 export function renderNPCQuests(npc: any) {
   const container = document.getElementById('npc-quests')!;
   container.innerHTML = '';  // Очищаем контейнер
@@ -453,13 +489,7 @@ export function openNPCDialog(npcId: string) {
     // Есть доступный квест — показываем предложение
     const q = availableQuests[0];
     if (npc.dialog.quest_offer) {
-      dialogText = npc.dialog.quest_offer
-        .replace('{target}', q.targetQty);  // Подставляем количество
-      if (q.targetItem) {
-        dialogText = dialogText.replace('{item}', itemDef(q.targetItem).nameRu);  // Название предмета
-      } else {
-        dialogText = dialogText.replace('{item}', '').replace('  ', ' ').trim();
-      }
+      dialogText = buildQuestOfferText(npc.dialog.quest_offer, q);
     } else {
       dialogText = `${npc.dialog.greet} Есть задание: ${q.desc}`;
     }
