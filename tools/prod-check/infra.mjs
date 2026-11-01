@@ -154,5 +154,33 @@ export async function runInfra() {
         : `записей: ${entries.length}`);
   }
 
+  // ── SP1: спрайты идут через наш сервер, а не с GitHub ────────
+  // Раньше клиент брал PNG напрямую с raw.githubusercontent.com: GitHub отдаёт
+  // их с max-age=300 (перекачка каждые 5 минут), а в части регионов домен
+  // недоступен — в бою были «сломанные картинки». Проверяем наш прокси:
+  // 200 + image/png + долгий immutable-кэш + повторный ответ из кэша.
+  {
+    const spritePath = 'pokemon/other/official-artwork/25.png';
+    const r1 = await api(`/api/sprite/${spritePath}`);
+    const ct = (r1.headers?.['content-type'] || '').toLowerCase();
+    const cc = String(r1.headers?.['cache-control'] || '');
+    const isPng = ct.includes('image/png');
+    const immutable = /max-age=\d{6,}/.test(cc) && /immutable/.test(cc);
+    check(
+      'SP1',
+      'спрайты отдаёт наш /api/sprite с immutable-кэшем',
+      r1.status === 200 && isPng && immutable,
+      r1.status !== 200
+        ? `HTTP ${r1.status} ${(r1.text || '').slice(0, 100)}`
+        : `${ct}, cache-control: ${cc || '—'}, ${(r1.text || '').length} символов в теле`
+    );
+    // Второй запрос должен обслуживаться кэшем в памяти (X-Sprite-Cache: HIT).
+    const r2 = await api(`/api/sprite/${spritePath}`);
+    const cacheState = r2.headers?.['x-sprite-cache'] || '—';
+    check('SP2', 'повторный запрос спрайта обслуживает кэш в памяти',
+      r2.status === 200 && String(cacheState).toUpperCase() === 'HIT',
+      `второй ответ: HTTP ${r2.status}, X-Sprite-Cache: ${cacheState}`);
+  }
+
   return finish();
 }

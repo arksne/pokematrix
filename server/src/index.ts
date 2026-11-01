@@ -28,6 +28,7 @@ import economyRoutes from './routes/economy.js';
 import chatRoutes from './routes/chat.js';
 import profileRoutes from './routes/profile.js';
 import pokeapiRoutes from './routes/pokeapi.js';
+import spriteRoutes from './routes/sprite.js';
 import learnsetRoutes from './routes/learnset.js';
 import sitemoveRoutes from './routes/sitemove.js';
 import dropsRoutes from './routes/drops.js';
@@ -238,6 +239,8 @@ async function main() {
   app.use('/api/economy', writeLimiter);
   app.use('/api/chat/send', writeLimiter);
   app.use('/api/pokeapi', proxyLimiter);
+  // Спрайты: те же лимиты, что у PokeAPI-прокси (это тоже прокси наружу).
+  app.use('/api/sprite', proxyLimiter);
   app.use('/api/log-client-error', errorReportLimiter);
 
   // ── Health check ─────────────────────────────────────────
@@ -290,6 +293,7 @@ async function main() {
   app.use('/api/chat', chatRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/pokeapi', pokeapiRoutes);
+  app.use('/api/sprite', spriteRoutes);
   app.use('/api/learnset', learnsetRoutes);
   app.use('/api/sitemove', sitemoveRoutes);
   app.use('/api/drops', dropsRoutes);

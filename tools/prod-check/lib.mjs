@@ -120,7 +120,13 @@ export async function api(path_, { method = 'GET', token, body, timeoutMs } = {}
       text = await res.text();
       json = JSON.parse(text);
     } catch (_) {}
-    return { status: res.status, json, text, attempts: attempt };
+    // Заголовки нужны проверкам вроде SP1: у спрайтов важны Content-Type и
+    // Cache-Control, а не тело ответа.
+    const headers = {};
+    try {
+      res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
+    } catch (_) {}
+    return { status: res.status, json, text, headers, attempts: attempt };
   }
   // Сетевой сбой — это результат проверки (status 0), а не падение набора:
   // иначе одно «нет ответа» убивало бы весь набор исключением.

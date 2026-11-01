@@ -91,19 +91,43 @@ export function getTypeGradient(types) {
   return `radial-gradient(circle at 50% 50%, ${c1}dd 0%, ${c1}55 50%, ${c2}55 80%, ${c2}dd 100%)`;
 }
 
+/**
+ * Переписать спрайт-URL GitHub на наш прокси.
+ *
+ * PokeAPI отдаёт ссылки вида
+ *   https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png
+ * GitHub отдаёт их с `Cache-Control: max-age=300` (перекачка каждые 5 минут), а
+ * в части регионов этот домен вообще недоступен — тогда в бою вместо покемонов
+ * «сломанные картинки» (ловил UI-тур). Наш `/api/sprite/*` держит PNG в
+ * памяти и отдаёт с immutable-кэшем на год, поэтому картинка грузится один раз.
+ *
+ * Всё, что не похоже на спрайт PokeAPI (уже относительный путь, локальный
+ * ассет, другой домен), возвращаем как есть.
+ */
+export function proxySpriteUrl(url: string): string {
+  if (!url) return '';
+  const m = /^https?:\/\/raw\.githubusercontent\.com\/PokeAPI\/sprites\/[^/]+\/sprites\/(.+\.png)$/.exec(url);
+  if (!m) return url;
+  return `/api/sprite/${m[1]}`;
+}
+
 export function getSpriteUrl(mon) {
   const api = mon.apiData || mon;
   const isShiny = mon.isShiny || api.isShiny;
   if (isShiny) {
-    return api.sprites?.other?.['official-artwork']?.front_shiny
+    return proxySpriteUrl(
+      api.sprites?.other?.['official-artwork']?.front_shiny
         || api.sprites?.front_shiny
         || api.sprites?.other?.['official-artwork']?.front_default
         || api.sprites?.front_default
-        || '';
+        || ''
+    );
   }
-  return api.sprites?.other?.['official-artwork']?.front_default
+  return proxySpriteUrl(
+    api.sprites?.other?.['official-artwork']?.front_default
       || api.sprites?.front_default
-      || '';
+      || ''
+  );
 }
 
 export function setTypeBg(id, types) {

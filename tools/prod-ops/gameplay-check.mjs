@@ -140,9 +140,19 @@ async function main() {
     userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36',
   });
   const page = await ctx.newPage();
+  const externalCalls = [];
   page.on('response', (r) => {
     const u = r.url();
-    if (!u.includes('/api/')) return;
+    if (!u.includes('/api/')) {
+      // Внешние домены: ДАННЫЕ покемонов не должны ходить напрямую на
+      // pokeapi.co — они идут через наш прокси с кэшами. Ожидаемые исключения:
+      // шрифты, заглушка telegram-web-app.js и CDN спрайтов PokeAPI
+      // (raw.githubusercontent.com) — картинки пока берутся оттуда.
+      if (/^https?:\/\//.test(u) && !u.startsWith(BASE) && !/fonts\.googleapis\.com|fonts\.gstatic\.com|telegram\.org|raw\.githubusercontent\.com/.test(u)) {
+        externalCalls.push({ url: u.slice(0, 120), status: r.status() });
+      }
+      return;
+    }
     apiCalls.push({ url: u.replace(BASE, ''), method: r.request().method(), status: r.status(), at: Date.now() });
   });
   page.on('console', (m) => {
@@ -526,6 +536,10 @@ async function main() {
     );
     check('A3', 'нет JS-ошибок и необработанных исключений', meaningfulErrors.length === 0 && pageErrors.length === 0,
       [...meaningfulErrors, ...pageErrors].slice(0, 3).join(' | ') || 'ок');
+    check('A4', 'данные покемонов идут через свой сервер, а не напрямую с pokeapi.co', externalCalls.length === 0,
+      externalCalls.length
+        ? externalCalls.slice(0, 3).map((c) => `${c.url} -> ${c.status}`).join('; ')
+        : 'внешних запросов, кроме шрифтов и CDN спрайтов, нет');
   } finally {
     await browser.close().catch(() => {});
   }
@@ -544,4 +558,5 @@ main().catch((e) => {
   console.error('Игровой прогон упал:', e?.stack || e);
   process.exit(1);
 });
+
 
