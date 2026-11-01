@@ -31,6 +31,10 @@ import { fetchSiteLearnset, siteStarterMoves } from '../data/learnset.js';
 //   ...                                              // и т.д. до 9
 // ]
 import { GEN_STARTERS } from '../data/starters.js';
+// Данные покемона берём через наш прокси (/api/pokeapi/*), а не напрямую с
+// pokeapi.co: сервер держит L1/L2-кэш, а клиент — свой кэш. Прямой запрос из
+// вебвью зависит от чужого домена и CORS и ходит мимо всех кэшей.
+import { fetchPokeAPI } from '../utils/api.js';
 
 // ── randomStarter: случайный стартовик из ВСЕХ 27 ──
 // Спека 3.22: стартовик — случайный из всех 27, без привязки к выбранной карте.
@@ -52,9 +56,8 @@ export function randomStarter(): string {
 //   6. Отправляет запрос на сервер для регистрации
 export async function giveStarterMon(pokemonName: string) {
   try {
-    // ── 1. Загрузка данных из PokeAPI ──
-    const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonName}`);
-    const starterData = await res.json();
+    // ── 1. Загрузка данных из PokeAPI (через прокси и кэши) ──
+    const starterData = await fetchPokeAPI(`pokemon/${pokemonName}`);
     const baseLevel = 5;  // Стартовый уровень
 
     // ── 2. Фильтрация атак ──

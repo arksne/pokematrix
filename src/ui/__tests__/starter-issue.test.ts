@@ -88,9 +88,12 @@ const BULBA = {
 function installFetch() {
   vi.stubGlobal('fetch', async (url: any) => {
     const u = String(url);
-    // Любого покемона отдаём бульбазавром (для выдачи важна форма, не вид);
-    // относительные URL (learnset) роняем — код уходит в PokeAPI-фолбэк.
-    if (/\/pokemon\/[^/]+$/.test(u) && !u.startsWith('/')) {
+    // Любого покемона отдаём бульбазавром (для выдачи важна форма, не вид).
+    // Клиент теперь берёт данные через наш прокси — `/api/pokeapi/pokemon/x`
+    // (относительный URL), поэтому принимаем оба варианта: и абсолютный
+    // pokeapi.co, и прокси. Остальные относительные URL (learnset) роняем —
+    // код уходит в PokeAPI-фолбэк.
+    if (/\/pokemon\/[^/]+$/.test(u) && /^(https?:\/\/|\/api\/pokeapi\/)/.test(u)) {
       return { ok: true, json: async () => JSON.parse(JSON.stringify(BULBA)) };
     }
     throw new TypeError('fetch failed (стаб)');

@@ -52,6 +52,8 @@ import { appendToLog, calculateStat } from '../battle/core.js';  // Лог + р�
 import { trackNPCQuests } from '../game/quest-track.js';  // Гринд-квесты: вылупление
 import { natures } from '../data/natures.js';          // Массив характеров
 import { fetchSiteLearnset, siteStarterMoves, rollEggMove } from '../data/learnset.js';
+// Данные покемона яйца — через прокси с кэшами (см. комментарий в starter.ts).
+import { fetchPokeAPI } from '../utils/api.js';
 
 // ── КОНСТАНТЫ ────────────────────────────────────────────
 
@@ -651,16 +653,17 @@ export async function hatchEgg(egg: any) {
   const eggData = { ...egg };  // Копируем данные яйца (на случай если оригинал изменится)
 
   try {
-    // Загружаем данные покемона из PokeAPI по имени вида
-    const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${egg.species}`);
-    if (!res.ok) {
+    // Загружаем данные покемона из PokeAPI по имени вида (через прокси и кэши)
+    let pokeData: any;
+    try {
+      pokeData = await fetchPokeAPI(`pokemon/${egg.species}`);
+    } catch {
       // Ошибка загрузки — яйцо утеряно
       state.eggs = state.eggs.filter((e: any) => e.uid !== egg.uid);
       store.emit('save');
       showToast(`Яйцо ${egg.species || 'неизвестного вида'} повреждено и утеряно`, true);
       return;
     }
-    const pokeData = await res.json();
 
     // Я12: режем лёрнсет до стартовых атак вида.
     // Порядок — как на сайте лиги (таблица «Развитие»: статусы первыми),

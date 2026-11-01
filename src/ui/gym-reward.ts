@@ -35,6 +35,8 @@ import { state, getTrainerId, generateUID } from '../game/state.js';  // Гло�
 import { showToast } from '../utils/dom.js';  // UI тосты
 import { autoSave } from '../game/save.js';              // Автосохранение
 import { renderTeamGrid } from './profile.js';          // Обновление сетки команды
+// Данные покемона-награды — через прокси с кэшами (см. комментарий в starter.ts).
+import { fetchPokeAPI } from '../utils/api.js';
 
 // ── isFirstGymWin: первая ли это победа (N4) ────
 // Значок и богатая награда (шини + предметы) — только за первую победу.
@@ -55,10 +57,8 @@ export function isFirstGymWin(badges: unknown, badgeName: string): boolean {
 // объект или null при ошибке
 export async function createAndGivePokemon(pokemonName, level = 1, opts: any = {}) {
   try {
-    // Загружаем данные покемона из PokeAPI
-    const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonName}`);
-    if (!res.ok) throw new Error(`PokeAPI returned ${res.status}`);
-    const pokeData = await res.json();
+    // Загружаем данные покемона (через прокси и кэши; ошибка = исключение)
+    const pokeData = await fetchPokeAPI(`pokemon/${pokemonName}`);
 
     const pokemon = buildGymPrizeMon(pokeData, level, opts);
     placePrizeMon(pokemon);
