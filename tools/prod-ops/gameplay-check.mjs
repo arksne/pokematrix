@@ -558,6 +558,72 @@ async function main() {
     check('G5', 'покупка в магазине проходит и списывает кредиты', bought && moneyDropped,
       `под-локация: ${shopNav || 'нет'}, товаров: ${shopBefore.buyButtons}, деньги: ${shopBefore.money} -> ${shopAfter.money}`);
     await page.screenshot({ path: path.join(STATE_DIR, 'game-05-shop.png') }).catch(() => {});
+
+    // ── G5a. Продажа: половина цены, количество уменьшается ─────────
+    // Деньги — самая болезненная механика: продажа уходит на сервер
+    // (/economy/sell), и если цена/количество считаются неверно, игрок либо
+    // теряет предмет, либо получает лишние кредиты. Покупку проверяет G5,
+    // а продажу раньше не проверял никто.
+    let soldOk = false;
+    let sellDetail = 'вкладка «Продать» не открылась';
+    const openedSell = await page
+      .evaluate(() => {
+        const tab = document.getElementById('shop-sell-tab');
+        if (!tab) return false;
+        tab.click();
+        return true;
+      })
+      .catch(() => false);
+    if (openedSell) {
+      await sleep(1500);
+      const readSell = () =>
+        page
+          .evaluate(() => {
+            const rows = Array.from(document.querySelectorAll('#shop-items .shop-item'));
+            const text = (rows[0]?.textContent || '').replace(/\s+/g, ' ').trim();
+            const moneyRaw = String(document.getElementById('shop-money-display')?.textContent || '').replace(/[^\d]/g, '');
+            return {
+              rows: rows.length,
+              text,
+              qty: Number((text.match(/\(x(\d+)\)/) || [])[1] || 0),
+              price: Number((text.match(/¥([\d ]+)\/шт/) || [])[1]?.replace(/[^\d]/g, '') || 0),
+              money: moneyRaw ? Number(moneyRaw) : null,
+            };
+          })
+          .catch(() => ({ rows: 0, text: '', qty: 0, price: 0, money: null }));
+      const sellBefore = await readSell();
+      const clickedSell = await page
+        .evaluate(() => {
+          const b = document.querySelector('.shop-sell-btn');
+          if (!b) return false;
+          b.click();
+          return true;
+        })
+        .catch(() => false);
+      await sleep(1200);
+      // Продажа всегда спрашивает подтверждение («Да»).
+      const confirmed = await page
+        .evaluate(() => {
+          const yes = document.getElementById('confirm-yes');
+          if (!yes) return false;
+          yes.click();
+          return true;
+        })
+        .catch(() => false);
+      await sleep(2500);
+      const sellAfter = await readSell();
+      const qtyDropped = sellBefore.qty > 0 && sellAfter.qty === sellBefore.qty - 1;
+      const moneyGain =
+        sellBefore.money !== null && sellAfter.money !== null ? sellAfter.money - sellBefore.money : null;
+      soldOk =
+        clickedSell && confirmed && qtyDropped && sellBefore.price > 0 && moneyGain === sellBefore.price;
+      sellDetail =
+        `товар: «${sellBefore.text.slice(0, 45)}», x${sellBefore.qty} → x${sellAfter.qty}, ` +
+        `деньги: ${sellBefore.money} → ${sellAfter.money} (+${moneyGain}), ожидали +${sellBefore.price}, ` +
+        `подтверждение: ${confirmed ? 'да' : 'нет'}`;
+    }
+    check('G5a', 'продажа начисляет половину цены и уменьшает количество', soldOk, sellDetail);
+
     await page.keyboard.press('Escape').catch(() => {});
 
     // ── G6. Чат: сообщение отправляется и появляется в ленте ────────
