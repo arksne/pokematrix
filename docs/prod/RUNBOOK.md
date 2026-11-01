@@ -67,6 +67,13 @@ $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; node tools/prod-check/run.mjs all
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; node tools/prod-ops/browser-check.mjs
 #   скриншоты: tools/prod-ops/.state/prod-browser*.png
 
+# 3b. Тур по всем экранам игры (22 проверки + скриншоты каждого экрана)
+$env:PROD_BOT_TOKEN='<BOT_TOKEN>'; $env:PROD_TG_ID='777900311'
+node tools/prod-ops/ui-tour.mjs
+#   мир, рюкзак, команда, чат, тренеры, дроп, покедекс, задания, достижения,
+#   лидерборд, аккаунт, PvP-арена, переход между локациями; скриншоты
+#   tools/prod-ops/.state/tour-*.png
+
 # 4. Локальный полный прогон (PGlite + Chromium, ~8 минут)
 npm run verify
 ```
@@ -157,18 +164,20 @@ npx --yes psql "$env:DATABASE_URL" -c "select 1"   # 402 quota / connection erro
   и команд-меню (кроме зарегистрированных `setMyCommands`) нет.
 - Админ-панель требует `ADMIN_PASS`, значение сгенерировано Render и никому не
   выдавалось; при необходимости задать своё в Dashboard → Environment.
-- Тестовые тренеры прод-проверок (tg_id 777900101…777900107 и т.п.) живут в
-  боевой базе вместе с игроками. Их сохранялки маленькие (~350 КБ на всех), но в
-  таблице лидеров и арена-статистике они видны как обычные игроки.
-  Чистка (только после согласия владельца, необратимо):
+- Тестовые тренеры прод-проверок (tg_id `7779xxxxxx`) живут в боевой базе вместе
+  с игроками: их видно в «Тренерах» и в таблице лидеров. Убираются одной
+  командой (по умолчанию dry-run, ничего не меняет):
 
-  ```sql
-  DELETE FROM refresh_tokens WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
-  DELETE FROM arena_stats     WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
-  DELETE FROM battle_ratings  WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
-  DELETE FROM save_history    WHERE user_id IN (SELECT id FROM users WHERE tg_id >= 777900000);
-  DELETE FROM users           WHERE tg_id >= 777900000;
+  ```powershell
+  $env:DATABASE_URL='postgresql://...'   # строка Neon
+  node tools/prod-ops/clean-test-users.mjs          # показать, кого удалит
+  node tools/prod-ops/clean-test-users.mjs --apply  # удалить
   ```
+
+  Скрипт трогает только tg_id 777900000…777999999, остальных не касается, и
+  отказывается работать, если диапазон не похож на тестовый. Логинятся под
+  тестовыми id: `tools/prod-check` (pc_*), `tools/prod-ops/browser-check.mjs`
+  (777900301), `tools/prod-ops/ui-tour.mjs` (777900311+).
 
 ### Откуда взялась квота 5.5 ГБ (разбор с цифрами из pg_stat)
 
