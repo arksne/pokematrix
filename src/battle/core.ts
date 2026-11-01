@@ -36,7 +36,8 @@
 // Каждый импорт — это внешний модуль, от которого зависит core.ts.
 // Все ui/* импорты — это DOM-манипуляции (кнопки, модалки).
 // Все data/* импорты — статические конфиги (погода, предметы).
-import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
+import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';
+import { teamBlockedToast } from '../ui/team-hint.js';   // Подсказка «вся команда без сознания → Поке-центр»         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
 import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon, proxySpriteUrl } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
@@ -3634,7 +3635,9 @@ async function startHunt(encountersArray) {
     const activeMonIndex = GS.myTeam.findIndex(m => m.currentHp > 0);
     if (activeMonIndex === -1) {
       huntPending = false;
-      return showToast('Вам нужен хотя бы один живой покемон для битвы!', true);
+      // Подсказка должна говорить, ЧТО делать: после проигранного боя новичок
+      // остаётся без команды и раньше слышал только «нужен живой покемон».
+      return showToast(teamBlockedToast(GS.myTeam) || 'Вам нужен хотя бы один живой покемон для битвы!', true);
     }
 
     // Close any previous battle end menu
@@ -8085,7 +8088,7 @@ async function startGymBattle(locId) {
   const leader = GS.gymLeaders[locId];
   const activeMonIndex = GS.myTeam.findIndex(m => m.currentHp > 0);
   if (activeMonIndex === -1) {
-    return showToast('Вам нужен хотя бы один живой покемон для битвы!', true);
+    return showToast(teamBlockedToast(GS.myTeam) || 'Вам нужен хотя бы один живой покемон для битвы!', true);
   }
 
   S.battleType = 'gym';

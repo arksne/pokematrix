@@ -381,9 +381,14 @@ body::before {
   text-align: left;
   cursor: pointer;
   display: flex;
+  align-items: center;          /* текст по центру при min-height */
   justify-content: space-between;
   color: var(--tma-text);
   transition: background 0.15s;
+  /* Тап-зона: кнопки переходов/NPC получают inline padding 6px и font 13px —
+     на телефоне это 31px по высоте, пальцем попасть сложно. 40px — минимум,
+     ниже которого кнопку уже неудобно нажимать в Telegram WebView. */
+  min-height: 40px;
 }
 .btn-nav:hover { background-color: #2a5a7a; }
 
@@ -1547,6 +1552,13 @@ input[type="number"] {
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 0.75rem;
+  /* Иконки в шапке (значки/уведомления/луна/синк) были ~27px — тоже мелко
+     для пальца; поднимаем до 34px, оставаясь компактными в шапке. */
+  min-height: 34px;
+  min-width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: background 0.2s;
   white-space: nowrap;

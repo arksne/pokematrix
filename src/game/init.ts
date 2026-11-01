@@ -52,6 +52,7 @@ import { setBeforeRenderLocation } from '../ui/location.js';
 import { startOnboarding, markLocationExplored, getExploredLocations, openHelp, isTutorialComplete, ensureTutorialQuests } from '../ui/tutorial.js';
 import { openAchievements } from '../ui/achievements.js';
 import { showToast } from '../utils/dom.js';
+import { teamBlockedToast } from '../ui/team-hint.js';   // Подсказка про выбитую команду
 import { checkClientFreshness } from './version.js';
 import { checkTutorialProgress } from '../ui/npcs.js';
 import { renderTutorialBar } from '../ui/npcs.js';
@@ -507,7 +508,7 @@ initGymEvents();
           stopAutoHunt();
         } else {
           if (!state.myTeam.some(m => m.currentHp > 0)) {
-            showToast('Вам нужен хотя бы один живой покемон!', true);
+            showToast(teamBlockedToast(state.myTeam) || 'Вам нужен хотя бы один живой покемон!', true);
             return;
           }
           startAutoHunt();
