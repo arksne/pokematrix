@@ -39,7 +39,8 @@
 import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';
 import { teamBlockedToast } from '../ui/team-hint.js';
 import { catchChance as computeCatchChance } from './catch-chance.js';
-import { onWaterDamage, onIntimidated } from './held-effects.js';   // Absorb Bulb / Adrenaline Orb   // Шанс поимки (Мастер-Болл — гарантированно)
+import { onWaterDamage, onIntimidated } from './held-effects.js';   // Absorb Bulb / Adrenaline Orb
+import { emptyHazards, addHazard, hasHazards, hazardMoveKind, hazardEntryEffect } from './hazards.js';   // Входные ловушки   // Шанс поимки (Мастер-Болл — гарантированно)
 import { checkGymEntry, gymEntryRequirements } from './gym-entry.js';   // Условия входа в зал (текст + проверка)   // Подсказка «вся команда без сознания → Поке-центр»         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
@@ -224,6 +225,81 @@ function saveBattleState() {
  * прошлого боя ломает следующий, а trapped/perish висят на покемонах.
  * Статусы/сон/стадии не трогаем (существующее поведение).
  */
+/**
+ * resetHazardsForBattle — ловушки живут ровно один бой.
+ *
+ * ВАЖНО: не в resetBattleField(): он вызывается и при смене покемона лидера
+ * посреди боя (gym/elite/champion), и ловушки бы стирались на каждом следующем
+ * покемоне — ровно тогда, когда должны срабатывать.
+ */
+function resetHazardsForBattle() {
+  S.hazardsP = emptyHazards();
+  S.hazardsE = emptyHazards();
+}
+
+/** Наземный ли покемон (Flying/Levitate не получают шипы и паутину). */
+function isGroundedMon(mon: any): boolean {
+  const types = (mon?.apiData?.types || []).map((x: any) => String(x?.type?.name || '').toLowerCase());
+  if (types.includes('flying')) return false;
+  const abil = String(mon?.apiData?.abilities?.[0]?.ability?.name || '').toLowerCase();
+  return abil !== 'levitate';
+}
+
+/** Эффект ловушек игрока на входящего покемона лидера/элиты/чемпиона. */
+function applyHazardsToEnemy(): boolean {
+  const hz = S.hazardsE;
+  if (!hz || !(hz.rocks || hz.spikes > 0 || hz.toxic > 0 || hz.sticky)) return false;
+  const types = (S.activeWild?.types || []).map((x: any) => String(x?.type?.name || '').toLowerCase());
+  const res = hazardEntryEffect(hz, S.wildMaxHP, {
+    rocksMultiplier: getTypeMultiplier('rock', types),
+    grounded: isGroundedMon(S.activeWild),
+    hasStatus: !!S.wildStatus,
+  });
+  if (res.damage > 0) {
+    S.wildCurHP = Math.max(0, S.wildCurHP - res.damage);
+    updateWildHpUI();
+  }
+  for (const line of res.lines) appendToLog(`${S.activeWild.name}: ${line}`, false, 'dmg');
+  if (res.status && !S.wildStatus) {
+    if (applyStatusEffect(S.activeWild, res.status)) {
+      S.wildStatus = res.status;
+      document.getElementById('wild-status-icon').innerText = getStatusIcon(res.status);
+    }
+  }
+  if (res.speedDrop) {
+    statStageModify(S.activeWild, 'spe', -1, true);
+    updateStatBadges();
+  }
+  return true;
+}
+
+/** Эффект ловушек врага на входящего покемона игрока (смена в бою). */
+function applyHazardsToPlayer(): boolean {
+  const hz = S.hazardsP;
+  if (!hz || !(hz.rocks || hz.spikes > 0 || hz.toxic > 0 || hz.sticky)) return false;
+  const types = (S.activePlayerMon?.apiData?.types || []).map((x: any) => String(x?.type?.name || '').toLowerCase());
+  const res = hazardEntryEffect(hz, S.activePlayerMon.maxHp, {
+    rocksMultiplier: getTypeMultiplier('rock', types),
+    grounded: isGroundedMon(S.activePlayerMon),
+    hasStatus: !!S.activePlayerMon.status,
+  });
+  if (res.damage > 0) {
+    S.activePlayerMon.currentHp = Math.max(1, S.activePlayerMon.currentHp - res.damage);
+    updatePlayerHpUI();
+  }
+  for (const line of res.lines) appendToLog(`${S.activePlayerMon.apiData.name}: ${line}`, false, 'dmg');
+  if (res.status && !S.activePlayerMon.status) {
+    if (applyStatusEffect(S.activePlayerMon, res.status)) {
+      document.getElementById('player-status-icon').innerText = getStatusIcon(res.status);
+    }
+  }
+  if (res.speedDrop) {
+    statStageModify(S.activePlayerMon, 'spe', -1, true);
+    updateStatBadges();
+  }
+  return true;
+}
+
 function resetBattleField() {
   S.terrain = null;
   // Боевые подмены способностей живут только до конца боя (Trace/Mummy/…).
@@ -2437,6 +2513,27 @@ function handleFieldAndTrickMoves(move: any, isPlayer: boolean): boolean {
       if (isPlayer) S.tailwindP = TAILWIND_TURNS; else S.tailwindW = TAILWIND_TURNS;
       return done(`${uname} подгоняет ветер в спину! (скорость ×2)`);
     }
+    // ── Входные ловушки (Stealth Rock / Spikes / Toxic Spikes / Sticky Web) ──
+    // Раньше эти атаки работали только в PvP, а в обычном бою были пустышкой.
+    case 'stealth-rock': case 'spikes': case 'toxic-spikes': case 'sticky-web': {
+      const kind = hazardMoveKind(slug);
+      if (!kind) return false;
+      const key = isPlayer ? 'hazardsE' : 'hazardsP'; // игрок ставит ловушки врагу
+      const current = (S as any)[key] || emptyHazards();
+      (S as any)[key] = addHazard(current, kind);
+      const names: Record<string, string> = {
+        rocks: 'камни', spikes: 'шипы', toxic: 'токсичные шипы', sticky: 'паутину',
+      };
+      return done(`${uname} ставит ${names[kind]}! Входящие покемоны противника пострадают.`);
+    }
+    case 'defog': {
+      const any = S.hazardsP || emptyHazards();
+      const foe = S.hazardsE || emptyHazards();
+      const cleared = hasHazards(any) || hasHazards(foe);
+      S.hazardsP = emptyHazards();
+      S.hazardsE = emptyHazards();
+      return done(cleared ? `${uname} сдувает все ловушки с поля!` : 'Сдувать нечего — поле чистое.');
+    }
     case 'trick-room': {
       if ((S.trickRoomTurns || 0) > 0) {
         S.trickRoomTurns = 0;
@@ -2834,7 +2931,9 @@ function handleFieldAndTrickMoves(move: any, isPlayer: boolean): boolean {
       statStageModify(user, 'atk', 1, !isPlayer);
       statStageModify(user, 'spe', 1, !isPlayer);
       if (isPlayer) S.enemySubstituteHP = 0; else S.substituteHP = 0;
-      return done(`${uname} прибирается: атака и скорость +1!`);
+      // Прибирается и на своей стороне поля — сдувает ловушки.
+      if (isPlayer) S.hazardsP = emptyHazards(); else S.hazardsE = emptyHazards();
+      return done(`${uname} прибирается: атака и скорость +1, ловушки убраны!`);
     }
     case 'take-heart': {
       statStageModify(user, 'spa', 1, !isPlayer);
@@ -3264,6 +3363,10 @@ function switchPokemon() {
     updatePlayerHpUI();
     updateAbilityDisplay();
 
+    // Ловушки врага (Stealth Rock / Spikes / Toxic Spikes / Sticky Web) бьют
+    // по входящему покемону игрока — так же, как в PvP.
+    applyHazardsToPlayer();
+
     // Противник получает ход после смены
     document.getElementById('battle-main-menu').style.display = 'none';
     setTimeout(() => { enemyTurn(); }, 1500);
@@ -3650,6 +3753,7 @@ async function startHunt(encountersArray) {
   S.activePlayerMon.choiceLockedMove = undefined;
   S.currentWeather = getDailyWeather(GS.currentLocationId);
   resetBattleField(); // фикс: поле/vol не текут между боями
+  resetHazardsForBattle(); // ловушки живут ровно один бой
 
   const modal = document.getElementById('encounter-modal');
   const battleLog = document.getElementById('battle-log');
@@ -5578,7 +5682,15 @@ async function useMove(moveIndex) {
         updatePlayerHpUI();
       }
 
-      // Sticky Barb: при контакте переползает на бьющего (если руки пустые)
+      // Rapid Spin: сдувает ловушки со стороны игрока.
+    if (normMoveName(move.name) === 'rapid-spin') {
+      const side = S.hazardsP || emptyHazards();
+      if (hasHazards(side)) {
+        S.hazardsP = emptyHazards();
+        appendToLog('Рапид-спин сдувает ловушки с вашей стороны поля!', false, 'system');
+      }
+    }
+    // Sticky Barb: при контакте переползает на бьющего (если руки пустые)
       if (power && isPhysical && S.activeWild.heldItem === 'stickyBarb') {
         if (!S.activePlayerMon.heldItem) {
           S.activeWild.heldItem = null;
@@ -8118,6 +8230,7 @@ async function startGymBattle(locId) {
   S.gymLeaderKey = locId;
   S.gymTeamIndex = 0;
   S.gymTeamData = JSON.parse(JSON.stringify(leader.team)); // Клонируем команду лидера (deep copy)
+  resetHazardsForBattle(); // ловушки не переходят из прошлого боя
 
   battle.transition(BattlePhase.GYM_START); // Фаза: начало гима
 
@@ -8360,6 +8473,7 @@ async function startGymNextPokemon() {
     }
 
     appendToLog(`${GS.gymLeaders[S.gymLeaderKey].name} выпускает ${S.activeWild.name}! (${S.gymTeamIndex + 1}/${S.gymTeamData.length})`);
+    applyHazardsToEnemy(); // Stealth Rock/Spikes игрока бьют входящего
 
     // Intimidate check
     const wildAbility = S.activeWild.abilities?.[0]?.ability?.name;
@@ -8461,6 +8575,7 @@ async function startEliteBattle() {
   S.battleRound = 0;
   S.battleType = 'elite';
   S.gymTeamIndex = 0;
+  resetHazardsForBattle();
 
   battle.transition(BattlePhase.ELITE_START);
 
@@ -8545,6 +8660,7 @@ async function startEliteNextPokemon() {
     updateWildHpUI();
 
     appendToLog(`${GS.eliteFour[S.gymTeamIndex].name} выпускает ${S.activeWild.name}!`);
+    applyHazardsToEnemy();
 
     // Intimidate check
     const wildAbility = S.activeWild.abilities?.[0]?.ability?.name;
@@ -8604,6 +8720,7 @@ async function championBattle() {
   GS.itemsUsedInBattle = 0;
   S.battleRound = 0;
   S.gymTeamData = JSON.parse(JSON.stringify(GS.champion.team)); // Клонируем команду чемпиона
+  resetHazardsForBattle();
   S.gymTeamIndexInMember = 0;
   S.battleType = 'champion';
   appendToLog(`--- ${GS.champion.name} вызывает вас! ---`);
@@ -8657,6 +8774,7 @@ async function startChampionNextPokemon() {
     updateWildHpUI();
 
     appendToLog(`${GS.champion.name} выпускает ${S.activeWild.name}!`);
+    applyHazardsToEnemy();
 
     // Intimidate check
     const wildAbility = S.activeWild.abilities?.[0]?.ability?.name;

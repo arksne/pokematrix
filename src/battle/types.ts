@@ -329,6 +329,9 @@ export interface BattleStateData {
   lastPlayerMoveDetail?: any | null;
   lastWildMove?: string | null;
   lastWildMoveDetail?: any | null;
+  /** Входные ловушки: сторона игрока (ставят враги) и врага (ставит игрок). */
+  hazardsP?: import('./hazards.js').HazardSet;
+  hazardsE?: import('./hazards.js').HazardSet;
   pendingHeal?: 'full' | 'fullpp' | null; // healing-wish/lunar-dance для входящего
   playerActedRound?: number; // раунд последнего хода игрока (для вражеского me-first)
   imprisonP?: string[];  // ходы, запрещённые дикому (imprison игрока)
