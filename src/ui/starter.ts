@@ -233,9 +233,16 @@ export function giveStarter(): Promise<void> {
 
     // Очищаем сетку
     grid.innerHTML = '';
-    // Устанавливаем заголовок
+    // Заголовок и подпись должны соответствовать тому, что реально происходит:
+    // карт девять (по числу поколений), но любая из них выдаёт случайного
+    // покемона из общего пула 27. Старый текст «выбрать одного из трёх»
+    // противоречил и девяти картам, и пулу — игроки решали, что интерфейс сломан.
     const title = document.querySelector('#starter-modal h2');
     if (title) (title as HTMLElement).innerText = 'Выберите карту (Поколения 1-9)';
+    const subtitle = document.getElementById('starter-subtitle');
+    if (subtitle) {
+      subtitle.textContent = `Профессор Оук спрятал за каждой картой одного из ${ALL_STARTERS.length} стартовых покемонов — забери любого.`;
+    }
 
     // GEN_STARTERS — 9 поколений, но тянем из общего пула ALL_STARTERS (спека 3.22)
     GEN_STARTERS.forEach(() => {

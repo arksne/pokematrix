@@ -120,6 +120,26 @@ export async function runInfra() {
       check('CH1', 'чат: сообщение отправляется и читается обратно',
         send.status === 200 && send.json?.ok === true && win.status === 200 && found,
         `send HTTP ${send.status}; messages HTTP ${win.status}; найдено: ${found ? 'да' : 'нет'} (просмотрено ${scanned}); маркер ${marker}`);
+
+      // Уборка за собой: маркер — мусор в ГЛОБАЛЬНОМ чате живого прода, а
+      // публичного DELETE у чата нет. Чистим админским purge_chat, если прогон
+      // дал PROD_ADMIN_PASS; иначе честно пишем в отчёт, что маркер остался.
+      if (send.status === 200) {
+        const adminPass = process.env.PROD_ADMIN_PASS || '';
+        if (adminPass) {
+          const purge = await api('/api/admin/api', {
+            method: 'POST',
+            token: adminPass,
+            body: { cmd: 'purge_chat', textPrefix: marker },
+          });
+          if (!(purge.status === 200 && Number(purge.json?.deleted) >= 1)) {
+            info('CH1-cleanup', 'маркер не удалён из чата прода', `HTTP ${purge.status} ${(purge.text || '').slice(0, 80)}`);
+          }
+        } else {
+          info('CH1-cleanup', 'маркер остался в чате прода (нет PROD_ADMIN_PASS)',
+            `удалить: POST /api/admin/api {"cmd":"purge_chat","textPrefix":"${marker}"}`);
+        }
+      }
     }
   }
 

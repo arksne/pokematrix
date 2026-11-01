@@ -1,0 +1,61 @@
+name: Keep prod warm + uptime check
+
+# Зачем: Render Free усыпляет инстанс после 15 минут без запросов, а холодный
+# старт — это 30-60 секунд ожидания для игрока, который только что нажал
+# «Играть» в Telegram. Плюс пока сервис спит, вебхук бота получает 502 от
+# Render, и Telegram ретраит апдейт /start.
+#
+# Что делает: раз в 10 минут дёргает /api/health. Если ответ не 200 или в теле
+# нет {"status":"ok","db":true} — job падает, и GitHub присылает владельцу
+# письмо: это же и бесплатный аптайм-монитор (ловит лежащий прод сам).
+#
+# Почему только 06:00–00:00 по Бишкеку (00:00–18:00 UTC): бесплатный тариф
+# Render даёт 750 инстанс-часов в месяц. Круглосуточное тепло = 730 ч + деплои
+# = впритык к лимиту, а превышение останавливает сервис до конца месяца.
+# 18 часов в сутки — 540 ч/мес, с запасом. Ночью холодный старт допустим.
+#
+# Ограничение: cron в GitHub Actions на бесплатных репозиториях может
+# задерживаться на 10-15 минут и отключается после 60 дней без активности в
+# репозитории. Это страховка, а не SLA.
+
+on:
+  schedule:
+    - cron: '*/10 0-17 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: GET /api/health (до 3 попыток, холодный старт до 90 с)
+        run: |
+          url='https://pokematrix.onrender.com/api/health'
+          for attempt in 1 2 3; do
+            echo "attempt $attempt: $url"
+            body=$(curl -sS --max-time 90 -w '\n%{http_code}' "$url" || true)
+            code=$(printf '%s' "$body" | tail -n1)
+            json=$(printf '%s' "$body" | head -n-1)
+            echo "HTTP $code"
+            echo "$json"
+            if [ "$code" = "200" ] && printf '%s' "$json" | grep -q '"status":"ok"' && printf '%s' "$json" | grep -q '"db":true'; then
+              echo "PROD OK"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::Прод нездоров: /api/health не вернул 200 {status:ok, db:true}"
+          exit 1
+
+      - name: Бот и версия (информационно)
+        if: always()
+        run: |
+          echo "version:  $(curl -sS --max-time 30 https://pokematrix.onrender.com/api/version || true)"
+          echo "telegram: $(curl -sS --max-time 30 https://pokematrix.onrender.com/api/telegram/status || true)"

@@ -88,30 +88,47 @@ export async function api(path_, { method = 'GET', token, body, timeoutMs } = {}
   // квоты Neon), fetch без сигнала ждёт бесконечно и весь прогон зависает на
   // первой же проверке, вместо того чтобы честно показать FAIL.
   const ms = timeoutMs ?? API_TIMEOUT_MS;
-  let res;
-  try {
-    res = await fetch(BASE + path_, {
-      method,
-      signal: AbortSignal.timeout(ms),
-      headers: {
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-  } catch (e) {
-    // Сетевой сбой — это результат проверки (status 0), а не падение набора:
-    // иначе одно «нет ответа» убивало бы весь набор исключением.
-    const code = netErrorCode(e, ms);
-    return { status: 0, json: null, text: `network error: ${code}`, error: code };
+  // Render Free cold start: первый запрос после пробуждения может не уложиться
+  // в таймаут (инстанс поднимается 30-60с). Делаем ОДИН повтор, но только для
+  // GET: POST повторять нельзя — запрос мог дойти и уже примениться, дубль дал
+  // бы лишнее сообщение в чате или лишний инкремент saveVersion.
+  const maxAttempts = method === 'GET' ? 2 : 1;
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let res;
+    try {
+      res = await fetch(BASE + path_, {
+        method,
+        signal: AbortSignal.timeout(ms),
+        headers: {
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (e) {
+      lastErr = e;
+      if (attempt < maxAttempts) {
+        await sleep(1500);
+        continue;
+      }
+      break;
+    }
+    let json = null;
+    let text = '';
+    try {
+      text = await res.text();
+      json = JSON.parse(text);
+    } catch (_) {}
+    return { status: res.status, json, text, attempts: attempt };
   }
-  let json = null;
-  let text = '';
-  try {
-    text = await res.text();
-    json = JSON.parse(text);
-  } catch (_) {}
-  return { status: res.status, json, text };
+  // Сетевой сбой — это результат проверки (status 0), а не падение набора:
+  // иначе одно «нет ответа» убивало бы весь набор исключением.
+  const code = netErrorCode(lastErr, ms);
+  return {
+    status: 0, json: null, error: code, attempts: maxAttempts,
+    text: `network error после ${maxAttempts} попыт.: ${code}`,
+  };
 }
 
 function signInitData(botToken, user) {

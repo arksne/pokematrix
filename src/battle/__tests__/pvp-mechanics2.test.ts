@@ -235,14 +235,23 @@ describe('pvp phase2 sender', () => {
   });
 
   it('thunder wave шлёт ailment для применения получателем', () => {
-    state.pvpMovesDetailed = [dmgOf('thunder-wave', {
-      power: null, damage_class: { name: 'status' }, type: { name: 'electric' },
-      accuracy: 90, meta: { ailment: { name: 'paralysis' }, ailment_chance: 100 },
-    })];
-    doPvPAttack(0);
-    const a = emitAction();
-    expect(a.ailment).toBe('par');
-    expect(a.dmg).toBe(0);
+    // Тест про содержимое action'а, а не про бросок на попадание: у thunder-wave
+    // accuracy 90, и без фиксации RNG примерно каждый десятый прогон уходил в
+    // miss, у a.ailment был undefined, и тест краснел на ровном месте — так CI
+    // и падал. Фиксируем минимальный бросок (гарантированное попадание).
+    vi.spyOn(Math, 'random').mockReturnValue(0.01);
+    try {
+      state.pvpMovesDetailed = [dmgOf('thunder-wave', {
+        power: null, damage_class: { name: 'status' }, type: { name: 'electric' },
+        accuracy: 90, meta: { ailment: { name: 'paralysis' }, ailment_chance: 100 },
+      })];
+      doPvPAttack(0);
+      const a = emitAction();
+      expect(a.ailment).toBe('par');
+      expect(a.dmg).toBe(0);
+    } finally {
+      (Math.random as any).mockRestore?.();
+    }
   });
 
   it('dragon-tail помечается forced switch', () => {
