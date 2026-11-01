@@ -8,6 +8,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import { getDb } from '../db/index.js';
 import { pokemonCache } from '../db/schema.js';
 import { logger } from '../logger.js';
@@ -16,6 +17,36 @@ const router = Router();
 const POKEAPI_BASE = 'https://pokeapi.co/api/v2';
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 const FETCH_TIMEOUT = 10_000; // 10s
+
+// ── Сжатие в L2 (таблица pokemon_cache) ─────────────────────
+// Neon Free считает public network transfer: всё, что Postgres отдаёт
+// клиенту, идёт в лимит 5 ГБ/мес. PokeAPI-дамп pokemon/* — в среднем 220 КБ
+// JSON на запись (301 строка = 65 МБ «логически»), species/move — по 30 КБ.
+// Каждый холодный старт Render обнуляет L1-кэш в памяти, и первые запросы
+// снова тянут эти строки из базы — именно это съело квоту в прошлый раз.
+//
+// Поэтому в L2 данные лежат сжатыми: gzip + base64 с префиксом 'gz:'. По
+// проводу из базы едет ~в 5-7 раз меньше, а на сервере распаковка занимает
+// доли миллисекунды (в память кладём уже распакованную строку).
+// Формат терпит оба варианта: старые строки без префикса читаются как JSON.
+const GZ_PREFIX = 'gz:';
+
+function encodeForDb(raw: string): string {
+  // Мелкие ответы незачем сжимать: base64 + заголовок съедят выигрыш.
+  if (raw.length < 2048) return raw;
+  return GZ_PREFIX + gzipSync(Buffer.from(raw, 'utf8'), { level: 6 }).toString('base64');
+}
+
+function decodeFromDb(stored: string): string {
+  if (!stored.startsWith(GZ_PREFIX)) return stored; // legacy-строка
+  try {
+    return gunzipSync(Buffer.from(stored.slice(GZ_PREFIX.length), 'base64')).toString('utf8');
+  } catch (err) {
+    // Битые данные в кэше не должны ронять запрос: считаем промахом.
+    logger.warn({ err }, '[pokeapi] не удалось распаковать строку кэша');
+    return '';
+  }
+}
 
 // ── L1-кэш в памяти ─────────────────────────────────────────
 // Раньше кэшем служила ТОЛЬКО таблица pokemon_cache: каждый запрос
@@ -153,9 +184,22 @@ router.get('*', async (req: Request, res: Response) => {
     if (cached) {
       const age = Date.now() - new Date(cached.fetched_at).getTime();
       if (age < CACHE_TTL) {
-        memSet(pokePath, cached.data);
-        sendRawJson(res, cached.data);
-        return;
+        const raw = decodeFromDb(cached.data);
+        if (raw) {
+          memSet(pokePath, raw);
+          sendRawJson(res, raw);
+          // Ленивая миграция формата: старые строки лежат несжатым JSON'ом
+          // (в базе таких ещё сотни), и каждое их чтение — лишний трафик Neon.
+          // Переписываем в сжатый вид в фоне, без ожидания ответа клиенту.
+          if (!cached.data.startsWith(GZ_PREFIX)) {
+            void db.update(pokemonCache)
+              .set({ data: encodeForDb(raw) })
+              .where(eq(pokemonCache.name, pokePath))
+              .catch((e: unknown) => logger.warn({ err: e }, '[pokeapi] recompress failed'));
+          }
+          return;
+        }
+        // Распаковать не вышло — считаем промахом и идём в PokeAPI.
       }
     }
 
@@ -182,17 +226,18 @@ router.get('*', async (req: Request, res: Response) => {
     memSet(pokePath, raw);
 
     // ── Сохраняем в кэш (L2) ──
-    // Ошибку записи глотаем: на Neon при превышении квоты база отклоняет
-    // INSERT'ы, и падать из-за этого на прокси нельзя.
+    // В базу пишем сжатый base64 (см. encodeForDb): чтение этой строки — это
+    // трафик Neon, а он в лимите 5 ГБ/мес. Ошибку записи глотаем: на Neon при
+    // превышении квоты база отклоняет INSERT'ы, и падать из-за этого нельзя.
     const nowIso = new Date().toISOString();
     try {
       await db.insert(pokemonCache).values({
         name: pokePath,
-        data: raw,
+        data: encodeForDb(raw),
         fetched_at: nowIso,
       }).onConflictDoUpdate({
         target: pokemonCache.name,
-        set: { data: raw, fetched_at: nowIso },
+        set: { data: encodeForDb(raw), fetched_at: nowIso },
       });
     } catch (e) {
       logger.warn({ err: e }, '[pokeapi] cache write failed');
