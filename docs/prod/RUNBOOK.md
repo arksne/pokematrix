@@ -116,6 +116,8 @@ npm run check:cold-start
 
 # 4. Локальный полный прогон (PGlite + Chromium, ~8 минут)
 npm run verify
+#   Занимает порты 8099 (приложение) и 5433 (Postgres). Если они заняты другой
+#   программой — переопределить: $env:VERIFY_PORT='8100'; $env:VERIFY_PG_PORT='5434'; npm run verify
 ```
 
 `tools/prod-check/wait-health.mjs` умеет ждать холодный старт Render Free:
