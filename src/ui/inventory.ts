@@ -574,10 +574,15 @@ export function renderInventory() {
       img.className = 'inv-grid-sprite';
       // Определяем источник спрайта:
       if (item.spriteType === 'pokeapi') {
-        // Если тип PokeAPI — берём из репозитория PokeAPI спрайтов
+        // Спрайт предмета — через наш прокси (/api/sprite/items/*): кэш на
+        // сервере + свой домен, потому что прямые ссылки на
+        // raw.githubusercontent.com в части регионов недоступны.
         img.src = item.sprite.startsWith('http')
-          ? item.sprite  // Полный URL (если задан)
-          : `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${item.sprite}`;
+          ? item.sprite.replace(
+              'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/',
+              '/api/sprite/'
+            )
+          : `/api/sprite/items/${item.sprite}`;
       } else {
         // Локальный спрайт из assets/items/
         img.src = item.sprite.startsWith('http')

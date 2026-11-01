@@ -39,7 +39,7 @@
 import { showToast, showSelectionModal, showConfirmModal, clientErrorBlob } from '../utils/dom.js';         // showToast — всплывающее уведомление; showSelectionModal — модалка выбора из списка
 import { itemDef } from '../utils/items.js';
 import { recordDrop } from '../ui/drop-log.js';                              // itemDef(id) → { nameRu, price, ... } — данные предмета по ID
-import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
+import { getSpriteUrl, updateBattleSpriteBgs, isShinyMon, proxySpriteUrl } from '../utils/sprite.js'; // getSpriteUrl — URL спрайта покемона; updateBattleSpriteBgs — фон битвы
 import { fetchPokeAPI } from '../utils/api.js';                          // fetchPokeAPI — GET к PokeAPI с кэшированием
 import { fetchSiteMoveDetail } from '../data/sitemove.js';              // детали атак — с сайта лиги
 import {
@@ -8345,7 +8345,7 @@ async function startGymNextPokemon() {
     document.getElementById('wild-lvl').innerText = `Lv${S.wildLvl}`;
     let wildSpriteUrl;
     if (S.battleType === 'gym') {
-      wildSpriteUrl = S.activeWild.sprites?.other?.['official-artwork']?.front_shiny || S.activeWild.sprites?.front_shiny || S.activeWild.sprites?.other?.['official-artwork']?.front_default || S.activeWild.sprites.front_default;
+      wildSpriteUrl = proxySpriteUrl(S.activeWild.sprites?.other?.['official-artwork']?.front_shiny || S.activeWild.sprites?.front_shiny || S.activeWild.sprites?.other?.['official-artwork']?.front_default || S.activeWild.sprites.front_default);
     } else {
       wildSpriteUrl = getSpriteUrl({ apiData: S.activeWild, isShiny: S.activeWild.isShiny || false });
     }

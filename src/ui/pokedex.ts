@@ -34,7 +34,7 @@ import { getPowerStars, getRarityStars } from '../utils/state.js';
 import { getPokedexState } from '../game/getters.js';
 // getTypeColor — возвращает HEX-цвет для типа покемона (например, 'fire' → '#FF4422')
 // getTypeGradient — возвращает CSS gradient для фона карточки по типам покемона
-import { getTypeColor, getTypeGradient } from '../utils/sprite.js';
+import { getTypeColor, getTypeGradient, proxySpriteUrl } from '../utils/sprite.js';
 // ── Данные, которых в покедексе раньше не было, хотя они лежали в проекте ──
 import { getAbilityNameRu, isAbilityImplemented } from '../data/abilities.js';  // RU-имя и «работает ли» способности
 import { MONSTER_DROP_TABLE } from '../data/drops.js';                            // что падает с покемона
@@ -124,10 +124,10 @@ export function openPokedex() {
   function getSpriteSrc(pokeapiId: number) {
     // Если включён режим шайни — берём shiny artwork
     if (showShinyList) {
-      return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/shiny/${pokeapiId}.png`;
+      return `/api/sprite/pokemon/other/official-artwork/shiny/${pokeapiId}.png`;
     }
     // Иначе — обычный artwork
-    return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokeapiId}.png`;
+    return `/api/sprite/pokemon/other/official-artwork/${pokeapiId}.png`;
   }
 
   // ── renderGrid: внутренняя функция отрисовки сетки покемонов ──
@@ -450,8 +450,8 @@ export async function showPokedexInfo(speciesName) {
     // ── URL спрайтов ──
     // Берём официальный artwork (HD картинка), если есть
     // Если нет — используем front_default (обычный спрайт 96×96)
-    const spriteUrl = data.sprites?.other?.['official-artwork']?.front_default || data.sprites.front_default;
-    const shinyUrl = data.sprites?.other?.['official-artwork']?.front_shiny || data.sprites.front_shiny;
+    const spriteUrl = proxySpriteUrl(data.sprites?.other?.['official-artwork']?.front_default || data.sprites.front_default);
+    const shinyUrl = proxySpriteUrl(data.sprites?.other?.['official-artwork']?.front_shiny || data.sprites.front_shiny);
     // CSS градиент для фона на основе типов покемона
     const detailTypeBg = getTypeGradient(data.types);
 

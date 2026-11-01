@@ -137,7 +137,8 @@ export function setTypeBg(id, types) {
   }
 }
 
-const ITEM_SPRITE_BASE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/';
+// Спрайты предметов тоже держим на своём домене: /api/sprite/items/* (см. proxySpriteUrl).
+const ITEM_SPRITE_BASE = '/api/sprite/items/';
 const LOCAL_ITEM_SPRITE_BASE = '/assets/items/';
 const ITEM_SPRITE_MAP = {
   // Balls
@@ -621,10 +622,10 @@ export function getItemSpriteImg(itemId, size = 24) {
   // Fallback to ITEMS database
   const item = ITEMS.find(i => i.id === itemId);
   if (!item) return '';
-  // item.sprite may be a full URL or just a filename — use it directly if it starts with http
-  const spriteUrl = item.sprite.startsWith('http')
-    ? item.sprite
-    : (item.spriteType === 'pokeapi' ? `${ITEM_SPRITE_BASE}${item.sprite}` : `${LOCAL_ITEM_SPRITE_BASE}${item.sprite}`);
+  // item.sprite может быть полным URL (тогда переписываем на наш прокси, если
+  // это GitHub PokeAPI) или просто именем файла.
+  const spriteUrl = proxySpriteUrl(item.sprite)
+    || (item.spriteType === 'pokeapi' ? `${ITEM_SPRITE_BASE}${item.sprite}` : `${LOCAL_ITEM_SPRITE_BASE}${item.sprite}`);
   return `<img src="${spriteUrl}" style="width:${size}px;height:${size}px;vertical-align:middle;image-rendering:auto" alt="">`;
 }
 export function updateBattleHeldIcons(playerMon, wildMon) {
