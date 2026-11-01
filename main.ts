@@ -61,6 +61,19 @@ declare global {
 // Используют store/state для мутаций.
 
 import { healStaleChunk } from './src/game/stale-chunk.js';
+import { createWarmingUI, installWarmingHandler } from './src/ui/warming.js';
+
+// ── Экран «Сервер просыпается…» ────────────────────────────
+// apiClient во время холодного старта Render Free повторяет запросы с backoff
+// и зовёт window.__pokematrixWarming(true/false). Раньше этот callback никто не
+// слушал: игрок до 45 секунд смотрел на неживой интерфейс. Ставим обработчик
+// как можно раньше — до динамического импорта init.ts, откуда идут первые
+// запросы к API.
+try {
+  installWarmingHandler(globalThis as any, createWarmingUI(document as any));
+} catch (e) {
+  console.warn('[app] warming overlay не установлен:', e);
+}
 
 // ── Самолечение после деплоя (устаревшие чанки) ────────────
 // Логика и её обоснование — в src/game/stale-chunk.ts (там же юнит-тесты):

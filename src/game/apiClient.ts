@@ -233,6 +233,9 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
         await sleep(warmupDelayMs(attemptIndex++));
         continue;
       }
+      // Не дождались подъёма — снимаем оверлей «Сервер просыпается…», иначе он
+      // останется на экране навсегда.
+      if (warming) notifyWarmupDone();
       throw err;
     }
 
@@ -242,7 +245,9 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
         await sleep(warmupDelayMs(attemptIndex++));
         continue;
       }
-      // Не дождались — отдаём как есть, вызывающий разберётся по 503.
+      // Не дождались — снимаем оверлей и отдаём как есть, вызывающий разберётся
+      // по 503.
+      if (warming) notifyWarmupDone();
       return res;
     }
 

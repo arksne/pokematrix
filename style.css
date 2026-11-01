@@ -3855,3 +3855,10 @@ input[type="number"] {
   margin-left: 4px;
 }
 .battle-dex-btn:active { transform: scale(0.92); }
+/* ── Холодный старт Render: «Сервер просыпается…» ─────────────
+   Оверлей рисует src/ui/warming.ts, пока apiClient ждёт подъёма
+   free-инстанса (503 {status:'warming'} / обрыв соединения). */
+@keyframes pm-warming-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
