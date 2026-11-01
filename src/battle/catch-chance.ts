@@ -12,7 +12,9 @@
  *   rate = (3*maxHP - 2*curHP) / (3*maxHP) * speciesRate * ballMult
  *   rate *= статус (сон/заморозка ×2.5, яд/ожог/паралич ×1.5)
  *   rate *= спец-эффекты (quick ×5 на первом ходу, dusk ×3 ночью,
- *           timer ×(1 + 0.3·ход), love ×8 при противоположном поле)
+ *           timer ×(1 + 0.3·ход), love ×8 при противоположном поле,
+ *           net ×3 по water/bug, nest ×(40−уровень)/10 (мин ×1),
+ *           repeat ×3 по уже пойманному виду)
  *   chance = min(0.95, rate / 255)
  */
 
@@ -36,6 +38,12 @@ export interface CatchContext {
   /** Love Ball: пол дикого и пол активного покемона игрока (если известны). */
   wildGender?: string | null;
   playerGender?: string | null;
+  /** Типы дикого (Net Ball: ×3 для водных/жукоподобных). */
+  wildTypes?: string[] | null;
+  /** Уровень дикого (Nest Ball: сильнее на слабых). */
+  wildLevel?: number | null;
+  /** Вид уже ловили раньше — есть в Покедексе (Repeat Ball: ×3). */
+  alreadyCaught?: boolean | null;
 }
 
 /** Потолок шанса для обычных шаров (как в исходной формуле). */
@@ -74,6 +82,23 @@ export function catchChance(ctx: CatchContext): number {
   if (ctx.item === 'loveBall' && ctx.wildGender && ctx.playerGender && ctx.wildGender !== ctx.playerGender) {
     rate *= 8;
   }
+
+  // Net Ball: ×3 на водных и жуках (описание вида обещает именно это, а шар
+  // продавался как обычный Поке-Болл).
+  if (ctx.item === 'netBall') {
+    const types = (ctx.wildTypes || []).map((t) => String(t || '').toLowerCase());
+    if (types.includes('water') || types.includes('bug')) rate *= 3;
+  }
+
+  // Nest Ball: чем слабее дикий, тем лучше — (40 − уровень)/10, минимум ×1
+  // (на Lv1 это ×3.9, как в описании).
+  if (ctx.item === 'nestBall') {
+    const level = Number(ctx.wildLevel);
+    if (Number.isFinite(level)) rate *= Math.max(1, (40 - level) / 10);
+  }
+
+  // Repeat Ball: ×3 на вид, который уже ловили (есть в Покедексе).
+  if (ctx.item === 'repeatBall' && ctx.alreadyCaught === true) rate *= 3;
 
   const chance = rate / CATCH_RATE_DIVISOR;
   if (!Number.isFinite(chance) || chance <= 0) return 0;

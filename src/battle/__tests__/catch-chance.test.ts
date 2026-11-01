@@ -102,6 +102,46 @@ describe('catchChance — обычные шары', () => {
   });
 });
 
+describe('catchChance — особые шары (Net/Nest/Repeat)', () => {
+  // Эти шары продавались в магазинах с описанием эффекта, но эффекта не было:
+  // ловили как обычный Поке-Болл за те же ¥100.
+  const base = { wildMaxHp: 100, wildCurHp: 100, speciesRate: 20, ballMult: 1 };
+  const plain = catchChance({ ...base, item: 'pokeBall' });
+
+  it('Net Ball ×3 по водным и жукам, ×1 по остальным', () => {
+    expect(catchChance({ ...base, item: 'netBall', wildTypes: ['water'] })).toBeCloseTo(plain * 3, 6);
+    expect(catchChance({ ...base, item: 'netBall', wildTypes: ['bug', 'flying'] })).toBeCloseTo(plain * 3, 6);
+    expect(catchChance({ ...base, item: 'netBall', wildTypes: ['fire'] })).toBeCloseTo(plain, 6);
+    expect(catchChance({ ...base, item: 'netBall' })).toBeCloseTo(plain, 6);
+  });
+
+  it('Nest Ball: ×3.9 на Lv1, ×1 на Lv30+, слабее на сильных', () => {
+    const nest = (level) => catchChance({ ...base, item: 'nestBall', wildLevel: level });
+    expect(nest(1)).toBeCloseTo(plain * 3.9, 6);
+    expect(nest(10)).toBeCloseTo(plain * 3, 6);
+    expect(nest(30)).toBeCloseTo(plain, 6);
+    expect(nest(50)).toBeCloseTo(plain, 6); // ниже ×1 не опускаем
+  });
+
+  it('Repeat Ball ×3 только на уже пойманный вид', () => {
+    expect(catchChance({ ...base, item: 'repeatBall', alreadyCaught: true })).toBeCloseTo(plain * 3, 6);
+    expect(catchChance({ ...base, item: 'repeatBall', alreadyCaught: false })).toBeCloseTo(plain, 6);
+    expect(catchChance({ ...base, item: 'repeatBall' })).toBeCloseTo(plain, 6);
+  });
+
+  it('эффекты комбинируются со статусом и не пробивают потолок', () => {
+    const chance = catchChance({
+      ...base,
+      wildCurHp: 1,
+      speciesRate: 255,
+      item: 'netBall',
+      wildTypes: ['water'],
+      wildStatus: 'slp',
+    });
+    expect(chance).toBe(CATCH_CHANCE_CAP);
+  });
+});
+
 describe('catchChance — защита от мусорных значений', () => {
   it('нулевое/отрицательное/NaN HP — 0, без NaN', () => {
     expect(catchChance({ wildMaxHp: 0, wildCurHp: 0 })).toBe(0);

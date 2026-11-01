@@ -7450,6 +7450,17 @@ function initEncounterEvents() {
         isDaytime: GS.isDaytime,
         wildGender: S.activeWild.wildGender,
         playerGender: S.activePlayerMon?.gender || S.activePlayerMon?.apiData?.gender,
+        // Net/Nest/Repeat Ball — их эффекты были описаны, но не работали:
+        // шар продавался за те же деньги и ловил как обычный Поке-Болл.
+        wildTypes: (S.activeWild.types || []).map((x: any) => String(x?.type?.name || '').toLowerCase()),
+        wildLevel: S.wildLvl,
+        alreadyCaught: (() => {
+          try {
+            return (GS.pokedexCaught as any)?.has?.(S.activeWild.name) === true;
+          } catch {
+            return false;
+          }
+        })(),
       });
 
       document.getElementById('battle-main-menu').style.display = 'none';
