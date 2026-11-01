@@ -435,6 +435,42 @@ async function main() {
     `было «${beforeName}», кликнули «${moved || '—'}», стало «${afterName}»${gated ? `, гейт: «${toastText}»` : ''}`);
   await page.screenshot({ path: path.join(STATE_DIR, 'tour-t13-location.png') }).catch(() => {});
 
+  // ── Магазин: под-локация города → кнопка «Магазин» → модалка с товарами ──
+  const shopNav = await page
+    .evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('.btn-nav'));
+      const shop = btns.find((b) => /маркет|магазин|shop/i.test(b.textContent || ''));
+      if (!shop) return null;
+      shop.click();
+      return (shop.textContent || '').trim();
+    })
+    .catch(() => null);
+  await sleep(2000);
+  const shopOpened = await page
+    .evaluate(() => {
+      const btn = Array.from(document.querySelectorAll('#loc-actions button')).find((b) =>
+        /Магазин/.test(b.textContent || '')
+      );
+      if (!btn) return { clicked: false, items: 0 };
+      btn.click();
+      return { clicked: true, items: 0 };
+    })
+    .catch(() => ({ clicked: false, items: 0 }));
+  await sleep(1500);
+  const shopState = await page
+    .evaluate(() => {
+      const modal = document.getElementById('shop-modal');
+      const items = document.getElementById('shop-items');
+      const visible = !!modal && window.getComputedStyle(modal).display !== 'none';
+      return { visible, items: items ? items.children.length : 0, money: (document.getElementById('shop-money-display')?.textContent || '').trim() };
+    })
+    .catch(() => ({ visible: false, items: 0, money: '' }));
+  check('T14', 'магазин открывается и показывает товары',
+    !!shopNav && shopState.visible && shopState.items > 0,
+    `под-локация: ${shopNav || 'не найдена'}, модалка: ${shopState.visible ? 'видна' : 'нет'}, товаров: ${shopState.items}, денег: ${shopState.money || '—'}`);
+  await page.screenshot({ path: path.join(STATE_DIR, 'tour-t14-shop.png') }).catch(() => {});
+  await page.keyboard.press('Escape').catch(() => {});
+
   // Скриншот полной страницы на текущем экране — удобно смотреть вёрстку.
   await page.screenshot({ path: path.join(STATE_DIR, 'tour-99-final.png'), fullPage: true }).catch(() => {});
 

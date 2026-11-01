@@ -463,8 +463,11 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 120px;
-  font-size: 0.9rem;
+  /* Было 120px: на одноколоночном списке команды пять пустых слотов растягивали
+     экран на 600+ пикселей пустоты, и до «Дропа»/низа команды приходилось
+     скроллить мимо заглушек. Пустой слот — это подсказка, а не карточка. */
+  min-height: 56px;
+  font-size: 0.75rem;
   box-shadow: none;
   cursor: default;
 }
