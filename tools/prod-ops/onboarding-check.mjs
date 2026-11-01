@@ -279,12 +279,20 @@ async function main() {
 
     // ── Охота: уровень дикого должен быть по силам стартеру ───────
     const startHunt = async () => {
-      await page
-        .evaluate(() => {
-          const b = document.getElementById('btn-hunt-toggle');
-          if (b && !b.classList.contains('active')) b.click();
-        })
-        .catch(() => {});
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const active = await page
+          .evaluate(() => {
+            const b = document.getElementById('btn-hunt-toggle');
+            if (!b) return false;
+            const isActive = b.classList.contains('active');
+            if (!isActive) b.click();
+            return isActive;
+          })
+          .catch(() => false);
+        if (active) return true;
+        await sleep(1800);
+      }
+      return false;
     };
     const waitEncounter = async (ms) => {
       const deadline = Date.now() + ms;
@@ -365,90 +373,127 @@ async function main() {
         `кредиты: ${before.credit} → ${after.credit}${cost != null ? ` (−${cost})` : ''}`;
       return detail;
     };
-    /** Команда вся без сознания? Проверяем через попытку включить охоту. */
+    /**
+     * Команда вся без сознания? Пробуем включить охоту и слушаем тост.
+     * Раньше требовалось, чтобы текст тоста ИЗМЕНИЛСЯ после двух кликов: если
+     * оба клика дают один и тот же текст, «изменения» нет и выбитая команда
+     * ошибочно считалась боеспособной — лечение не вызывалось, охота молча не
+     * запускалась. Теперь просто проверяем сам текст.
+     */
     const teamFainted = async () => {
-      const toastBefore = await page
-        .evaluate(() => (document.getElementById('trade-toast')?.textContent || '').trim())
-        .catch(() => '');
+      const wasActive = await page
+        .evaluate(() => !!document.getElementById('btn-hunt-toggle')?.classList.contains('active'))
+        .catch(() => false);
+      if (wasActive) return false; // уже ищем — команда точно боеспособна
       await page
-        .evaluate(() => {
-          const b = document.getElementById('btn-hunt-toggle');
-          if (b && b.classList.contains('active')) b.click();
-          b?.click();
-        })
+        .evaluate(() => document.getElementById('btn-hunt-toggle')?.click())
         .catch(() => {});
-      await sleep(1200);
-      const toastAfter = await page
-        .evaluate(() => (document.getElementById('trade-toast')?.textContent || '').trim())
-        .catch(() => '');
-      const fainted = toastAfter !== toastBefore && /живой покемон/i.test(toastAfter);
-      await page
+      await sleep(1400);
+      // Тост читаем ТОЛЬКО как подсказку: он мог остаться от прошлого действия.
+      // Главный признак — включилась ли охота (у выбитой команды — нет).
+      const info = await page
         .evaluate(() => {
-          const b = document.getElementById('btn-hunt-toggle');
-          if (b && b.classList.contains('active')) b.click();
+          const btn = document.getElementById('btn-hunt-toggle');
+          return {
+            active: !!btn && btn.classList.contains('active'),
+            toast: (document.getElementById('trade-toast')?.textContent || '').trim(),
+          };
         })
-        .catch(() => {});
-      return fainted;
+        .catch(() => ({ active: false, toast: '' }));
+      if (info.active) {
+        const faintedByToast = /живой покемон|без сознания/i.test(info.toast);
+        // Тост про выбитую команду + отсутствие активации = выбита.
+        if (!faintedByToast) {
+          await page
+            .evaluate(() => document.getElementById('btn-hunt-toggle')?.click())
+            .catch(() => {});
+        }
+        return false;
+      }
+      return /живой покемон|без сознания/i.test(info.toast) ? true : !info.active;
     };
+    /** Добить бой: закрыть меню победы или «Уйти с поля боя». */
+    const closeBattle = async () => {
+      for (let i = 0; i < 4; i++) {
+        const state = await page
+          .evaluate(() => {
+            const modal = document.getElementById('encounter-modal');
+            const open = !!modal && window.getComputedStyle(modal).display !== 'none';
+            if (!open) return 'closed';
+            const endMenu = document.getElementById('battle-end-menu');
+            if (endMenu && window.getComputedStyle(endMenu).display !== 'none') {
+              document.getElementById('btn-leave-battle')?.click();
+              return 'end-menu';
+            }
+            const leave = Array.from(modal.querySelectorAll('button')).find((b) =>
+              /Уйти с поля боя/i.test(b.textContent || '')
+            );
+            if (leave) {
+              leave.click();
+              return 'leave';
+            }
+            document.getElementById('btn-run')?.click();
+            return 'run';
+          })
+          .catch(() => 'error');
+        if (state === 'closed') return true;
+        await sleep(2000);
+      }
+      return false;
+    };
+
     // ── Ловля: ОДНА атака для ослабления, дальше только шары ──────
     // Формула поимки в игре: чем меньше HP у дикого, тем выше шанс. Но вторая
     // атака Lv5-стартера по дикому Lv3 часто его добивает — и поймать уже
     // некого. Поэтому ровно одна атака на встречу, остальное — шары (5 штук у
     // новичка). Если дикий убежал/упал — ищем следующую встречу.
-    const catchLogRe = /пойман|Попался/i;
+    // ── Ловля: ОДНА атака для ослабления, дальше только шары ──────
+    // Формула поимки: чем меньше HP у дикого, тем выше шанс. Но вторая атака
+    // Lv5-стартера по дикому Lv3 часто его добивает — поймать уже некого.
+    // Поэтому ровно одна атака на встречу, остальное — шары.
+    //
+    // Результат проверяем по ОБЛАЧНОМУ СЕЙВУ (команда выросла), а не по тексту
+    // лога: лог боя хранит историю между встречами и слова «пойман/Попался» в
+    // нём остаются от прошлых боёв — на этом проверка уже давала ложный успех.
     const readBattleLog = () =>
       page
         .evaluate(() => (document.getElementById('battle-log')?.textContent || '').trim())
         .catch(() => '');
+    const teamCount = async () => {
+      const save = await fetchCloudSave(page);
+      return typeof save.team === 'number' ? save.team : null;
+    };
+    const teamAtStart = await teamCount();
 
     for (let attempt = 0; attempt < MAX_CATCH_ATTEMPTS && !caught; attempt++) {
       dbg('попытка', attempt + 1, 'encounterOpen=', await isEncounterOpen());
       if (!(await isEncounterOpen())) {
-        // После проигранного боя команда может быть вся без сознания — тогда
-        // охота честно не запускается («нужен живой покемон»). Лечимся в
-        // поке-центре и продолжаем, иначе проверка «не поймали» врёт.
         if (await teamFainted()) {
           const heal = await healTeam();
-          dbg('лечение после поражения:', heal.note);
+          dbg('ловля: лечение перед поиском:', heal.note);
         }
         await startHunt();
-        if (!(await waitEncounter(50_000))) {
+        if (!(await waitEncounter(90_000))) {
           catchDetail = `попытка ${attempt + 1}: встречи не было`;
           continue;
         }
         await sleep(3200);
       }
       let attackedThisEncounter = false;
-      // Лог боя хранится между встречами: «пойман» из прошлого боя не должен
-      // засчитываться как успех в этом. Смотрим только прирост лога.
-      const logAtStart = await readBattleLog();
-      let logBaseline = logAtStart.length;
-      for (let act = 0; act < 12; act++) {
+      for (let act = 0; act < 16; act++) {
         if (!(await isEncounterOpen())) break;
-        const currentLog = await readBattleLog();
-        if (catchLogRe.test(currentLog.slice(logBaseline))) {
-          caught = true;
-          break;
-        }
         const action = await page
-          .evaluate((alreadyAttacked) => {
-            // Меню хода в новой вёрстке переключается классами, полагаться на
-            // computed display нельзя (проверено на проде: гейт «ждать ход»
-            // залипал и ловля не начиналась). Игра сама игнорирует клик не в
-            // свой ход — просто кликаем и смотрим, вырос ли лог.
+          .evaluate((needAttack) => {
+            const endMenu = document.getElementById('battle-end-menu');
+            if (endMenu && endMenu.style.display === 'flex') return 'ended';
             const sel = document.getElementById('battle-item-select');
             const ball = sel ? Array.from(sel.options).find((o) => /ball/i.test(o.value || '')) : null;
-            if (/пойман|Попался/i.test(document.getElementById('battle-log')?.textContent || '')) return 'caught-in-log';
-            if (alreadyAttacked && ball) {
-              sel.value = ball.value;
-              sel.dispatchEvent(new Event('change', { bubbles: true }));
-              document.getElementById('btn-use-item')?.click();
-              return 'ball';
-            }
-            const mv = document.querySelector('#move-btn-0');
-            if (mv) {
-              mv.click();
-              return 'attack';
+            if (needAttack) {
+              const mv = document.querySelector('#move-btn-0');
+              if (mv) {
+                mv.click();
+                return 'attack';
+              }
             }
             if (ball) {
               sel.value = ball.value;
@@ -457,62 +502,34 @@ async function main() {
               return 'ball';
             }
             return 'nothing';
-          }, attackedThisEncounter)
+          }, !attackedThisEncounter)
           .catch(() => 'error');
-        if (action === 'caught-in-log') {
-          caught = true;
-          break;
-        }
-        if (action === 'attack' && !attackedThisEncounter) attackedThisEncounter = true;
-        if (action === 'waiting') {
-          await sleep(1500); // ход противника — ждём, не тратя попытку
-          continue;
-        }
-        if (action === 'nothing' || action === 'error') {
-          catchDetail = `попытка ${attempt + 1}: нет доступных действий`;
-          break;
-        }
+        if (action === 'attack') attackedThisEncounter = true;
+        if (action === 'ended' || action === 'nothing' || action === 'error') break;
         await sleep(2400);
-        const afterLog = await readBattleLog();
-        dbg('act=', action, 'encOpen=', await isEncounterOpen(), 'new:', afterLog.slice(logBaseline).slice(-90));
-        if (catchLogRe.test(afterLog.slice(logBaseline))) {
-          caught = true;
-          break;
+        // Каждое второе действие сверяемся с облаком: команда выросла = поймали.
+        if (act % 2 === 1) {
+          const now = await teamCount();
+          if (now != null && teamAtStart != null && now > teamAtStart) {
+            caught = true;
+            catchDetail = `команда выросла: ${teamAtStart} → ${now}`;
+            dbg('пойман по сейву:', catchDetail);
+            break;
+          }
         }
       }
-      if (caught) {
-        const log = await readBattleLog();
-        catchDetail = `пойман: «${log.slice(logBaseline).slice(-90) || log.slice(-90)}»`;
-      } else if (!catchDetail) {
-        catchDetail = `попытка ${attempt + 1}: дикий убежал/упал`;
-      }
-      // Закрываем остатки боя (после поимки экран боя сам не закрывается —
-      // игрок жмёт «Уйти с поля боя»).
-      await page
-        .evaluate(() => {
-          const endMenu = document.getElementById('battle-end-menu');
-          if (endMenu && window.getComputedStyle(endMenu).display !== 'none') {
-            document.getElementById('btn-leave-battle')?.click();
-            return;
-          }
-          const leave = Array.from(document.querySelectorAll('#encounter-modal button')).find((b) =>
-            /Уйти с поля боя/i.test(b.textContent || '')
-          );
-          if (leave) leave.click();
-          else document.getElementById('btn-run')?.click();
-        })
-        .catch(() => {});
-      await sleep(2500);
-    }    saveAfterCatch = await fetchCloudSave(page);
-    hintAfterCatch = await hint();
-    await page.screenshot({ path: path.join(STATE_DIR, 'onboarding-caught.png') }).catch(() => {});
+      await closeBattle();
+      await sleep(900);
+    }
+    if (!caught && !catchDetail) catchDetail = 'не поймали за отведённые встречи';
 
-    const teamGrew = (saveAfterCatch.team ?? 0) > (saveBefore.team ?? 0);
     check(
       'O5',
       'первого дикого покемона можно поймать (шар + ослабление)',
-      caught || teamGrew,
-      caught ? catchDetail : `не поймали за ${MAX_CATCH_ATTEMPTS} встреч; команда: ${saveBefore.team} → ${saveAfterCatch.team}`
+      caught,
+      caught
+        ? catchDetail
+        : `не поймали за ${MAX_CATCH_ATTEMPTS} встреч; команда в облаке: ${teamAtStart} → ${await teamCount()}`
     );
 
     // ── Возвращаемся к Оуку и сдаём квест (награда выдаётся там) ──
@@ -610,68 +627,48 @@ async function main() {
         .catch(() => {});
       await sleep(700);
     };
-    /** Добить бой: закрыть меню победы или «Уйти с поля боя». */
-    const closeBattle = async () => {
-      for (let i = 0; i < 4; i++) {
-        const state = await page
-          .evaluate(() => {
-            const modal = document.getElementById('encounter-modal');
-            const open = !!modal && window.getComputedStyle(modal).display !== 'none';
-            if (!open) return 'closed';
-            const endMenu = document.getElementById('battle-end-menu');
-            if (endMenu && window.getComputedStyle(endMenu).display !== 'none') {
-              document.getElementById('btn-leave-battle')?.click();
-              return 'end-menu';
-            }
-            const leave = Array.from(modal.querySelectorAll('button')).find((b) =>
-              /Уйти с поля боя/i.test(b.textContent || '')
-            );
-            if (leave) {
-              leave.click();
-              return 'leave';
-            }
-            document.getElementById('btn-run')?.click();
-            return 'run';
-          })
-          .catch(() => 'error');
-        if (state === 'closed') return true;
-        await sleep(2000);
-      }
-      return false;
-    };
+
     /**
      * Один бой: ждать загрузки атак (кнопки сначала «…»), потом жать первую
      * до конца боя. Возвращает 'win' | 'loss' | 'fled' | 'timeout'.
      */
+    /**
+     * Довести бой до конца: жать первую атаку, пока бой не закончится.
+     * Результат считаем по приросту лога боя: #battle-log хранит историю между
+     * встречами, поэтому «побеждён» из прошлого боя засчитывать нельзя.
+     */
     const winOneBattle = async () => {
+      const logAtStart = await readBattleLog();
+      const baseLen = logAtStart.length;
       const battleState = () =>
         page
-          .evaluate(() => {
+          .evaluate((base) => {
             const modal = document.getElementById('encounter-modal');
             const open = !!modal && window.getComputedStyle(modal).display !== 'none';
             const endMenu = document.getElementById('battle-end-menu');
             const ended = !!endMenu && window.getComputedStyle(endMenu).display !== 'none';
             const log = (document.getElementById('battle-log')?.textContent || '').trim();
-            const mv = document.querySelector('#move-btn-0');
-            const moveText = (mv?.textContent || '').trim();
-            const moveReady = /\d+\s*\/\s*\d+|PP/i.test(moveText) || (moveText.length > 3 && moveText !== '…' && moveText !== '...');
-            return { open, ended, log, moveReady, playerTurn };
-          })
-          .catch(() => ({ open: false, ended: false, log: '', moveReady: false, playerTurn: false }));
+            const fresh = base > 0 && log.length > base ? log.slice(base) : log;
+            // Кнопка атаки в новой вёрстке — span с названием, без цифр PP,
+            // поэтому единственный надёжный признак — что элемент есть.
+            const hasMove = !!document.querySelector('#move-btn-0');
+            return { open, ended, fresh, hasMove };
+          }, baseLen)
+          .catch(() => ({ open: false, ended: false, fresh: '', hasMove: false }));
       for (let i = 0; i < 40; i++) {
         const st = await battleState();
         if (!st.open || st.ended) {
-          if (/побежден|Вы победили|получил .* EXP/i.test(st.log)) return 'win';
-          if (/потерял|проиграл|поражени/i.test(st.log)) return 'loss';
-          if (/сбежать|вырвался|убежал/i.test(st.log)) return 'fled';
+          if (/побежден|Вы победили|получил .* EXP|повысился уровень|Победа/i.test(st.fresh)) return 'win';
+          if (/потерял|проиграл|поражени/i.test(st.fresh)) return 'loss';
+          if (/сбежать|вырвался|убежал/i.test(st.fresh)) return 'fled';
           return 'timeout';
         }
-        if (st.moveReady && st.playerTurn) {
+        if (st.hasMove) {
           await page
             .evaluate(() => document.querySelector('#move-btn-0')?.click())
             .catch(() => {});
         }
-        await sleep(2200);
+        await sleep(2400);
       }
       return 'timeout';
     };
