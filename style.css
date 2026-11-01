@@ -866,6 +866,14 @@ body::before {
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
 }
 
+/* Спрайты боя заполняет клиент, когда подтянет данные покемонов (PokeAPI через
+   прокси). До этого src пустой, и браузер рисует значок «сломанной картинки»
+   прямо в бою. Пока данных нет — пусть будет просто пустая рамка. */
+.reborn-sprite:not([src]),
+.reborn-sprite[src=""] {
+  visibility: hidden;
+}
+
 .reborn-profile-container .reborn-sprite-box {
   height: 100px;
 }
