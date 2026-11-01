@@ -251,6 +251,39 @@ async function main() {
 
   check('B3', 'мир игры отрисовался (#view-world виден)', worldVisible);
 
+  // ── B14: бюджет начального бандла ────────────────────────────
+  // Клиент — один Vite-бандл, он качается при каждом холодном старте Mini App.
+  // Без бюджета бандл тихо растёт, и игра «тормозит» на телефоне.
+  //
+  // Важно: наш Node-сервер НЕ жмёт статику сам (gzip только для JSON/API), на
+  // проде сжатие делает edge Render. Поэтому на локальном стенде браузер видит
+  // несжатые байты. Меряем оба режима: если сжатия нет — сравниваем с бюджетом
+  // для несжатого бандла, иначе с 600 КБ сжатого (замер прода: 355 КБ).
+  const BUNDLE_BUDGET_COMPRESSED = 600 * 1024;
+  const BUNDLE_BUDGET_RAW = 1800 * 1024;
+  const bundle = await page
+    .evaluate(() => {
+      const entries = performance
+        .getEntriesByType('resource')
+        .filter((e) => /\/assets\/.*\.(js|css)(\?|$)/.test(e.name));
+      const raw = entries.reduce((sum, e) => sum + (e.encodedBodySize || e.transferSize || 0), 0);
+      // Сжатие определяем по encoded < decoded: transferSize включает заголовки
+      // (+~300 Б на файл), и сравнение transferSize/encodedBodySize ложно
+      // показывало «сжато» даже на локальном несжатом стенде.
+      const compressed = entries.some(
+        (e) => e.encodedBodySize > 0 && e.decodedBodySize > 0 && e.encodedBodySize < e.decodedBodySize
+      );
+      return { count: entries.length, bytes: raw, compressed };
+    })
+    .catch(() => ({ count: 0, bytes: 0, compressed: false }));
+  const budget = bundle.compressed ? BUNDLE_BUDGET_COMPRESSED : BUNDLE_BUDGET_RAW;
+  check(
+    'B14',
+    'начальный бандл в бюджете (JS+CSS)',
+    bundle.bytes > 0 && bundle.bytes <= budget,
+    `${bundle.count} файлов, ${(bundle.bytes / 1024).toFixed(0)} КБ (${bundle.compressed ? 'сжатых' : 'несжатых'}, бюджет ${(budget / 1024).toFixed(0)} КБ)`
+  );
+
   // Стартовый покемон: у нового игрока открывается модалка выбора стартера.
   const starterVisible = await page
     .evaluate(() => {
