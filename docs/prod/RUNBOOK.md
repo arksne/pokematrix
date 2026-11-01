@@ -59,7 +59,7 @@ Invoke-RestMethod https://pokematrix.onrender.com/api/health   # {"status":"ok",
 Invoke-RestMethod https://pokematrix.onrender.com/api/version  # commit = HEAD в main
 Invoke-RestMethod https://pokematrix.onrender.com/api/telegram/status  # enabled: true
 
-# 2. Полный E2E по API и сокетам (50 проверок: infra + pvp + trade + arena)
+# 2. Полный E2E по API и сокетам (52 проверки: infra+спрайты, pvp, trade, arena)
 cd pokematrix
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; node tools/prod-check/run.mjs all
 
@@ -67,19 +67,20 @@ $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; node tools/prod-check/run.mjs all
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; node tools/prod-ops/browser-check.mjs
 #   скриншоты: tools/prod-ops/.state/prod-browser*.png
 
-# 3b. Тур по всем экранам игры (23 проверки + скриншоты каждого экрана)
+# 3b. Тур по всем экранам игры (24 проверки + скриншоты каждого экрана)
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; $env:PROD_TG_ID='777900311'
 node tools/prod-ops/ui-tour.mjs
 #   мир, рюкзак, команда, чат, тренеры, дроп, покедекс, задания, достижения,
 #   лидерборд, аккаунт, PvP-арена, магазин, переход между локациями; скриншоты
 #   tools/prod-ops/.state/tour-*.png
 
-# 3c. Игровой прогон: можно ли ИГРАТЬ, а не только открывать экраны
+# 3c. Игровой прогон (13 проверок): можно ли ИГРАТЬ, а не только открывать экраны
 $env:PROD_BOT_TOKEN='<BOT_TOKEN>'; $env:PROD_TG_ID='777900350'
 npm run check:gameplay
-#   вход + стартер, охота -> встреча, ход в бою и завершение боя, сейв после
-#   боя с прогрессом, покупка в магазине, сообщение в чат, перезагрузка с
-#   подъёмом облачного сейва; скриншоты tools/prod-ops/.state/game-*.png
+#   вход + стартер, охота -> встреча, спрайты боя через /api/sprite, бросок
+#   покебола (расход шара), ход в бою и завершение боя, сейв после боя с
+#   прогрессом, покупка в магазине, сообщение в чат, перезагрузка с подъёмом
+#   облачного сейва; скриншоты tools/prod-ops/.state/game-*.png
 #   ВАЖНО: скрипт ходит под тестовым tg_id — после прогона уберите аккаунты:
 #   $env:DATABASE_URL='...'; node tools/prod-ops/clean-test-users.mjs --apply
 

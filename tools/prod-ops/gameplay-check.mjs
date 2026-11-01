@@ -256,33 +256,47 @@ async function main() {
     const versionBefore = saveAfterStart.saveVersion;
 
     // ── G2. Охота: включаем поиск и ждём встречу ────────────────────
-    let encounterOpen = false;
-    for (let attempt = 0; attempt < 4 && !encounterOpen; attempt++) {
-      const toggled = await page
-        .evaluate(() => {
-          const b = document.getElementById('btn-hunt-toggle');
-          if (!b) return false;
-          b.click();
-          return true;
-        })
-        .catch(() => false);
-      if (!toggled) break;
-      const huntDeadline = Date.now() + 40_000;
-      while (Date.now() < huntDeadline && !encounterOpen) {
-        encounterOpen = await page
+    // Хелпер: включить поиск и дождаться встречи (до attempts попыток).
+    // Нужен дважды: до проверки спрайтов/броска шара и повторно для боя, если
+    // первый бой закончился сам (покемон убежал после броска) — иначе проверка
+    // боя зависела бы от случайной длительности первой встречи.
+    const huntForEncounter = async (attempts = 4, waitMs = 40_000) => {
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const toggled = await page
           .evaluate(() => {
-            const m = document.getElementById('encounter-modal');
-            return !!m && window.getComputedStyle(m).display !== 'none';
+            const b = document.getElementById('btn-hunt-toggle');
+            if (!b) return false;
+            b.click();
+            return true;
           })
           .catch(() => false);
-        if (!encounterOpen) await sleep(1000);
-      }
-      if (!encounterOpen) {
-        // Выключаем поиск перед следующей попыткой (кнопка — переключатель).
+        if (!toggled) return false;
+        const huntDeadline = Date.now() + waitMs;
+        while (Date.now() < huntDeadline) {
+          const open = await page
+            .evaluate(() => {
+              const m = document.getElementById('encounter-modal');
+              return !!m && window.getComputedStyle(m).display !== 'none';
+            })
+            .catch(() => false);
+          if (open) return true;
+          await sleep(1000);
+        }
+        // Кнопка — переключатель: выключаем поиск перед следующей попыткой.
         await page.evaluate(() => document.getElementById('btn-hunt-toggle')?.click()).catch(() => {});
         await sleep(700);
       }
-    }
+      return false;
+    };
+    const isEncounterOpen = () =>
+      page
+        .evaluate(() => {
+          const m = document.getElementById('encounter-modal');
+          return !!m && window.getComputedStyle(m).display !== 'none';
+        })
+        .catch(() => false);
+
+    let encounterOpen = await huntForEncounter();
     check('G2', 'поиск покемонов приводит к встрече', encounterOpen, encounterOpen ? 'модалка боя открылась' : 'встречи не было за 4 попытки');
     await page.screenshot({ path: path.join(STATE_DIR, 'game-02-encounter.png') }).catch(() => {});
 
@@ -316,11 +330,65 @@ async function main() {
     }
     check('G2a', 'спрайты боя приходят через наш /api/sprite и отрисованы', spritesOk, spritesDetail);
 
+    // ── G2b. Бросок покебола: расход шара и понятный лог ───────────
+    // Ловля — основная механика игры. Дикий покемон может вырваться (это норма),
+    // поэтому проверяем не «пойман», а «шар улетел, из инвентаря списался,
+    // в логе есть бросок».
+    let ballOk = false;
+    let ballDetail = 'бой не открылся';
+    if (encounterOpen) {
+      const before = await page
+        .evaluate(() => {
+          const sel = document.getElementById('battle-item-select');
+          if (!sel) return null;
+          const opt = Array.from(sel.options).find((o) => /ball/i.test(o.value || '') || /бол/i.test(o.textContent || ''));
+          return opt ? { value: opt.value, label: (opt.textContent || '').trim() } : null;
+        })
+        .catch(() => null);
+      if (!before) {
+        ballDetail = 'в бою нет покеболов в списке предметов';
+      } else {
+        await page
+          .evaluate((value) => {
+            const sel = document.getElementById('battle-item-select');
+            if (!sel) return;
+            sel.value = value;
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('btn-use-item')?.click();
+          }, before.value)
+          .catch(() => {});
+        await sleep(3500);
+        const after = await page
+          .evaluate((value) => {
+            const sel = document.getElementById('battle-item-select');
+            const opt = sel ? Array.from(sel.options).find((o) => o.value === value) : null;
+            return {
+              log: (document.getElementById('battle-log')?.textContent || '').trim(),
+              countText: opt ? (opt.textContent || '').trim() : '',
+            };
+          }, before.value)
+          .catch(() => ({ log: '', countText: '' }));
+        const threw = /бросил|броса|брошен|ball/i.test(after.log);
+        const countNow = Number(String(after.countText).replace(/[^\d]/g, ''));
+        const countBefore = Number(String(before.label).replace(/[^\d]/g, ''));
+        // Ловля могла сразу закончить бой — тогда шар просто «ушёл».
+        ballOk = threw && (countBefore > 0 ? countNow < countBefore : true);
+        ballDetail = `шар: «${before.label}» -> «${after.countText}», бросок в логе: ${threw ? 'да' : 'нет'}`;
+      }
+    }
+    check('G2b', 'покебол бросается и списывается из инвентаря', ballOk, ballDetail);
+
     // ── G3. Бой: бьём по кнопкам атак, лог должен расти ────────────
+    // Бросок шара мог закончить бой (поймали/убежал). Тогда ищем новую встречу,
+    // чтобы проверить именно ход боем, а не зависеть от случайного исхода.
     let attacks = 0;
     let battleEnded = false;
     let lastLog = '';
-    if (encounterOpen) {
+    let g3Encounter = encounterOpen;
+    if (!(await isEncounterOpen())) {
+      g3Encounter = await huntForEncounter(3, 40_000);
+    }
+    if (g3Encounter) {
       for (let turn = 0; turn < 30 && !battleEnded; turn++) {
         const state = await page
           .evaluate(() => {
@@ -390,7 +458,7 @@ async function main() {
     check(
       'G3',
       'бой идёт: атака срабатывает, бой корректно завершается',
-      encounterOpen && attacks >= 1 && !encounterAfter && String(lastLog).length > 20,
+      g3Encounter && attacks >= 1 && !encounterAfter && String(lastLog).length > 20,
       `атак: ${attacks}, бой ${encounterAfter ? 'не закрылся' : 'закрыт'}, лог: «${String(lastLog).slice(0, 70)}»`
     );
     await page.screenshot({ path: path.join(STATE_DIR, 'game-03-battle.png') }).catch(() => {});
