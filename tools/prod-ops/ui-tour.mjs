@@ -350,6 +350,22 @@ async function main() {
     await page
       .screenshot({ path: path.join(STATE_DIR, `tour-${step.id.toLowerCase()}-${step.label.replace(/[^\wа-я]+/gi, '_')}.png`), fullPage: false })
       .catch(() => {});
+
+    // Рюкзак: блок «Валюта» должен быть ровно один. Раньше кредиты выводились
+    // дважды — отдельным блоком и как предмет категории currency.
+    if (step.id === 'T2') {
+      const dupes = await page
+        .evaluate(() => {
+          const el = document.getElementById('inventory-items');
+          if (!el) return { count: 0, titles: [] };
+          const titles = Array.from(el.querySelectorAll('.inv-category-title')).map((t) => (t.textContent || '').trim());
+          return { count: titles.filter((t) => /^Валюта$/i.test(t)).length, titles };
+        })
+        .catch(() => ({ count: 0, titles: [] }));
+      check('T2a', 'в рюкзаке «Валюта» показана один раз (нет дубля кредитов)',
+        dupes.count <= 1,
+        `заголовков «Валюта»: ${dupes.count}, все заголовки: ${dupes.titles.slice(0, 8).join(' | ') || '—'}`);
+    }
   }
 
   // ── Аккаунт и PvP-арена (вкладка «Тренеры» → «Аккаунт») ──

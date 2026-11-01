@@ -545,9 +545,12 @@ export function renderInventory() {
 
   // Проходим по всем категориям
   for (const [catId, catName] of Object.entries(categories)) {
-    // Фильтруем предметы: только этой категории И есть в наличии
+    // Фильтруем предметы: только этой категории И есть в наличии.
+    // Кредиты пропускаем: они уже показаны отдельным блоком «Валюта» сверху,
+    // иначе в рюкзаке было два «Валюта» подряд — «Кредиты x1000» и «Кредит 1000»
+    // (видно на скриншоте UI-тура, выглядело как дубль-баг).
     const catItems = getInvState().ITEMS.filter(
-      item => item.category === catId && getItemQty(item.id) > 0
+      item => item.category === catId && item.id !== 'credit' && getItemQty(item.id) > 0
     );
     if (catItems.length === 0) continue;  // Пропускаем пустые категории
     hasAnyItems = true;
